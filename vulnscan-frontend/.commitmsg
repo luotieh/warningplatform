@@ -1,0 +1,4 @@
+fix: workspace包exports.default指向源文件，修复CI构建jiti兼容问题
+
+- 9个@core包exports.default改为指向src，绕过unbuild stub的jiti浏览器不兼容
+- 清理无关文档、lint配置、playground等冗余文件

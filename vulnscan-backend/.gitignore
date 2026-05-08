@@ -1,0 +1,21 @@
+cofig.toml
+.idea
+
+
+
+config.toml
+
+server-amd64
+server-windows.exe
+*.exe
+
+di/wire_gen.go
+
+sdk
+/server-linux
+
+vue-vben-admin
+
+# 嵌入式前端构建产物（仅保留 .gitkeep）
+public/dist/*
+!public/dist/.gitkeep

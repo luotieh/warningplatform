@@ -1,0 +1,49 @@
+{
+  "name": "frontend-template",
+  "version": "1.0.0",
+  "private": true,
+  "keywords": [
+    "vue3",
+    "naive-ui",
+    "vben",
+    "template"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm --silent -F @vben/web-template run dev",
+    "build": "cross-env NODE_OPTIONS=--max-old-space-size=8192 pnpm --silent -F @vben/web-template run build",
+    "build:prod": "pnpm -r run stub --if-present && pnpm -F @vben-core/design run build && pnpm run build",
+    "preview": "pnpm -F @vben/web-template run preview",
+    "typecheck": "pnpm -F @vben/web-template run typecheck",
+    "clean": "node ./scripts/clean.mjs",
+    "format": "echo format skipped",
+    "lint": "echo lint skipped",
+    "postinstall": "pnpm -r run stub --if-present",
+    "preinstall": "npx only-allow pnpm",
+    "reinstall": "pnpm clean --del-lock && pnpm install"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@vben/tailwind-config": "workspace:*",
+    "@vben/tsconfig": "workspace:*",
+    "@vben/vite-config": "workspace:*",
+    "@vben/vsh": "workspace:*",
+    "@vitejs/plugin-vue": "catalog:",
+    "@vitejs/plugin-vue-jsx": "catalog:",
+    "autoprefixer": "catalog:",
+    "cross-env": "catalog:",
+    "rimraf": "catalog:",
+    "tailwindcss": "catalog:",
+    "typescript": "catalog:",
+    "unbuild": "catalog:",
+    "vite": "catalog:",
+    "vue": "catalog:",
+    "vue-tsc": "catalog:"
+  },
+  "engines": {
+    "node": ">=20.19.0",
+    "pnpm": ">=10.0.0"
+  },
+  "packageManager": "pnpm@10.28.2"
+}

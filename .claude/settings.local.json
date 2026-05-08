@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"F:\\\\code\\\\circular\" -Recurse -Force)",
+      "Bash(Select-Object -First 100)",
+      "Bash(Format-Table FullName)",
+      "Bash(Get-ChildItem -Path \"F:\\\\code\\\\security-incident\" -Recurse -ErrorAction SilentlyContinue)",
+      "PowerShell(Get-ChildItem -Path \"F:\\\\code\\\\vulnerability-scan-new\" -Force | Select-Object Name, @{Name=\"Type\";Expression={if \\($_.PSIsContainer\\) {\"Dir\"} else {\"File\"}}} | Format-Table -AutoSize)",
+      "PowerShell(Get-ChildItem -Path \"F:\\\\code\\\\vulnerability-scan-new\\\\vulnscan-backend\" -Recurse -Force | Where-Object {$_.PSIsContainer} | Select-Object FullName | Sort-Object)",
+      "Bash(Get-ChildItem -Path \"F:\\\\code\\\\vulnerability-scan-new\" -Directory)",
+      "Bash(Select-Object Name)",
+      "Bash(Get-ChildItem -Path \"F:\\\\code\\\\vulnerability-scan-new\\\\vulnscan-backend\" -Recurse -Filter \"*.go\")",
+      "Bash(Select-Object -First 20)",
+      "Bash(grep -E \"\\\\.\\(go|json\\)$\")",
+      "Bash(Get-ChildItem -Path \"F:\\\\code\\\\circular\\\\circular-backend\" -Recurse -Filter \"*.go\")",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(Get-ChildItem -Path \"F:\\\\code\\\\security-incident\\\\security-incident-backend\" -Recurse -Filter \"*.go\")",
+      "Bash(Select-Object FullName)",
+      "Bash(Sort-Object FullName)",
+      "PowerShell(Get-ChildItem \"F:\\\\code\\\\vulnerability-scan-new\\\\vulnscan-backend\\\\circular\" -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })",
+      "Bash(wire *)",
+      "Bash(Get-ChildItem -Path \"F:\\\\code\\\\vulnerability-scan-new\\\\vulnscan-frontend\" -Directory)",
+      "PowerShell(Get-ChildItem -Recurse \"F:\\\\code\\\\vulnerability-scan-new\\\\vulnscan-frontend\\\\apps\\\\web\\\\src\\\\views\\\\circular\",\"F:\\\\code\\\\vulnerability-scan-new\\\\vulnscan-frontend\\\\apps\\\\web\\\\src\\\\views\\\\incident\" -File | Select-Object @{N='Path';E={$_.FullName.Replace\\('F:\\\\code\\\\vulnerability-scan-new\\\\vulnscan-frontend\\\\apps\\\\web\\\\src\\\\',''\\)}})",
+      "Bash(npx vue-tsc *)",
+      "Bash(grep \"\\\\.go$\")",
+      "Bash(grep -E \"^f:/code/vulnerability-scan-new/vulnscan-backend/[^/]+$\")",
+      "Bash(Get-ChildItem -Path \"f:\\\\code\\\\vulnerability-scan-new\" -Directory)"
+    ]
+  }
+}

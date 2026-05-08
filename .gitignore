@@ -1,0 +1,23 @@
+# IDE
+.idea
+.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.history
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Cursor
+.cursor
+
+# MCP / Agent 工作目录
+mcps/
+agent-transcripts/
+vulnscan-frontend/node_modules
+terminals/
+*.exe
