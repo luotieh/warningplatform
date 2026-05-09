@@ -19,3 +19,5 @@ vue-vben-admin
 # 嵌入式前端构建产物（仅保留 .gitkeep）
 public/dist/*
 !public/dist/.gitkeep
+
+frontend/dist

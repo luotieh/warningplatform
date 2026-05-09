@@ -419,6 +419,9 @@ importers:
       '@vueuse/core':
         specifier: 'catalog:'
         version: 14.2.0(vue@3.5.27(typescript@5.9.3))
+      dayjs:
+        specifier: 'catalog:'
+        version: 1.11.19
       echarts:
         specifier: 'catalog:'
         version: 6.0.0

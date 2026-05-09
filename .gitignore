@@ -20,4 +20,4 @@ mcps/
 agent-transcripts/
 vulnscan-frontend/node_modules
 terminals/
-*.exe
+*.ex
