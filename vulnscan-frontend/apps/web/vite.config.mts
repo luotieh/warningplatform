@@ -8,9 +8,8 @@ export default defineConfig(async () => {
     },
     vite: {
       build: {
-        // ★ 直接输出到后端 embed 目录，部署时一个二进制即可
-        // 请根据实际后端目录名修改路径，如：'../../../my-biz-backend/frontend/dist'
-        outDir: '../../../template-backend/frontend/dist',
+        // ★ 直接输出到后端 embed 目录（见 vulnscan-backend/frontend/embed.go），单一二进制部署
+        outDir: '../../../vulnscan-backend/frontend/dist',
         emptyOutDir: true,
       },
       server: {

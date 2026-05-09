@@ -53,8 +53,8 @@ jobs:
           export GENERATE_SOURCEMAP=false
           pnpm run build:prod
 
-          echo "✅ 前端构建完成（产物直接输出到 vulnscan-backend/public/dist）"
-          ls -la ../vulnscan-backend/public/dist/
+          echo "✅ 前端构建完成（产物直接输出到 vulnscan-backend/frontend/dist）"
+          ls -la ../vulnscan-backend/frontend/dist/
 
       - name: (4) 构建后端二进制
         id: build
@@ -130,7 +130,7 @@ jobs:
         if: always()
         run: |
           rm -f server-* *.tar *.tar.gz *.config.toml Dockerfile 2>/dev/null
-          rm -rf deploy-templates vulnscan-backend/public/dist/*
+          rm -rf deploy-templates vulnscan-backend/frontend/dist/*
           echo "✅ 清理完成"
 
   k8s-deploy:
