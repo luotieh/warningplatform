@@ -62,11 +62,19 @@ async function handleLogin(values: Record<string, any>) {
     values.answer = captchaAnswer.value;
   }
 
-  const result = await authStore.authLogin(values);
+  try {
+    const result = await authStore.authLogin(values);
 
-  if (requireCaptcha.value && !result?.userInfo) {
-    captchaAnswer.value = '';
-    await loadCaptcha();
+    if (requireCaptcha.value && !result?.userInfo) {
+      captchaAnswer.value = '';
+      await loadCaptcha();
+    }
+  } catch (error: any) {
+    message.error(error?.message || '登录失败，请稍后重试');
+    if (requireCaptcha.value) {
+      captchaAnswer.value = '';
+      await loadCaptcha();
+    }
   }
 }
 

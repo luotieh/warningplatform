@@ -1,3 +1,5 @@
+import './compat-polyfills';
+
 import { initPreferences } from '@vben/preferences';
 import { unmountGlobalLoading } from '@vben/utils';
 

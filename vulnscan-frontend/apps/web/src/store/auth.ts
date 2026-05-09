@@ -9,7 +9,7 @@ import { resetAllStores, useAccessStore, useUserStore } from '@vben/stores';
 
 import { defineStore } from 'pinia';
 
-import { notification } from '#/adapter/naive';
+import { message, notification } from '#/adapter/naive';
 import { getAccessCodesApi, getUserInfoApi, loginApi, logoutApi } from '#/api';
 import { changeExpiredPassword } from '#/api/core/public';
 import { $t } from '#/locales';
@@ -104,6 +104,16 @@ export const useAuthStore = defineStore('auth', () => {
           });
         }
       }
+    } catch (error: any) {
+      const msg =
+        error?.response?.data?.msg ||
+        error?.response?.data?.message ||
+        error?.message ||
+        '登录失败，请稍后重试';
+      if (!error?.__silent) {
+        message.error(msg);
+      }
+      return { error, userInfo: null };
     } finally {
       loginLoading.value = false;
     }

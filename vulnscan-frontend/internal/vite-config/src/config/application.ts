@@ -58,6 +58,7 @@ function defineApplicationConfig(userConfigPromise?: DefineApplicationOptions) {
     const applicationConfig: UserConfig = {
       base,
       build: {
+        cssTarget: ['chrome99', 'edge99', 'safari15'],
         rollupOptions: {
           output: {
             assetFileNames: '[ext]/[name]-[hash].[ext]',
@@ -65,7 +66,7 @@ function defineApplicationConfig(userConfigPromise?: DefineApplicationOptions) {
             entryFileNames: 'jse/index-[name]-[hash].js',
           },
         },
-        target: 'es2015',
+        target: ['chrome99', 'edge99', 'safari15'],
       },
       css: createCssOptions(injectGlobalScss),
       esbuild: {
