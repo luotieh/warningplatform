@@ -64,8 +64,10 @@ jobs:
           export PATH=$PATH:$(go env GOPATH)/bin
           go mod tidy
 
+          # di/wire_gen.go 被 .gitignore 排除不会进仓库，必须在 CI 内生成；
+          # 构建机通常未安装 wire 全局命令，用 go run 拉取与 go.mod 一致的版本。
           if [ "$WIRE" = "true" ]; then
-            wire ./di
+            go run github.com/google/wire/cmd/wire@v0.7.0 gen ./di
           fi
 
           GO_VERSION=$(go version | awk '{print $3}')
@@ -76,8 +78,8 @@ jobs:
           LDFLAGS+=" -X 'vulnscan-backend/boot.BuildCommit=${{ steps.meta.outputs.commit_msg }}'"
           LDFLAGS+=" -X 'vulnscan-backend/boot.ProductVersion=${{ steps.meta.outputs.tag }}'"
 
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="$LDFLAGS" -trimpath -o ../server-amd64 ./cmd/server/main.go
-          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="$LDFLAGS" -trimpath -o ../server-arm64 ./cmd/server/main.go
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="$LDFLAGS" -trimpath -o ../server-amd64 ./cmd/server
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="$LDFLAGS" -trimpath -o ../server-arm64 ./cmd/server
           upx --best --lzma ../server-amd64 || true
           echo "✅ 后端构建完成（含嵌入前端）"
           ls -la ../server-*
