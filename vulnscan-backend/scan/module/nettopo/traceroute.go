@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -115,21 +116,20 @@ func (m *NetTopoScanner) traceroute(ctx context.Context, target *engine.Target, 
 func probeHop(targetIP string, ttl int, timeout time.Duration) hopResult {
 	conn, err := net.DialTimeout("ip4:icmp", targetIP, timeout)
 	if err != nil {
-		return probeHopUDP(fmt.Sprintf("%s:33434", targetIP), ttl, timeout)
+		return probeHopUDP(targetIP, ttl, timeout)
 	}
 	conn.Close()
-	return probeHopUDP(fmt.Sprintf("%s:33434", targetIP), ttl, timeout)
+	return probeHopUDP(targetIP, ttl, timeout)
 }
 
-func probeHopUDP(addr string, ttl int, timeout time.Duration) hopResult {
+func probeHopUDP(host string, ttl int, timeout time.Duration) hopResult {
 	hop := hopResult{TTL: ttl, Timeout: true}
 
 	port := 33434 + ttl
-	dst := strings.Split(addr, ":")[0]
-	udpAddr := fmt.Sprintf("%s:%d", dst, port)
+	udpAddr := net.JoinHostPort(host, strconv.Itoa(port))
 
 	start := time.Now()
-	conn, err := net.DialTimeout("udp4", udpAddr, timeout)
+	conn, err := net.DialTimeout("udp", udpAddr, timeout)
 	if err != nil {
 		return hop
 	}
