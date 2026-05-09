@@ -87,7 +87,7 @@ func (d *FindingDeduplicator) Fingerprint(taskID string, f *Finding) string {
 }
 
 func (d *FindingDeduplicator) DeduplicateFindings(taskID string, findings []*Finding) []*Finding {
-	var unique []*Finding
+	unique := make([]*Finding, 0, len(findings))
 	for _, f := range findings {
 		if !d.IsDuplicate(taskID, f) {
 			unique = append(unique, f)

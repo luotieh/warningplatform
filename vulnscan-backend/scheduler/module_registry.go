@@ -8,7 +8,9 @@ import (
 	"vulnscan-backend/dict"
 	"vulnscan-backend/model"
 	"vulnscan-backend/nuclei"
+	"vulnscan-backend/pkg/payload"
 	"vulnscan-backend/scan/engine"
+	"vulnscan-backend/scan/module/advancedvuln"
 	"vulnscan-backend/scan/module/apidisc"
 	"vulnscan-backend/scan/module/apisec"
 	"vulnscan-backend/scan/module/bruteforce"
@@ -40,6 +42,7 @@ import (
 	"vulnscan-backend/scan/module/synscan"
 	"vulnscan-backend/scan/module/techdetect"
 	"vulnscan-backend/scan/module/udpscan"
+	"vulnscan-backend/scan/module/unauth"
 	"vulnscan-backend/scan/module/wafdetect"
 	"vulnscan-backend/scan/module/weakpass"
 	"vulnscan-backend/scan/module/webcrawl"
@@ -80,6 +83,8 @@ func ResolveModules(db *gorm.DB, task model.ScanTask) []engine.ScanModule {
 	profile := resolveProfile(task)
 	rs := rulestore.NewWithoutDB()
 	ds := dict.NewStore(nil)
+	pl := payload.NewLoader(db)
+	_ = pl.LoadAll()
 
 	var modules []engine.ScanModule
 
@@ -92,7 +97,7 @@ func ResolveModules(db *gorm.DB, task model.ScanTask) []engine.ScanModule {
 			webcrawl.New(),
 		)
 	case "full":
-		modules = allModules(db, rs, ds)
+		modules = allModules(db, rs, ds, pl)
 	case "recon":
 		modules = append(modules,
 			icmp.New(),
@@ -119,35 +124,39 @@ func ResolveModules(db *gorm.DB, task model.ScanTask) []engine.ScanModule {
 		)
 	case "vuln":
 		modules = append(modules,
-			sqli.New(),
-			xss.New(),
+			sqli.New(pl),
+			xss.New(pl),
 			weakpass.New(),
 			bruteforce.New(ds),
-			ssrf.New(""),
-			cmdi.New(),
-			lfi.New(),
-			ssti.New(),
-			xxe.New(),
-			nosqli.New(),
+			ssrf.New("", pl),
+			cmdi.New(pl),
+			lfi.New(pl),
+			ssti.New(pl),
+			xxe.New(pl),
+			nosqli.New(pl),
 			jwtsec.New(),
+			advancedvuln.New(pl),
+			unauth.New(),
 		)
 	case "vuln-full":
 		modules = append(modules,
-			sqli.New(),
-			xss.New(),
+			sqli.New(pl),
+			xss.New(pl),
 			weakpass.New(),
 			bruteforce.New(ds),
-			ssrf.New(""),
-			cmdi.New(),
-			lfi.New(),
-			ssti.New(),
-			xxe.New(),
-			nosqli.New(),
+			ssrf.New("", pl),
+			cmdi.New(pl),
+			lfi.New(pl),
+			ssti.New(pl),
+			xxe.New(pl),
+			nosqli.New(pl),
 			jwtsec.New(),
 			apisec.New(),
+			advancedvuln.New(pl),
+			unauth.New(),
 		)
 	default:
-		modules = allModules(db, rs, ds)
+		modules = allModules(db, rs, ds, pl)
 	}
 
 	if enabledModules, ok := task.Config["modules"]; ok {
@@ -173,7 +182,7 @@ func ResolveModules(db *gorm.DB, task model.ScanTask) []engine.ScanModule {
 	return modules
 }
 
-func allModules(db *gorm.DB, rs *rulestore.Store, ds *dict.Store) []engine.ScanModule {
+func allModules(db *gorm.DB, rs *rulestore.Store, ds *dict.Store, pl *payload.Loader) []engine.ScanModule {
 	return []engine.ScanModule{
 		icmp.New(),
 		portscan.New(),
@@ -197,20 +206,22 @@ func allModules(db *gorm.DB, rs *rulestore.Store, ds *dict.Store) []engine.ScanM
 		emailcollect.New(),
 		screenshot.New(),
 		dirscan.New(),
-		sqli.New(),
-		xss.New(),
+		sqli.New(pl),
+		xss.New(pl),
 		weakpass.New(),
 		bruteforce.New(ds),
-		ssrf.New(""),
-		cmdi.New(),
-		lfi.New(),
-		ssti.New(),
-		xxe.New(),
-		nosqli.New(),
+		ssrf.New("", pl),
+		cmdi.New(pl),
+		lfi.New(pl),
+		ssti.New(pl),
+		xxe.New(pl),
+		nosqli.New(pl),
 		jwtsec.New(),
 		apisec.New(),
 		fpenhance.New(),
 		nettopo.New(),
 		nuclei.NewModule(db),
+		advancedvuln.New(pl),
+		unauth.New(),
 	}
 }

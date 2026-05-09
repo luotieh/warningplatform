@@ -13,69 +13,9 @@ import (
 	"time"
 )
 
-type DiscoveryEngine struct {
-	collectors []AssetCollector
-}
-
 type AssetCollector interface {
 	Name() string
 	Collect(ctx context.Context, seed Seed) ([]DiscoveredAsset, error)
-}
-
-func NewDiscoveryEngine(extraCollectors ...AssetCollector) *DiscoveryEngine {
-	collectors := []AssetCollector{
-		&DNSCollector{},
-		&ReverseDNSCollector{},
-		&CertCollector{},
-	}
-	collectors = append(collectors, extraCollectors...)
-	return &DiscoveryEngine{collectors: collectors}
-}
-
-func (e *DiscoveryEngine) Discover(ctx context.Context, project *ASMProject) ([]DiscoveredAsset, error) {
-	var allAssets []DiscoveredAsset
-
-	for _, seed := range project.Seeds {
-		for _, collector := range e.collectors {
-			select {
-			case <-ctx.Done():
-				return allAssets, ctx.Err()
-			default:
-			}
-
-			assets, err := collector.Collect(ctx, seed)
-			if err != nil {
-				slog.Warn("ASM收集器失败",
-					"collector", collector.Name(),
-					"seed", seed.Value,
-					"error", err,
-				)
-				continue
-			}
-
-			for i := range assets {
-				assets[i].ProjectID = project.ID
-				assets[i].FirstSeen = time.Now()
-				assets[i].LastSeen = time.Now()
-				assets[i].Status = "active"
-			}
-
-			allAssets = append(allAssets, assets...)
-		}
-	}
-
-	allAssets = dedup(allAssets)
-	for i := range allAssets {
-		allAssets[i].RiskScore = calculateRiskScore(allAssets[i])
-	}
-
-	slog.Info("[+] ASM资产发现完成",
-		"project", project.Name,
-		"seeds", len(project.Seeds),
-		"discovered", len(allAssets),
-	)
-
-	return allAssets, nil
 }
 
 type DNSCollector struct{}
@@ -241,39 +181,4 @@ func (c *CertCollector) Collect(ctx context.Context, seed Seed) ([]DiscoveredAss
 
 	slog.Info("[+] CT日志收集完成", "domain", seed.Value, "subdomains", len(assets))
 	return assets, nil
-}
-
-func dedup(assets []DiscoveredAsset) []DiscoveredAsset {
-	seen := make(map[string]bool)
-	var result []DiscoveredAsset
-	for _, a := range assets {
-		key := a.Type + "|" + a.Value
-		if !seen[key] {
-			seen[key] = true
-			result = append(result, a)
-		}
-	}
-	return result
-}
-
-func calculateRiskScore(asset DiscoveredAsset) int {
-	score := 30
-
-	switch asset.Type {
-	case "ip":
-		score += 20
-	case "domain":
-		score += 10
-	case "url":
-		score += 30
-	}
-
-	if strings.Contains(asset.Source, "passive") {
-		score += 5
-	}
-
-	if score > 100 {
-		score = 100
-	}
-	return score
 }

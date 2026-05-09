@@ -55,6 +55,21 @@ const routes: RouteRecordRaw[] = [
         },
       },
       {
+        name: 'PayloadManage',
+        path: 'payload',
+        component: () => import('#/views/knowledge/payload/list.vue'),
+        meta: {
+          icon: 'lucide:shield-check',
+          title: 'Payload 管理',
+          perms: [
+            { action: 'create', label: '新建' },
+            { action: 'import', label: '导入' },
+            { action: 'update', label: '编辑' },
+            { action: 'delete', label: '删除' },
+          ],
+        },
+      },
+      {
         name: 'DictWordDetail',
         path: 'dict/word/:id',
         component: () =>

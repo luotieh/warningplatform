@@ -230,7 +230,7 @@ onMounted(loadData);
 
       <!-- Pipeline 可视化 -->
       <div v-if="customStages.length === 0">
-        <NEmpty description="暂无阶段，点击"添加阶段"开始编排" />
+        <NEmpty description="暂无阶段，点击添加阶段开始编排" />
       </div>
 
       <div v-else style="display: flex; flex-direction: column; gap: 0">

@@ -8,15 +8,18 @@ import (
 	"strings"
 	"time"
 
+	"vulnscan-backend/model"
+	"vulnscan-backend/pkg/payload"
 	"vulnscan-backend/scan/engine"
 )
 
 type SSTIScanner struct {
-	base *engine.VulnScanner
+	base     *engine.VulnScanner
+	payloads *payload.Loader
 }
 
-func New() *SSTIScanner {
-	return &SSTIScanner{}
+func New(loader *payload.Loader) *SSTIScanner {
+	return &SSTIScanner{payloads: loader}
 }
 
 func (m *SSTIScanner) ID() string       { return "ssti" }
@@ -27,18 +30,6 @@ func (m *SSTIScanner) Params() []engine.ModuleParam {
 	return []engine.ModuleParam{engine.VulnVerificationParam()}
 }
 
-func (m *SSTIScanner) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
-	m.base = engine.NewVulnScanner(config)
-	verifyLevel := engine.GetConfigValue(config, "verification_level", "both")
-
-	result := m.base.RunTargets(ctx, m.ID(), targets, func(ctx context.Context, target *engine.Target) []*engine.Finding {
-		return m.testTarget(ctx, target, verifyLevel)
-	})
-
-	engine.LogModuleComplete(m.ID(), len(targets), len(result.Findings), result.Duration)
-	return result, nil
-}
-
 type sstiProbe struct {
 	payload  string
 	expect   string
@@ -46,14 +37,57 @@ type sstiProbe struct {
 	category string
 }
 
-var mathProbes = []sstiProbe{
-	{"{{7*7}}", "49", "Jinja2/Twig", "math"},
-	{"${7*7}", "49", "Freemarker/Mako", "math"},
-	{"<%= 7*7 %>", "49", "ERB/EJS", "math"},
-	{"#{7*7}", "49", "Ruby/Pug", "math"},
-	{"{{7*'7'}}", "7777777", "Jinja2", "math-str"},
-	{"${7*7}", "49", "Velocity/Thymeleaf", "math"},
-	{"[#assign x=7*7]${x}", "49", "Freemarker-assign", "math"},
+func (m *SSTIScanner) getMathProbes() []sstiProbe {
+	if m.payloads != nil {
+		dbPayloads := m.payloads.GetPayloads("ssti")
+		var result []sstiProbe
+		for _, p := range dbPayloads {
+			if p.Type == "basic" || p.Type == "math" {
+				expect := p.Expect
+				if expect == "" {
+					if strings.Contains(p.Value, "7*7") || strings.Contains(p.Value, "7*'7'") {
+						if strings.Contains(p.Value, "{{") {
+							if strings.Contains(p.Value, "7*'7'") {
+								expect = "7777777"
+							} else {
+								expect = "49"
+							}
+						} else if strings.Contains(p.Value, "${") {
+							expect = "49"
+						}
+					}
+				}
+				if expect != "" {
+					engine := p.Tags
+					if engine == "" {
+						engine = "Template"
+					}
+					result = append(result, sstiProbe{
+						payload:  p.Value,
+						expect:   expect,
+						engine:   engine,
+						category: "math",
+					})
+				}
+			}
+		}
+		if len(result) > 0 {
+			return result
+		}
+	}
+	return defaultMathProbes()
+}
+
+func defaultMathProbes() []sstiProbe {
+	return []sstiProbe{
+		{"{{7*7}}", "49", "Jinja2/Twig", "math"},
+		{"${7*7}", "49", "Freemarker/Mako", "math"},
+		{"<%= 7*7 %>", "49", "ERB/EJS", "math"},
+		{"#{7*7}", "49", "Ruby/Pug", "math"},
+		{"{{7*'7'}}", "7777777", "Jinja2", "math-str"},
+		{"${7*7}", "49", "Velocity/Thymeleaf", "math"},
+		{"[#assign x=7*7]${x}", "49", "Freemarker-assign", "math"},
+	}
 }
 
 var engineErrorPatterns = []*regexp.Regexp{
@@ -76,39 +110,88 @@ type sstiExploit struct {
 	detail  string
 }
 
-var exploitProbes = []sstiExploit{
-	{
-		payload: "{{config}}",
-		detect:  func(body string) bool { return strings.Contains(body, "SECRET_KEY") || strings.Contains(body, "DEBUG") },
-		engine:  "Jinja2/Flask",
-		detail:  "config-object-leaked",
-	},
-	{
-		payload: "{{self.__class__.__mro__}}",
-		detect:  func(body string) bool { return strings.Contains(body, "object") && strings.Contains(body, "class") },
-		engine:  "Jinja2",
-		detail:  "mro-chain-exposed",
-	},
-	{
-		payload: "${.version}",
-		detect:  func(body string) bool { return regexp.MustCompile(`\d+\.\d+\.\d+`).MatchString(body) },
-		engine:  "Freemarker",
-		detail:  "version-leaked",
-	},
-	{
-		payload: "{{_self.env.getExtension('Twig\\Extension\\CoreExtension')}}",
-		detect:  func(body string) bool { return strings.Contains(body, "Twig") },
-		engine:  "Twig",
-		detail:  "extension-info-leaked",
-	},
-	{
-		payload: "{{range.constructor('return global.process.version')()}}",
-		detect: func(body string) bool {
-			return regexp.MustCompile(`v\d+\.\d+\.\d+`).MatchString(body)
+func (m *SSTIScanner) getExploitProbes() []sstiExploit {
+	if m.payloads != nil {
+		dbPayloads := m.payloads.GetPayloads("ssti")
+		var result []sstiExploit
+		for _, p := range dbPayloads {
+			if p.Type == "config_leak" || p.Type == "rce" {
+				engine := p.Tags
+				if engine == "" {
+					engine = "Template"
+				}
+				value := p.Value
+				detect := func(body string) bool {
+					if strings.Contains(value, "config") {
+						return strings.Contains(body, "SECRET_KEY") || strings.Contains(body, "DEBUG")
+					}
+					if strings.Contains(value, "version") {
+						return regexp.MustCompile(`\d+\.\d+\.\d+`).MatchString(body)
+					}
+					return strings.Contains(body, p.Expect)
+				}
+				result = append(result, sstiExploit{
+					payload: value,
+					detect:  detect,
+					engine:  engine,
+					detail:  p.Name,
+				})
+			}
+		}
+		if len(result) > 0 {
+			return result
+		}
+	}
+	return defaultExploitProbes()
+}
+
+func defaultExploitProbes() []sstiExploit {
+	return []sstiExploit{
+		{
+			payload: "{{config}}",
+			detect:  func(body string) bool { return strings.Contains(body, "SECRET_KEY") || strings.Contains(body, "DEBUG") },
+			engine:  "Jinja2/Flask",
+			detail:  "config-object-leaked",
 		},
-		engine: "Nunjucks/Pug",
-		detail: "node-version-leaked",
-	},
+		{
+			payload: "{{self.__class__.__mro__}}",
+			detect:  func(body string) bool { return strings.Contains(body, "object") && strings.Contains(body, "class") },
+			engine:  "Jinja2",
+			detail:  "mro-chain-exposed",
+		},
+		{
+			payload: "${.version}",
+			detect:  func(body string) bool { return regexp.MustCompile(`\d+\.\d+\.\d+`).MatchString(body) },
+			engine:  "Freemarker",
+			detail:  "version-leaked",
+		},
+		{
+			payload: "{{_self.env.getExtension('Twig\\Extension\\CoreExtension')}}",
+			detect:  func(body string) bool { return strings.Contains(body, "Twig") },
+			engine:  "Twig",
+			detail:  "extension-info-leaked",
+		},
+		{
+			payload: "{{range.constructor('return global.process.version')()}}",
+			detect: func(body string) bool {
+				return regexp.MustCompile(`v\d+\.\d+\.\d+`).MatchString(body)
+			},
+			engine: "Nunjucks/Pug",
+			detail: "node-version-leaked",
+		},
+	}
+}
+
+func (m *SSTIScanner) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
+	m.base = engine.NewVulnScanner(config)
+	verifyLevel := engine.GetConfigValue(config, "verification_level", "both")
+
+	result := m.base.RunTargets(ctx, m.ID(), targets, func(ctx context.Context, target *engine.Target) []*engine.Finding {
+		return m.testTarget(ctx, target, verifyLevel)
+	})
+
+	engine.LogModuleComplete(m.ID(), len(targets), len(result.Findings), result.Duration)
+	return result, nil
 }
 
 func (m *SSTIScanner) testTarget(ctx context.Context, target *engine.Target, verifyLevel string) []*engine.Finding {
@@ -156,7 +239,7 @@ func (m *SSTIScanner) testTarget(ctx context.Context, target *engine.Target, ver
 }
 
 func (m *SSTIScanner) testMathExpression(ctx context.Context, target *engine.Target, point engine.InjectionPoint, baseBody string) *engine.Finding {
-	for _, probe := range mathProbes {
+	for _, probe := range m.getMathProbes() {
 		select {
 		case <-ctx.Done():
 			return nil
@@ -239,7 +322,7 @@ func (m *SSTIScanner) testErrorBased(ctx context.Context, target *engine.Target,
 }
 
 func (m *SSTIScanner) testExploit(ctx context.Context, target *engine.Target, point engine.InjectionPoint, baseBody string) *engine.Finding {
-	for _, probe := range exploitProbes {
+	for _, probe := range m.getExploitProbes() {
 		select {
 		case <-ctx.Done():
 			return nil
@@ -276,3 +359,5 @@ func (m *SSTIScanner) testExploit(ctx context.Context, target *engine.Target, po
 	}
 	return nil
 }
+
+var _ = model.VulnPayload{}

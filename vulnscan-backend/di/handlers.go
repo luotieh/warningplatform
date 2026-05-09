@@ -32,6 +32,8 @@ import (
 	"vulnscan-backend/notify"
 	"vulnscan-backend/nuclei"
 	"vulnscan-backend/organize"
+	"vulnscan-backend/payloadmgr"
+	"vulnscan-backend/pkg/payload"
 	"vulnscan-backend/poc"
 	"vulnscan-backend/scan/module/cyberspace"
 	"vulnscan-backend/schedule"
@@ -80,6 +82,7 @@ type Handlers struct {
 	sched         *scheduler.Scheduler
 	cronRunner    *schedule.CronRunner
 	Settings      *setting.Handler
+	payloadLoader *payload.Loader
 }
 
 func (h *Handlers) RouteLoad() {
@@ -177,7 +180,7 @@ func (h *Handlers) initScheduler(authGroup *gin.RouterGroup, backends *[]authori
 	reportAPI := scheduler.NewReportAPI(session)
 	reportAPI.RegisterRoutes(authGroup)
 
-	pipelineAPI := scheduler.NewPipelineAPI(session)
+	pipelineAPI := scheduler.NewPipelineAPI(session, h.payloadLoader)
 	pipelineAPI.RegisterRoutes(authGroup)
 
 	slog.Info("[+] Scheduler + Report + Pipeline API 已注册")
@@ -296,6 +299,9 @@ func (h *Handlers) autoMigrate() {
 		&model.ASMDiscoveredAsset{},
 		&model.ASMChange{},
 		&model.ASMAlertRule{},
+		// Federation 同步版本管理
+		&model.SyncVersion{},
+		&model.SyncLog{},
 	}
 
 	if migrateErr := session.AutoMigrate(tables...); migrateErr != nil {
@@ -511,6 +517,11 @@ func (h *Handlers) initKnowledgeAPIs(authGroup *gin.RouterGroup, backends *[]aut
 		return
 	}
 
+	h.payloadLoader = payload.NewLoader(session)
+	if err := h.payloadLoader.LoadAll(); err != nil {
+		slog.Warn("[Knowledge] 加载 payload 失败，将使用空加载器", "error", err)
+	}
+
 	pocStore := nuclei.NewPocStore(session)
 	pocSvc := poc.NewServicePoc(h.DB, pocStore)
 	pocHandler := poc.NewHandlerPoc(pocSvc)
@@ -529,7 +540,12 @@ func (h *Handlers) initKnowledgeAPIs(authGroup *gin.RouterGroup, backends *[]aut
 	dictRoutes := kdict.NewDict(dictHandler)
 	*backends = append(*backends, dictRoutes.RoutesWithGroup(authGroup)...)
 
-	slog.Info("[+] POC + Fingerprint + Dict 知识库 API 已注册")
+	payloadSvc := payloadmgr.NewService(session)
+	payloadHandler := payloadmgr.NewHandler(payloadSvc, h.payloadLoader)
+	payloadRoutes := payloadmgr.NewRoutes(payloadHandler)
+	*backends = append(*backends, payloadRoutes.RegisterRoutes(authGroup)...)
+
+	slog.Info("[+] POC + Fingerprint + Dict + Payload 知识库 API 已注册")
 }
 
 func (h *Handlers) initComplianceAPI(authGroup *gin.RouterGroup, backends *[]authorize.BackendItem) {

@@ -2,17 +2,24 @@ package engine
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"io"
 	"log/slog"
-	"net"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
 )
+
+var dynamicContentPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}`),
+	regexp.MustCompile(`\d{10,13}`),
+	regexp.MustCompile(`[a-f0-9]{32}`),
+	regexp.MustCompile(`csrf[_-]?token["']?\s*[:=]\s*["'][a-zA-Z0-9]+["']`),
+	regexp.MustCompile(`_nonce["']?\s*[:=]\s*["'][a-zA-Z0-9]+["']`),
+}
 
 type Verifier struct {
 	client     *http.Client
@@ -32,31 +39,21 @@ type VerifyResult struct {
 }
 
 func NewVerifier() *Verifier {
-	client := &http.Client{
-		Timeout: 15 * time.Second,
-		Transport: &http.Transport{
-			TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
-			MaxIdleConns:        50,
-			MaxIdleConnsPerHost: 10,
-			DialContext:         (&net.Dialer{Timeout: 5 * time.Second}).DialContext,
-		},
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
+	pool := GetGlobalClientPool()
+	client := pool.GetOrCreate("verifier", WithRedirectPolicy(RedirectNoFollow), WithTimeout(15*time.Second))
 
 	v := &Verifier{
-		client:     client,
+		client:     client.client,
 		strategies: make(map[string]VerifyStrategy),
 	}
-	v.strategies["sqli_error"] = &sqliErrorVerifier{client: client}
-	v.strategies["sqli_boolean"] = &sqliBoolVerifier{client: client}
-	v.strategies["sqli_time"] = &sqliTimeVerifier{client: client}
-	v.strategies["sqli_union"] = &sqliUnionVerifier{client: client}
-	v.strategies["xss_reflected"] = &xssReflectedVerifier{client: client}
-	v.strategies["cmdi_time"] = &cmdiTimeVerifier{client: client}
-	v.strategies["cmdi_output"] = &cmdiOutputVerifier{client: client}
-	v.strategies["lfi"] = &lfiVerifier{client: client}
+	v.strategies["sqli_error"] = &sqliErrorVerifier{client: client.client}
+	v.strategies["sqli_boolean"] = &sqliBoolVerifier{client: client.client}
+	v.strategies["sqli_time"] = &sqliTimeVerifier{client: client.client}
+	v.strategies["sqli_union"] = &sqliUnionVerifier{client: client.client}
+	v.strategies["xss_reflected"] = &xssReflectedVerifier{client: client.client}
+	v.strategies["cmdi_time"] = &cmdiTimeVerifier{client: client.client}
+	v.strategies["cmdi_output"] = &cmdiOutputVerifier{client: client.client}
+	v.strategies["lfi"] = &lfiVerifier{client: client.client}
 
 	return v
 }
@@ -156,6 +153,7 @@ func (v *sqliBoolVerifier) Verify(ctx context.Context, f *Finding) *VerifyResult
 	}
 
 	baseBody := fetchBody(ctx, v.client, f.Target.URL)
+	baseLines := extractLines(baseBody)
 
 	pairs := []struct{ t, f string }{
 		{`1 OR 1=1`, `1 OR 1=2`},
@@ -168,9 +166,11 @@ func (v *sqliBoolVerifier) Verify(ctx context.Context, f *Finding) *VerifyResult
 		tBody := fetchWithPayload(ctx, v.client, f.Target.URL, param, p.t)
 		fBody := fetchWithPayload(ctx, v.client, f.Target.URL, param, p.f)
 		if tBody != "" && fBody != "" {
-			tRatio := simpleRatio(baseBody, tBody)
-			fRatio := simpleRatio(baseBody, fBody)
-			if tRatio > 0.7 && fRatio < 0.5 {
+			tLines := extractLines(tBody)
+			fLines := extractLines(fBody)
+			tJaccard := jaccardSimilarity(baseLines, tLines)
+			fJaccard := jaccardSimilarity(baseLines, fLines)
+			if tJaccard > 0.7 && fJaccard < 0.5 {
 				confirmed++
 			}
 		}
@@ -244,27 +244,70 @@ func (v *xssReflectedVerifier) Verify(ctx context.Context, f *Finding) *VerifyRe
 	probes := []struct {
 		payload string
 		expect  string
+		context string
 	}{
-		{`<img src=x onerror=1>`, `onerror=1`},
-		{`<svg/onload=1>`, `onload=1`},
-		{`"><script>1</script>`, `<script>1</script>`},
+		{`<img src=x onerror=1>`, `onerror=1`, "html_tag"},
+		{`<svg/onload=1>`, `onload=1`, "html_tag"},
+		{`"><script>1</script>`, `<script>1</script>`, "script"},
+		{`' onmouseover='alert(1)`, `onmouseover=`, "attribute"},
+		{`javascript:alert(1)`, `javascript:alert(1)`, "javascript_uri"},
 	}
 
 	confirmed := 0
+	executableContext := 0
 	for _, p := range probes {
 		body := fetchWithPayload(ctx, v.client, f.Target.URL, param, p.payload)
 		if strings.Contains(body, p.expect) {
 			confirmed++
+			if isExecutableContext(body, p.expect, p.context) {
+				executableContext++
+			}
 		}
+	}
+
+	detail := fmt.Sprintf("%d/%d XSS probes reflected", confirmed, len(probes))
+	if executableContext > 0 {
+		detail += fmt.Sprintf(", %d in executable context", executableContext)
 	}
 
 	return &VerifyResult{
 		Verified:   confirmed >= 1,
-		Confidence: min(90, f.Confidence+confirmed*5),
-		Detail:     fmt.Sprintf("%d/%d XSS probes reflected", confirmed, len(probes)),
+		Confidence: min(95, f.Confidence+confirmed*5+executableContext*10),
+		Detail:     detail,
 		Variants:   len(probes),
 		Confirmed:  confirmed,
 	}
+}
+
+func isExecutableContext(body, payload, contextType string) bool {
+	idx := strings.Index(body, payload)
+	if idx == -1 {
+		return false
+	}
+
+	before := body[:idx]
+
+	switch contextType {
+	case "script":
+		scriptOpen := strings.Count(before, "<script")
+		scriptClose := strings.Count(before, "</script>")
+		return scriptOpen > scriptClose
+	case "html_tag":
+		lastTagStart := strings.LastIndex(before, "<")
+		lastTagEnd := strings.LastIndex(before, ">")
+		return lastTagStart > lastTagEnd
+	case "attribute":
+		lastQuote := strings.LastIndexAny(before, `"'`)
+		if lastQuote == -1 {
+			return false
+		}
+		lastTagStart := strings.LastIndex(before[:lastQuote], "<")
+		return lastTagStart != -1
+	case "javascript_uri":
+		return strings.Contains(before, "href=") || strings.Contains(before, "src=")
+	}
+
+	return false
 }
 
 type cmdiTimeVerifier struct{ client *http.Client }
@@ -369,13 +412,90 @@ func hasDBError(body string) bool {
 		"sql syntax", "mysql", "postgresql", "ora-", "sqlite",
 		"sqlstate", "unclosed quotation", "odbc", "syntax error",
 	}
-	lower := strings.ToLower(body)
 	for _, p := range patterns {
-		if strings.Contains(lower, p) {
+		if containsFold(body, p) {
 			return true
 		}
 	}
 	return false
+}
+
+func containsFold(s, substr string) bool {
+	if len(substr) > len(s) {
+		return false
+	}
+	for i := 0; i <= len(s)-len(substr); i++ {
+		match := true
+		for j := 0; j < len(substr); j++ {
+			sc := s[i+j]
+			pc := substr[j]
+			if sc != pc {
+				if sc >= 'A' && sc <= 'Z' {
+					sc += 'a' - 'A'
+				}
+				if pc >= 'A' && pc <= 'Z' {
+					pc += 'a' - 'A'
+				}
+				if sc != pc {
+					match = false
+					break
+				}
+			}
+		}
+		if match {
+			return true
+		}
+	}
+	return false
+}
+
+func extractLines(s string) map[string]struct{} {
+	lines := make(map[string]struct{})
+	start := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\n' {
+			line := s[start:i]
+			line = filterDynamicContent(line)
+			if len(line) > 3 {
+				lines[line] = struct{}{}
+			}
+			start = i + 1
+		}
+	}
+	if start < len(s) {
+		line := s[start:]
+		line = filterDynamicContent(line)
+		if len(line) > 3 {
+			lines[line] = struct{}{}
+		}
+	}
+	return lines
+}
+
+func filterDynamicContent(s string) string {
+	for _, pattern := range dynamicContentPatterns {
+		s = pattern.ReplaceAllString(s, "<DYNAMIC>")
+	}
+	return s
+}
+
+func jaccardSimilarity(a, b map[string]struct{}) float64 {
+	if len(a) == 0 && len(b) == 0 {
+		return 1.0
+	}
+
+	intersection := 0
+	for line := range a {
+		if _, ok := b[line]; ok {
+			intersection++
+		}
+	}
+
+	union := len(a) + len(b) - intersection
+	if union == 0 {
+		return 0
+	}
+	return float64(intersection) / float64(union)
 }
 
 func simpleRatio(a, b string) float64 {

@@ -9,6 +9,23 @@ type defaultFP struct {
 	versionExpr string
 	ports       string
 	priority    int
+
+	// HTTP 深度识别
+	httpPaths     string
+	httpHeaders   string
+	httpMethod    string
+	httpMatchBody bool
+
+	// TLS 证书分析
+	tlsMatchCN       bool
+	tlsMatchSAN      bool
+	tlsMatchOrg      bool
+	tlsMatchIssuer   bool
+	tlsMatchExpiry   bool
+	tlsMatchSelfSign bool
+
+	// 探测链
+	probeChainNext string
 }
 
 func defaultFingerprints() []defaultFP {
@@ -229,6 +246,20 @@ func defaultFingerprints() []defaultFP {
 		{name: "Probe-SVN", service: "SVN", probeType: "active", probeData: "", matchRegex: `^\(\s*success`, priority: 80, ports: "3690"},
 		{name: "Probe-Socks5", service: "SOCKS5", probeType: "active", probeData: "\\x05\\x01\\x00", matchRegex: `^\x05[\x00\xff]`, priority: 80, ports: "1080"},
 		{name: "Probe-Zabbix", service: "Zabbix", probeType: "active", probeData: "", matchRegex: `(?i)ZBXD`, priority: 78, ports: "10050,10051"},
+
+		// ============================================================
+		// HTTP 深度识别规则
+		// ============================================================
+		{name: "HTTP-Deep-Spring", service: "Spring Boot", probeType: "active", probeData: "GET /actuator/env HTTP/1.0\\r\\nHost: probe\\r\\n\\r\\n", matchRegex: `(?i)"activeProfiles"`, priority: 92, ports: "8080,80,443", httpPaths: "/actuator/env,/actuator/health", httpMethod: "GET"},
+		{name: "HTTP-Deep-Django", service: "Django", probeType: "active", probeData: "GET /admin/ HTTP/1.0\\r\\nHost: probe\\r\\n\\r\\n", matchRegex: `(?i)django|Django administration`, priority: 90, ports: "8000,80,443", httpPaths: "/admin/,/admin/login/", httpMethod: "GET"},
+		{name: "HTTP-Deep-WordPress", service: "WordPress", probeType: "active", probeData: "GET /wp-login.php HTTP/1.0\\r\\nHost: probe\\r\\n\\r\\n", matchRegex: `(?i)WordPress|wp-login`, priority: 92, ports: "80,443", httpPaths: "/wp-login.php,/wp-admin/,/wp-content/", httpMethod: "GET"},
+		{name: "HTTP-Deep-Jenkins", service: "Jenkins", probeType: "active", probeData: "GET /login HTTP/1.0\\r\\nHost: probe\\r\\n\\r\\n", matchRegex: `(?i)X-Jenkins|Jenkins`, priority: 90, ports: "8080,80,443", httpPaths: "/login,/manage", httpMethod: "GET"},
+		{name: "HTTP-Deep-Grafana", service: "Grafana", probeType: "active", probeData: "GET /login HTTP/1.0\\r\\nHost: probe\\r\\n\\r\\n", matchRegex: `(?i)Grafana|grafana`, priority: 90, ports: "3000,80,443", httpPaths: "/login,/api/health", httpMethod: "GET"},
+		{name: "HTTP-Deep-Kibana", service: "Kibana", probeType: "active", probeData: "GET /app/kibana HTTP/1.0\\r\\nHost: probe\\r\\n\\r\\n", matchRegex: `(?i)Kibana|kibana`, priority: 90, ports: "5601,80,443", httpPaths: "/app/kibana,/api/status", httpMethod: "GET"},
+		{name: "HTTP-Deep-Nacos", service: "Nacos", probeType: "active", probeData: "GET /nacos/ HTTP/1.0\\r\\nHost: probe\\r\\n\\r\\n", matchRegex: `(?i)Nacos|nacos`, priority: 90, ports: "8848,80,443", httpPaths: "/nacos/,/nacos/v1/cs/health", httpMethod: "GET"},
+		{name: "HTTP-Deep-Swagger", service: "Swagger UI", probeType: "active", probeData: "GET /swagger-ui.html HTTP/1.0\\r\\nHost: probe\\r\\n\\r\\n", matchRegex: `(?i)swagger|Swagger UI`, priority: 88, ports: "8080,80,443", httpPaths: "/swagger-ui.html,/swagger/index.html,/api-docs", httpMethod: "GET"},
+		{name: "HTTP-Deep-Prometheus", service: "Prometheus", probeType: "active", probeData: "GET /graph HTTP/1.0\\r\\nHost: probe\\r\\n\\r\\n", matchRegex: `(?i)Prometheus|prometheus`, priority: 88, ports: "9090,80,443", httpPaths: "/graph,/api/v1/status/buildinfo", httpMethod: "GET"},
+		{name: "HTTP-Deep-Elasticsearch", service: "Elasticsearch", probeType: "active", probeData: "GET / HTTP/1.0\\r\\nHost: probe\\r\\n\\r\\n", matchRegex: `(?i)"cluster_name"|"tagline"`, priority: 90, ports: "9200,80,443", httpPaths: "/,/_cluster/health", httpMethod: "GET"},
 	}
 }
 

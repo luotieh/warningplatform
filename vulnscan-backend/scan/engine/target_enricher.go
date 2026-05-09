@@ -136,6 +136,89 @@ func (e *TargetEnricher) deriveTargets(targets []*Target) []*Target {
 	return derived
 }
 
+func (e *TargetEnricher) EnrichWithFindings(targets []*Target, findings []*Finding) []*Target {
+	enriched := make([]*Target, 0, len(targets))
+
+	findingMap := make(map[string][]*Finding)
+	for _, f := range findings {
+		if f.Target != nil {
+			key := targetUniqueKey(f.Target)
+			findingMap[key] = append(findingMap[key], f)
+		}
+	}
+
+	for _, t := range targets {
+		key := targetUniqueKey(t)
+		enrichedTarget := &Target{
+			Host:         t.Host,
+			IP:           t.IP,
+			Port:         t.Port,
+			Protocol:     t.Protocol,
+			URL:          t.URL,
+			Service:      t.Service,
+			Product:      t.Product,
+			Version:      t.Version,
+			Fingerprints: t.Fingerprints,
+			Extra:        copyExtra(t.Extra),
+		}
+
+		if enrichedTarget.IP == "" && enrichedTarget.Host != "" && net.ParseIP(enrichedTarget.Host) != nil {
+			enrichedTarget.IP = enrichedTarget.Host
+		}
+
+		if enrichedTarget.Protocol == "" && enrichedTarget.Port > 0 {
+			if svc, ok := e.portServiceMap[enrichedTarget.Port]; ok {
+				enrichedTarget.Protocol = svc
+			} else {
+				enrichedTarget.Protocol = "tcp"
+			}
+		}
+
+		if enrichedTarget.URL == "" && enrichedTarget.Port > 0 {
+			enrichedTarget.URL = e.buildURL(enrichedTarget)
+		}
+
+		if findings, ok := findingMap[key]; ok {
+			for _, f := range findings {
+				if f.Type == "fingerprint" && f.Data != nil {
+					fp := Fingerprint{
+						Confidence: f.Confidence,
+						Source:     f.ModuleID,
+					}
+					if product, ok := f.Data["product"]; ok {
+						fp.Product = product
+						if enrichedTarget.Product == "" {
+							enrichedTarget.Product = product
+						}
+					}
+					if version, ok := f.Data["version"]; ok {
+						fp.Version = version
+						if enrichedTarget.Version == "" {
+							enrichedTarget.Version = version
+						}
+					}
+					if category, ok := f.Data["category"]; ok {
+						fp.Category = category
+					}
+					enrichedTarget.Fingerprints = append(enrichedTarget.Fingerprints, fp)
+				}
+
+				if f.Type == "service" && f.Data != nil {
+					if service, ok := f.Data["service"]; ok {
+						if enrichedTarget.Service == "" {
+							enrichedTarget.Service = service
+						}
+					}
+				}
+			}
+		}
+
+		enriched = append(enriched, enrichedTarget)
+	}
+
+	return enriched
+}
+
 func (e *TargetEnricher) mergeInto(dest, src *Target) {
 	if dest.IP == "" && src.IP != "" {
 		dest.IP = src.IP
@@ -163,7 +246,7 @@ func targetUniqueKey(t *Target) string {
 	if host == "" {
 		host = t.IP
 	}
-	return fmt.Sprintf("%s|%d|%s", host, t.Port, t.Protocol)
+	return fmt.Sprintf("%s|%d|%s|%s", host, t.Port, t.Protocol, t.Service)
 }
 
 func copyExtra(m map[string]string) map[string]string {

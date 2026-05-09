@@ -21,6 +21,7 @@ import (
 	"vulnscan-backend/boot"
 	clusterContract "vulnscan-backend/cluster/cluster-contract"
 	"vulnscan-backend/model"
+	"vulnscan-backend/pkg/payload"
 	"vulnscan-backend/scan/engine"
 	"vulnscan-backend/scan/module/certcheck"
 	"vulnscan-backend/scan/module/dirscan"
@@ -430,6 +431,9 @@ func (w *WorkerAgent) resolveModules(task *model.ScanTask) []engine.ScanModule {
 		profile = task.Type
 	}
 
+	pl := payload.NewLoader(nil)
+	_ = pl.LoadAll()
+
 	switch profile {
 	case "quick":
 		return []engine.ScanModule{
@@ -440,10 +444,10 @@ func (w *WorkerAgent) resolveModules(task *model.ScanTask) []engine.ScanModule {
 		}
 	case "vuln":
 		return []engine.ScanModule{
-			sqli.New(),
-			xss.New(),
+			sqli.New(pl),
+			xss.New(pl),
 			weakpass.New(),
-			ssrf.New(""),
+			ssrf.New("", pl),
 		}
 	case "recon":
 		return []engine.ScanModule{
@@ -467,10 +471,10 @@ func (w *WorkerAgent) resolveModules(task *model.ScanTask) []engine.ScanModule {
 			certcheck.New(),
 			infoleak.New(),
 			dirscan.New(),
-			sqli.New(),
-			xss.New(),
+			sqli.New(pl),
+			xss.New(pl),
 			weakpass.New(),
-			ssrf.New(""),
+			ssrf.New("", pl),
 		}
 	}
 }

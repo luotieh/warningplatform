@@ -9,15 +9,18 @@ import (
 	"strings"
 	"time"
 
+	"vulnscan-backend/model"
+	"vulnscan-backend/pkg/payload"
 	"vulnscan-backend/scan/engine"
 )
 
 type CMDiScanner struct {
-	base *engine.VulnScanner
+	base     *engine.VulnScanner
+	payloads *payload.Loader
 }
 
-func New() *CMDiScanner {
-	return &CMDiScanner{}
+func New(loader *payload.Loader) *CMDiScanner {
+	return &CMDiScanner{payloads: loader}
 }
 
 func (m *CMDiScanner) ID() string       { return "cmdi" }
@@ -81,14 +84,66 @@ func (m *CMDiScanner) testTarget(ctx context.Context, target *engine.Target, ver
 	return findings
 }
 
-type cmdiPayload struct {
+type cmdiPayloadEntry struct {
 	value   string
 	os      string
 	variant string
 }
 
-func timePayloads() []cmdiPayload {
-	return []cmdiPayload{
+func (m *CMDiScanner) getTimePayloads() []cmdiPayloadEntry {
+	if m.payloads != nil {
+		dbPayloads := m.payloads.GetPayloads("cmdi")
+		var result []cmdiPayloadEntry
+		for _, p := range dbPayloads {
+			if p.Type == "time" || p.Type == "oob" {
+				os := "linux"
+				if strings.Contains(p.Databases, "windows") {
+					os = "windows"
+				}
+				result = append(result, cmdiPayloadEntry{
+					value:   p.Value,
+					os:      os,
+					variant: p.Tags,
+				})
+			}
+		}
+		if len(result) > 0 {
+			return result
+		}
+	}
+	return defaultTimePayloads()
+}
+
+func (m *CMDiScanner) getOutputPayloads(canary string) []cmdiPayloadEntry {
+	if m.payloads != nil {
+		dbPayloads := m.payloads.GetPayloads("cmdi")
+		var result []cmdiPayloadEntry
+		for _, p := range dbPayloads {
+			if p.Type == "basic" || p.Type == "rce" {
+				os := "linux"
+				if strings.Contains(p.Databases, "windows") {
+					os = "windows"
+				}
+				value := p.Value
+				if strings.Contains(value, "{canary}") {
+					value = strings.ReplaceAll(value, "{canary}", canary)
+				}
+				result = append(result, cmdiPayloadEntry{
+					value:   value,
+					os:      os,
+					variant: p.Tags,
+				})
+			}
+		}
+		if len(result) > 0 {
+			return result
+		}
+	}
+	return defaultOutputPayloads(canary)
+}
+
+func defaultTimePayloads() []cmdiPayloadEntry {
+	return []cmdiPayloadEntry{
 		{"; sleep 5", "linux", "semicolon"},
 		{"| sleep 5", "linux", "pipe"},
 		{"|| sleep 5", "linux", "or"},
@@ -103,8 +158,8 @@ func timePayloads() []cmdiPayload {
 	}
 }
 
-func outputPayloads(canary string) []cmdiPayload {
-	return []cmdiPayload{
+func defaultOutputPayloads(canary string) []cmdiPayloadEntry {
+	return []cmdiPayloadEntry{
 		{fmt.Sprintf("; echo %s", canary), "linux", "echo-semicolon"},
 		{fmt.Sprintf("| echo %s", canary), "linux", "echo-pipe"},
 		{fmt.Sprintf("$(echo %s)", canary), "linux", "echo-subshell"},
@@ -122,7 +177,7 @@ func (m *CMDiScanner) testTimeBased(ctx context.Context, target *engine.Target, 
 	baseLatency := time.Since(baseStart)
 	threshold := baseLatency + 4*time.Second
 
-	for _, p := range timePayloads() {
+	for _, p := range m.getTimePayloads() {
 		select {
 		case <-ctx.Done():
 			return nil
@@ -164,7 +219,7 @@ func (m *CMDiScanner) testTimeBased(ctx context.Context, target *engine.Target, 
 }
 
 func (m *CMDiScanner) testOutputBased(ctx context.Context, target *engine.Target, point engine.InjectionPoint, canary string) *engine.Finding {
-	for _, p := range outputPayloads(canary) {
+	for _, p := range m.getOutputPayloads(canary) {
 		select {
 		case <-ctx.Done():
 			return nil
@@ -221,3 +276,5 @@ func genCanary() string {
 	_, _ = rand.Read(b)
 	return "rce" + hex.EncodeToString(b)
 }
+
+var _ = model.VulnPayload{}

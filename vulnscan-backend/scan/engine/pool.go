@@ -17,7 +17,7 @@ func NewWorkerPool(size int) *WorkerPool {
 	ctx, cancel := context.WithCancel(context.Background())
 	p := &WorkerPool{
 		size:   size,
-		taskCh: make(chan func(), size*2),
+		taskCh: make(chan func(), size*4),
 		ctx:    ctx,
 		cancel: cancel,
 	}

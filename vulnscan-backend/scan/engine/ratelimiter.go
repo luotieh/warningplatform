@@ -6,10 +6,9 @@ import (
 	"time"
 )
 
-// TokenBucket provides a global token-bucket rate limiter shared across all scan modules.
-// Different from RateLimiter (channel-based per-target), this is a single global bucket.
 type TokenBucket struct {
 	mu         sync.Mutex
+	cond       *sync.Cond
 	tokens     float64
 	maxTokens  float64
 	refillRate float64
@@ -19,8 +18,6 @@ type TokenBucket struct {
 var globalBucket *TokenBucket
 var bucketOnce sync.Once
 
-// GetGlobalBucket returns the singleton token bucket.
-// Default: 1000 requests/second, burst up to 2000.
 func GetGlobalBucket() *TokenBucket {
 	bucketOnce.Do(func() {
 		globalBucket = NewTokenBucket(1000, 2000)
@@ -28,7 +25,6 @@ func GetGlobalBucket() *TokenBucket {
 	return globalBucket
 }
 
-// SetGlobalBucketRate reconfigures the global bucket.
 func SetGlobalBucketRate(rps float64, burst float64) {
 	b := GetGlobalBucket()
 	b.mu.Lock()
@@ -38,32 +34,46 @@ func SetGlobalBucketRate(rps float64, burst float64) {
 	if b.tokens > burst {
 		b.tokens = burst
 	}
+	b.cond.Broadcast()
 }
 
 func NewTokenBucket(rps float64, burst float64) *TokenBucket {
-	return &TokenBucket{
+	tb := &TokenBucket{
 		tokens:     burst,
 		maxTokens:  burst,
 		refillRate: rps,
 		lastRefill: time.Now(),
 	}
+	tb.cond = sync.NewCond(&tb.mu)
+	return tb
 }
 
-// Wait blocks until a token is available or ctx is cancelled.
 func (tb *TokenBucket) Wait(ctx context.Context) error {
 	for {
 		if tb.tryTake() {
 			return nil
 		}
+
+		tb.mu.Lock()
+		waitDone := make(chan struct{})
+		go func() {
+			tb.cond.Wait()
+			close(waitDone)
+		}()
+
 		select {
 		case <-ctx.Done():
+			tb.cond.Broadcast()
+			tb.mu.Unlock()
 			return ctx.Err()
-		case <-time.After(time.Millisecond):
+		case <-waitDone:
+			tb.mu.Unlock()
+		case <-time.After(50 * time.Millisecond):
+			tb.mu.Unlock()
 		}
 	}
 }
 
-// TryTake attempts to take a token without blocking.
 func (tb *TokenBucket) TryTake() bool {
 	return tb.tryTake()
 }
@@ -83,12 +93,12 @@ func (tb *TokenBucket) tryTake() bool {
 
 	if tb.tokens >= 1 {
 		tb.tokens--
+		tb.cond.Broadcast()
 		return true
 	}
 	return false
 }
 
-// Stats returns current bucket stats.
 func (tb *TokenBucket) Stats() (tokens float64, rps float64, burst float64) {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()

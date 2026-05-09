@@ -10,17 +10,20 @@ import (
 	"strings"
 	"time"
 
+	"vulnscan-backend/model"
+	"vulnscan-backend/pkg/payload"
 	"vulnscan-backend/scan/engine"
 )
 
 type XSSScanner struct {
-	base    *engine.VulnScanner
-	scanCtx *engine.ScanContext
-	wafEnc  *engine.WAFBypassEncoder
+	base     *engine.VulnScanner
+	scanCtx  *engine.ScanContext
+	wafEnc   *engine.WAFBypassEncoder
+	payloads *payload.Loader
 }
 
-func New() *XSSScanner {
-	return &XSSScanner{}
+func New(loader *payload.Loader) *XSSScanner {
+	return &XSSScanner{payloads: loader}
 }
 
 func (m *XSSScanner) ID() string       { return "xss" }
@@ -33,6 +36,7 @@ func (m *XSSScanner) Params() []engine.ModuleParam {
 
 func (m *XSSScanner) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
 	m.base = engine.NewVulnScanner(config, engine.WithTimeout(10*time.Second))
+	m.wafEnc = engine.NewWAFBypassEncoder(engine.BuildScanContext(config))
 	verifyLevel := engine.GetConfigValue(config, "verification_level", "both")
 
 	result := m.base.RunTargets(ctx, m.ID(), targets, func(ctx context.Context, target *engine.Target) []*engine.Finding {
@@ -89,27 +93,30 @@ func (m *XSSScanner) testReflected(ctx context.Context, target *engine.Target, p
 		return nil
 	}
 
-	for _, payload := range xssPayloads(canary) {
-		body, _, _ := m.base.SendInjected(ctx, target, point, payload.value)
+	for _, p := range m.getXSSPayloads(canary) {
+		value := strings.ReplaceAll(p.Value, "{canary}", canary)
+		expect := strings.ReplaceAll(p.Expect, "{canary}", canary)
+
+		body, _, _ := m.base.SendInjected(ctx, target, point, value)
 		if body == "" {
 			continue
 		}
 
-		if strings.Contains(body, payload.expect) {
+		if strings.Contains(body, expect) {
 			return &engine.Finding{
 				ModuleID:    m.ID(),
 				Target:      target,
 				Type:        "xss_reflected",
 				Title:       fmt.Sprintf("反射型XSS - %s: %s", point.Type, point.Name),
-				Description: fmt.Sprintf("%s参数 %s 的值被直接反射到响应中且未充分编码 (context: %s)", point.Type, point.Name, payload.context),
+				Description: fmt.Sprintf("%s参数 %s 的值被直接反射到响应中且未充分编码 (context: %s)", point.Type, point.Name, p.Context),
 				Severity:    "medium",
 				Confidence:  80,
-				Evidence:    engine.Truncate(extractContext(body, payload.expect, 200), 500),
+				Evidence:    engine.Truncate(extractContext(body, expect, 200), 500),
 				Timestamp:   time.Now(),
 				Data: map[string]string{
 					"param":      point.Name,
-					"payload":    payload.value,
-					"context":    payload.context,
+					"payload":    value,
+					"context":    p.Context,
 					"type":       "reflected",
 					"inject_via": string(point.Type),
 				},
@@ -120,92 +127,34 @@ func (m *XSSScanner) testReflected(ctx context.Context, target *engine.Target, p
 	return nil
 }
 
-type xssPayload struct {
-	value   string
-	expect  string
-	context string
-}
-
-func xssPayloads(canary string) []xssPayload {
-	return []xssPayload{
-		{
-			value:   fmt.Sprintf(`<script>alert('%s')</script>`, canary),
-			expect:  fmt.Sprintf(`<script>alert('%s')</script>`, canary),
-			context: "html",
-		},
-		{
-			value:   fmt.Sprintf(`"><img src=x onerror=alert('%s')>`, canary),
-			expect:  fmt.Sprintf(`onerror=alert('%s')`, canary),
-			context: "attribute",
-		},
-		{
-			value:   fmt.Sprintf(`'><svg/onload=alert('%s')>`, canary),
-			expect:  fmt.Sprintf(`onload=alert('%s')`, canary),
-			context: "tag-break",
-		},
-		{
-			value:   fmt.Sprintf(`javascript:alert('%s')`, canary),
-			expect:  fmt.Sprintf(`javascript:alert('%s')`, canary),
-			context: "href",
-		},
-		{
-			value:   fmt.Sprintf(`" onfocus="alert('%s')" autofocus="`, canary),
-			expect:  fmt.Sprintf(`onfocus="alert('%s')"`, canary),
-			context: "event-handler",
-		},
-		{
-			value:   fmt.Sprintf(`<details open ontoggle=alert('%s')>`, canary),
-			expect:  fmt.Sprintf(`ontoggle=alert('%s')`, canary),
-			context: "html5-element",
-		},
-		{
-			value:   fmt.Sprintf(`<math><mtext><table><mglyph><svg><mtext><textarea><path id="</textarea><img onerror=alert('%s') src=1>">`, canary),
-			expect:  fmt.Sprintf(`onerror=alert('%s')`, canary),
-			context: "mutation-xss",
-		},
-		{
-			value:   fmt.Sprintf(`</script><script>alert('%s')</script>`, canary),
-			expect:  fmt.Sprintf(`alert('%s')`, canary),
-			context: "script-break",
-		},
-		{
-			value:   fmt.Sprintf(`'-alert('%s')-'`, canary),
-			expect:  fmt.Sprintf(`alert('%s')`, canary),
-			context: "js-string",
-		},
-		{
-			value:   fmt.Sprintf(`\x3cscript\x3ealert('%s')\x3c/script\x3e`, canary),
-			expect:  fmt.Sprintf(`alert('%s')`, canary),
-			context: "hex-encode",
-		},
+func (m *XSSScanner) getXSSPayloads(canary string) []payload.XSSPayloadEntry {
+	if m.payloads != nil {
+		cfg := m.payloads.GetXSS()
+		if cfg != nil && len(cfg.Payloads) > 0 {
+			return cfg.Payloads
+		}
 	}
+	return defaultXSSPayloads(canary)
 }
 
-var domSinkPatterns = []string{
-	`document\.write\s*\(`,
-	`document\.writeln\s*\(`,
-	`\.innerHTML\s*=`,
-	`\.outerHTML\s*=`,
-	`eval\s*\(`,
-	`setTimeout\s*\(\s*['"]`,
-	`setInterval\s*\(\s*['"]`,
-	`new\s+Function\s*\(`,
-	`\.insertAdjacentHTML\s*\(`,
-	`window\.location\s*=`,
-	`location\.href\s*=`,
-	`location\.assign\s*\(`,
-	`location\.replace\s*\(`,
+func (m *XSSScanner) getDOMSinkPatterns() []model.VulnPayloadPattern {
+	if m.payloads != nil {
+		cfg := m.payloads.GetXSS()
+		if cfg != nil && len(cfg.DOMSinks) > 0 {
+			return cfg.DOMSinks
+		}
+	}
+	return defaultDOMSinkPatterns()
 }
 
-var domSourcePatterns = []string{
-	`location\.hash`,
-	`location\.search`,
-	`location\.href`,
-	`document\.URL`,
-	`document\.documentURI`,
-	`document\.referrer`,
-	`window\.name`,
-	`postMessage`,
+func (m *XSSScanner) getDOMSourcePatterns() []model.VulnPayloadPattern {
+	if m.payloads != nil {
+		cfg := m.payloads.GetXSS()
+		if cfg != nil && len(cfg.DOMSources) > 0 {
+			return cfg.DOMSources
+		}
+	}
+	return defaultDOMSourcePatterns()
 }
 
 func (m *XSSScanner) testDOMSinks(ctx context.Context, target *engine.Target) []*engine.Finding {
@@ -218,16 +167,16 @@ func (m *XSSScanner) testDOMSinks(ctx context.Context, target *engine.Target) []
 	foundSinks := map[string]bool{}
 	foundSources := map[string]bool{}
 
-	for _, pattern := range domSinkPatterns {
-		re := regexp.MustCompile(pattern)
+	for _, p := range m.getDOMSinkPatterns() {
+		re := regexp.MustCompile(p.Pattern)
 		if re.MatchString(body) {
-			foundSinks[pattern] = true
+			foundSinks[p.Name] = true
 		}
 	}
-	for _, pattern := range domSourcePatterns {
-		re := regexp.MustCompile(pattern)
+	for _, p := range m.getDOMSourcePatterns() {
+		re := regexp.MustCompile(p.Pattern)
 		if re.MatchString(body) {
-			foundSources[pattern] = true
+			foundSources[p.Name] = true
 		}
 	}
 
@@ -283,4 +232,50 @@ func extractContext(body, marker string, window int) string {
 	}
 
 	return body[start:end]
+}
+
+func defaultXSSPayloads(canary string) []payload.XSSPayloadEntry {
+	return []payload.XSSPayloadEntry{
+		{Value: fmt.Sprintf(`<script>alert('%s')</script>`, canary), Expect: fmt.Sprintf(`<script>alert('%s')</script>`, canary), Context: "html"},
+		{Value: fmt.Sprintf(`"><img src=x onerror=alert('%s')>`, canary), Expect: fmt.Sprintf(`onerror=alert('%s')`, canary), Context: "attribute"},
+		{Value: fmt.Sprintf(`'><svg/onload=alert('%s')>`, canary), Expect: fmt.Sprintf(`onload=alert('%s')`, canary), Context: "tag-break"},
+		{Value: fmt.Sprintf(`javascript:alert('%s')`, canary), Expect: fmt.Sprintf(`javascript:alert('%s')`, canary), Context: "href"},
+		{Value: fmt.Sprintf(`" onfocus="alert('%s')" autofocus="`, canary), Expect: fmt.Sprintf(`onfocus="alert('%s')"`, canary), Context: "event-handler"},
+		{Value: fmt.Sprintf(`<details open ontoggle=alert('%s')>`, canary), Expect: fmt.Sprintf(`ontoggle=alert('%s')`, canary), Context: "html5-element"},
+		{Value: fmt.Sprintf(`<math><mtext><table><mglyph><svg><mtext><textarea><path id="</textarea><img onerror=alert('%s') src=1>">`, canary), Expect: fmt.Sprintf(`onerror=alert('%s')`, canary), Context: "mutation-xss"},
+		{Value: fmt.Sprintf(`</script><script>alert('%s')</script>`, canary), Expect: fmt.Sprintf(`alert('%s')`, canary), Context: "script-break"},
+		{Value: fmt.Sprintf(`'-alert('%s')-'`, canary), Expect: fmt.Sprintf(`alert('%s')`, canary), Context: "js-string"},
+		{Value: fmt.Sprintf(`\x3cscript\x3ealert('%s')\x3c/script\x3e`, canary), Expect: fmt.Sprintf(`alert('%s')`, canary), Context: "hex-encode"},
+	}
+}
+
+func defaultDOMSinkPatterns() []model.VulnPayloadPattern {
+	return []model.VulnPayloadPattern{
+		{Pattern: `document\.write\s*\(`, Name: "document.write", Category: "dom_sink", Enabled: true},
+		{Pattern: `document\.writeln\s*\(`, Name: "document.writeln", Category: "dom_sink", Enabled: true},
+		{Pattern: `\.innerHTML\s*=`, Name: "innerHTML", Category: "dom_sink", Enabled: true},
+		{Pattern: `\.outerHTML\s*=`, Name: "outerHTML", Category: "dom_sink", Enabled: true},
+		{Pattern: `eval\s*\(`, Name: "eval", Category: "dom_sink", Enabled: true},
+		{Pattern: `setTimeout\s*\(\s*['"]`, Name: "setTimeout", Category: "dom_sink", Enabled: true},
+		{Pattern: `setInterval\s*\(\s*['"]`, Name: "setInterval", Category: "dom_sink", Enabled: true},
+		{Pattern: `new\s+Function\s*\(`, Name: "Function constructor", Category: "dom_sink", Enabled: true},
+		{Pattern: `\.insertAdjacentHTML\s*\(`, Name: "insertAdjacentHTML", Category: "dom_sink", Enabled: true},
+		{Pattern: `window\.location\s*=`, Name: "window.location", Category: "dom_sink", Enabled: true},
+		{Pattern: `location\.href\s*=`, Name: "location.href", Category: "dom_sink", Enabled: true},
+		{Pattern: `location\.assign\s*\(`, Name: "location.assign", Category: "dom_sink", Enabled: true},
+		{Pattern: `location\.replace\s*\(`, Name: "location.replace", Category: "dom_sink", Enabled: true},
+	}
+}
+
+func defaultDOMSourcePatterns() []model.VulnPayloadPattern {
+	return []model.VulnPayloadPattern{
+		{Pattern: `location\.hash`, Name: "location.hash", Category: "dom_source", Enabled: true},
+		{Pattern: `location\.search`, Name: "location.search", Category: "dom_source", Enabled: true},
+		{Pattern: `location\.href`, Name: "location.href", Category: "dom_source", Enabled: true},
+		{Pattern: `document\.URL`, Name: "document.URL", Category: "dom_source", Enabled: true},
+		{Pattern: `document\.documentURI`, Name: "document.documentURI", Category: "dom_source", Enabled: true},
+		{Pattern: `document\.referrer`, Name: "document.referrer", Category: "dom_source", Enabled: true},
+		{Pattern: `window\.name`, Name: "window.name", Category: "dom_source", Enabled: true},
+		{Pattern: `postMessage`, Name: "postMessage", Category: "dom_source", Enabled: true},
+	}
 }

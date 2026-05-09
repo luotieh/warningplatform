@@ -28,6 +28,23 @@ type CompiledFingerprint struct {
 	VersionExpr *regexp.Regexp
 	Priority    int
 	Ports       map[int]struct{}
+
+	// HTTP 深度识别
+	HTTPPaths     []string
+	HTTPHeaders   map[string]string
+	HTTPMethod    string
+	HTTPMatchBody bool
+
+	// TLS 证书分析
+	TLSMatchCN       bool
+	TLSMatchSAN      bool
+	TLSMatchOrg      bool
+	TLSMatchIssuer   bool
+	TLSMatchExpiry   bool
+	TLSMatchSelfSign bool
+
+	// 探测链
+	ProbeChainNext string
 }
 
 // FingerprintStore 指纹库 — 多层加载: DB > 用户自定义 > 内嵌默认
@@ -65,6 +82,29 @@ func (s *FingerprintStore) GetProbes(port int) []*CompiledFingerprint {
 	var probes []*CompiledFingerprint
 	for _, fp := range s.fingerprints {
 		if fp.ProbeType != "active" {
+			continue
+		}
+		if len(fp.Ports) > 0 {
+			if _, ok := fp.Ports[port]; !ok {
+				continue
+			}
+		}
+		probes = append(probes, fp)
+	}
+	return probes
+}
+
+// GetHTTPProbes 获取 HTTP 深度探测指纹
+func (s *FingerprintStore) GetHTTPProbes(port int) []*CompiledFingerprint {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var probes []*CompiledFingerprint
+	for _, fp := range s.fingerprints {
+		if fp.ProbeType != "active" {
+			continue
+		}
+		if len(fp.HTTPPaths) == 0 {
 			continue
 		}
 		if len(fp.Ports) > 0 {
@@ -235,7 +275,57 @@ func compileFingerprint(fp model.ServiceFingerprint) *CompiledFingerprint {
 		compiled.Ports = parsePorts(fp.Ports)
 	}
 
+	if fp.HTTPPaths != "" {
+		compiled.HTTPPaths = parsePaths(fp.HTTPPaths)
+	}
+
+	if fp.HTTPHeaders != "" {
+		compiled.HTTPHeaders = parseHTTPHeaders(fp.HTTPHeaders)
+	}
+
+	if fp.HTTPMethod != "" {
+		compiled.HTTPMethod = fp.HTTPMethod
+	} else {
+		compiled.HTTPMethod = "GET"
+	}
+
+	compiled.HTTPMatchBody = fp.HTTPMatchBody
+	compiled.TLSMatchCN = fp.TLSMatchCN
+	compiled.TLSMatchSAN = fp.TLSMatchSAN
+	compiled.TLSMatchOrg = fp.TLSMatchOrg
+	compiled.TLSMatchIssuer = fp.TLSMatchIssuer
+	compiled.TLSMatchExpiry = fp.TLSMatchExpiry
+	compiled.TLSMatchSelfSign = fp.TLSMatchSelfSign
+	compiled.ProbeChainNext = fp.ProbeChainNext
+
 	return compiled
+}
+
+func parsePaths(pathsStr string) []string {
+	var paths []string
+	for _, p := range strings.Split(pathsStr, ",") {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			paths = append(paths, p)
+		}
+	}
+	return paths
+}
+
+func parseHTTPHeaders(headersStr string) map[string]string {
+	headers := make(map[string]string)
+	pairs := strings.Split(headersStr, ",")
+	for _, pair := range pairs {
+		pair = strings.TrimSpace(pair)
+		if idx := strings.Index(pair, ":"); idx > 0 {
+			key := strings.TrimSpace(pair[:idx])
+			value := strings.TrimSpace(pair[idx+1:])
+			if key != "" {
+				headers[key] = value
+			}
+		}
+	}
+	return headers
 }
 
 func decodeProbeData(data string) []byte {
@@ -299,6 +389,25 @@ func (s *FingerprintStore) loadDefaults() {
 		if fp.ports != "" {
 			compiled.Ports = parsePorts(fp.ports)
 		}
+		if fp.httpPaths != "" {
+			compiled.HTTPPaths = parsePaths(fp.httpPaths)
+		}
+		if fp.httpHeaders != "" {
+			compiled.HTTPHeaders = parseHTTPHeaders(fp.httpHeaders)
+		}
+		if fp.httpMethod != "" {
+			compiled.HTTPMethod = fp.httpMethod
+		} else {
+			compiled.HTTPMethod = "GET"
+		}
+		compiled.HTTPMatchBody = fp.httpMatchBody
+		compiled.TLSMatchCN = fp.tlsMatchCN
+		compiled.TLSMatchSAN = fp.tlsMatchSAN
+		compiled.TLSMatchOrg = fp.tlsMatchOrg
+		compiled.TLSMatchIssuer = fp.tlsMatchIssuer
+		compiled.TLSMatchExpiry = fp.tlsMatchExpiry
+		compiled.TLSMatchSelfSign = fp.tlsMatchSelfSign
+		compiled.ProbeChainNext = fp.probeChainNext
 		s.fingerprints = append(s.fingerprints, compiled)
 	}
 

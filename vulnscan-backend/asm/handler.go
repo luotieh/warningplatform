@@ -15,7 +15,7 @@ import (
 
 type Handler struct {
 	db     *db.DB
-	engine *DiscoveryEngine
+	engine *ConcurrentDiscoveryEngine
 	diff   *DiffEngine
 	alert  *AlertEngine
 }
@@ -24,7 +24,7 @@ func NewHandler(database *db.DB, extraCollectors ...AssetCollector) *Handler {
 	sess, _ := database.GetDBSession()
 	return &Handler{
 		db:     database,
-		engine: NewDiscoveryEngine(extraCollectors...),
+		engine: NewConcurrentDiscoveryEngine(10, 120*time.Second, extraCollectors...),
 		diff:   NewDiffEngine(),
 		alert:  NewAlertEngine(sess),
 	}

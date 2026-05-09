@@ -14,17 +14,26 @@ type PipelineStage struct {
 }
 
 type Pipeline struct {
-	stages   []PipelineStage
-	pool     *WorkerPool
-	limiter  *RateLimiter
-	findings []*Finding
-	mu       sync.Mutex
+	stages          []PipelineStage
+	pool            *WorkerPool
+	limiter         *RateLimiter
+	findings        []*Finding
+	techDetector    *AdvancedTechDetector
+	moduleCutter    *SmartModuleCutter
+	dedup           *MultiLayerDeduplicator
+	propagator      *SmartTargetPropagator
+	resourceMonitor *ResourceAwareAdaptiveController
 }
 
 func NewPipeline(poolSize, globalRate, targetRate int) *Pipeline {
 	return &Pipeline{
-		pool:    NewWorkerPool(poolSize),
-		limiter: NewRateLimiter(globalRate, targetRate),
+		pool:            NewWorkerPool(poolSize),
+		limiter:         NewRateLimiter(globalRate, targetRate),
+		techDetector:    NewAdvancedTechDetector(),
+		moduleCutter:    NewSmartModuleCutter(1.0),
+		dedup:           NewMultiLayerDeduplicator(1000000, 0.01, false, nil),
+		propagator:      NewSmartTargetPropagator(),
+		resourceMonitor: NewResourceAwareAdaptiveController(10, 50, 5*time.Second),
 	}
 }
 
@@ -45,23 +54,29 @@ func (p *Pipeline) Run(ctx context.Context, targets []*Target) ([]*Finding, erro
 		slog.Info("[*] Pipeline 阶段开始", "stage", stage.Name, "modules", len(stage.Modules), "targets", len(currentTargets))
 		start := time.Now()
 
+		profile := p.techDetector.Detect(currentTargets, p.findings)
+
+		selectedModules := p.moduleCutter.CutModules(stage.Modules, profile, currentTargets)
+
+		p.resourceMonitor.Adjust()
+
 		var stageTargets []*Target
 
 		if stage.Parallel {
-			stageTargets = p.runParallel(ctx, stage.Modules, currentTargets)
+			stageTargets = p.runParallel(ctx, selectedModules, currentTargets)
 		} else {
-			stageTargets = p.runSequential(ctx, stage.Modules, currentTargets)
+			stageTargets = p.runSequential(ctx, selectedModules, currentTargets)
 		}
 
 		if len(stageTargets) > 0 {
-			currentTargets = append(currentTargets, stageTargets...)
+			currentTargets = p.propagator.Propagate(currentTargets, stageTargets, p.findings)
 		}
 
 		slog.Info("[*] Pipeline 阶段完成",
 			"stage", stage.Name,
 			"duration", time.Since(start),
 			"findings", len(p.findings),
-			"new_targets", len(stageTargets),
+			"new_targets", len(currentTargets),
 		)
 	}
 
@@ -90,9 +105,11 @@ func (p *Pipeline) runParallel(ctx context.Context, modules []ScanModule, target
 
 			mu.Lock()
 			if result.Findings != nil {
-				p.mu.Lock()
-				p.findings = append(p.findings, result.Findings...)
-				p.mu.Unlock()
+				for _, f := range result.Findings {
+					if !p.dedup.IsDuplicate(m.ID(), f) {
+						p.findings = append(p.findings, f)
+					}
+				}
 			}
 			if result.Targets != nil {
 				newTargets = append(newTargets, result.Targets...)
@@ -125,9 +142,11 @@ func (p *Pipeline) runSequential(ctx context.Context, modules []ScanModule, targ
 		}
 
 		if result.Findings != nil {
-			p.mu.Lock()
-			p.findings = append(p.findings, result.Findings...)
-			p.mu.Unlock()
+			for _, f := range result.Findings {
+				if !p.dedup.IsDuplicate(mod.ID(), f) {
+					p.findings = append(p.findings, f)
+				}
+			}
 		}
 		if result.Targets != nil {
 			newTargets = append(newTargets, result.Targets...)

@@ -10,17 +10,21 @@ import (
 	"strings"
 	"time"
 
+	"vulnscan-backend/model"
+	"vulnscan-backend/pkg/payload"
 	"vulnscan-backend/scan/engine"
 )
 
 type SSRFScanner struct {
 	base         *engine.VulnScanner
+	payloads     *payload.Loader
 	callbackBase string
 }
 
-func New(callbackBase string) *SSRFScanner {
+func New(callbackBase string, loader *payload.Loader) *SSRFScanner {
 	return &SSRFScanner{
 		callbackBase: callbackBase,
+		payloads:     loader,
 	}
 }
 
@@ -51,6 +55,35 @@ var internalTargets = []struct {
 	{"localhost HTTPS", "https://127.0.0.1/"},
 	{"IPv6 localhost", "http://[::1]/"},
 	{"0.0.0.0", "http://0.0.0.0/"},
+}
+
+func (m *SSRFScanner) getInternalTargets() []struct {
+	name string
+	url  string
+} {
+	if m.payloads != nil {
+		dbPayloads := m.payloads.GetPayloads("ssrf")
+		var result []struct {
+			name string
+			url  string
+		}
+		for _, p := range dbPayloads {
+			if p.Type == "basic" || p.Type == "cloud_metadata" || p.Type == "file_read" || p.Type == "protocol" {
+				name := p.Name
+				if name == "" {
+					name = p.Value
+				}
+				result = append(result, struct {
+					name string
+					url  string
+				}{name, p.Value})
+			}
+		}
+		if len(result) > 0 {
+			return result
+		}
+	}
+	return internalTargets
 }
 
 var bypassTechniques = []struct {
@@ -125,9 +158,10 @@ func (m *SSRFScanner) testSSRF(ctx context.Context, target *engine.Target, baseU
 	}
 
 	token := generateToken()
+	targets := m.getInternalTargets()
 
 	for _, param := range params {
-		for _, internal := range internalTargets {
+		for _, internal := range targets {
 			techniques := bypassTechniques[:1]
 			if enableBypass {
 				techniques = bypassTechniques
@@ -365,3 +399,5 @@ func buildBaseURL(t *engine.Target) string {
 	}
 	return fmt.Sprintf("%s://%s:%d", scheme, host, t.Port)
 }
+
+var _ = model.VulnPayload{}

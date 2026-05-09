@@ -5,6 +5,8 @@ import (
 	"sort"
 	"time"
 
+	"vulnscan-backend/model"
+
 	"gorm.io/gorm"
 )
 
@@ -106,6 +108,37 @@ func init() {
 				tx.Exec("ALTER TABLE " + col.table + " ADD COLUMN " + col.column + " " + col.colDef)
 			}
 		}
+		return nil
+	})
+
+	Register("003_add_vuln_payloads", "添加漏洞扫描 Payload 管理表", func(tx *gorm.DB) error {
+		if err := tx.AutoMigrate(
+			&model.VulnPayload{},
+			&model.VulnPayloadPattern{},
+			&model.VulnPayloadConfig{},
+		); err != nil {
+			return err
+		}
+
+		if err := seedDefaultPayloads(tx); err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	Register("004_add_service_fingerprint_enhanced", "扩展服务指纹表，添加 HTTP 深度识别和 TLS 证书分析字段", func(tx *gorm.DB) error {
+		if err := tx.AutoMigrate(
+			&model.ServiceFingerprint{},
+			&model.PortServiceMap{},
+		); err != nil {
+			return err
+		}
+
+		if err := seedDefaultServiceFingerprints(tx); err != nil {
+			return err
+		}
+
 		return nil
 	})
 }

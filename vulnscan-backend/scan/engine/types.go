@@ -6,12 +6,27 @@ import (
 )
 
 type Target struct {
-	Host     string            `json:"host"`
-	IP       string            `json:"ip"`
-	Port     int               `json:"port"`
-	Protocol string            `json:"protocol"`
-	URL      string            `json:"url"`
-	Extra    map[string]string `json:"extra,omitempty"`
+	Host         string            `json:"host"`
+	IP           string            `json:"ip"`
+	Port         int               `json:"port"`
+	Protocol     string            `json:"protocol"`
+	URL          string            `json:"url"`
+	Service      string            `json:"service,omitempty"`
+	Product      string            `json:"product,omitempty"`
+	Version      string            `json:"version,omitempty"`
+	Fingerprints []Fingerprint     `json:"fingerprints,omitempty"`
+	Extra        map[string]string `json:"extra,omitempty"`
+	WAFDetected  bool              `json:"waf_detected,omitempty"`
+	WAFName      string            `json:"waf_name,omitempty"`
+}
+
+type Fingerprint struct {
+	Product    string `json:"product"`
+	Version    string `json:"version"`
+	Category   string `json:"category"`
+	Confidence int    `json:"confidence"`
+	Source     string `json:"source"`
+	TechStack  string `json:"tech_stack,omitempty"`
 }
 
 type VerificationLevel string

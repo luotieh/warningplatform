@@ -5,7 +5,6 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 )
@@ -13,17 +12,32 @@ import (
 type VulnScanner struct {
 	Client      *ScanHTTPClient
 	Concurrency int
+	pool        *ClientPool
+	poolKey     string
 }
 
 func NewVulnScanner(config map[string]interface{}, moduleOpts ...ClientOption) *VulnScanner {
 	concurrency := GetConfigInt(config, "concurrency", 10)
 
-	opts := append(ClientFromConfig(config), moduleOpts...)
-	client := NewScanHTTPClient(opts...)
+	pool := GetGlobalClientPool()
+	poolKey := ""
+	if name, ok := config["module_name"].(string); ok {
+		poolKey = name
+	}
+
+	var client *ScanHTTPClient
+	if len(moduleOpts) > 0 || poolKey != "" {
+		opts := append(ClientFromConfig(config), moduleOpts...)
+		client = pool.GetOrCreate(poolKey, opts...)
+	} else {
+		client = pool.GetDefault()
+	}
 
 	return &VulnScanner{
 		Client:      client,
 		Concurrency: concurrency,
+		pool:        pool,
+		poolKey:     poolKey,
 	}
 }
 
@@ -183,18 +197,50 @@ func Similarity(a, b string) float64 {
 
 	common := 0
 	setA := make(map[string]int)
-	for _, line := range strings.Split(a, "\n") {
-		setA[strings.TrimSpace(line)]++
-	}
-	for _, line := range strings.Split(b, "\n") {
-		key := strings.TrimSpace(line)
-		if setA[key] > 0 {
-			common++
-			setA[key]--
+	for i := 0; i < len(a); {
+		j := i
+		for j < len(a) && a[j] != '\n' {
+			j++
 		}
+		line := a[i:j]
+		setA[line]++
+		i = j + 1
 	}
 
-	total := len(strings.Split(a, "\n")) + len(strings.Split(b, "\n"))
+	for i := 0; i < len(b); {
+		j := i
+		for j < len(b) && b[j] != '\n' {
+			j++
+		}
+		line := b[i:j]
+		if setA[line] > 0 {
+			common++
+			setA[line]--
+		}
+		i = j + 1
+	}
+
+	lineCountA := 0
+	for i := 0; i < len(a); {
+		j := i
+		for j < len(a) && a[j] != '\n' {
+			j++
+		}
+		lineCountA++
+		i = j + 1
+	}
+
+	lineCountB := 0
+	for i := 0; i < len(b); {
+		j := i
+		for j < len(b) && b[j] != '\n' {
+			j++
+		}
+		lineCountB++
+		i = j + 1
+	}
+
+	total := lineCountA + lineCountB
 	if total == 0 {
 		return 1.0
 	}

@@ -6,11 +6,36 @@ export interface ServiceFingerprint {
   service: string;
   protocol: string;
   probe_type: string;
-  pattern: string;
-  version_regex?: string;
-  confidence: number;
-  source_type?: string;
-  sync_version?: number;
+  probe_data: string;
+  match_type: string;
+  match_rule: string;
+  version_expr: string;
+  priority: number;
+  ports: string;
+  status: string;
+  source: string;
+  description: string;
+  sync_version: number;
+  source_type: string;
+
+  // HTTP 深度识别相关字段
+  http_paths: string;
+  http_headers: string;
+  http_method: string;
+  http_match_body: boolean;
+
+  // TLS 证书分析相关字段
+  tls_match_cn: boolean;
+  tls_match_san: boolean;
+  tls_match_org: boolean;
+  tls_match_issuer: boolean;
+  tls_match_expiry: boolean;
+  tls_match_self_sign: boolean;
+
+  // 探测链相关字段
+  probe_chain: string;
+  probe_chain_next: string;
+
   created_at: string;
   updated_at: string;
 }

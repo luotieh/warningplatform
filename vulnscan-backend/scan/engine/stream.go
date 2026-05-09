@@ -3,15 +3,14 @@ package engine
 import (
 	"context"
 	"log/slog"
-	"sync"
+	"sync/atomic"
 	"time"
 )
 
 type FindingStream struct {
 	ch     chan *FindingBatch
 	done   chan struct{}
-	closed bool
-	mu     sync.Mutex
+	closed atomic.Bool
 }
 
 type FindingBatch struct {
@@ -38,12 +37,9 @@ func (fs *FindingStream) Send(batch *FindingBatch) (sent bool) {
 		}
 	}()
 
-	fs.mu.Lock()
-	if fs.closed {
-		fs.mu.Unlock()
+	if fs.closed.Load() {
 		return false
 	}
-	fs.mu.Unlock()
 
 	select {
 	case fs.ch <- batch:
@@ -76,10 +72,7 @@ func (fs *FindingStream) Receive(ctx context.Context) (*FindingBatch, bool) {
 }
 
 func (fs *FindingStream) Close() {
-	fs.mu.Lock()
-	defer fs.mu.Unlock()
-	if !fs.closed {
-		fs.closed = true
+	if fs.closed.CompareAndSwap(false, true) {
 		close(fs.ch)
 	}
 }

@@ -8,17 +8,19 @@ import (
 	"strings"
 	"time"
 
+	"vulnscan-backend/pkg/payload"
 	"vulnscan-backend/scan/engine"
 )
 
 type SQLiScanner struct {
-	base    *engine.VulnScanner
-	scanCtx *engine.ScanContext
-	wafEnc  *engine.WAFBypassEncoder
+	base     *engine.VulnScanner
+	scanCtx  *engine.ScanContext
+	wafEnc   *engine.WAFBypassEncoder
+	payloads *payload.Loader
 }
 
-func New() *SQLiScanner {
-	return &SQLiScanner{}
+func New(loader *payload.Loader) *SQLiScanner {
+	return &SQLiScanner{payloads: loader}
 }
 
 func (m *SQLiScanner) ID() string       { return "sqli" }
@@ -106,29 +108,29 @@ func (m *SQLiScanner) testTarget(ctx context.Context, target *engine.Target, ver
 }
 
 func (m *SQLiScanner) testErrorBased(ctx context.Context, target *engine.Target, point engine.InjectionPoint) *engine.Finding {
-	payloads := m.errorPayloads()
+	payloads := m.getErrorPayloads()
 
-	for _, payload := range payloads {
-		body, _, err := m.base.SendInjected(ctx, target, point, payload)
+	for _, p := range payloads {
+		body, _, err := m.base.SendInjected(ctx, target, point, p)
 		if err != nil || body == "" {
 			continue
 		}
 
-		for _, pattern := range sqlErrorPatterns {
+		for _, pattern := range m.getErrorPatterns() {
 			if pattern.MatchString(body) {
 				return &engine.Finding{
 					ModuleID:    m.ID(),
 					Target:      target,
 					Type:        "sqli_error",
 					Title:       fmt.Sprintf("SQL注入(Error-based) - %s: %s", point.Type, point.Name),
-					Description: fmt.Sprintf("%s参数 %s 使用 payload '%s' 触发了数据库错误", point.Type, point.Name, payload),
+					Description: fmt.Sprintf("%s参数 %s 使用 payload '%s' 触发了数据库错误", point.Type, point.Name, p),
 					Severity:    "high",
 					Confidence:  85,
 					Evidence:    engine.Truncate(body, 500),
 					Timestamp:   time.Now(),
 					Data: map[string]string{
 						"param":      point.Name,
-						"payload":    payload,
+						"payload":    p,
 						"type":       "error-based",
 						"inject_via": string(point.Type),
 					},
@@ -141,17 +143,7 @@ func (m *SQLiScanner) testErrorBased(ctx context.Context, target *engine.Target,
 }
 
 func (m *SQLiScanner) testBooleanBased(ctx context.Context, target *engine.Target, point engine.InjectionPoint, baseBody string) *engine.Finding {
-	boolPairs := []struct {
-		truePayload  string
-		falsePayload string
-		label        string
-	}{
-		{`' OR '1'='1' -- `, `' OR '1'='2' -- `, "string-quote"},
-		{`" OR "1"="1" -- `, `" OR "1"="2" -- `, "double-quote"},
-		{`1 OR 1=1`, `1 OR 1=2`, "numeric"},
-		{`) OR (1=1`, `) OR (1=2`, "parenthesized"},
-		{`' OR 1=1#`, `' OR 1=2#`, "hash-comment"},
-	}
+	boolPairs := m.getBooleanPairs()
 
 	for _, pair := range boolPairs {
 		select {
@@ -160,8 +152,8 @@ func (m *SQLiScanner) testBooleanBased(ctx context.Context, target *engine.Targe
 		default:
 		}
 
-		trueBody, _, _ := m.base.SendInjected(ctx, target, point, pair.truePayload)
-		falseBody, _, _ := m.base.SendInjected(ctx, target, point, pair.falsePayload)
+		trueBody, _, _ := m.base.SendInjected(ctx, target, point, pair.TruePayload)
+		falseBody, _, _ := m.base.SendInjected(ctx, target, point, pair.FalsePayload)
 
 		if trueBody == "" || falseBody == "" {
 			continue
@@ -177,17 +169,18 @@ func (m *SQLiScanner) testBooleanBased(ctx context.Context, target *engine.Targe
 				Target:      target,
 				Type:        "sqli_boolean",
 				Title:       fmt.Sprintf("SQL注入(Boolean-based) - %s: %s", point.Type, point.Name),
-				Description: fmt.Sprintf("%s参数 %s 使用 %s 变体检测，true/false 响应差异显著 (true=%.2f, false=%.2f, tf_diff=%.2f)", point.Type, point.Name, pair.label, trueDiff, falseDiff, tfDiff),
+				Description: fmt.Sprintf("%s参数 %s 检测，true/false 响应差异显著 (true=%.2f, false=%.2f, tf_diff=%.2f)", point.Type, point.Name, trueDiff, falseDiff, tfDiff),
 				Severity:    "high",
 				Confidence:  75,
 				Timestamp:   time.Now(),
 				Data: map[string]string{
-					"param":       point.Name,
-					"type":        "boolean-based",
-					"variant":     pair.label,
-					"true_ratio":  fmt.Sprintf("%.2f", trueDiff),
-					"false_ratio": fmt.Sprintf("%.2f", falseDiff),
-					"inject_via":  string(point.Type),
+					"param":         point.Name,
+					"type":          "boolean-based",
+					"true_payload":  pair.TruePayload,
+					"false_payload": pair.FalsePayload,
+					"true_ratio":    fmt.Sprintf("%.2f", trueDiff),
+					"false_ratio":   fmt.Sprintf("%.2f", falseDiff),
+					"inject_via":    string(point.Type),
 				},
 			}
 		}
@@ -197,7 +190,7 @@ func (m *SQLiScanner) testBooleanBased(ctx context.Context, target *engine.Targe
 }
 
 func (m *SQLiScanner) testTimeBased(ctx context.Context, target *engine.Target, point engine.InjectionPoint) *engine.Finding {
-	timePayloads := m.timePayloads()
+	timePayloads := m.getTimePayloads()
 
 	baseStart := time.Now()
 	m.base.FetchBody(ctx, target.URL)
@@ -212,12 +205,12 @@ func (m *SQLiScanner) testTimeBased(ctx context.Context, target *engine.Target, 
 		}
 
 		start := time.Now()
-		m.base.SendInjected(ctx, target, point, tp.payload)
+		m.base.SendInjected(ctx, target, point, tp.Value)
 		elapsed := time.Since(start)
 
 		if elapsed >= threshold && elapsed >= 4500*time.Millisecond {
 			confirmStart := time.Now()
-			m.base.SendInjected(ctx, target, point, tp.payload)
+			m.base.SendInjected(ctx, target, point, tp.Value)
 			confirmElapsed := time.Since(confirmStart)
 
 			if confirmElapsed >= threshold && confirmElapsed >= 4*time.Second {
@@ -226,19 +219,24 @@ func (m *SQLiScanner) testTimeBased(ctx context.Context, target *engine.Target, 
 					confidence = 90
 				}
 
+				dbType := "unknown"
+				if len(tp.Databases) > 0 {
+					dbType = tp.Databases[0]
+				}
+
 				return &engine.Finding{
 					ModuleID:    m.ID(),
 					Target:      target,
 					Type:        "sqli_time",
-					Title:       fmt.Sprintf("SQL注入(Time-based) - %s: %s [%s]", point.Type, point.Name, tp.dbType),
-					Description: fmt.Sprintf("%s参数 %s 使用 %s payload 触发延迟 (第1次: %v, 第2次: %v, 基线: %v)", point.Type, point.Name, tp.dbType, elapsed.Round(time.Millisecond), confirmElapsed.Round(time.Millisecond), baselineLatency.Round(time.Millisecond)),
+					Title:       fmt.Sprintf("SQL注入(Time-based) - %s: %s [%s]", point.Type, point.Name, dbType),
+					Description: fmt.Sprintf("%s参数 %s 使用 %s payload 触发延迟 (第1次: %v, 第2次: %v, 基线: %v)", point.Type, point.Name, dbType, elapsed.Round(time.Millisecond), confirmElapsed.Round(time.Millisecond), baselineLatency.Round(time.Millisecond)),
 					Severity:    "high",
 					Confidence:  confidence,
 					Timestamp:   time.Now(),
 					Data: map[string]string{
 						"param":      point.Name,
-						"payload":    tp.payload,
-						"db_type":    tp.dbType,
+						"payload":    tp.Value,
+						"db_type":    dbType,
 						"type":       "time-based",
 						"delay_1":    elapsed.String(),
 						"delay_2":    confirmElapsed.String(),
@@ -272,7 +270,7 @@ func (m *SQLiScanner) testUnionBased(ctx context.Context, target *engine.Target,
 		}
 
 		hasError := false
-		for _, pattern := range sqlErrorPatterns {
+		for _, pattern := range m.getErrorPatterns() {
 			if pattern.MatchString(body) {
 				hasError = true
 				break
@@ -302,30 +300,101 @@ func (m *SQLiScanner) testUnionBased(ctx context.Context, target *engine.Target,
 	return nil
 }
 
-var sqlErrorPatterns = []*regexp.Regexp{
-	regexp.MustCompile(`(?i)SQL syntax.*MySQL`),
-	regexp.MustCompile(`(?i)Warning.*mysql_`),
-	regexp.MustCompile(`(?i)valid MySQL result`),
-	regexp.MustCompile(`(?i)MySqlClient\.`),
-	regexp.MustCompile(`(?i)PostgreSQL.*ERROR`),
-	regexp.MustCompile(`(?i)Warning.*pg_`),
-	regexp.MustCompile(`(?i)valid PostgreSQL result`),
-	regexp.MustCompile(`(?i)ORA-\d{5}`),
-	regexp.MustCompile(`(?i)Oracle error`),
-	regexp.MustCompile(`(?i)Microsoft OLE DB Provider for SQL Server`),
-	regexp.MustCompile(`(?i)\[Microsoft\]\[ODBC SQL Server Driver\]`),
-	regexp.MustCompile(`(?i)Unclosed quotation mark`),
-	regexp.MustCompile(`(?i)SQLite3::`),
-	regexp.MustCompile(`(?i)SQLite/JDBCDriver`),
-	regexp.MustCompile(`(?i)sqlite3\.OperationalError`),
-	regexp.MustCompile(`(?i)SQLSTATE\[\d+\]`),
-	regexp.MustCompile(`(?i)Syntax error.*in query expression`),
+func (m *SQLiScanner) getErrorPayloads() []string {
+	db := m.scanCtx.DetectedDBType()
+	var values []string
+
+	if m.payloads != nil {
+		cfg := m.payloads.GetSQLi()
+		if cfg != nil {
+			for _, p := range cfg.ErrorPayloads {
+				if db == "" {
+					values = append(values, p.Value)
+				} else {
+					for _, d := range p.Databases {
+						if d == "all" || strings.EqualFold(d, db) {
+							values = append(values, p.Value)
+							break
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if len(values) == 0 {
+		values = defaultErrorPayloads(db)
+	}
+
+	if m.wafEnc.HasWAF() {
+		values = m.wafEnc.EncodePayloads(values)
+	}
+	return values
 }
 
-func (m *SQLiScanner) errorPayloads() []string {
+func (m *SQLiScanner) getTimePayloads() []payload.PayloadEntry {
+	db := m.scanCtx.DetectedDBType()
+	var result []payload.PayloadEntry
+
+	if m.payloads != nil {
+		cfg := m.payloads.GetSQLi()
+		if cfg != nil {
+			for _, p := range cfg.TimePayloads {
+				if db == "" {
+					result = append(result, p)
+				} else {
+					for _, d := range p.Databases {
+						if d == "all" || strings.EqualFold(d, db) {
+							result = append(result, p)
+							break
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if len(result) == 0 {
+		for _, p := range defaultTimePayloads() {
+			result = append(result, payload.PayloadEntry{Value: p.Value, Databases: []string{p.Type}})
+		}
+	}
+
+	return result
+}
+
+func (m *SQLiScanner) getBooleanPairs() []payload.BooleanPair {
+	if m.payloads != nil {
+		cfg := m.payloads.GetSQLi()
+		if cfg != nil && len(cfg.BooleanPairs) > 0 {
+			return cfg.BooleanPairs
+		}
+	}
+	return defaultBooleanPairs()
+}
+
+func (m *SQLiScanner) getErrorPatterns() []*regexp.Regexp {
+	var patterns []*regexp.Regexp
+
+	if m.payloads != nil {
+		cfg := m.payloads.GetSQLi()
+		if cfg != nil {
+			for _, p := range cfg.ErrorPatterns {
+				patterns = append(patterns, regexp.MustCompile(p.Pattern))
+			}
+		}
+	}
+
+	if len(patterns) == 0 {
+		patterns = defaultErrorPatterns()
+	}
+
+	return patterns
+}
+
+func defaultErrorPayloads(db string) []string {
 	base := []string{`'`, `"`, `1'"\`}
 
-	db := m.scanCtx.DetectedDBType()
 	switch db {
 	case "mysql":
 		base = append(base,
@@ -362,47 +431,56 @@ func (m *SQLiScanner) errorPayloads() []string {
 		)
 	}
 
-	if m.wafEnc.HasWAF() {
-		base = m.wafEnc.EncodePayloads(base)
-	}
 	return base
 }
 
-func (m *SQLiScanner) timePayloads() []struct {
-	payload string
-	dbType  string
-} {
-	all := []struct {
-		payload string
-		dbType  string
-	}{
-		{`' OR SLEEP(5)-- `, "MySQL"},
-		{`" OR SLEEP(5)-- `, "MySQL"},
-		{`1; WAITFOR DELAY '0:0:5'-- `, "MSSQL"},
-		{`'; WAITFOR DELAY '0:0:5'-- `, "MSSQL"},
-		{`1'; SELECT PG_SLEEP(5)-- `, "PostgreSQL"},
-		{`' || PG_SLEEP(5)-- `, "PostgreSQL"},
-		{`1' AND BENCHMARK(5000000,SHA1('test'))-- `, "MySQL-benchmark"},
-	}
+type defaultTimePayload struct {
+	Value string
+	Type  string
+}
 
-	db := m.scanCtx.DetectedDBType()
-	if db == "" {
-		return all
+func defaultTimePayloads() []defaultTimePayload {
+	return []defaultTimePayload{
+		{Value: `' OR SLEEP(5)-- `, Type: "MySQL"},
+		{Value: `" OR SLEEP(5)-- `, Type: "MySQL"},
+		{Value: `1; WAITFOR DELAY '0:0:5'-- `, Type: "MSSQL"},
+		{Value: `'; WAITFOR DELAY '0:0:5'-- `, Type: "MSSQL"},
+		{Value: `1'; SELECT PG_SLEEP(5)-- `, Type: "PostgreSQL"},
+		{Value: `' || PG_SLEEP(5)-- `, Type: "PostgreSQL"},
+		{Value: `1' AND BENCHMARK(5000000,SHA1('test'))-- `, Type: "MySQL-benchmark"},
 	}
+}
 
-	var filtered []struct {
-		payload string
-		dbType  string
+func defaultBooleanPairs() []payload.BooleanPair {
+	return []payload.BooleanPair{
+		{TruePayload: `' OR '1'='1' -- `, FalsePayload: `' OR '1'='2' -- `},
+		{TruePayload: `" OR "1"="1" -- `, FalsePayload: `" OR "1"="2" -- `},
+		{TruePayload: `1 OR 1=1`, FalsePayload: `1 OR 1=2`},
+		{TruePayload: `) OR (1=1`, FalsePayload: `) OR (1=2`},
+		{TruePayload: `' OR 1=1#`, FalsePayload: `' OR 1=2#`},
 	}
-	for _, tp := range all {
-		if strings.EqualFold(tp.dbType, db) || strings.HasPrefix(strings.ToLower(tp.dbType), db) {
-			filtered = append(filtered, tp)
-		}
+}
+
+func defaultErrorPatterns() []*regexp.Regexp {
+	return []*regexp.Regexp{
+		regexp.MustCompile(`(?i)SQL syntax.*MySQL`),
+		regexp.MustCompile(`(?i)Warning.*mysql_`),
+		regexp.MustCompile(`(?i)valid MySQL result`),
+		regexp.MustCompile(`(?i)MySqlClient\.`),
+		regexp.MustCompile(`(?i)PostgreSQL.*ERROR`),
+		regexp.MustCompile(`(?i)Warning.*pg_`),
+		regexp.MustCompile(`(?i)valid PostgreSQL result`),
+		regexp.MustCompile(`(?i)ORA-\d{5}`),
+		regexp.MustCompile(`(?i)Oracle error`),
+		regexp.MustCompile(`(?i)Microsoft OLE DB Provider for SQL Server`),
+		regexp.MustCompile(`(?i)\[Microsoft\]\[ODBC SQL Server Driver\]`),
+		regexp.MustCompile(`(?i)Unclosed quotation mark`),
+		regexp.MustCompile(`(?i)SQLite3::`),
+		regexp.MustCompile(`(?i)SQLite/JDBCDriver`),
+		regexp.MustCompile(`(?i)sqlite3\.OperationalError`),
+		regexp.MustCompile(`(?i)SQLSTATE\[\d+\]`),
+		regexp.MustCompile(`(?i)Syntax error.*in query expression`),
 	}
-	if len(filtered) == 0 {
-		return all
-	}
-	return filtered
 }
 
 func levenshteinRatio(a, b string) float64 {

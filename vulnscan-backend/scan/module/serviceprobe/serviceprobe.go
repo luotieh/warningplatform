@@ -62,8 +62,8 @@ func (m *ServiceProbe) Run(ctx context.Context, targets []*engine.Target, config
 
 			probed.Add(1)
 			timeout := m.adaptiveTimeout(target, baseTimeout)
-			match := m.probeFast(ctx, target, timeout, enableTLS)
-			if match == nil {
+			probeResult := m.probeWithChain(ctx, target, timeout, enableTLS)
+			if probeResult == nil || probeResult.Service == "" {
 				return
 			}
 
@@ -71,10 +71,10 @@ func (m *ServiceProbe) Run(ctx context.Context, targets []*engine.Target, config
 				Host:     target.Host,
 				IP:       target.IP,
 				Port:     target.Port,
-				Protocol: match.Service,
+				Protocol: probeResult.Service,
 				URL:      target.URL,
 			}
-			svcLower := strings.ToLower(match.Service)
+			svcLower := strings.ToLower(probeResult.Service)
 			isHTTP := svcLower == "http" || svcLower == "https" ||
 				strings.HasPrefix(svcLower, "http-") || svcLower == "http-proxy" || svcLower == "http-alt"
 			if isHTTP {
@@ -90,22 +90,65 @@ func (m *ServiceProbe) Run(ctx context.Context, targets []*engine.Target, config
 				enriched.URL = fmt.Sprintf("%s://%s:%d", scheme, host, target.Port)
 			}
 
+			data := map[string]string{
+				"service": probeResult.Service,
+				"version": probeResult.Version,
+				"banner":  probeResult.Banner,
+				"method":  probeResult.Method,
+			}
+
+			if probeResult.HTTPInfo != nil {
+				if probeResult.HTTPInfo.Title != "" {
+					data["http_title"] = probeResult.HTTPInfo.Title
+				}
+				if probeResult.HTTPInfo.Server != "" {
+					data["http_server"] = probeResult.HTTPInfo.Server
+				}
+				if probeResult.HTTPInfo.XPoweredBy != "" {
+					data["x_powered_by"] = probeResult.HTTPInfo.XPoweredBy
+				}
+				if probeResult.HTTPInfo.Framework != "" {
+					data["framework"] = probeResult.HTTPInfo.Framework
+				}
+				if probeResult.HTTPInfo.CMS != "" {
+					data["cms"] = probeResult.HTTPInfo.CMS
+				}
+				if probeResult.HTTPInfo.Language != "" {
+					data["language"] = probeResult.HTTPInfo.Language
+				}
+			}
+
+			if probeResult.TLSInfo != nil {
+				if probeResult.TLSInfo.CN != "" {
+					data["tls_cn"] = probeResult.TLSInfo.CN
+				}
+				if len(probeResult.TLSInfo.SANs) > 0 {
+					data["tls_sans"] = strings.Join(probeResult.TLSInfo.SANs, ",")
+				}
+				if len(probeResult.TLSInfo.Organization) > 0 {
+					data["tls_org"] = strings.Join(probeResult.TLSInfo.Organization, ",")
+				}
+				data["tls_self_signed"] = fmt.Sprintf("%v", probeResult.TLSInfo.IsSelfSigned)
+				data["tls_expired"] = fmt.Sprintf("%v", probeResult.TLSInfo.IsExpired)
+				data["tls_days_until_expiry"] = fmt.Sprintf("%d", probeResult.TLSInfo.DaysUntilExpiry)
+			}
+
+			title := fmt.Sprintf("检测到服务: %s", probeResult.Service)
+			if probeResult.HTTPInfo != nil && probeResult.HTTPInfo.Title != "" {
+				title = fmt.Sprintf("检测到服务: %s - %s", probeResult.Service, probeResult.HTTPInfo.Title)
+			}
+
 			mu.Lock()
 			result.Findings = append(result.Findings, &engine.Finding{
 				ModuleID:   m.ID(),
 				Target:     enriched,
 				Type:       "service",
-				Title:      fmt.Sprintf("检测到服务: %s", match.Service),
+				Title:      title,
 				Severity:   "info",
-				Confidence: match.Confidence,
-				Evidence:   match.Banner,
+				Confidence: probeResult.Confidence,
+				Evidence:   probeResult.Banner,
 				Timestamp:  time.Now(),
-				Data: map[string]string{
-					"service": match.Service,
-					"version": match.Version,
-					"banner":  match.Banner,
-					"method":  match.Method,
-				},
+				Data:       data,
 			})
 			result.Targets = append(result.Targets, enriched)
 			mu.Unlock()

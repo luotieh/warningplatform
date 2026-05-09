@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"vulnscan-backend/dict"
+	"vulnscan-backend/pkg/payload"
 	"vulnscan-backend/scan/engine"
 	"vulnscan-backend/scan/rulestore"
 
@@ -11,11 +12,12 @@ import (
 )
 
 type PipelineAPI struct {
-	db *gorm.DB
+	db     *gorm.DB
+	loader *payload.Loader
 }
 
-func NewPipelineAPI(db *gorm.DB) *PipelineAPI {
-	return &PipelineAPI{db: db}
+func NewPipelineAPI(db *gorm.DB, loader *payload.Loader) *PipelineAPI {
+	return &PipelineAPI{db: db, loader: loader}
 }
 
 type ModuleInfo struct {
@@ -42,7 +44,7 @@ func (a *PipelineAPI) RegisterRoutes(g *gin.RouterGroup) {
 func (a *PipelineAPI) ListModules(c *gin.Context) {
 	ds := dict.NewStore(nil)
 	rs := rulestore.NewWithoutDB()
-	mods := allModules(a.db, rs, ds)
+	mods := allModules(a.db, rs, ds, a.loader)
 
 	var result []ModuleInfo
 	for _, m := range mods {
@@ -59,7 +61,7 @@ func (a *PipelineAPI) ListModules(c *gin.Context) {
 func (a *PipelineAPI) ListStages(c *gin.Context) {
 	ds := dict.NewStore(nil)
 	rs := rulestore.NewWithoutDB()
-	mods := allModules(a.db, rs, ds)
+	mods := allModules(a.db, rs, ds, a.loader)
 	stages := BuildStages(mods)
 
 	var result []StageInfo
@@ -81,7 +83,7 @@ func (a *PipelineAPI) ListStages(c *gin.Context) {
 func (a *PipelineAPI) ListModuleConfigs(c *gin.Context) {
 	ds := dict.NewStore(nil)
 	rs := rulestore.NewWithoutDB()
-	mods := allModules(a.db, rs, ds)
+	mods := allModules(a.db, rs, ds, a.loader)
 
 	var configs []engine.ModuleConfigInfo
 	for _, m := range mods {

@@ -9,15 +9,18 @@ import (
 	"strings"
 	"time"
 
+	"vulnscan-backend/model"
+	"vulnscan-backend/pkg/payload"
 	"vulnscan-backend/scan/engine"
 )
 
 type NoSQLiScanner struct {
-	base *engine.VulnScanner
+	base     *engine.VulnScanner
+	payloads *payload.Loader
 }
 
-func New() *NoSQLiScanner {
-	return &NoSQLiScanner{}
+func New(loader *payload.Loader) *NoSQLiScanner {
+	return &NoSQLiScanner{payloads: loader}
 }
 
 func (m *NoSQLiScanner) ID() string       { return "nosqli" }
@@ -26,6 +29,42 @@ func (m *NoSQLiScanner) Category() string { return "vuln" }
 
 func (m *NoSQLiScanner) Params() []engine.ModuleParam {
 	return []engine.ModuleParam{engine.VulnVerificationParam()}
+}
+
+var mongoErrorPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)MongoError`),
+	regexp.MustCompile(`(?i)MongoDB.*error`),
+	regexp.MustCompile(`(?i)\$[a-z]+.*not.*allowed`),
+	regexp.MustCompile(`(?i)CastError.*ObjectId`),
+	regexp.MustCompile(`(?i)SyntaxError.*JSON`),
+	regexp.MustCompile(`(?i)CouchDB.*error`),
+	regexp.MustCompile(`(?i)illegal.*operator`),
+	regexp.MustCompile(`(?i)bad.*query`),
+}
+
+func (m *NoSQLiScanner) getOperatorPayloads() []string {
+	if m.payloads != nil {
+		dbPayloads := m.payloads.GetPayloads("nosqli")
+		var result []string
+		for _, p := range dbPayloads {
+			if p.Type == "basic" || p.Type == "operator" {
+				result = append(result, p.Value)
+			}
+		}
+		if len(result) > 0 {
+			return result
+		}
+	}
+	return defaultOperatorPayloads()
+}
+
+func defaultOperatorPayloads() []string {
+	return []string{
+		"[$gt]",
+		"[$ne]=",
+		"[$regex]=.*",
+		"[$exists]=true",
+	}
 }
 
 func (m *NoSQLiScanner) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
@@ -38,17 +77,6 @@ func (m *NoSQLiScanner) Run(ctx context.Context, targets []*engine.Target, confi
 
 	engine.LogModuleComplete(m.ID(), len(targets), len(result.Findings), result.Duration)
 	return result, nil
-}
-
-var mongoErrorPatterns = []*regexp.Regexp{
-	regexp.MustCompile(`(?i)MongoError`),
-	regexp.MustCompile(`(?i)MongoDB.*error`),
-	regexp.MustCompile(`(?i)\$[a-z]+.*not.*allowed`),
-	regexp.MustCompile(`(?i)CastError.*ObjectId`),
-	regexp.MustCompile(`(?i)SyntaxError.*JSON`),
-	regexp.MustCompile(`(?i)CouchDB.*error`),
-	regexp.MustCompile(`(?i)illegal.*operator`),
-	regexp.MustCompile(`(?i)bad.*query`),
 }
 
 func (m *NoSQLiScanner) testTarget(ctx context.Context, target *engine.Target, verifyLevel string) []*engine.Finding {
@@ -88,15 +116,8 @@ func (m *NoSQLiScanner) testTarget(ctx context.Context, target *engine.Target, v
 func (m *NoSQLiScanner) testQueryParamErrorBased(ctx context.Context, target *engine.Target, u *url.URL, params url.Values) []*engine.Finding {
 	var findings []*engine.Finding
 
-	operatorPayloads := []string{
-		"[$gt]",
-		"[$ne]=",
-		"[$regex]=.*",
-		"[$exists]=true",
-	}
-
 	for param := range params {
-		for _, suffix := range operatorPayloads {
+		for _, suffix := range m.getOperatorPayloads() {
 			select {
 			case <-ctx.Done():
 				return findings
@@ -213,6 +234,21 @@ func (m *NoSQLiScanner) testJSONOperatorInjection(ctx context.Context, target *e
 		`{"username":{"$regex":".*"},"password":{"$regex":".*"}}`,
 	}
 
+	if m.payloads != nil {
+		dbPayloads := m.payloads.GetPayloads("nosqli")
+		var dbPayloadsList []string
+		for _, p := range dbPayloads {
+			if p.Type == "basic" || p.Type == "operator" {
+				if json.Valid([]byte(p.Value)) {
+					dbPayloadsList = append(dbPayloadsList, p.Value)
+				}
+			}
+		}
+		if len(dbPayloadsList) > 0 {
+			payloads = dbPayloadsList
+		}
+	}
+
 	for _, payload := range payloads {
 		select {
 		case <-ctx.Done():
@@ -299,3 +335,5 @@ func (m *NoSQLiScanner) testJSONAuthBypass(ctx context.Context, target *engine.T
 
 	return nil
 }
+
+var _ = model.VulnPayload{}
