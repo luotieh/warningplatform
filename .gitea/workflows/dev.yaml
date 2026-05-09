@@ -64,10 +64,9 @@ jobs:
           export PATH=$PATH:$(go env GOPATH)/bin
           go mod tidy
 
-          # di/wire_gen.go 被 .gitignore 排除不会进仓库，必须在 CI 内生成；
-          # 构建机通常未安装 wire 全局命令，用 go run 拉取与 go.mod 一致的版本。
+          # di/wire_gen.go 被 .gitignore 排除不会进仓库，必须在 CI 内生成（与 Makefile 一致：在 di 目录执行 wire）。
           if [ "$WIRE" = "true" ]; then
-            go run github.com/google/wire/cmd/wire@v0.7.0 gen ./di
+            (cd di && wire)
           fi
 
           GO_VERSION=$(go version | awk '{print $3}')
