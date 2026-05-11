@@ -1,7 +1,8 @@
 <script lang="ts" setup>
-import type { TestPocMatch, ValidateResult } from '#/api/poc';
+import type { DataTableColumns } from "naive-ui";
+import type { TestPocMatch, ValidateResult } from "#/api/poc";
 
-import { computed, h, onMounted, ref } from 'vue';
+import { computed, h, onMounted, ref } from "vue";
 
 import {
   NAlert,
@@ -28,7 +29,7 @@ import {
   NTabs,
   NTag,
   useMessage,
-} from 'naive-ui';
+} from "naive-ui";
 
 import {
   createPoc,
@@ -41,11 +42,11 @@ import {
   updatePoc,
   validatePocYaml,
   type PocTemplate,
-} from '#/api/poc';
+} from "#/api/poc";
 
-import YamlEditor from './yaml-editor.vue';
+import YamlEditor from "./yaml-editor.vue";
 
-defineOptions({ name: 'PocManage' });
+defineOptions({ name: "PocManage" });
 
 const message = useMessage();
 const loading = ref(false);
@@ -53,29 +54,29 @@ const data = ref<PocTemplate[]>([]);
 const total = ref(0);
 const page = ref(1);
 const pageSize = ref(20);
-const keyword = ref('');
+const keyword = ref("");
 const severityFilter = ref<string | null>(null);
 
 // Import
 const showImport = ref(false);
 const importing = ref(false);
-const yamlContent = ref('');
+const yamlContent = ref("");
 
 // Editor
 const showEditor = ref(false);
-const editorMode = ref<'create' | 'edit'>('create');
+const editorMode = ref<"create" | "edit">("create");
 const editorForm = ref({
-  name: '',
-  severity: 'info',
-  description: '',
-  content: '',
-  category: '',
-  cve: '',
-  tags: '',
+  name: "",
+  severity: "info",
+  description: "",
+  content: "",
+  category: "",
+  cve: "",
+  tags: "",
 });
 const saving = ref(false);
-const editingId = ref('');
-const editorTab = ref('editor');
+const editingId = ref("");
+const editorTab = ref("editor");
 const yamlEditorRef = ref<InstanceType<typeof YamlEditor>>();
 
 // Validate
@@ -84,7 +85,7 @@ const validateResult = ref<ValidateResult | null>(null);
 
 // Test
 const showTestPanel = ref(false);
-const testTargetUrl = ref('');
+const testTargetUrl = ref("");
 const testing = ref(false);
 const testResult = ref<{
   success: boolean;
@@ -96,29 +97,29 @@ const testResult = ref<{
 // Detail
 const showDetail = ref(false);
 const detailItem = ref<PocTemplate | null>(null);
-const detailTab = ref('info');
+const detailTab = ref("info");
 
 const sevLabels: Record<string, string> = {
-  critical: '严重',
-  high: '高危',
-  medium: '中危',
-  low: '低危',
-  info: '信息',
+  critical: "严重",
+  high: "高危",
+  medium: "中危",
+  low: "低危",
+  info: "信息",
 };
 const sevColors: Record<string, { bg: string; fg: string }> = {
-  critical: { bg: '#fff1f0', fg: '#cf1322' },
-  high: { bg: '#fff7e6', fg: '#d46b08' },
-  medium: { bg: '#fffbe6', fg: '#d4b106' },
-  low: { bg: '#f6ffed', fg: '#389e0d' },
-  info: { bg: '#f0f5ff', fg: '#1890ff' },
+  critical: { bg: "#fff1f0", fg: "#cf1322" },
+  high: { bg: "#fff7e6", fg: "#d46b08" },
+  medium: { bg: "#fffbe6", fg: "#d4b106" },
+  low: { bg: "#f6ffed", fg: "#389e0d" },
+  info: { bg: "#f0f5ff", fg: "#1890ff" },
 };
 
 const severityOptions = [
-  { label: '严重', value: 'critical' },
-  { label: '高危', value: 'high' },
-  { label: '中危', value: 'medium' },
-  { label: '低危', value: 'low' },
-  { label: '信息', value: 'info' },
+  { label: "严重", value: "critical" },
+  { label: "高危", value: "high" },
+  { label: "中危", value: "medium" },
+  { label: "低危", value: "low" },
+  { label: "信息", value: "info" },
 ];
 
 const pocTemplate = `id: my-poc-template
@@ -139,30 +140,72 @@ http:
           - 200
 `;
 
-const columns = computed(() => [
+const templateReferenceYaml = `id: template-id
+info:
+  name: 模板名称
+  author: 作者
+  severity: high
+  description: 描述
+  tags: tag1,tag2
+  reference:
+    - https://...
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/path"
+    matchers-condition: and
+    matchers:
+      - type: word
+        words:
+          - "keyword"
+      - type: status
+        status:
+          - 200`;
+
+const nucleiVariables = [
+  { name: "{{BaseURL}}", desc: "完整 URL" },
+  { name: "{{RootURL}}", desc: "根路径 URL" },
+  { name: "{{Hostname}}", desc: "主机名" },
+  { name: "{{Host}}", desc: "主机名:端口" },
+  { name: "{{Port}}", desc: "端口号" },
+  { name: "{{Path}}", desc: "请求路径" },
+  { name: "{{Schema}}", desc: "协议 (http/https)" },
+];
+
+const matcherTypes = [
+  { name: "word", desc: "关键字匹配" },
+  { name: "regex", desc: "正则匹配" },
+  { name: "status", desc: "HTTP 状态码" },
+  { name: "binary", desc: "二进制数据匹配" },
+  { name: "dsl", desc: "DSL 表达式" },
+  { name: "size", desc: "响应体大小" },
+];
+
+const columns = computed<DataTableColumns<PocTemplate>>(() => [
   {
-    title: '名称',
-    key: 'name',
+    title: "名称",
+    key: "name",
     minWidth: 200,
     render: (row: PocTemplate) =>
       h(
-        'a',
+        "a",
         {
-          style: 'color: #1890ff; cursor: pointer',
+          style: "color: #1890ff; cursor: pointer",
           onClick: () => openDetail(row),
         },
         row.name,
       ),
   },
   {
-    title: '严重程度',
-    key: 'severity',
+    title: "严重程度",
+    key: "severity",
     width: 90,
-    align: 'center' as const,
+    align: "center" as const,
     render: (row: PocTemplate) => {
-      const sc = sevColors[row.severity] ?? { bg: '#f5f5f5', fg: '#999' };
+      const sc = sevColors[row.severity] ?? { bg: "#f5f5f5", fg: "#999" };
       return h(
-        'span',
+        "span",
         {
           style: `padding: 3px 10px; border-radius: 4px; font-size: 12px; font-weight: 600; background: ${sc.bg}; color: ${sc.fg}`,
         },
@@ -171,57 +214,56 @@ const columns = computed(() => [
     },
   },
   {
-    title: 'PoC ID',
-    key: 'poc_id',
+    title: "PoC ID",
+    key: "poc_id",
     width: 180,
-    ellipsis: { tooltip: true },
+    ellipsis: { tooltip: true as const },
   },
-  { title: '作者', key: 'author', width: 100 },
-  { title: 'CVE', key: 'cve', width: 130 },
+  { title: "作者", key: "author", width: 100 },
+  { title: "CVE", key: "cve", width: 130 },
   {
-    title: '标签',
-    key: 'tags',
+    title: "标签",
+    key: "tags",
     width: 160,
     render: (row: PocTemplate) => {
-      if (!row.tags?.length)
-        return h('span', { style: 'color: #ccc' }, '-');
+      if (!row.tags?.length) return h("span", { style: "color: #ccc" }, "-");
       return h(NSpace, { size: 2 }, () =>
         row.tags
           .slice(0, 3)
           .map((t: string) =>
-            h(NTag, { size: 'tiny', bordered: false }, () => t),
+            h(NTag, { size: "tiny", bordered: false }, () => t),
           ),
       );
     },
   },
-  { title: '命中', key: 'hit_count', width: 60 },
+  { title: "命中", key: "hit_count", width: 60 },
   {
-    title: '启用',
-    key: 'enabled',
+    title: "启用",
+    key: "enabled",
     width: 70,
     render: (row: PocTemplate) =>
       h(NSwitch, {
-        size: 'small',
+        size: "small",
         value: row.enabled,
         onUpdateValue: (v: boolean) => handleToggle(row.id, v),
       }),
   },
   {
-    title: '操作',
-    key: 'actions',
+    title: "操作",
+    key: "actions",
     width: 140,
-    fixed: 'right' as const,
+    fixed: "right" as const,
     render: (row: PocTemplate) =>
       h(NSpace, { size: 4 }, () => [
         h(
           NButton,
           {
-            size: 'tiny',
-            type: 'info',
+            size: "tiny",
+            type: "info",
             secondary: true,
             onClick: () => openEdit(row),
           },
-          () => '编辑',
+          () => "编辑",
         ),
         h(
           NPopconfirm,
@@ -230,10 +272,10 @@ const columns = computed(() => [
             trigger: () =>
               h(
                 NButton,
-                { size: 'tiny', type: 'error', text: true },
-                () => '删除',
+                { size: "tiny", type: "error", text: true },
+                () => "删除",
               ),
-            default: () => '确定删除？',
+            default: () => "确定删除？",
           },
         ),
       ]),
@@ -262,52 +304,52 @@ async function handleToggle(id: string, enabled: boolean) {
     const item = data.value.find((d) => d.id === id);
     if (item) item.enabled = enabled;
   } catch (e: any) {
-    message.error(e?.message || '操作失败');
+    message.error(e?.message || "操作失败");
   }
 }
 
 async function handleDelete(id: string) {
   try {
     await deletePoc(id);
-    message.success('已删除');
+    message.success("已删除");
     await fetchData();
   } catch (e: any) {
-    message.error(e?.message || '删除失败');
+    message.error(e?.message || "删除失败");
   }
 }
 
 async function handleImport() {
   if (!yamlContent.value.trim()) {
-    message.warning('请输入 YAML 内容');
+    message.warning("请输入 YAML 内容");
     return;
   }
   importing.value = true;
   try {
     await importPocYaml(yamlContent.value);
-    message.success('导入成功');
+    message.success("导入成功");
     showImport.value = false;
-    yamlContent.value = '';
+    yamlContent.value = "";
     await fetchData();
   } catch (e: any) {
-    message.error(e?.message || '导入失败');
+    message.error(e?.message || "导入失败");
   } finally {
     importing.value = false;
   }
 }
 
 function openCreate() {
-  editorMode.value = 'create';
-  editingId.value = '';
+  editorMode.value = "create";
+  editingId.value = "";
   editorForm.value = {
-    name: '',
-    severity: 'info',
-    description: '',
+    name: "",
+    severity: "info",
+    description: "",
     content: pocTemplate,
-    category: '',
-    cve: '',
-    tags: '',
+    category: "",
+    cve: "",
+    tags: "",
   };
-  editorTab.value = 'editor';
+  editorTab.value = "editor";
   validateResult.value = null;
   testResult.value = null;
   showTestPanel.value = false;
@@ -315,31 +357,31 @@ function openCreate() {
 }
 
 async function openEdit(row: PocTemplate) {
-  editorMode.value = 'edit';
+  editorMode.value = "edit";
   editingId.value = row.id;
   try {
     const detail = (await getPocDetail(row.id)) as any;
     editorForm.value = {
-      name: detail.name ?? '',
-      severity: detail.severity ?? 'info',
-      description: detail.description ?? '',
-      content: detail.content ?? '',
-      category: detail.category ?? '',
-      cve: detail.cve ?? '',
-      tags: (detail.tags ?? []).join(', '),
+      name: detail.name ?? "",
+      severity: detail.severity ?? "info",
+      description: detail.description ?? "",
+      content: detail.content ?? "",
+      category: detail.category ?? "",
+      cve: detail.cve ?? "",
+      tags: (detail.tags ?? []).join(", "),
     };
   } catch {
     editorForm.value = {
       name: row.name,
       severity: row.severity,
-      description: '',
-      content: '',
-      category: '',
-      cve: row.cve ?? '',
-      tags: (row.tags ?? []).join(', '),
+      description: "",
+      content: "",
+      category: "",
+      cve: row.cve ?? "",
+      tags: (row.tags ?? []).join(", "),
     };
   }
-  editorTab.value = 'editor';
+  editorTab.value = "editor";
   validateResult.value = null;
   testResult.value = null;
   showTestPanel.value = false;
@@ -348,7 +390,7 @@ async function openEdit(row: PocTemplate) {
 
 async function handleValidate() {
   if (!editorForm.value.content.trim()) {
-    message.warning('请先编写 YAML 内容');
+    message.warning("请先编写 YAML 内容");
     return;
   }
   validating.value = true;
@@ -357,14 +399,14 @@ async function handleValidate() {
     const res = (await validatePocYaml(editorForm.value.content)) as any;
     validateResult.value = res;
     if (res.valid) {
-      message.success('YAML 校验通过');
+      message.success("YAML 校验通过");
       if (res.name && !editorForm.value.name) editorForm.value.name = res.name;
-      if (res.severity && res.severity !== 'info')
+      if (res.severity && res.severity !== "info")
         editorForm.value.severity = res.severity;
       if (res.description && !editorForm.value.description)
         editorForm.value.description = res.description;
       if (res.tags?.length && !editorForm.value.tags)
-        editorForm.value.tags = res.tags.join(', ');
+        editorForm.value.tags = res.tags.join(", ");
     } else {
       message.error(`校验失败: ${res.error}`);
       const lineMatch = res.error?.match(/line (\d+)/i);
@@ -375,13 +417,13 @@ async function handleValidate() {
             message: res.error!,
             startLine: line,
             endLine: line,
-            severity: 'error',
+            severity: "error",
           },
         ]);
       }
     }
   } catch (e: any) {
-    message.error(e?.message || '校验请求失败');
+    message.error(e?.message || "校验请求失败");
   } finally {
     validating.value = false;
   }
@@ -389,11 +431,11 @@ async function handleValidate() {
 
 async function handleTest() {
   if (!editorForm.value.content.trim()) {
-    message.warning('请先编写 YAML 内容');
+    message.warning("请先编写 YAML 内容");
     return;
   }
   if (!testTargetUrl.value.trim()) {
-    message.warning('请输入测试目标 URL');
+    message.warning("请输入测试目标 URL");
     return;
   }
   testing.value = true;
@@ -416,7 +458,7 @@ async function handleTest() {
       message.error(`测试失败: ${res.error}`);
     }
   } catch (e: any) {
-    message.error(e?.message || '测试请求失败');
+    message.error(e?.message || "测试请求失败");
   } finally {
     testing.value = false;
   }
@@ -424,7 +466,7 @@ async function handleTest() {
 
 async function handleSave() {
   if (!editorForm.value.name || !editorForm.value.content) {
-    message.warning('名称和内容不能为空');
+    message.warning("名称和内容不能为空");
     return;
   }
   saving.value = true;
@@ -437,21 +479,21 @@ async function handleSave() {
       category: editorForm.value.category,
       cve: editorForm.value.cve,
       tags: editorForm.value.tags
-        .split(',')
+        .split(",")
         .map((t: string) => t.trim())
         .filter(Boolean),
     };
-    if (editorMode.value === 'create') {
+    if (editorMode.value === "create") {
       await createPoc(payload);
-      message.success('创建成功');
+      message.success("创建成功");
     } else {
       await updatePoc(editingId.value, payload);
-      message.success('更新成功');
+      message.success("更新成功");
     }
     showEditor.value = false;
     await fetchData();
   } catch (e: any) {
-    message.error(e?.message || '保存失败');
+    message.error(e?.message || "保存失败");
   } finally {
     saving.value = false;
   }
@@ -463,7 +505,7 @@ async function openDetail(row: PocTemplate) {
   } catch {
     detailItem.value = row;
   }
-  detailTab.value = 'info';
+  detailTab.value = "info";
   showDetail.value = true;
 }
 
@@ -561,7 +603,7 @@ onMounted(fetchData);
         placeholder="粘贴 Nuclei 格式的 YAML..."
         :rows="18"
         style="
-          font-family: 'SF Mono', Consolas, monospace;
+          font-family: &quot;SF Mono&quot;, Consolas, monospace;
           font-size: 13px;
         "
       />
@@ -584,7 +626,9 @@ onMounted(fetchData);
     >
       <div style="display: flex; gap: 16px; min-height: 600px">
         <!-- Left: YAML Editor -->
-        <div style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+        <div
+          style="flex: 1; min-width: 0; display: flex; flex-direction: column"
+        >
           <div
             style="
               display: flex;
@@ -625,7 +669,7 @@ onMounted(fetchData);
                 type="warning"
                 @click="showTestPanel = !showTestPanel"
               >
-                {{ showTestPanel ? '关闭测试' : '测试 PoC' }}
+                {{ showTestPanel ? "关闭测试" : "测试 PoC" }}
               </NButton>
             </NSpace>
           </div>
@@ -653,7 +697,9 @@ onMounted(fetchData);
                   size="small"
                   type="primary"
                   :loading="testing"
-                  :disabled="!testTargetUrl.trim() || !editorForm.content.trim()"
+                  :disabled="
+                    !testTargetUrl.trim() || !editorForm.content.trim()
+                  "
                   @click="handleTest"
                 >
                   执行测试
@@ -701,8 +747,11 @@ onMounted(fetchData);
                               borderRadius: '3px',
                               fontSize: '11px',
                               fontWeight: 600,
-                              background: (sevColors[f.severity] ?? { bg: '#f5f5f5' }).bg,
-                              color: (sevColors[f.severity] ?? { fg: '#999' }).fg,
+                              background: (
+                                sevColors[f.severity] ?? { bg: '#f5f5f5' }
+                              ).bg,
+                              color: (sevColors[f.severity] ?? { fg: '#999' })
+                                .fg,
                             }"
                           >
                             {{ sevLabels[f.severity] ?? f.severity }}
@@ -733,9 +782,11 @@ onMounted(fetchData);
                             max-height: 300px;
                             line-height: 1.5;
                             margin: 8px 0;
-                            font-family: 'SF Mono', Consolas, monospace;
+                            font-family:
+                              &quot;SF Mono&quot;, Consolas, monospace;
                           "
-                        >{{ f.evidence }}</pre>
+                          >{{ f.evidence }}</pre
+                        >
                         <NCode
                           v-if="f.curl_command"
                           :code="f.curl_command"
@@ -817,7 +868,10 @@ onMounted(fetchData);
                 <p style="margin: 2px 0; color: #555">
                   Name: {{ validateResult.name }}
                 </p>
-                <p v-if="validateResult.author" style="margin: 2px 0; color: #555">
+                <p
+                  v-if="validateResult.author"
+                  style="margin: 2px 0; color: #555"
+                >
                   Author: {{ validateResult.author }}
                 </p>
                 <p
@@ -830,14 +884,13 @@ onMounted(fetchData);
                   v-if="validateResult.tags?.length"
                   style="margin: 2px 0; color: #555"
                 >
-                  Tags: {{ validateResult.tags?.join(', ') }}
+                  Tags: {{ validateResult.tags?.join(", ") }}
                 </p>
               </div>
             </NTabPane>
 
             <NTabPane name="help" tab="模板参考">
-              <!-- v-pre prevents Vue from parsing Nuclei {{ }} variables -->
-              <div v-pre style="font-size: 12px; color: #666; line-height: 1.8">
+              <div style="font-size: 12px; color: #666; line-height: 1.8">
                 <p style="font-weight: 600; margin-bottom: 4px">
                   Nuclei YAML 模板结构
                 </p>
@@ -849,30 +902,10 @@ onMounted(fetchData);
                     font-size: 11px;
                     line-height: 1.6;
                     white-space: pre-wrap;
-                    font-family: 'SF Mono', Consolas, monospace;
+                    font-family: &quot;SF Mono&quot;, Consolas, monospace;
                   "
-                >id: template-id
-info:
-  name: 模板名称
-  author: 作者
-  severity: high
-  description: 描述
-  tags: tag1,tag2
-  reference:
-    - https://...
-
-http:
-  - method: GET
-    path:
-      - "{{BaseURL}}/path"
-    matchers-condition: and
-    matchers:
-      - type: word
-        words:
-          - "keyword"
-      - type: status
-        status:
-          - 200</pre>
+                  >{{ templateReferenceYaml }}</pre
+                >
 
                 <p style="font-weight: 600; margin: 12px 0 4px">常用变量</p>
                 <ul
@@ -883,35 +916,13 @@ http:
                     font-size: 12px;
                   "
                 >
-                  <li>
-                    <code style="color: #d63384">{{BaseURL}}</code> 完整 URL
-                  </li>
-                  <li>
-                    <code style="color: #d63384">{{RootURL}}</code>
-                    根路径 URL
-                  </li>
-                  <li>
-                    <code style="color: #d63384">{{Hostname}}</code> 主机名
-                  </li>
-                  <li>
-                    <code style="color: #d63384">{{Host}}</code>
-                    主机名:端口
-                  </li>
-                  <li>
-                    <code style="color: #d63384">{{Port}}</code> 端口号
-                  </li>
-                  <li>
-                    <code style="color: #d63384">{{Path}}</code> 请求路径
-                  </li>
-                  <li>
-                    <code style="color: #d63384">{{Schema}}</code>
-                    协议 (http/https)
+                  <li v-for="item in nucleiVariables" :key="item.name">
+                    <code style="color: #d63384">{{ item.name }}</code>
+                    {{ item.desc }}
                   </li>
                 </ul>
 
-                <p style="font-weight: 600; margin: 12px 0 4px">
-                  匹配器类型
-                </p>
+                <p style="font-weight: 600; margin: 12px 0 4px">匹配器类型</p>
                 <ul
                   style="
                     padding-left: 16px;
@@ -920,12 +931,9 @@ http:
                     font-size: 12px;
                   "
                 >
-                  <li><b>word</b> — 关键字匹配</li>
-                  <li><b>regex</b> — 正则匹配</li>
-                  <li><b>status</b> — HTTP 状态码</li>
-                  <li><b>binary</b> — 二进制数据匹配</li>
-                  <li><b>dsl</b> — DSL 表达式</li>
-                  <li><b>size</b> — 响应体大小</li>
+                  <li v-for="item in matcherTypes" :key="item.name">
+                    <b>{{ item.name }}</b> - {{ item.desc }}
+                  </li>
                 </ul>
               </div>
             </NTabPane>
@@ -937,7 +945,7 @@ http:
         <NSpace justify="end">
           <NButton @click="showEditor = false">取消</NButton>
           <NButton type="primary" :loading="saving" @click="handleSave">
-            {{ editorMode === 'create' ? '创建' : '保存' }}
+            {{ editorMode === "create" ? "创建" : "保存" }}
           </NButton>
         </NSpace>
       </template>
@@ -946,32 +954,43 @@ http:
     <!-- Detail Drawer -->
     <NDrawer v-model:show="showDetail" :width="650">
       <NDrawerContent v-if="detailItem" :title="detailItem.name">
-        <template #header-extra>
-          <NSpace :size="8">
-            <span
-              :style="{
-                padding: '3px 10px',
-                borderRadius: '4px',
-                fontSize: '12px',
-                fontWeight: 600,
-                background: (
-                  sevColors[detailItem.severity] ?? { bg: '#f5f5f5' }
-                ).bg,
-                color: (sevColors[detailItem.severity] ?? { fg: '#999' }).fg,
-              }"
-            >
-              {{ sevLabels[detailItem.severity] ?? detailItem.severity }}
-            </span>
-            <NTag
-              v-if="detailItem.enabled"
-              size="small"
-              type="success"
-              :bordered="false"
-            >
-              启用
-            </NTag>
-            <NTag v-else size="small" :bordered="false">停用</NTag>
-          </NSpace>
+        <template #header>
+          <div
+            style="
+              display: flex;
+              gap: 12px;
+              align-items: center;
+              justify-content: space-between;
+              width: 100%;
+            "
+          >
+            <span style="font-weight: 600">{{ detailItem.name }}</span>
+            <NSpace :size="8">
+              <span
+                :style="{
+                  padding: '3px 10px',
+                  borderRadius: '4px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  background: (
+                    sevColors[detailItem.severity] ?? { bg: '#f5f5f5' }
+                  ).bg,
+                  color: (sevColors[detailItem.severity] ?? { fg: '#999' }).fg,
+                }"
+              >
+                {{ sevLabels[detailItem.severity] ?? detailItem.severity }}
+              </span>
+              <NTag
+                v-if="detailItem.enabled"
+                size="small"
+                type="success"
+                :bordered="false"
+              >
+                启用
+              </NTag>
+              <NTag v-else size="small" :bordered="false">停用</NTag>
+            </NSpace>
+          </div>
         </template>
 
         <NTabs v-model:value="detailTab" size="small" type="line">
@@ -987,25 +1006,25 @@ http:
                 {{ detailItem.poc_id }}
               </NDescriptionsItem>
               <NDescriptionsItem label="作者">
-                {{ detailItem.author || '-' }}
+                {{ detailItem.author || "-" }}
               </NDescriptionsItem>
               <NDescriptionsItem label="CVE">
-                {{ detailItem.cve || '-' }}
+                {{ detailItem.cve || "-" }}
               </NDescriptionsItem>
               <NDescriptionsItem label="CWE">
-                {{ (detailItem as any).cwe || '-' }}
+                {{ (detailItem as any).cwe || "-" }}
               </NDescriptionsItem>
               <NDescriptionsItem label="CVSS">
-                {{ (detailItem as any).cvss || '-' }}
+                {{ (detailItem as any).cvss || "-" }}
               </NDescriptionsItem>
               <NDescriptionsItem label="命中数">
                 {{ detailItem.hit_count }}
               </NDescriptionsItem>
               <NDescriptionsItem label="来源">
-                {{ detailItem.source || '-' }}
+                {{ detailItem.source || "-" }}
               </NDescriptionsItem>
               <NDescriptionsItem label="分类">
-                {{ (detailItem as any).category || '-' }}
+                {{ (detailItem as any).category || "-" }}
               </NDescriptionsItem>
               <NDescriptionsItem :span="2" label="标签">
                 <NSpace v-if="detailItem.tags?.length" :size="4">
@@ -1021,7 +1040,7 @@ http:
                 <span v-else style="color: #ccc">-</span>
               </NDescriptionsItem>
               <NDescriptionsItem :span="2" label="描述">
-                {{ detailItem.description || '-' }}
+                {{ detailItem.description || "-" }}
               </NDescriptionsItem>
             </NDescriptions>
           </NTabPane>

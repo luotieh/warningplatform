@@ -8,6 +8,7 @@ import (
 	"vulnscan-backend/model"
 
 	"code.yt-security.com/public/core/v2/db"
+	"code.yt-security.com/public/core/v2/generate/qulid"
 	"gorm.io/gorm"
 )
 
@@ -89,7 +90,11 @@ func (s *serviceAsset) GetByID(id string) (*model.Asset, error) {
 }
 
 func (s *serviceAsset) Create(item *model.Asset) error {
-	return s.session().Create(item).Error
+	if err := s.session().Create(item).Error; err != nil {
+		return err
+	}
+	s.ensureVerifyTasks([]model.Asset{*item}, item.CreatedBy, "asset_create")
+	return nil
 }
 
 func (s *serviceAsset) Update(id string, updates map[string]any) error {
@@ -116,9 +121,11 @@ func (s *serviceAsset) recordChangeLogs(old *model.Asset, updates map[string]any
 		"type":                      func() string { return old.Type },
 		"address":                   func() string { return old.Address },
 		"group_id":                  func() string { return old.GroupID },
+		"organize_id":               func() string { return old.OrganizeID },
 		"status":                    func() string { return fmt.Sprintf("%d", old.Status) },
 		"domain":                    func() string { return old.Domain },
 		"ipv4":                      func() string { return old.IPv4 },
+		"ipv6":                      func() string { return old.IPv6 },
 		"port":                      func() string { return fmt.Sprintf("%d", old.Port) },
 		"protocol":                  func() string { return old.Protocol },
 		"service":                   func() string { return old.Service },
@@ -167,7 +174,97 @@ func (s *serviceAsset) Delete(id string) error {
 
 func (s *serviceAsset) BatchImport(items []*model.Asset) (int, error) {
 	result := s.session().CreateInBatches(items, 100)
+	if result.Error == nil && result.RowsAffected > 0 {
+		assets := make([]model.Asset, 0, len(items))
+		operator := ""
+		for _, item := range items {
+			if item == nil {
+				continue
+			}
+			if operator == "" {
+				operator = item.CreatedBy
+			}
+			assets = append(assets, *item)
+		}
+		s.ensureVerifyTasks(assets, operator, "asset_import")
+	}
 	return int(result.RowsAffected), result.Error
+}
+
+func (s *serviceAsset) ensureVerifyTasks(assets []model.Asset, operator, sourceType string) {
+	if len(assets) == 0 {
+		return
+	}
+	now := time.Now()
+	batchID := qulid.GenerateID()
+	sess := s.session()
+	exists := make(map[string]bool)
+	var existing []model.AssetVerifyTask
+	if err := sess.Where("asset_id IN ? AND status <> ?", assetIDsFromAssets(assets), model.AssetVerifyTaskArchived).
+		Find(&existing).Error; err == nil {
+		for _, task := range existing {
+			exists[task.AssetID] = true
+		}
+	}
+
+	var tasks []model.AssetVerifyTask
+	var logs []model.AssetVerifyOplog
+
+	for _, asset := range assets {
+		if exists[asset.ID] {
+			continue
+		}
+		targetOrganizeID := asset.OrganizeID
+		status := model.AssetVerifyTaskPendingDispatch
+		if targetOrganizeID != "" {
+			status = model.AssetVerifyTaskPendingReceive
+		}
+		task := model.AssetVerifyTask{
+			ID:                qulid.GenerateID(),
+			AssetID:           asset.ID,
+			BatchID:           batchID,
+			SourceType:        sourceType,
+			Status:            status,
+			OwnerOrganizeID:   asset.OrganizeID,
+			CurrentOrganizeID: targetOrganizeID,
+			TargetOrganizeID:  targetOrganizeID,
+			ConstructionOrgID: asset.ConstructionOrgID,
+			OperationOrgID:    asset.OperationOrgID,
+			CreatedBy:         operator,
+			UpdatedBy:         operator,
+			CreatedAt:         now,
+			UpdatedAt:         now,
+		}
+		tasks = append(tasks, task)
+		logs = append(logs, model.AssetVerifyOplog{
+			TaskID:           task.ID,
+			AssetID:          task.AssetID,
+			Action:           model.AssetVerifyActionCreate,
+			ToStatus:         string(task.Status),
+			TargetOrganizeID: task.TargetOrganizeID,
+			Operator:         operator,
+			Remark:           "asset auto verify task",
+			CreatedAt:        now,
+		})
+	}
+
+	if len(tasks) == 0 {
+		return
+	}
+	if err := sess.CreateInBatches(tasks, 100).Error; err != nil {
+		return
+	}
+	if len(logs) > 0 {
+		_ = sess.CreateInBatches(logs, 100).Error
+	}
+}
+
+func assetIDsFromAssets(assets []model.Asset) []string {
+	ids := make([]string, 0, len(assets))
+	for _, asset := range assets {
+		ids = append(ids, asset.ID)
+	}
+	return ids
 }
 
 func (s *serviceAsset) BatchUpdate(ids []string, updates map[string]any) (int64, error) {

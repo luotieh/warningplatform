@@ -1,6 +1,7 @@
 package asset
 
 import (
+	"encoding/csv"
 	"fmt"
 	"strings"
 
@@ -12,6 +13,7 @@ import (
 	iamsdk "code.yt-security.com/public/sdk"
 	"code.yt-security.com/public/sdk/permission"
 	"github.com/gin-gonic/gin"
+	"github.com/xuri/excelize/v2"
 )
 
 type HandlerAsset struct {
@@ -20,6 +22,15 @@ type HandlerAsset struct {
 
 func NewHandlerAsset(svc assetContract.ServiceAsset) *HandlerAsset {
 	return &HandlerAsset{svc: svc}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func (h *HandlerAsset) List(c *gin.Context) {
@@ -72,10 +83,11 @@ func (h *HandlerAsset) Create(c *gin.Context) {
 		Tags:       req.Tags,
 		Status:     1,
 		CreatedBy:  user.UserID,
-		OrganizeID: user.OrganizeID,
+		OrganizeID: firstNonEmpty(req.OrganizeID, user.OrganizeID),
 
 		Domain:                  req.Domain,
 		IPv4:                    req.IPv4,
+		IPv6:                    req.IPv6,
 		URL:                     req.URL,
 		Protocol:                req.Protocol,
 		Service:                 req.Service,
@@ -94,6 +106,7 @@ func (h *HandlerAsset) Create(c *gin.Context) {
 		DataSource:              model.DataSourceType(req.DataSource),
 		ResponsibleUserID:       req.ResponsibleUserID,
 		ResponsibleUserName:     req.ResponsibleUserName,
+		Extra:                   req.Extra,
 		Remark:                  req.Remark,
 		LifecycleState:          "discovered",
 	}
@@ -107,35 +120,38 @@ func (h *HandlerAsset) Create(c *gin.Context) {
 }
 
 type updateAssetReq struct {
-	Name    *string  `json:"name"`
-	Type    *string  `json:"type"`
-	Address *string  `json:"address"`
-	GroupID *string  `json:"group_id"`
-	Port    *int     `json:"port"`
-	Tags    []string `json:"tags"`
-	Status  *int     `json:"status"`
+	Name       *string  `json:"name"`
+	Type       *string  `json:"type"`
+	Address    *string  `json:"address"`
+	GroupID    *string  `json:"group_id"`
+	OrganizeID *string  `json:"organize_id"`
+	Port       *int     `json:"port"`
+	Tags       []string `json:"tags"`
+	Status     *int     `json:"status"`
 
-	Domain                  *string `json:"domain"`
-	IPv4                    *string `json:"ipv4"`
-	URL                     *string `json:"url"`
-	Protocol                *string `json:"protocol"`
-	Service                 *string `json:"service"`
-	Version                 *string `json:"version"`
-	OS                      *string `json:"os"`
-	DataNumber              *string `json:"data_number"`
-	SystemName              *string `json:"system_name"`
-	SystemType              *string `json:"system_type"`
-	IsOnline                *bool   `json:"is_online"`
-	IsKey                   *bool   `json:"is_key"`
-	SecurityProtectionLevel *string `json:"security_protection_level"`
-	FilingCertNumber        *string `json:"filing_cert_number"`
-	IcpFilingNumber         *string `json:"icp_filing_number"`
-	ConstructionOrgID       *string `json:"construction_org_id"`
-	OperationOrgID          *string `json:"operation_org_id"`
-	DataSource              *string `json:"data_source"`
-	ResponsibleUserID       *string `json:"responsible_user_id"`
-	ResponsibleUserName     *string `json:"responsible_user_name"`
-	Remark                  *string `json:"remark"`
+	Domain                  *string        `json:"domain"`
+	IPv4                    *string        `json:"ipv4"`
+	IPv6                    *string        `json:"ipv6"`
+	URL                     *string        `json:"url"`
+	Protocol                *string        `json:"protocol"`
+	Service                 *string        `json:"service"`
+	Version                 *string        `json:"version"`
+	OS                      *string        `json:"os"`
+	DataNumber              *string        `json:"data_number"`
+	SystemName              *string        `json:"system_name"`
+	SystemType              *string        `json:"system_type"`
+	IsOnline                *bool          `json:"is_online"`
+	IsKey                   *bool          `json:"is_key"`
+	SecurityProtectionLevel *string        `json:"security_protection_level"`
+	FilingCertNumber        *string        `json:"filing_cert_number"`
+	IcpFilingNumber         *string        `json:"icp_filing_number"`
+	ConstructionOrgID       *string        `json:"construction_org_id"`
+	OperationOrgID          *string        `json:"operation_org_id"`
+	DataSource              *string        `json:"data_source"`
+	ResponsibleUserID       *string        `json:"responsible_user_id"`
+	ResponsibleUserName     *string        `json:"responsible_user_name"`
+	Extra                   *model.JSONMap `json:"extra"`
+	Remark                  *string        `json:"remark"`
 }
 
 func (h *HandlerAsset) Update(c *gin.Context) {
@@ -163,6 +179,9 @@ func (h *HandlerAsset) Update(c *gin.Context) {
 	if req.GroupID != nil {
 		updates["group_id"] = *req.GroupID
 	}
+	if req.OrganizeID != nil {
+		updates["organize_id"] = *req.OrganizeID
+	}
 	if req.Port != nil {
 		updates["port"] = *req.Port
 	}
@@ -177,6 +196,9 @@ func (h *HandlerAsset) Update(c *gin.Context) {
 	}
 	if req.IPv4 != nil {
 		updates["ipv4"] = *req.IPv4
+	}
+	if req.IPv6 != nil {
+		updates["ipv6"] = *req.IPv6
 	}
 	if req.URL != nil {
 		updates["url"] = *req.URL
@@ -232,6 +254,9 @@ func (h *HandlerAsset) Update(c *gin.Context) {
 	if req.ResponsibleUserName != nil {
 		updates["responsible_user_name"] = *req.ResponsibleUserName
 	}
+	if req.Extra != nil {
+		updates["extra"] = *req.Extra
+	}
 	if req.Remark != nil {
 		updates["remark"] = *req.Remark
 	}
@@ -274,7 +299,7 @@ func (h *HandlerAsset) BatchUpdate(c *gin.Context) {
 	}
 
 	allowedFields := map[string]bool{
-		"group_id": true, "status": true, "system_type": true,
+		"group_id": true, "organize_id": true, "status": true, "system_type": true,
 		"security_protection_level": true, "lifecycle_state": true,
 		"data_source": true, "responsible_user_name": true,
 		"responsible_user_id": true, "is_key": true, "is_online": true,
@@ -316,6 +341,8 @@ func (h *HandlerAsset) Export(c *gin.Context) {
 	format := c.DefaultQuery("format", "csv")
 	if format == "csv" {
 		h.exportCSV(c, items)
+	} else if format == "xlsx" {
+		h.exportXLSX(c, items)
 	} else {
 		web.Resp(c, web.ParamsMissingRequired)
 	}
@@ -325,29 +352,249 @@ func (h *HandlerAsset) exportCSV(c *gin.Context, items []model.Asset) {
 	c.Header("Content-Type", "text/csv; charset=utf-8")
 	c.Header("Content-Disposition", "attachment; filename=assets.csv")
 
-	bom := "\xEF\xBB\xBF"
-	header := "ID,名称,系统名称,地址,域名,IPv4,端口,类型,系统类型,保护等级,生命周期,风险分,责任人,数据来源,创建时间\n"
-	c.Writer.WriteString(bom + header)
+	_, _ = c.Writer.WriteString("\xEF\xBB\xBF")
+	writer := csv.NewWriter(c.Writer)
+	defer writer.Flush()
 
+	columns := assetExportColumns()
+	header := make([]string, 0, len(columns))
+	for _, col := range columns {
+		header = append(header, col.Title)
+	}
+	_ = writer.Write(header)
+	orgMap := h.constructionOrgMap(items)
 	for _, a := range items {
-		port := ""
-		if a.Port > 0 {
-			port = fmt.Sprintf("%d", a.Port)
-		}
-		line := fmt.Sprintf("%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%.1f,%s,%s,%s\n",
-			csvEscape(a.ID), csvEscape(a.Name), csvEscape(a.SystemName),
-			csvEscape(a.Address), csvEscape(a.Domain), csvEscape(a.IPv4), port,
-			csvEscape(a.Type), csvEscape(a.SystemType),
-			csvEscape(a.SecurityProtectionLevel), csvEscape(string(a.LifecycleState)),
-			a.RiskScore, csvEscape(a.ResponsibleUserName), csvEscape(string(a.DataSource)),
-			a.CreatedAt.Format("2006-01-02 15:04:05"))
-		c.Writer.WriteString(line)
+		_ = writer.Write(assetExportRow(a, columns, orgMap))
 	}
 }
 
-func csvEscape(s string) string {
-	if strings.ContainsAny(s, ",\"\n\r") {
-		return "\"" + strings.ReplaceAll(s, "\"", "\"\"") + "\""
+func (h *HandlerAsset) exportXLSX(c *gin.Context, items []model.Asset) {
+	f := excelize.NewFile()
+	sheet := f.GetSheetName(0)
+	f.SetSheetName(sheet, "资产台账")
+	sheet = "资产台账"
+
+	columns := assetExportColumns()
+	writeGroupedAssetHeader(f, sheet, columns)
+	orgMap := h.constructionOrgMap(items)
+	for r, item := range items {
+		row := assetExportRow(item, columns, orgMap)
+		for cidx, value := range row {
+			cell, _ := excelize.CoordinatesToCellName(cidx+1, r+3)
+			f.SetCellValue(sheet, cell, value)
+		}
 	}
-	return s
+	_ = f.SetRowHeight(sheet, 1, 24)
+	_ = f.SetRowHeight(sheet, 2, 28)
+	_ = f.SetColWidth(sheet, "A", lastColumnName(len(columns)), 18)
+	_ = f.SetPanes(sheet, &excelize.Panes{
+		Freeze:      true,
+		YSplit:      2,
+		TopLeftCell: "A3",
+		ActivePane:  "bottomLeft",
+	})
+
+	c.Header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	c.Header("Content-Disposition", "attachment; filename=assets.xlsx")
+	if err := f.Write(c.Writer); err != nil {
+		web.Resp(c, web.InternalError)
+	}
+}
+
+func assetExportColumns() []assetImportColumn {
+	columns := make([]assetImportColumn, 0, len(assetImportColumns)+4)
+	columns = append(columns, assetImportColumns...)
+	columns = append(columns,
+		assetImportColumn{Field: "risk_score", Group: "导出统计信息", Title: "风险分"},
+		assetImportColumn{Field: "vuln_count", Group: "导出统计信息", Title: "漏洞数"},
+		assetImportColumn{Field: "status", Group: "导出统计信息", Title: "状态"},
+		assetImportColumn{Field: "created_at", Group: "导出统计信息", Title: "创建时间"},
+	)
+	return columns
+}
+
+func assetExportRow(asset model.Asset, columns []assetImportColumn, orgMap map[string]model.ConstructionOrg) []string {
+	row := make([]string, 0, len(columns))
+	for _, col := range columns {
+		row = append(row, assetExportValue(asset, col.Field, orgMap))
+	}
+	return row
+}
+
+func assetExportValue(asset model.Asset, field string, orgMap map[string]model.ConstructionOrg) string {
+	switch field {
+	case "name":
+		return asset.Name
+	case "address":
+		return asset.Address
+	case "type":
+		return asset.Type
+	case "system_name":
+		return asset.SystemName
+	case "system_type":
+		return asset.SystemType
+	case "data_number":
+		return asset.DataNumber
+	case "domain":
+		return asset.Domain
+	case "ipv4":
+		return asset.IPv4
+	case "ipv6":
+		return asset.IPv6
+	case "url":
+		return asset.URL
+	case "port":
+		if asset.Port > 0 {
+			return fmt.Sprintf("%d", asset.Port)
+		}
+		return ""
+	case "protocol":
+		return asset.Protocol
+	case "service":
+		return asset.Service
+	case "version":
+		return asset.Version
+	case "os":
+		return asset.OS
+	case "is_online":
+		return formatBool(asset.IsOnline)
+	case "is_key":
+		return formatBool(asset.IsKey)
+	case "security_protection_level":
+		return asset.SecurityProtectionLevel
+	case "filing_cert_number":
+		return asset.FilingCertNumber
+	case "icp_filing_number":
+		return asset.IcpFilingNumber
+	case "organize_id":
+		return asset.OrganizeID
+	case "construction_org":
+		return constructionOrgExportValue(orgMap, asset.ConstructionOrgID, "name")
+	case "construction_org_location":
+		return constructionOrgExportValue(orgMap, asset.ConstructionOrgID, "location")
+	case "construction_org_address":
+		return constructionOrgExportValue(orgMap, asset.ConstructionOrgID, "address")
+	case "construction_org_charge_person":
+		return constructionOrgExportValue(orgMap, asset.ConstructionOrgID, "charge_person")
+	case "construction_org_charge_phone":
+		return constructionOrgExportValue(orgMap, asset.ConstructionOrgID, "charge_phone")
+	case "construction_org_security_filing":
+		return constructionOrgExportValue(orgMap, asset.ConstructionOrgID, "security_filing")
+	case "operation_org":
+		return constructionOrgExportValue(orgMap, asset.OperationOrgID, "name")
+	case "operation_org_location":
+		return constructionOrgExportValue(orgMap, asset.OperationOrgID, "location")
+	case "operation_org_address":
+		return constructionOrgExportValue(orgMap, asset.OperationOrgID, "address")
+	case "operation_org_charge_person":
+		return constructionOrgExportValue(orgMap, asset.OperationOrgID, "charge_person")
+	case "operation_org_charge_phone":
+		return constructionOrgExportValue(orgMap, asset.OperationOrgID, "charge_phone")
+	case "operation_org_security_filing":
+		return constructionOrgExportValue(orgMap, asset.OperationOrgID, "security_filing")
+	case "data_source":
+		return string(asset.DataSource)
+	case "lifecycle_state":
+		return string(asset.LifecycleState)
+	case "responsible_user_name":
+		return asset.ResponsibleUserName
+	case "tags":
+		return strings.Join(asset.Tags, ",")
+	case "remark":
+		return asset.Remark
+	case "risk_score":
+		return fmt.Sprintf("%.1f", asset.RiskScore)
+	case "vuln_count":
+		return fmt.Sprintf("%d", asset.VulnCount)
+	case "status":
+		return fmt.Sprintf("%d", asset.Status)
+	case "created_at":
+		return asset.CreatedAt.Format("2006-01-02 15:04:05")
+	default:
+		if assetExtraImportFields[field] {
+			return extraValue(asset.Extra, field)
+		}
+		return ""
+	}
+}
+
+func constructionOrgExportValue(orgMap map[string]model.ConstructionOrg, id string, field string) string {
+	if id == "" {
+		return ""
+	}
+	org, ok := orgMap[id]
+	if !ok {
+		if field == "name" {
+			return id
+		}
+		return ""
+	}
+	switch field {
+	case "name":
+		return firstNonEmpty(org.Name, id)
+	case "location":
+		return org.Location
+	case "address":
+		return org.Address
+	case "charge_person":
+		return org.ChargePerson
+	case "charge_phone":
+		return org.ChargePhone
+	case "security_filing":
+		return org.SecurityFiling
+	default:
+		return ""
+	}
+}
+
+func formatBool(value bool) string {
+	if value {
+		return "是"
+	}
+	return "否"
+}
+
+func extraValue(extra model.JSONMap, key string) string {
+	if extra == nil {
+		return ""
+	}
+	value, ok := extra[key]
+	if !ok || value == nil {
+		return ""
+	}
+	switch v := value.(type) {
+	case bool:
+		return formatBool(v)
+	case string:
+		return v
+	default:
+		return fmt.Sprintf("%v", v)
+	}
+}
+
+func (h *HandlerAsset) constructionOrgMap(items []model.Asset) map[string]model.ConstructionOrg {
+	ids := make([]string, 0)
+	seen := map[string]bool{}
+	for _, item := range items {
+		for _, id := range []string{item.ConstructionOrgID, item.OperationOrgID} {
+			if id != "" && !seen[id] {
+				seen[id] = true
+				ids = append(ids, id)
+			}
+		}
+	}
+	result := map[string]model.ConstructionOrg{}
+	if len(ids) == 0 {
+		return result
+	}
+	svc, ok := h.svc.(*serviceAsset)
+	if !ok {
+		return result
+	}
+	var orgs []model.ConstructionOrg
+	_ = svc.session().Where("id IN ?", ids).Find(&orgs).Error
+	for _, org := range orgs {
+		result[org.ID] = org
+	}
+	return result
 }

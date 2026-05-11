@@ -3,30 +3,45 @@ import './compat-polyfills';
 import { initPreferences } from '@vben/preferences';
 import { unmountGlobalLoading } from '@vben/utils';
 
+import {
+  applyInitialThemeFromParent,
+  enforceAppShellTheme,
+} from './composables/use-theme-sync';
 import { overridesPreferences } from './preferences';
 
 /**
- * 应用初始化完成之后再进行页面加载渲染
+ * Initialize preferences before mounting the application.
  */
 async function initApplication() {
-  // name用于指定项目唯一标识
-  // 用于区分不同项目的偏好设置以及存储数据的key前缀以及其他一些需要隔离的数据
   const env = import.meta.env.PROD ? 'prod' : 'dev';
   const appVersion = import.meta.env.VITE_APP_VERSION;
   const namespace = `${import.meta.env.VITE_APP_NAMESPACE}-${appVersion}-${env}`;
 
-  // app偏好设置初始化
+  // Bump this when cached Vben preferences become incompatible with app defaults.
+  const PREFS_SCHEMA_VERSION = '5';
+  const versionKey = `${namespace}__schema_v`;
+  if (localStorage.getItem(versionKey) !== PREFS_SCHEMA_VERSION) {
+    for (const key of Object.keys(localStorage)) {
+      if (key.startsWith(namespace)) {
+        localStorage.removeItem(key);
+      }
+    }
+    localStorage.removeItem('iam_theme');
+    localStorage.setItem(versionKey, PREFS_SCHEMA_VERSION);
+  }
+
   await initPreferences({
     namespace,
     overrides: overridesPreferences,
   });
 
-  // 启动应用并挂载
-  // vue应用主要逻辑及视图
+  if (!applyInitialThemeFromParent()) {
+    enforceAppShellTheme();
+  }
+
   const { bootstrap } = await import('./bootstrap');
   await bootstrap(namespace);
 
-  // 移除并销毁loading
   unmountGlobalLoading();
 }
 

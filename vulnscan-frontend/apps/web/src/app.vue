@@ -3,7 +3,7 @@ import type { GlobalThemeOverrides } from 'naive-ui';
 
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 
-import { useNaiveDesignTokens } from '@vben/hooks';
+import { useElementPlusDesignTokens, useNaiveDesignTokens } from '@vben/hooks';
 import { preferences } from '@vben/preferences';
 
 import { useThemeSync } from '#/composables/use-theme-sync';
@@ -25,6 +25,8 @@ defineOptions({ name: 'App' });
 useThemeSync();
 
 const { commonTokens } = useNaiveDesignTokens();
+/** 将 Element Plus --el-* 与 CSS 设计令牌对齐（IAM 前端无 Element，此处需显式同步以免 dark/css-vars 残留冷色底） */
+useElementPlusDesignTokens();
 
 const tokenLocale = computed(() =>
   preferences.app.locale === 'zh-CN' ? zhCN : enUS,
@@ -59,40 +61,7 @@ const tokenTheme = computed(() => {
 
 const themeOverrides = computed((): GlobalThemeOverrides => {
   return {
-    common: {
-      ...commonTokens,
-      borderRadius: '6px',
-      borderRadiusSmall: '4px',
-    },
-    Card: {
-      borderRadius: '10px',
-      paddingSmall: '16px 20px',
-      titleFontSizeSmall: '15px',
-      titleFontWeight: '600',
-    },
-    DataTable: {
-      borderRadius: '8px',
-      thPaddingSmall: '10px 12px',
-      tdPaddingSmall: '8px 12px',
-      fontSizeSmall: '13px',
-    },
-    Tag: {
-      borderRadius: '6px',
-    },
-    Button: {
-      borderRadiusSmall: '6px',
-      borderRadiusMedium: '8px',
-    },
-    Statistic: {
-      valueFontSize: '24px',
-      labelFontSize: '12px',
-    },
-    Drawer: {
-      borderRadius: '12px 0 0 12px',
-    },
-    Progress: {
-      borderRadius: '6px',
-    },
+    common: commonTokens,
   };
 });
 </script>

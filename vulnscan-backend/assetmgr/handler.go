@@ -17,6 +17,7 @@ type Handler struct {
 	risk        ac.ServiceRisk
 	alert       ac.ServiceAlert
 	verify      ac.ServiceVerify
+	verifyTask  ac.ServiceVerifyTask
 	compliance  ac.ServiceComplianceItem
 	tmpl        ac.ServiceComplianceTemplate
 	check       ac.ServiceCheckResult
@@ -30,6 +31,7 @@ func NewHandler(
 	risk ac.ServiceRisk,
 	alert ac.ServiceAlert,
 	verify ac.ServiceVerify,
+	verifyTask ac.ServiceVerifyTask,
 	compliance ac.ServiceComplianceItem,
 	tmpl ac.ServiceComplianceTemplate,
 	check ac.ServiceCheckResult,
@@ -38,7 +40,7 @@ func NewHandler(
 	workflow ac.ServiceWorkflow,
 ) *Handler {
 	return &Handler{
-		lifecycle: lifecycle, risk: risk, alert: alert, verify: verify,
+		lifecycle: lifecycle, risk: risk, alert: alert, verify: verify, verifyTask: verifyTask,
 		compliance: compliance, tmpl: tmpl, check: check,
 		responsible: responsible, integration: integration, workflow: workflow,
 	}
@@ -195,6 +197,162 @@ func (h *Handler) VerifyReview(c *gin.Context) {
 }
 
 // ── 合规项 ──
+
+func (h *Handler) VerifyTaskList(c *gin.Context) {
+	req, ok := web.BindQuery[ac.VerifyTaskListReq](c)
+	if !ok {
+		return
+	}
+	items, count, err := h.verifyTask.ListTasks(req)
+	if err != nil {
+		web.Resp(c, web.InternalError)
+		return
+	}
+	web.RespContentWithNum(c, web.Success, count, items)
+}
+
+func (h *Handler) VerifyTaskCreate(c *gin.Context) {
+	req, ok := web.BindJSON[ac.VerifyTaskCreateReq](c)
+	if !ok {
+		return
+	}
+	user, _ := iamsdk.GetCurrentUser(c)
+	items, err := h.verifyTask.CreateTasks(req, user.UserID, user.OrganizeID)
+	if err != nil {
+		web.Resp(c, web.InternalError)
+		return
+	}
+	web.RespContent(c, web.Success, gin.H{"items": items, "count": len(items)})
+}
+
+func (h *Handler) VerifyTaskReceive(c *gin.Context) {
+	req, ok := web.BindJSON[ac.VerifyTaskActionReq](c)
+	if !ok {
+		return
+	}
+	user, _ := iamsdk.GetCurrentUser(c)
+	if err := h.verifyTask.Receive(c.Param("id"), user.UserID, user.OrganizeID, req.Remark); err != nil {
+		web.Resp(c, web.InternalError)
+		return
+	}
+	web.Resp(c, web.Success)
+}
+
+func (h *Handler) VerifyTaskConfirm(c *gin.Context) {
+	req, ok := web.BindJSON[ac.VerifyTaskActionReq](c)
+	if !ok {
+		return
+	}
+	user, _ := iamsdk.GetCurrentUser(c)
+	if err := h.verifyTask.Confirm(c.Param("id"), user.UserID, req.Remark); err != nil {
+		web.Resp(c, web.InternalError)
+		return
+	}
+	web.Resp(c, web.Success)
+}
+
+func (h *Handler) VerifyTaskReject(c *gin.Context) {
+	req, ok := web.BindJSON[ac.VerifyTaskActionReq](c)
+	if !ok {
+		return
+	}
+	user, _ := iamsdk.GetCurrentUser(c)
+	if err := h.verifyTask.Reject(c.Param("id"), user.UserID, req.RejectReason, req.Remark); err != nil {
+		web.Resp(c, web.InternalError)
+		return
+	}
+	web.Resp(c, web.Success)
+}
+
+func (h *Handler) VerifyTaskForward(c *gin.Context) {
+	req, ok := web.BindJSON[ac.VerifyTaskActionReq](c)
+	if !ok {
+		return
+	}
+	user, _ := iamsdk.GetCurrentUser(c)
+	if err := h.verifyTask.Forward(c.Param("id"), req.TargetOrganizeID, user.UserID, req.Remark); err != nil {
+		web.Resp(c, web.InternalError)
+		return
+	}
+	web.Resp(c, web.Success)
+}
+
+func (h *Handler) VerifyTaskReturn(c *gin.Context) {
+	req, ok := web.BindJSON[ac.VerifyTaskActionReq](c)
+	if !ok {
+		return
+	}
+	user, _ := iamsdk.GetCurrentUser(c)
+	if err := h.verifyTask.Return(c.Param("id"), user.UserID, req.Remark); err != nil {
+		web.Resp(c, web.InternalError)
+		return
+	}
+	web.Resp(c, web.Success)
+}
+
+func (h *Handler) VerifyTaskArchive(c *gin.Context) {
+	req, ok := web.BindJSON[ac.VerifyTaskActionReq](c)
+	if !ok {
+		return
+	}
+	user, _ := iamsdk.GetCurrentUser(c)
+	if err := h.verifyTask.Archive(c.Param("id"), user.UserID, req.Remark); err != nil {
+		web.Resp(c, web.InternalError)
+		return
+	}
+	web.Resp(c, web.Success)
+}
+
+func (h *Handler) VerifyTaskReactivate(c *gin.Context) {
+	req, ok := web.BindJSON[ac.VerifyTaskActionReq](c)
+	if !ok {
+		return
+	}
+	user, _ := iamsdk.GetCurrentUser(c)
+	if err := h.verifyTask.Reactivate(c.Param("id"), user.UserID, req.Remark); err != nil {
+		web.Resp(c, web.InternalError)
+		return
+	}
+	web.Resp(c, web.Success)
+}
+
+func (h *Handler) VerifyTaskLogs(c *gin.Context) {
+	req, ok := web.BindQuery[ac.VerifyTaskLogsReq](c)
+	if !ok {
+		return
+	}
+	if req.TaskID == "" {
+		req.TaskID = c.Param("id")
+	}
+	items, count, err := h.verifyTask.ListLogs(req)
+	if err != nil {
+		web.Resp(c, web.InternalError)
+		return
+	}
+	web.RespContentWithNum(c, web.Success, count, items)
+}
+
+func (h *Handler) ArchiveList(c *gin.Context) {
+	req, ok := web.BindQuery[ac.ArchiveListReq](c)
+	if !ok {
+		return
+	}
+	items, count, err := h.verifyTask.ListArchives(req)
+	if err != nil {
+		web.Resp(c, web.InternalError)
+		return
+	}
+	web.RespContentWithNum(c, web.Success, count, items)
+}
+
+func (h *Handler) ArchiveDetail(c *gin.Context) {
+	item, err := h.verifyTask.GetArchive(c.Param("id"))
+	if err != nil {
+		web.Resp(c, web.NotFound)
+		return
+	}
+	web.RespContent(c, web.Success, item)
+}
 
 func (h *Handler) ComplianceList(c *gin.Context) {
 	var req ac.ComplianceItemReq

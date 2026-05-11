@@ -41,6 +41,7 @@ export interface Asset {
   last_scan_at?: string;
   ssl_expires_at?: string;
   domain_expires_at?: string;
+  extra?: Record<string, any>;
   remark?: string;
 }
 
@@ -95,8 +96,10 @@ export interface AssetEnrichDetail {
   asset: Asset;
   ports: { port: number; protocol: string; service: string; version: string }[];
   vulns: { id: string; title: string; severity: string; status: string; target: string; created_at: string }[];
+  asset_vulns: { id: string; title: string; severity: string; status: string; target: string; created_at: string }[];
   scan_history: { id: string; name: string; status: string; created_at: string; finished_at?: string }[];
   services: { service_name: string; version: string; port: string; count: number }[];
+  monitor_tasks: { id: string; task_name: string; target_homepage: string; enabled: boolean; next_run_at?: string }[];
   summary: { port_count: number; vuln_count: number; scan_count: number; risk_score: number; last_scan?: string };
 }
 

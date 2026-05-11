@@ -10,6 +10,19 @@ export interface SecurityPosture {
   top_vuln_assets: { host: string; vuln_count: number; risk_score: number }[];
   active_scans: number;
   worker_status: Record<string, number>;
+  monitor_stats?: {
+    enabled_tasks?: number;
+    open_alerts?: number;
+    total_alerts?: number;
+    total_tasks?: number;
+  };
+  top_risk_assets?: {
+    address?: string;
+    alert_count?: number;
+    name?: string;
+    risk_score?: number;
+    vuln_count?: number;
+  }[];
 }
 
 export function getDashboardOverview() {

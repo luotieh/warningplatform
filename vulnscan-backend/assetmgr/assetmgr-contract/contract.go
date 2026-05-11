@@ -106,6 +106,72 @@ type ServiceVerify interface {
 	Review(id string, status, remark, reviewer string) error
 }
 
+type VerifyTaskListReq struct {
+	Page              int    `form:"page"`
+	PageSize          int    `form:"page_size"`
+	AssetID           string `form:"asset_id"`
+	Status            string `form:"status"`
+	Keyword           string `form:"keyword"`
+	OwnerOrganizeID   string `form:"owner_organize_id"`
+	CurrentOrganizeID string `form:"current_organize_id"`
+	SourceType        string `form:"source_type"`
+}
+
+type VerifyTaskCreateReq struct {
+	AssetIDs         []string `json:"asset_ids" binding:"required"`
+	BatchID          string   `json:"batch_id"`
+	SourceType       string   `json:"source_type"`
+	TargetOrganizeID string   `json:"target_organize_id"`
+	Remark           string   `json:"remark"`
+}
+
+type VerifyTaskActionReq struct {
+	TargetOrganizeID string `json:"target_organize_id"`
+	VerifyResult     string `json:"verify_result"`
+	RejectReason     string `json:"reject_reason"`
+	Remark           string `json:"remark"`
+}
+
+type VerifyTaskResp struct {
+	model.AssetVerifyTask
+	AssetName  string `json:"asset_name"`
+	SystemName string `json:"system_name"`
+	Address    string `json:"address"`
+	AssetType  string `json:"asset_type"`
+	DataNumber string `json:"data_number"`
+}
+
+type VerifyTaskLogsReq struct {
+	Page     int    `form:"page"`
+	PageSize int    `form:"page_size"`
+	TaskID   string `form:"task_id"`
+	AssetID  string `form:"asset_id"`
+}
+
+type ArchiveListReq struct {
+	Page       int    `form:"page"`
+	PageSize   int    `form:"page_size"`
+	AssetID    string `form:"asset_id"`
+	Keyword    string `form:"keyword"`
+	OrganizeID string `form:"organize_id"`
+	BatchID    string `form:"batch_id"`
+}
+
+type ServiceVerifyTask interface {
+	ListTasks(req VerifyTaskListReq) ([]VerifyTaskResp, int64, error)
+	CreateTasks(req VerifyTaskCreateReq, operator, organizeID string) ([]model.AssetVerifyTask, error)
+	Receive(id, operator, organizeID, remark string) error
+	Confirm(id, operator, remark string) error
+	Reject(id, operator, reason, remark string) error
+	Forward(id, targetOrganizeID, operator, remark string) error
+	Return(id, operator, remark string) error
+	Archive(id, operator, remark string) error
+	Reactivate(id, operator, remark string) error
+	ListLogs(req VerifyTaskLogsReq) ([]model.AssetVerifyOplog, int64, error)
+	ListArchives(req ArchiveListReq) ([]model.AssetArchiveSnapshot, int64, error)
+	GetArchive(id string) (*model.AssetArchiveSnapshot, error)
+}
+
 // ── 合规模板 ──
 
 type TemplateListReq struct {

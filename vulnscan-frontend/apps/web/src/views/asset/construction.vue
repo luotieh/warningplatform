@@ -1,11 +1,12 @@
 <script lang="ts" setup>
 import { h, onMounted, reactive, ref } from 'vue';
 import {
-  NButton, NCard, NDataTable, NForm, NFormItem, NGrid, NGridItem, NInput,
+  NButton, NCard, NCascader, NDataTable, NForm, NFormItem, NGrid, NGridItem, NInput,
   NModal, NPopconfirm, NSpace, useMessage,
 } from 'naive-ui';
 import type { ConstructionOrg } from '#/api/assetmgr';
 import { createConstruction, deleteConstruction, getConstructionList, updateConstruction } from '#/api/assetmgr';
+import { regionCodeFromLabel, regionLabelFromCode, regionOptions } from '#/utils/region';
 
 defineOptions({ name: 'AssetConstruction' });
 
@@ -24,7 +25,7 @@ const pagination = reactive({
 const searchForm = reactive({ keyword: '' });
 
 const formData = reactive({
-  name: '', location: '', address: '', charge_person: '', charge_phone: '', security_filing: '',
+  name: '', location: '', location_code: null as null | string, address: '', charge_person: '', charge_phone: '', security_filing: '',
 });
 
 const columns = [
@@ -59,21 +60,37 @@ async function fetchList() {
   finally { loading.value = false; }
 }
 
-function resetForm() { Object.assign(formData, { name: '', location: '', address: '', charge_person: '', charge_phone: '', security_filing: '' }); }
+function resetForm() { Object.assign(formData, { name: '', location: '', location_code: null, address: '', charge_person: '', charge_phone: '', security_filing: '' }); }
 
 function onAdd() { editingId.value = null; resetForm(); showModal.value = true; }
 
 function onEdit(row: ConstructionOrg) {
   editingId.value = row.id;
-  Object.assign(formData, { name: row.name, location: row.location, address: row.address, charge_person: row.charge_person, charge_phone: row.charge_phone, security_filing: row.security_filing });
+  Object.assign(formData, {
+    name: row.name,
+    location: row.location,
+    location_code: regionCodeFromLabel(row.location),
+    address: row.address,
+    charge_person: row.charge_person,
+    charge_phone: row.charge_phone,
+    security_filing: row.security_filing,
+  });
   showModal.value = true;
 }
 
 async function onSave() {
   if (!formData.name) { message.warning('请输入单位名称'); return; }
+  const payload = {
+    name: formData.name,
+    location: regionLabelFromCode(formData.location_code) || formData.location,
+    address: formData.address,
+    charge_person: formData.charge_person,
+    charge_phone: formData.charge_phone,
+    security_filing: formData.security_filing,
+  };
   try {
-    if (editingId.value) { await updateConstruction(editingId.value, formData); message.success('更新成功'); }
-    else { await createConstruction(formData); message.success('创建成功'); }
+    if (editingId.value) { await updateConstruction(editingId.value, payload); message.success('更新成功'); }
+    else { await createConstruction(payload); message.success('创建成功'); }
     showModal.value = false; fetchList();
   } catch { message.error('操作失败'); }
 }
@@ -101,7 +118,18 @@ onMounted(fetchList);
       <NForm label-placement="left" label-width="80" style="margin-top: 16px">
         <NGrid :cols="2" :x-gap="16">
           <NGridItem><NFormItem label="名称" required><NInput v-model:value="formData.name" /></NFormItem></NGridItem>
-          <NGridItem><NFormItem label="所在地"><NInput v-model:value="formData.location" /></NFormItem></NGridItem>
+          <NGridItem>
+            <NFormItem label="所在地">
+              <NCascader
+                v-model:value="formData.location_code"
+                :options="regionOptions"
+                filterable
+                clearable
+                check-strategy="child"
+                placeholder="请选择省/市/区县"
+              />
+            </NFormItem>
+          </NGridItem>
           <NGridItem span="2"><NFormItem label="地址"><NInput v-model:value="formData.address" /></NFormItem></NGridItem>
           <NGridItem><NFormItem label="负责人"><NInput v-model:value="formData.charge_person" /></NFormItem></NGridItem>
           <NGridItem><NFormItem label="电话"><NInput v-model:value="formData.charge_phone" /></NFormItem></NGridItem>

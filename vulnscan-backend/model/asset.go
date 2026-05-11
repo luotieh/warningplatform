@@ -354,6 +354,101 @@ type AssetVerify struct {
 
 func (AssetVerify) TableName() string { return "vs_asset_verify" }
 
+type AssetVerifyTaskStatus = string
+
+const (
+	AssetVerifyTaskPendingDispatch AssetVerifyTaskStatus = "pending_dispatch"
+	AssetVerifyTaskPendingReceive  AssetVerifyTaskStatus = "pending_receive"
+	AssetVerifyTaskPendingVerify   AssetVerifyTaskStatus = "pending_verify"
+	AssetVerifyTaskConfirmed       AssetVerifyTaskStatus = "confirmed"
+	AssetVerifyTaskRejected        AssetVerifyTaskStatus = "rejected"
+	AssetVerifyTaskReturned        AssetVerifyTaskStatus = "returned"
+	AssetVerifyTaskForwarded       AssetVerifyTaskStatus = "forwarded"
+	AssetVerifyTaskArchived        AssetVerifyTaskStatus = "archived"
+)
+
+type AssetVerifyTaskAction = string
+
+const (
+	AssetVerifyActionCreate     AssetVerifyTaskAction = "create"
+	AssetVerifyActionDispatch   AssetVerifyTaskAction = "dispatch"
+	AssetVerifyActionReceive    AssetVerifyTaskAction = "receive"
+	AssetVerifyActionConfirm    AssetVerifyTaskAction = "verify_confirm"
+	AssetVerifyActionReject     AssetVerifyTaskAction = "verify_reject"
+	AssetVerifyActionForward    AssetVerifyTaskAction = "forward"
+	AssetVerifyActionReturn     AssetVerifyTaskAction = "return"
+	AssetVerifyActionArchive    AssetVerifyTaskAction = "archive"
+	AssetVerifyActionReactivate AssetVerifyTaskAction = "reactivate"
+)
+
+type AssetVerifyResult = string
+
+const (
+	AssetVerifyResultConfirmed    AssetVerifyResult = "confirmed"
+	AssetVerifyResultNotConfirmed AssetVerifyResult = "not_confirmed"
+)
+
+// AssetVerifyTask tracks the operational verification workflow for one asset.
+type AssetVerifyTask struct {
+	ID                string                `gorm:"primarykey;type:varchar(36)" json:"id"`
+	AssetID           string                `gorm:"type:varchar(36);not null;index" json:"asset_id"`
+	BatchID           string                `gorm:"type:varchar(36);index" json:"batch_id"`
+	SourceType        string                `gorm:"type:varchar(30);index" json:"source_type"`
+	Status            AssetVerifyTaskStatus `gorm:"type:varchar(30);index" json:"status"`
+	OwnerOrganizeID   string                `gorm:"type:varchar(64);index" json:"owner_organize_id"`
+	CurrentOrganizeID string                `gorm:"type:varchar(64);index" json:"current_organize_id"`
+	FromOrganizeID    string                `gorm:"type:varchar(64)" json:"from_organize_id"`
+	TargetOrganizeID  string                `gorm:"type:varchar(64)" json:"target_organize_id"`
+	ConstructionOrgID string                `gorm:"type:varchar(64)" json:"construction_org_id"`
+	OperationOrgID    string                `gorm:"type:varchar(64)" json:"operation_org_id"`
+	VerifyResult      AssetVerifyResult     `gorm:"type:varchar(30)" json:"verify_result"`
+	RejectReason      string                `gorm:"type:varchar(500)" json:"reject_reason"`
+	Remark            string                `gorm:"type:varchar(500)" json:"remark"`
+	ArchivedAt        *time.Time            `json:"archived_at"`
+	CreatedBy         string                `gorm:"type:varchar(64)" json:"created_by"`
+	UpdatedBy         string                `gorm:"type:varchar(64)" json:"updated_by"`
+	CreatedAt         time.Time             `json:"created_at"`
+	UpdatedAt         time.Time             `json:"updated_at"`
+}
+
+func (AssetVerifyTask) TableName() string { return "vs_asset_verify_task" }
+
+// AssetVerifyOplog records every state transition of asset verification tasks.
+type AssetVerifyOplog struct {
+	ID               int64                 `gorm:"primaryKey;autoIncrement" json:"id"`
+	TaskID           string                `gorm:"type:varchar(36);not null;index" json:"task_id"`
+	AssetID          string                `gorm:"type:varchar(36);not null;index" json:"asset_id"`
+	Action           AssetVerifyTaskAction `gorm:"type:varchar(30);not null;index" json:"action"`
+	FromStatus       string                `gorm:"type:varchar(30)" json:"from_status"`
+	ToStatus         string                `gorm:"type:varchar(30)" json:"to_status"`
+	FromOrganizeID   string                `gorm:"type:varchar(64)" json:"from_organize_id"`
+	TargetOrganizeID string                `gorm:"type:varchar(64)" json:"target_organize_id"`
+	Operator         string                `gorm:"type:varchar(64)" json:"operator"`
+	Remark           string                `gorm:"type:varchar(500)" json:"remark"`
+	CreatedAt        time.Time             `json:"created_at"`
+}
+
+func (AssetVerifyOplog) TableName() string { return "vs_asset_verify_oplog" }
+
+// AssetArchiveSnapshot keeps immutable data captured when an asset is archived.
+type AssetArchiveSnapshot struct {
+	ID         string    `gorm:"primarykey;type:varchar(36)" json:"id"`
+	TaskID     string    `gorm:"type:varchar(36);not null;index" json:"task_id"`
+	AssetID    string    `gorm:"type:varchar(36);not null;index" json:"asset_id"`
+	BatchID    string    `gorm:"type:varchar(36);index" json:"batch_id"`
+	OrganizeID string    `gorm:"type:varchar(64);index" json:"organize_id"`
+	AssetName  string    `gorm:"type:varchar(200)" json:"asset_name"`
+	SystemName string    `gorm:"type:varchar(100)" json:"system_name"`
+	Address    string    `gorm:"type:varchar(500)" json:"address"`
+	Status     string    `gorm:"type:varchar(30);index" json:"status"`
+	Snapshot   JSONMap   `gorm:"type:text" json:"snapshot"`
+	ArchivedBy string    `gorm:"type:varchar(64)" json:"archived_by"`
+	ArchivedAt time.Time `json:"archived_at"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+func (AssetArchiveSnapshot) TableName() string { return "vs_asset_archive_snapshot" }
+
 // ── 合规模板 ──
 
 // ComplianceTemplate 合规检查模板

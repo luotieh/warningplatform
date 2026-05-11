@@ -91,16 +91,18 @@ export async function federationListProviders() {
   return Array.isArray(res?.providers) ? res.providers : [];
 }
 
-export function federationAuthorizeUrl(provider: string) {
+export function federationAuthorizeUrl(provider: string, redirectUri?: string) {
   return requestClient.post<{ auth_url: string; state: string }>(
     `/auth/federation/${provider}/authorize-url`,
+    redirectUri ? { redirect_uri: redirectUri } : undefined,
   );
 }
 
 // ========== WebAuthn 登录 ==========
-export function webauthnLoginBegin() {
+export function webauthnLoginBegin(account: string) {
   return requestClient.post<{ options: WebAuthnLoginOptions; session_id: string }>(
     '/auth/webauthn/login/begin',
+    { account },
   );
 }
 

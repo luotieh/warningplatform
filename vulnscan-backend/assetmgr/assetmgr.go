@@ -46,6 +46,23 @@ func (m *AssetMgr) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
 				{Name: "审核列表", Path: "list", Method: "GET", Handler: m.handler.VerifyList, Enabled: true},
 				{Name: "提交审核", Method: "POST", Handler: m.handler.VerifySubmit, Enabled: true},
 				{Name: "审批", Path: ":id/review", Method: "PUT", Handler: m.handler.VerifyReview, Enabled: true},
+				{Name: "核验任务列表", Path: "tasks/list", Method: "GET", Handler: m.handler.VerifyTaskList, Enabled: true},
+				{Name: "创建核验任务", Path: "tasks", Method: "POST", Handler: m.handler.VerifyTaskCreate, Enabled: true},
+				{Name: "接收核验任务", Path: "tasks/:id/receive", Method: "PUT", Handler: m.handler.VerifyTaskReceive, Enabled: true},
+				{Name: "确认核验任务", Path: "tasks/:id/confirm", Method: "PUT", Handler: m.handler.VerifyTaskConfirm, Enabled: true},
+				{Name: "驳回核验任务", Path: "tasks/:id/reject", Method: "PUT", Handler: m.handler.VerifyTaskReject, Enabled: true},
+				{Name: "转发核验任务", Path: "tasks/:id/forward", Method: "PUT", Handler: m.handler.VerifyTaskForward, Enabled: true},
+				{Name: "退回核验任务", Path: "tasks/:id/return", Method: "PUT", Handler: m.handler.VerifyTaskReturn, Enabled: true},
+				{Name: "归档核验任务", Path: "tasks/:id/archive", Method: "PUT", Handler: m.handler.VerifyTaskArchive, Enabled: true},
+				{Name: "重新激活核验任务", Path: "tasks/:id/reactivate", Method: "PUT", Handler: m.handler.VerifyTaskReactivate, Enabled: true},
+				{Name: "核验流转日志", Path: "tasks/:id/logs", Method: "GET", Handler: m.handler.VerifyTaskLogs, Enabled: true},
+			},
+		},
+		{
+			Name: "资产归档", Path: "archive", Enabled: true,
+			Children: []authorize.Route{
+				{Name: "归档资产列表", Path: "assets/list", Method: "GET", Handler: m.handler.ArchiveList, Enabled: true},
+				{Name: "归档资产详情", Path: "assets/:id", Method: "GET", Handler: m.handler.ArchiveDetail, Enabled: true},
 			},
 		},
 		{

@@ -67,6 +67,10 @@ export function getOrganizeTree() {
   return requestClient.get('/organize/tree');
 }
 
+export function getIamOrganizeTree() {
+  return requestClient.get<any[]>('/identity/organizes');
+}
+
 export function createOrganize(data: Partial<Organize>) {
   return requestClient.post('/organize', data);
 }
@@ -192,6 +196,117 @@ export function submitVerify(data: { asset_id: string }) {
 
 export function reviewVerify(id: string, data: { review_status: string; review_remark?: string }) {
   return requestClient.put(`/assetmgr/verify/${id}/review`, data);
+}
+
+export interface AssetVerifyTask {
+  id: string;
+  asset_id: string;
+  asset_name?: string;
+  system_name?: string;
+  address?: string;
+  asset_type?: string;
+  data_number?: string;
+  batch_id?: string;
+  source_type?: string;
+  status: string;
+  owner_organize_id?: string;
+  current_organize_id?: string;
+  from_organize_id?: string;
+  target_organize_id?: string;
+  construction_org_id?: string;
+  operation_org_id?: string;
+  verify_result?: string;
+  reject_reason?: string;
+  remark?: string;
+  archived_at?: string;
+  created_by?: string;
+  updated_by?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface AssetVerifyOplog {
+  id: number;
+  task_id: string;
+  asset_id: string;
+  action: string;
+  from_status?: string;
+  to_status?: string;
+  from_organize_id?: string;
+  target_organize_id?: string;
+  operator?: string;
+  remark?: string;
+  created_at?: string;
+}
+
+export interface AssetArchiveSnapshot {
+  id: string;
+  task_id: string;
+  asset_id: string;
+  batch_id?: string;
+  organize_id?: string;
+  asset_name?: string;
+  system_name?: string;
+  address?: string;
+  status?: string;
+  snapshot?: Record<string, any>;
+  archived_by?: string;
+  archived_at?: string;
+  created_at?: string;
+}
+
+export function getVerifyTaskList(params?: Record<string, any>) {
+  return baseRequestClient.get<any>('/assetmgr/verify/tasks/list', { params });
+}
+
+export function createVerifyTasks(data: {
+  asset_ids: string[];
+  batch_id?: string;
+  source_type?: string;
+  target_organize_id?: string;
+  remark?: string;
+}) {
+  return requestClient.post('/assetmgr/verify/tasks', data);
+}
+
+export function receiveVerifyTask(id: string, data?: Record<string, any>) {
+  return requestClient.put(`/assetmgr/verify/tasks/${id}/receive`, data ?? {});
+}
+
+export function confirmVerifyTask(id: string, data?: Record<string, any>) {
+  return requestClient.put(`/assetmgr/verify/tasks/${id}/confirm`, data ?? {});
+}
+
+export function rejectVerifyTask(id: string, data?: { reject_reason?: string; remark?: string }) {
+  return requestClient.put(`/assetmgr/verify/tasks/${id}/reject`, data ?? {});
+}
+
+export function forwardVerifyTask(id: string, data: { target_organize_id: string; remark?: string }) {
+  return requestClient.put(`/assetmgr/verify/tasks/${id}/forward`, data);
+}
+
+export function returnVerifyTask(id: string, data?: Record<string, any>) {
+  return requestClient.put(`/assetmgr/verify/tasks/${id}/return`, data ?? {});
+}
+
+export function archiveVerifyTask(id: string, data?: Record<string, any>) {
+  return requestClient.put(`/assetmgr/verify/tasks/${id}/archive`, data ?? {});
+}
+
+export function reactivateVerifyTask(id: string, data?: Record<string, any>) {
+  return requestClient.put(`/assetmgr/verify/tasks/${id}/reactivate`, data ?? {});
+}
+
+export function getVerifyTaskLogs(id: string, params?: Record<string, any>) {
+  return baseRequestClient.get<any>(`/assetmgr/verify/tasks/${id}/logs`, { params });
+}
+
+export function getArchiveList(params?: Record<string, any>) {
+  return baseRequestClient.get<any>('/assetmgr/archive/assets/list', { params });
+}
+
+export function getArchiveDetail(id: string) {
+  return requestClient.get<AssetArchiveSnapshot>(`/assetmgr/archive/assets/${id}`);
 }
 
 // ── 合规 ──

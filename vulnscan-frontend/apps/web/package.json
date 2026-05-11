@@ -18,6 +18,10 @@
     "#/*": "./src/*"
   },
   "dependencies": {
+    "@form-create/designer": "3.4.0",
+    "@form-create/element-ui": "^3.2.42",
+    "@form-create/naive-ui": "3.2.42",
+    "@vant/area-data": "2.1.0",
     "@vben/access": "workspace:*",
     "@vben/common-ui": "workspace:*",
     "@vben/constants": "workspace:*",
@@ -35,6 +39,7 @@
     "@vueuse/core": "catalog:",
     "dayjs": "catalog:",
     "echarts": "catalog:",
+    "element-plus": "catalog:",
     "monaco-editor": "^0.55.1",
     "naive-ui": "catalog:",
     "pinia": "catalog:",

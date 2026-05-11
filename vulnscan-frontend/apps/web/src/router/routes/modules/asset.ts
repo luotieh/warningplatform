@@ -69,6 +69,18 @@ const routes: RouteRecordRaw[] = [
         meta: { icon: 'lucide:refresh-cw', title: '生命周期' },
       },
       {
+        name: 'AssetVerifyTasks',
+        path: 'verify-tasks',
+        component: () => import('#/views/asset/verify-tasks.vue'),
+        meta: { icon: 'lucide:clipboard-check', title: '核验任务' },
+      },
+      {
+        name: 'AssetArchive',
+        path: 'archive',
+        component: () => import('#/views/asset/archive.vue'),
+        meta: { icon: 'lucide:archive', title: '资产归档' },
+      },
+      {
         name: 'AssetChangeLog',
         path: 'changelog',
         component: () => import('#/views/asset/changelog.vue'),

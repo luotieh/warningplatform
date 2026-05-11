@@ -23,34 +23,37 @@ type AssetQuery struct {
 }
 
 type CreateAssetReq struct {
-	Name    string   `json:"name" binding:"required"`
-	Type    string   `json:"type" binding:"required"`
-	Address string   `json:"address" binding:"required"`
-	GroupID string   `json:"group_id"`
-	Port    int      `json:"port"`
-	Tags    []string `json:"tags"`
+	Name       string   `json:"name" binding:"required"`
+	Type       string   `json:"type" binding:"required"`
+	Address    string   `json:"address" binding:"required"`
+	GroupID    string   `json:"group_id"`
+	OrganizeID string   `json:"organize_id"`
+	Port       int      `json:"port"`
+	Tags       []string `json:"tags"`
 
-	Domain                  string `json:"domain"`
-	IPv4                    string `json:"ipv4"`
-	URL                     string `json:"url"`
-	Protocol                string `json:"protocol"`
-	Service                 string `json:"service"`
-	Version                 string `json:"version"`
-	OS                      string `json:"os"`
-	DataNumber              string `json:"data_number"`
-	SystemName              string `json:"system_name"`
-	SystemType              string `json:"system_type"`
-	IsOnline                bool   `json:"is_online"`
-	IsKey                   bool   `json:"is_key"`
-	SecurityProtectionLevel string `json:"security_protection_level"`
-	FilingCertNumber        string `json:"filing_cert_number"`
-	IcpFilingNumber         string `json:"icp_filing_number"`
-	ConstructionOrgID       string `json:"construction_org_id"`
-	OperationOrgID          string `json:"operation_org_id"`
-	DataSource              string `json:"data_source"`
-	ResponsibleUserID       string `json:"responsible_user_id"`
-	ResponsibleUserName     string `json:"responsible_user_name"`
-	Remark                  string `json:"remark"`
+	Domain                  string        `json:"domain"`
+	IPv4                    string        `json:"ipv4"`
+	IPv6                    string        `json:"ipv6"`
+	URL                     string        `json:"url"`
+	Protocol                string        `json:"protocol"`
+	Service                 string        `json:"service"`
+	Version                 string        `json:"version"`
+	OS                      string        `json:"os"`
+	DataNumber              string        `json:"data_number"`
+	SystemName              string        `json:"system_name"`
+	SystemType              string        `json:"system_type"`
+	IsOnline                bool          `json:"is_online"`
+	IsKey                   bool          `json:"is_key"`
+	SecurityProtectionLevel string        `json:"security_protection_level"`
+	FilingCertNumber        string        `json:"filing_cert_number"`
+	IcpFilingNumber         string        `json:"icp_filing_number"`
+	ConstructionOrgID       string        `json:"construction_org_id"`
+	OperationOrgID          string        `json:"operation_org_id"`
+	DataSource              string        `json:"data_source"`
+	ResponsibleUserID       string        `json:"responsible_user_id"`
+	ResponsibleUserName     string        `json:"responsible_user_name"`
+	Extra                   model.JSONMap `json:"extra"`
+	Remark                  string        `json:"remark"`
 }
 
 type BatchUpdateReq struct {

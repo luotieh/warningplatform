@@ -144,6 +144,8 @@ export interface LoginSettings {
   allow_email_login: boolean;
   allow_phone_login: boolean;
   allow_webauthn: boolean;
+  copyright?: string;
+  site_name?: string;
 }
 
 export function getLoginSettings() {

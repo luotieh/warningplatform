@@ -44,8 +44,11 @@ func (s *serviceConstruction) List(req oc.ConstructionListReq) ([]model.Construc
 	if size < 1 || size > 100 {
 		size = 20
 	}
-	err := q.Order("created_at DESC").Offset((page - 1) * size).Limit(size).Find(&items).Error
-	return items, count, err
+	if err := q.Order("created_at DESC").Offset((page - 1) * size).Limit(size).Find(&items).Error; err != nil {
+		return nil, 0, err
+	}
+	s.fillUsedCount(items)
+	return items, count, nil
 }
 
 func (s *serviceConstruction) GetByID(id string) (*model.ConstructionOrg, error) {
@@ -53,6 +56,7 @@ func (s *serviceConstruction) GetByID(id string) (*model.ConstructionOrg, error)
 	if err := s.session().Where("id = ?", id).First(&item).Error; err != nil {
 		return nil, fmt.Errorf("记录不存在")
 	}
+	item.Used = s.usedCount(id)
 	return &item, nil
 }
 
@@ -72,10 +76,24 @@ func (s *serviceConstruction) Delete(id string) error {
 	if err := s.session().Where("id = ?", id).First(&item).Error; err != nil {
 		return fmt.Errorf("记录不存在")
 	}
-	if item.Used > 0 {
+	if s.usedCount(id) > 0 {
 		return fmt.Errorf("该单位有关联资产，不允许删除")
 	}
 	return s.session().Where("id = ?", id).Delete(&model.ConstructionOrg{}).Error
+}
+
+func (s *serviceConstruction) fillUsedCount(items []model.ConstructionOrg) {
+	for i := range items {
+		items[i].Used = s.usedCount(items[i].ID)
+	}
+}
+
+func (s *serviceConstruction) usedCount(id string) int {
+	var count int64
+	s.session().Model(&model.Asset{}).
+		Where("construction_org_id = ? OR operation_org_id = ?", id, id).
+		Count(&count)
+	return int(count)
 }
 
 var _ oc.ServiceConstruction = (*serviceConstruction)(nil)

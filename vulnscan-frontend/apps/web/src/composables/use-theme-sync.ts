@@ -1,52 +1,107 @@
-/**
- * 主题同步 composable
- *
- * 支持两种场景：
- * 1. iframe 嵌入：监听来自 IAM 主框架的 postMessage
- * 2. 独立部署：启动时从 URL 参数 / localStorage 读取 IAM 主题配置
- *
- * IAM 主框架通过 postMessage 发送：
- * { type: 'iam:theme-sync', payload: { mode: 'dark', colorPrimary: '#1890ff', ... } }
- *
- * 或通过 URL 参数 / localStorage key 'iam_theme' 传递 JSON 字符串。
- */
 import { onMounted, onUnmounted } from 'vue';
 
 import { preferencesManager } from '@vben/preferences';
 
 export interface IamThemePayload {
-  /** 主题模式：light | dark | auto */
+  /** Theme mode from IAM. */
   mode?: 'auto' | 'dark' | 'light';
-  /** 主色 */
+  /** Primary brand color. */
   colorPrimary?: string;
-  /** 是否半黑暗模式 */
+  /** Legacy field from older iframe messages. Ignored by this subsystem. */
   semiDarkSidebar?: boolean;
-  /** 圆角大小 */
+  /** Naive/Vben border radius. */
   radius?: string;
 }
 
 const IAM_THEME_MSG_TYPE = 'iam:theme-sync';
 const IAM_THEME_STORAGE_KEY = 'iam_theme';
+const THEME_MODES = ['auto', 'dark', 'light'] as const;
+type ThemeMode = (typeof THEME_MODES)[number];
+
+const SHELL_THEME = {
+  builtinType: 'default',
+  mode: 'light',
+  semiDarkHeader: false,
+  semiDarkSidebar: false,
+} as const;
+
+function safeDecode(value: string) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function normalizeThemePayload(value: unknown): IamThemePayload | null {
+  if (!value) return null;
+
+  if (typeof value === 'string') {
+    const decoded = safeDecode(value);
+    if (THEME_MODES.includes(decoded as ThemeMode)) {
+      return { mode: decoded as ThemeMode };
+    }
+
+    try {
+      return normalizeThemePayload(JSON.parse(decoded));
+    } catch {
+      return null;
+    }
+  }
+
+  if (typeof value === 'object') {
+    const payload = value as IamThemePayload;
+    if (
+      payload.mode ||
+      payload.colorPrimary ||
+      payload.semiDarkSidebar !== undefined ||
+      payload.radius
+    ) {
+      return payload;
+    }
+  }
+
+  return null;
+}
+
+function persistTheme(payload: IamThemePayload) {
+  try {
+    localStorage.setItem(IAM_THEME_STORAGE_KEY, JSON.stringify(payload));
+  } catch {
+    // Storage can be unavailable in some embedded browser contexts.
+  }
+}
 
 function applyTheme(payload: IamThemePayload) {
-  const updates: Record<string, any> = {};
+  const theme: Record<string, unknown> = { ...SHELL_THEME };
 
   if (payload.mode) {
-    updates.theme = { mode: payload.mode };
-  }
-  if (payload.colorPrimary) {
-    updates.theme = { ...(updates.theme || {}), colorPrimary: payload.colorPrimary };
-  }
-  if (payload.semiDarkSidebar !== undefined) {
-    updates.sidebar = { ...(updates.sidebar || {}), theme: payload.semiDarkSidebar ? 'dark' : 'light' };
-  }
-  if (payload.radius) {
-    updates.theme = { ...(updates.theme || {}), radius: payload.radius };
+    theme.mode = payload.mode;
   }
 
-  if (Object.keys(updates).length > 0) {
-    preferencesManager.updatePreferences(updates);
+  if (payload.colorPrimary) {
+    theme.colorPrimary = payload.colorPrimary;
   }
+
+  if (payload.radius) {
+    theme.radius = payload.radius;
+  }
+
+  if (Object.keys(theme).length > 0) {
+    preferencesManager.updatePreferences({ theme });
+  }
+}
+
+export function enforceAppShellTheme() {
+  const currentTheme = preferencesManager.getPreferences().theme ?? {};
+  preferencesManager.updatePreferences({
+    theme: {
+      ...SHELL_THEME,
+      colorPrimary: currentTheme.colorPrimary,
+      mode: currentTheme.mode || SHELL_THEME.mode,
+      radius: currentTheme.radius,
+    },
+  });
 }
 
 function handleMessage(event: MessageEvent) {
@@ -55,78 +110,71 @@ function handleMessage(event: MessageEvent) {
   let payload: IamThemePayload | null = null;
 
   if (event.data.type === IAM_THEME_MSG_TYPE && event.data.payload) {
-    payload = event.data.payload;
+    payload = normalizeThemePayload(event.data.payload);
   } else if (
     event.data.source === 'iam' &&
     event.data.type === 'theme-change' &&
     event.data.theme
   ) {
-    payload = { mode: event.data.theme };
+    payload = normalizeThemePayload(event.data.theme);
   } else if (
     event.data.source === 'iam' &&
     event.data.type === 'iframe-params' &&
     event.data.data?.iam_theme
   ) {
-    payload = { mode: event.data.data.iam_theme };
+    payload = normalizeThemePayload(event.data.data.iam_theme);
   }
 
   if (payload) {
     applyTheme(payload);
-    try {
-      localStorage.setItem(IAM_THEME_STORAGE_KEY, JSON.stringify(payload));
-    } catch {
-      // ignore
-    }
+    persistTheme(payload);
   }
 }
 
 function loadFromURL(): IamThemePayload | null {
   try {
     const url = new URL(window.location.href);
-    const themeParam = url.searchParams.get('iam_theme');
-    if (themeParam) {
-      return JSON.parse(decodeURIComponent(themeParam));
-    }
+    return normalizeThemePayload(url.searchParams.get(IAM_THEME_STORAGE_KEY));
   } catch {
-    // ignore
+    return null;
   }
-  return null;
 }
 
 function loadFromStorage(): IamThemePayload | null {
   try {
-    const raw = localStorage.getItem(IAM_THEME_STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
+    return normalizeThemePayload(localStorage.getItem(IAM_THEME_STORAGE_KEY));
   } catch {
-    // ignore
+    return null;
   }
-  return null;
+}
+
+export function applyInitialThemeFromParent() {
+  const fromURL = loadFromURL();
+  const fromStorage = loadFromStorage();
+  const initial = fromURL || fromStorage;
+
+  if (!initial) {
+    return false;
+  }
+
+  applyTheme(initial);
+  if (fromURL) {
+    persistTheme(fromURL);
+  }
+  return true;
 }
 
 /**
- * 自动同步 IAM 主题到子系统
+ * Sync the child system theme with IAM.
  *
- * 启动时优先级：URL 参数 > localStorage > 默认值
- * 运行时通过 postMessage 实时同步。
+ * Priority at startup: URL param > localStorage > app defaults.
+ * Runtime updates are received through postMessage.
  */
 export function useThemeSync() {
-  let handler: ((e: MessageEvent) => void) | null = null;
+  let handler: null | ((e: MessageEvent) => void) = null;
 
   onMounted(() => {
-    const fromURL = loadFromURL();
-    const fromStorage = loadFromStorage();
-    const initial = fromURL || fromStorage;
-
-    if (initial) {
-      applyTheme(initial);
-      if (fromURL) {
-        try {
-          localStorage.setItem(IAM_THEME_STORAGE_KEY, JSON.stringify(fromURL));
-        } catch {
-          // ignore
-        }
-      }
-    }
+    applyInitialThemeFromParent();
 
     handler = handleMessage;
     window.addEventListener('message', handler);
@@ -139,12 +187,6 @@ export function useThemeSync() {
   });
 }
 
-/**
- * IAM 主框架侧：向 iframe 发送主题变更
- *
- * 示例（在 IAM 主框架中调用）：
- *   postThemeToIframe(iframeRef.value?.contentWindow, { mode: 'dark', colorPrimary: '#1890ff' })
- */
 export function postThemeToIframe(
   target: Window | null | undefined,
   payload: IamThemePayload,

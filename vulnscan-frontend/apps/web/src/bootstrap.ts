@@ -1,4 +1,4 @@
-import { createApp, watchEffect } from 'vue';
+import { computed, createApp } from 'vue';
 
 import { registerAccessDirective } from '@vben/access';
 import { registerLoadingDirective } from '@vben/common-ui';
@@ -9,6 +9,16 @@ import { initStores } from '@vben/stores';
 import '@vben/styles';
 import '@vben/styles/naive';
 
+import formCreatePlugin from '@form-create/naive-ui';
+import '@form-create/naive-ui/src/style/index.css';
+import FcDesigner from '@form-create/designer';
+import '@form-create/designer/src/style/index.css';
+import ElementPlus from 'element-plus';
+import 'element-plus/dist/index.css';
+import 'element-plus/theme-chalk/dark/css-vars.css';
+import '#/assets/styles/app-theme.css';
+/* 最后加载壳层（参考 iam-frontend：iam-global 紧跟 naive；此处压过 Element / form-create） */
+import './styles/app-shell.css';
 import { useTitle } from '@vueuse/core';
 
 import { $t, setupI18n } from '#/locales';
@@ -18,6 +28,21 @@ import { initSetupVbenForm } from './adapter/form';
 import { message } from './adapter/naive';
 import App from './app.vue';
 import { router } from './router';
+
+function setupLoadingDirectives(app: ReturnType<typeof createApp>) {
+  const spinning = app.directive('spinning');
+
+  if (spinning) {
+    return;
+  }
+
+  // Element Plus registers v-loading globally. Keep Vben on v-spinning to
+  // avoid duplicate directive warnings during startup and HMR.
+  registerLoadingDirective(app, {
+    loading: false,
+    spinning: 'spinning',
+  });
+}
 
 function setupGlobalErrorHandlers(app: ReturnType<typeof createApp>) {
   app.config.errorHandler = (err, _instance, info) => {
@@ -38,7 +63,12 @@ function setupGlobalErrorHandlers(app: ReturnType<typeof createApp>) {
           : typeof reason === 'string'
             ? reason
             : '';
-      if (msg && !/network|cancel|aborted|chunk|auth_revoked|token.*expired|unauthorized|401/i.test(msg)) {
+      if (
+        msg &&
+        !/network|cancel|aborted|chunk|auth_revoked|token.*expired|unauthorized|401/i.test(
+          msg,
+        )
+      ) {
         message.error(msg);
       }
     });
@@ -46,38 +76,24 @@ function setupGlobalErrorHandlers(app: ReturnType<typeof createApp>) {
 }
 
 async function bootstrap(namespace: string) {
-  // 初始化组件适配器
-  await initComponentAdapter();
-
-  // 初始化表单组件
-  await initSetupVbenForm();
-
-  // // 设置弹窗的默认配置
-  // setDefaultModalProps({
-  //   fullscreenButton: false,
-  // });
-  // // 设置抽屉的默认配置
-  // setDefaultDrawerProps({
-  //   // zIndex: 2000,
-  // });
+  const [, , { initTippy }, { MotionPlugin }] = await Promise.all([
+    initComponentAdapter(),
+    initSetupVbenForm(),
+    import('@vben/common-ui/es/tippy'),
+    import('@vben/plugins/motion'),
+  ]);
 
   const app = createApp(App);
 
   setupGlobalErrorHandlers(app);
+  app.use((formCreatePlugin as any).default ?? formCreatePlugin);
+  app.use(ElementPlus);
+  app.use((FcDesigner as any).default ?? FcDesigner);
 
-  // 注册v-loading指令
-  registerLoadingDirective(app, {
-    loading: 'loading', // 在这里可以自定义指令名称,也可以明确提供false表示不注册这个指令
-    spinning: 'spinning',
-  });
+  setupLoadingDirectives(app);
 
-  // 国际化 i18n 配置
-  await setupI18n(app);
+  await Promise.all([setupI18n(app), initStores(app, { namespace })]);
 
-  // 配置 pinia-tore
-  await initStores(app, { namespace });
-
-  // embed 模式：URL 含 ?embed 时隐藏顶栏（IAM 已提供），保留侧边栏菜单
   if (new URLSearchParams(window.location.search).has('embed')) {
     updatePreferences({
       app: { layout: 'sidebar-nav' },
@@ -87,30 +103,19 @@ async function bootstrap(namespace: string) {
     });
   }
 
-  // 安装权限指令
   registerAccessDirective(app);
   registerCustomDirectives(app);
 
-  // 初始化 tippy
-  const { initTippy } = await import('@vben/common-ui/es/tippy');
   initTippy(app);
-
-  // 配置路由及路由守卫
+  app.use(MotionPlugin);
   app.use(router);
 
-  // 配置Motion插件
-  const { MotionPlugin } = await import('@vben/plugins/motion');
-  app.use(MotionPlugin);
-
-  // 动态更新标题
-  watchEffect(() => {
-    if (preferences.app.dynamicTitle) {
-      const routeTitle = router.currentRoute.value.meta?.title;
-      const pageTitle =
-        (routeTitle ? `${$t(routeTitle)} - ` : '') + preferences.app.name;
-      useTitle(pageTitle);
-    }
+  const pageTitle = computed(() => {
+    if (!preferences.app.dynamicTitle) return preferences.app.name;
+    const routeTitle = router.currentRoute.value.meta?.title;
+    return (routeTitle ? `${$t(routeTitle)} - ` : '') + preferences.app.name;
   });
+  useTitle(pageTitle);
 
   app.mount('#app');
 }

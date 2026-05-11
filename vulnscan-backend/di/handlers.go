@@ -20,6 +20,7 @@ import (
 	fedAuth "vulnscan-backend/federation/auth"
 	fedClient "vulnscan-backend/federation/client"
 	"vulnscan-backend/federation/server"
+	"vulnscan-backend/formdesign"
 	"vulnscan-backend/frontend"
 	"vulnscan-backend/health"
 	"vulnscan-backend/incident"
@@ -40,6 +41,7 @@ import (
 	"vulnscan-backend/scheduler"
 	"vulnscan-backend/setting"
 	"vulnscan-backend/sitemonitor"
+	"vulnscan-backend/systemdict"
 	"vulnscan-backend/tagging"
 	"vulnscan-backend/task"
 	tmplAPI "vulnscan-backend/template/api"
@@ -114,6 +116,10 @@ func (h *Handlers) RouteLoad() {
 			Domain:  h.Product.GetCode(),
 			Enabled: true,
 		},
+		PublicAuth: &iamsdk.PublicAuthProxyOptions{
+			SiteName:  h.Product.GetName(),
+			Copyright: h.Product.GetName(),
+		},
 	})
 
 	var backends []authorize.BackendItem
@@ -130,6 +136,17 @@ func (h *Handlers) RouteLoad() {
 
 	settingRoutes := setting.NewSettingRoutes(h.Settings)
 	backends = append(backends, settingRoutes.RoutesWithGroup(iamAuthGroup)...)
+	systemDictHandler := systemdict.NewHandler(h.DB)
+	systemDictHandler.SeedDefaults()
+	systemDictRoutes := systemdict.NewRoutes(systemDictHandler)
+	backends = append(backends, systemDictRoutes.RoutesWithGroup(iamAuthGroup)...)
+	if formSession, err := h.DB.GetDBSession(); err == nil {
+		formHandler := formdesign.NewHandler(formSession)
+		formRoutes := formdesign.NewRoutes(formHandler)
+		backends = append(backends, formRoutes.RoutesWithGroup(iamAuthGroup)...)
+	} else {
+		slog.Error("[FormDesign] 获取数据库会话失败", "error", err)
+	}
 
 	h.initDashboardAPI(iamAuthGroup, &backends)
 	h.initNotifyAPI(iamAuthGroup, &backends)
@@ -261,6 +278,9 @@ func (h *Handlers) autoMigrate() {
 		&model.AssetRiskScore{},
 		&model.Alert{},
 		&model.AssetVerify{},
+		&model.AssetVerifyTask{},
+		&model.AssetVerifyOplog{},
+		&model.AssetArchiveSnapshot{},
 		&model.ComplianceTemplate{},
 		&model.ComplianceTemplateItem{},
 		&model.ComplianceCheckResult{},
@@ -269,6 +289,11 @@ func (h *Handlers) autoMigrate() {
 		&model.Workflow{},
 		&model.WorkflowExecution{},
 		&model.SystemSetting{},
+		&model.SystemDict{},
+		&model.SystemDictItem{},
+		&model.DynamicFormTemplate{},
+		&model.DynamicFormTemplateVersion{},
+		&model.DynamicFormSubmission{},
 		// 站点监控
 		&model.MonitorTask{},
 		&model.MonitorDefaultConfig{},

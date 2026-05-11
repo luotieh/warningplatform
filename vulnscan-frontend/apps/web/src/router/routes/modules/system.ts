@@ -20,6 +20,15 @@ const routes: RouteRecordRaw[] = [
         },
       },
       {
+        name: 'SystemDict',
+        path: 'dict',
+        component: () => import('#/views/system/dict.vue'),
+        meta: {
+          title: '数据字典',
+          icon: 'lucide:list-tree',
+        },
+      },
+      {
         name: 'SystemInit',
         path: 'init',
         component: () => import('#/views/system/init.vue'),

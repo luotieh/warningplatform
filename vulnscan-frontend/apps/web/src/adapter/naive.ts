@@ -5,12 +5,22 @@ import '@vben/styles';
 
 import { createDiscreteApi, darkTheme, lightTheme } from 'naive-ui';
 
+function resolveNaiveTheme() {
+  if (preferences.theme.mode === 'dark') return darkTheme;
+  if (preferences.theme.mode === 'auto') {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches
+      ? darkTheme
+      : lightTheme;
+  }
+  return lightTheme;
+}
+
 const themeOverridesProviderProps = computed(() => ({
-  themeOverrides: preferences.theme.mode === 'light' ? lightTheme : darkTheme,
+  themeOverrides: resolveNaiveTheme(),
 }));
 
 const themeProviderProps = computed(() => ({
-  theme: preferences.theme.mode === 'light' ? lightTheme : darkTheme,
+  theme: resolveNaiveTheme(),
 }));
 
 export const { dialog, loadingBar, message, modal, notification } =
