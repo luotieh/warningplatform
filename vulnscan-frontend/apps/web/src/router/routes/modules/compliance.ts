@@ -5,16 +5,16 @@ import { BasicLayout } from '#/layouts';
 const routes: RouteRecordRaw[] = [
   {
     component: BasicLayout,
-    meta: { icon: 'lucide:clipboard-check', order: 5, title: '合规检查' },
-    name: 'Compliance',
+    meta: { hideInMenu: true, title: '合规检查' },
+    name: 'ComplianceCompat',
     path: '/compliance',
-    redirect: '/compliance/baselines',
+    redirect: '/monitor/baselines',
     children: [
       {
-        name: 'ComplianceBaselines',
+        name: 'ComplianceBaselinesCompat',
         path: 'baselines',
         component: () => import('#/views/compliance/index.vue'),
-        meta: { icon: 'lucide:shield-check', title: '基线检查' },
+        meta: { hideInMenu: true, title: '基线检查', activePath: '/monitor/baselines' },
       },
     ],
   },

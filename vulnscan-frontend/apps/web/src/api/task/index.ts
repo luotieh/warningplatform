@@ -1,7 +1,7 @@
 import { useAppConfig } from '@vben/hooks';
 import { useAccessStore } from '@vben/stores';
 
-import { baseRequestClient, requestClient } from '#/api/request';
+import { baseRequestClient, probeAuthentication, requestClient } from '#/api/request';
 
 export interface ScanTask {
   id: string;
@@ -251,7 +251,9 @@ export function subscribeScanEvents(
   es.addEventListener('ping', () => {});
 
   es.onerror = (e) => {
+    void probeAuthentication();
     callbacks.onError?.(e);
+    es.close();
   };
 
   return {

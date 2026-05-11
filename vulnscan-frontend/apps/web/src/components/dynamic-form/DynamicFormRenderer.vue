@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 
-import type { Api } from '@form-create/naive-ui';
 import { NEmpty } from 'naive-ui';
 
-import { normalizeFormOptions, normalizeFormRule } from '#/api/form';
+import { normalizeFormOptions, normalizeRuntimeFormRule } from '#/api/form';
 
 defineOptions({ name: 'DynamicFormRenderer' });
 
@@ -26,10 +25,22 @@ const emit = defineEmits<{
   'update:modelValue': [value: Record<string, any>];
 }>();
 
-const api = ref<Api | null>(null);
+const api = ref<any>(null);
 const formData = ref<Record<string, any>>({ ...props.modelValue });
+let syncingFromProps = false;
 
-const rule = computed(() => normalizeFormRule(props.schema as Record<string, any>));
+function cloneRecord(value?: Record<string, any>) {
+  return { ...(value ?? {}) };
+}
+
+function isSameRecord(
+  left?: Record<string, any>,
+  right?: Record<string, any>,
+) {
+  return JSON.stringify(left ?? {}) === JSON.stringify(right ?? {});
+}
+
+const rule = computed(() => normalizeRuntimeFormRule(props.schema as Record<string, any>));
 const option = computed(() => ({
   ...normalizeFormOptions(props.schema as Record<string, any>, props.options),
   disabled: props.disabled || props.readonly,
@@ -38,14 +49,27 @@ const option = computed(() => ({
 watch(
   () => props.modelValue,
   value => {
-    formData.value = { ...(value ?? {}) };
+    if (isSameRecord(value, formData.value)) {
+      return;
+    }
+    syncingFromProps = true;
+    formData.value = cloneRecord(value);
   },
   { deep: true },
 );
 
 watch(
   formData,
-  value => emit('update:modelValue', { ...value }),
+  value => {
+    if (syncingFromProps) {
+      syncingFromProps = false;
+      return;
+    }
+    if (isSameRecord(value, props.modelValue)) {
+      return;
+    }
+    emit('update:modelValue', cloneRecord(value));
+  },
   { deep: true },
 );
 

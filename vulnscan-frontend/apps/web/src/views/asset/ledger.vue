@@ -71,6 +71,28 @@ const batchEditForm = reactive({
 });
 const exportLoading = ref(false);
 
+const assetDynamicRenderOptions = computed(() => {
+  const raw =
+    assetDynamicSubmission.value?.version?.options
+    || assetDynamicTemplate.value?.options
+    || {};
+  const rawForm = raw?.form ?? {};
+  const rawRow = raw?.row ?? {};
+
+  return {
+    ...raw,
+    form: {
+      ...rawForm,
+      labelPlacement: 'left',
+      labelWidth: rawForm.labelWidth ?? '120px',
+    },
+    row: {
+      ...rawRow,
+      gutter: rawRow.gutter ?? 16,
+    },
+  };
+});
+
 function blurActiveElement() {
   const activeElement = document.activeElement;
   if (activeElement instanceof HTMLElement) {
@@ -943,11 +965,13 @@ onMounted(() => {
               {{ assetDynamicTemplate.name }}
             </NTag>
           </div>
-          <DynamicFormRenderer
-            v-model="assetDynamicFormData"
-            :schema="assetDynamicSubmission?.version?.schema || assetDynamicTemplate.schema"
-            :options="assetDynamicSubmission?.version?.options || assetDynamicTemplate.options"
-          />
+          <div class="asset-dynamic-form-shell">
+            <DynamicFormRenderer
+              v-model="assetDynamicFormData"
+              :schema="assetDynamicSubmission?.version?.schema || assetDynamicTemplate.schema"
+              :options="assetDynamicRenderOptions"
+            />
+          </div>
         </div>
 
         </NForm>
@@ -1031,7 +1055,7 @@ onMounted(() => {
                 v-model="assetDynamicFormData"
                 readonly
                 :schema="assetDynamicSubmission?.version?.schema || assetDynamicTemplate?.schema || {}"
-                :options="assetDynamicSubmission?.version?.options || assetDynamicTemplate?.options || {}"
+                :options="assetDynamicRenderOptions"
               />
               <div v-else class="asset-empty-dynamic">暂无扩展表单数据</div>
             </NCard>
@@ -1044,7 +1068,7 @@ onMounted(() => {
               { title: '状态', key: 'status', width: 70 },
               { title: '时间', key: 'created_at', width: 150 },
             ]" :max-height="400" />
-            <NButton v-if="detailVulns.length > 0" text type="info" style="margin-top: 8px" @click="router.push(`/vuln/list?asset_id=${detailItem.id}`)">查看全部漏洞 →</NButton>
+            <NButton v-if="detailVulns.length > 0" text type="info" style="margin-top: 8px" @click="router.push(`/scan/vulns?asset_id=${detailItem.id}`)">查看全部漏洞 →</NButton>
           </NTabPane>
           <NTabPane name="monitor" tab="关联监控">
             <div v-if="detailMonitorTasks.length === 0" style="padding: 20px; text-align: center; color: #999">暂无关联监控任务</div>
@@ -1334,6 +1358,29 @@ onMounted(() => {
   color: var(--n-text-color);
   font-size: 14px;
   font-weight: 600;
+}
+
+.asset-dynamic-form-shell {
+  padding: 16px 18px 4px;
+  border: 1px solid var(--n-border-color);
+  border-radius: 10px;
+  background: var(--n-color-embedded, var(--n-color));
+}
+
+.asset-dynamic-form-shell :deep(.form-create) {
+  padding: 0;
+}
+
+.asset-dynamic-form-shell :deep(.fc-form) {
+  display: block;
+}
+
+.asset-dynamic-form-shell :deep(.fc-form .n-form-item) {
+  margin-bottom: 14px;
+}
+
+.asset-dynamic-form-shell :deep(.fc-form .n-form-item:last-child) {
+  margin-bottom: 0;
 }
 
 .asset-detail-section :deep(.n-descriptions-table-content__label) {

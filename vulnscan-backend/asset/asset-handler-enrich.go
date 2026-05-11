@@ -14,7 +14,6 @@ import (
 	"code.yt-security.com/public/core/v2/generate/qulid"
 	"code.yt-security.com/public/core/v2/web"
 	iamsdk "code.yt-security.com/public/sdk"
-	"code.yt-security.com/public/sdk/permission"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -118,7 +117,7 @@ func (h *EnrichHandler) AssetDetail(c *gin.Context) {
 }
 
 func (h *EnrichHandler) AggregateFromScans(c *gin.Context) {
-	scope := iamsdk.DataFilterScope(c, permission.DefaultFieldMapping)
+	scope := iamsdk.DataFilterScope(c, assetFieldMapping)
 
 	var findings []struct {
 		Target   string
@@ -200,7 +199,7 @@ func (h *EnrichHandler) AggregateFromScans(c *gin.Context) {
 }
 
 func (h *EnrichHandler) AssetStats(c *gin.Context) {
-	scope := iamsdk.DataFilterScope(c, permission.DefaultFieldMapping)
+	scope := iamsdk.DataFilterScope(c, assetFieldMapping)
 
 	var totalAssets int64
 	h.session().Model(&model.Asset{}).Scopes(scope).Count(&totalAssets)
@@ -248,7 +247,7 @@ func (h *EnrichHandler) AssetStats(c *gin.Context) {
 }
 
 func (h *EnrichHandler) GroupList(c *gin.Context) {
-	scope := iamsdk.DataFilterScope(c, permission.DefaultFieldMapping)
+	scope := iamsdk.DataFilterScope(c, assetFieldMapping)
 	var groups []model.AssetGroup
 	h.session().Model(&model.AssetGroup{}).Scopes(scope).Order("created_at DESC").Find(&groups)
 
@@ -1200,7 +1199,7 @@ func (h *EnrichHandler) buildTargetMatchers(asset *model.Asset) []string {
 // ── 资产报告 ──
 
 func (h *EnrichHandler) ComplianceReport(c *gin.Context) {
-	scope := iamsdk.DataFilterScope(c, permission.DefaultFieldMapping)
+	scope := iamsdk.DataFilterScope(c, assetFieldMapping)
 
 	type complianceCounts struct {
 		Total           int64 `gorm:"column:total"`

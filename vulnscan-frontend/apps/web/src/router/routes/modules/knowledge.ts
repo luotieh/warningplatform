@@ -5,7 +5,7 @@ import { BasicLayout } from '#/layouts';
 const routes: RouteRecordRaw[] = [
   {
     component: BasicLayout,
-    meta: { icon: 'lucide:database', order: 6, title: '知识库' },
+    meta: { icon: 'lucide:database', order: 11, title: '知识库' },
     name: 'Knowledge',
     path: '/knowledge',
     redirect: '/knowledge/poc',
@@ -128,6 +128,15 @@ const routes: RouteRecordRaw[] = [
             { action: 'delete', label: '删除' },
             { action: 'archive', label: '归档' },
           ],
+        },
+      },
+      {
+        name: 'KnowledgeIntel',
+        path: 'intel',
+        component: () => import('#/views/intel/index.vue'),
+        meta: {
+          icon: 'lucide:shield-alert',
+          title: '情报库',
         },
       },
       {

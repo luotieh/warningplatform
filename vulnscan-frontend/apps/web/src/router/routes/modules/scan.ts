@@ -5,7 +5,7 @@ import { BasicLayout } from '#/layouts';
 const routes: RouteRecordRaw[] = [
   {
     component: BasicLayout,
-    meta: { icon: 'lucide:radar', order: 4, title: '扫描中心' },
+    meta: { icon: 'lucide:radar', order: 4, title: '漏洞扫描' },
     name: 'Scan',
     path: '/scan',
     redirect: '/scan/task',
@@ -65,6 +65,25 @@ const routes: RouteRecordRaw[] = [
           icon: 'lucide:workflow',
           title: '流程编排',
         },
+      },
+      {
+        name: 'ScanVulnList',
+        path: 'vulns',
+        component: () => import('#/views/vuln/list.vue'),
+        meta: {
+          icon: 'lucide:bug',
+          title: '漏洞列表',
+          perms: [
+            { action: 'verify', label: '验证' },
+            { action: 'delete', label: '删除' },
+          ],
+        },
+      },
+      {
+        name: 'ScanVulnDetail',
+        path: 'vulns/:id',
+        component: () => import('#/views/vuln/detail.vue'),
+        meta: { hideInMenu: true, title: '漏洞详情', activePath: '/scan/vulns' },
       },
     ],
   },

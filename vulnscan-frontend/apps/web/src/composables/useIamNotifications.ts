@@ -5,6 +5,7 @@ import { computed, onUnmounted, ref, shallowRef } from 'vue';
 import { useAccessStore } from '@vben/stores';
 
 import { notification as naiveNotification } from '#/adapter/naive';
+import { probeAuthentication } from '#/api/request';
 import {
   deleteNotification,
   getNotificationList,
@@ -248,12 +249,14 @@ export function connectNotificationWS(path?: string) {
     socket = null;
     wsConnected = false;
     if (!wsExplicitlyClosed) {
+      void probeAuthentication();
       if (consumers > 0) startPolling();
       scheduleReconnect();
     }
   });
 
   socket.addEventListener('error', () => {
+    void probeAuthentication();
     socket?.close();
   });
 }

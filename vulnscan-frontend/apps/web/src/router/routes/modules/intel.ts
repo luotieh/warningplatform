@@ -5,16 +5,16 @@ import { BasicLayout } from '#/layouts';
 const routes: RouteRecordRaw[] = [
   {
     component: BasicLayout,
-    meta: { icon: 'lucide:shield-alert', order: 4, title: '威胁情报' },
-    name: 'Intel',
+    meta: { hideInMenu: true, title: '威胁情报' },
+    name: 'IntelCompat',
     path: '/intel',
-    redirect: '/intel/cve',
+    redirect: '/knowledge/intel',
     children: [
       {
-        name: 'IntelCVE',
+        name: 'IntelCVECompat',
         path: 'cve',
         component: () => import('#/views/intel/index.vue'),
-        meta: { icon: 'lucide:database', title: '情报库' },
+        meta: { hideInMenu: true, title: '情报库', activePath: '/knowledge/intel' },
       },
     ],
   },

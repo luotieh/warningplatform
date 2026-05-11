@@ -5,7 +5,7 @@ import { BasicLayout } from '#/layouts';
 const routes: RouteRecordRaw[] = [
   {
     component: BasicLayout,
-    meta: { icon: 'lucide:radar', order: 3, title: '攻击面管理' },
+    meta: { icon: 'lucide:radar', order: 7, title: '攻击面管理' },
     name: 'ASM',
     path: '/asm',
     redirect: '/asm/projects',
@@ -23,6 +23,18 @@ const routes: RouteRecordRaw[] = [
             { action: 'discover', label: '执行发现' },
           ],
         },
+      },
+      {
+        name: 'ASMCyberspaceSearch',
+        path: 'cyberspace',
+        component: () => import('#/views/asset/cyberspace.vue'),
+        meta: { icon: 'lucide:globe', title: '空间搜索' },
+      },
+      {
+        name: 'ASMSecurity',
+        path: 'security',
+        component: () => import('#/views/asset/security.vue'),
+        meta: { icon: 'lucide:activity', title: '安全态势' },
       },
     ],
   },

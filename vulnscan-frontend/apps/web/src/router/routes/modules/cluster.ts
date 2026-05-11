@@ -5,7 +5,7 @@ import { BasicLayout } from '#/layouts';
 const routes: RouteRecordRaw[] = [
   {
     component: BasicLayout,
-    meta: { icon: 'lucide:network', order: 7, title: '集群管理' },
+    meta: { icon: 'lucide:network', order: 13, title: '集群管理' },
     name: 'Cluster',
     path: '/cluster',
     redirect: '/cluster/nodes',

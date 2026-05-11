@@ -5,7 +5,7 @@ import { BasicLayout } from '#/layouts';
 const routes: RouteRecordRaw[] = [
   {
     component: BasicLayout,
-    meta: { icon: 'lucide:mail-warning', order: 7, title: '通报处置' },
+    meta: { icon: 'lucide:mail-warning', order: 5, title: '通报处置' },
     name: 'Circular',
     path: '/circular',
     redirect: '/circular/input',

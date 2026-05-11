@@ -30,29 +30,30 @@ func (s *serviceInput) session() *gorm.DB {
 	return sess
 }
 
-func (s *serviceInput) Add(ctx context.Context, req inputContract.InputAddReq, createdBy string) error {
+func (s *serviceInput) Add(ctx context.Context, req inputContract.InputAddReq, createdBy string) (string, error) {
 	if req.Title == "" {
-		return fmt.Errorf("通报标题不能为空")
+		return "", fmt.Errorf("通报标题不能为空")
 	}
 
 	sess := s.session()
 	now := time.Now()
 	id := qulid.GenerateID()
 	circular := model.Circular{
-		Code:             id,
-		Title:            req.Title,
-		Source:           model.CircularSourceManualInput,
-		Organize:         "yt-networks-security",
-		CircularData:     req.CircularData,
-		Status:           model.CircularToBeSubmit,
-		CircularTemplate: req.CircularTemplate,
+		Code:               id,
+		Title:              req.Title,
+		Source:             model.CircularSourceManualInput,
+		Organize:           req.Organize,
+		CircularData:       req.CircularData,
+		ProcessingDeadline: req.ProcessingDeadline,
+		Status:             model.CircularToBeSubmit,
+		CircularTemplate:   req.CircularTemplate,
 	}
 	circular.Id = id
 	circular.CreatedBy = createdBy
 	circular.CreatedAt = now
 	circular.UpdatedAt = now
 
-	return sess.WithContext(ctx).Transaction(func(session *gorm.DB) error {
+	err := sess.WithContext(ctx).Transaction(func(session *gorm.DB) error {
 		if err := session.Create(&circular).Error; err != nil {
 			return err
 		}
@@ -62,6 +63,10 @@ func (s *serviceInput) Add(ctx context.Context, req inputContract.InputAddReq, c
 		})
 		return session.Create(&opLog).Error
 	})
+	if err != nil {
+		return "", err
+	}
+	return circular.Id, nil
 }
 
 func (s *serviceInput) List(ctx context.Context, req inputContract.ListQuery) (int64, []inputContract.ListResp, error) {
@@ -144,6 +149,12 @@ func (s *serviceInput) Edit(ctx context.Context, id string, req inputContract.In
 	updates := make(map[string]any)
 	if req.Title != nil {
 		updates["title"] = *req.Title
+	}
+	if req.Organize != nil {
+		updates["organize"] = *req.Organize
+	}
+	if req.ProcessingDeadline != nil {
+		updates["processing_deadline"] = *req.ProcessingDeadline
 	}
 	if req.CircularData != nil {
 		v, _ := req.CircularData.Value()

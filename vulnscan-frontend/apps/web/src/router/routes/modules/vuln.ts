@@ -5,29 +5,22 @@ import { BasicLayout } from '#/layouts';
 const routes: RouteRecordRaw[] = [
   {
     component: BasicLayout,
-    meta: { icon: 'lucide:shield-alert', order: 5, title: '漏洞管理' },
-    name: 'Vuln',
+    meta: { hideInMenu: true, title: '漏洞管理' },
+    name: 'VulnCompat',
     path: '/vuln',
-    redirect: '/vuln/list',
+    redirect: '/scan/vulns',
     children: [
       {
-        name: 'VulnList',
+        name: 'VulnListCompat',
         path: 'list',
         component: () => import('#/views/vuln/list.vue'),
-        meta: {
-          icon: 'lucide:bug',
-          title: '漏洞列表',
-          perms: [
-            { action: 'verify', label: '验证' },
-            { action: 'delete', label: '删除' },
-          ],
-        },
+        meta: { hideInMenu: true, title: '漏洞列表', activePath: '/scan/vulns' },
       },
       {
-        name: 'VulnDetail',
+        name: 'VulnDetailCompat',
         path: ':id',
         component: () => import('#/views/vuln/detail.vue'),
-        meta: { hideInMenu: true, title: '漏洞详情' },
+        meta: { hideInMenu: true, title: '漏洞详情', activePath: '/scan/vulns' },
       },
     ],
   },

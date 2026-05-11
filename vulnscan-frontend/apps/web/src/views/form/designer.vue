@@ -32,7 +32,7 @@ import {
   saveDynamicFormDraft,
   updateDynamicFormTemplate,
 } from '#/api/form';
-import DynamicFormRenderer from '#/components/dynamic-form/DynamicFormRenderer.vue';
+import FormPreview from '#/components/dynamic-form/FormPreview.vue';
 
 defineOptions({ name: 'FormDesigner' });
 
@@ -44,6 +44,8 @@ const saving = ref(false);
 const publishing = ref(false);
 const jsonError = ref('');
 const previewData = ref<Record<string, any>>({});
+const previewRule = ref<any[]>([]);
+const previewOptionState = ref<Record<string, any>>({});
 const template = ref<DynamicFormTemplate | null>(null);
 const versions = ref<DynamicFormTemplateVersion[]>([]);
 const designerRef = ref<any>(null);
@@ -54,7 +56,7 @@ const changeLog = ref('');
 
 const businessOptions = [
   { label: '资产', value: 'asset' },
-  { label: '通报', value: 'incident' },
+  { label: '事件', value: 'incident' },
 ];
 
 const fieldTypeOptions = [
@@ -88,13 +90,10 @@ const schemaText = ref(JSON.stringify({ rule: [] }, null, 2));
 const optionsText = ref(JSON.stringify({ labelPlacement: 'left', labelWidth: 120, submitBtn: false }, null, 2));
 
 const parsedSchema = computed(() => safeParse(schemaText.value, { rule: [] }));
-const parsedOptions = computed(() => safeParse(optionsText.value, {}));
-const previewSchema = computed(() => parsedSchema.value ?? { rule: [] });
-const previewOptions = computed(() => normalizeFormOptions(previewSchema.value, parsedOptions.value ?? {}));
 const draftVersion = computed(() => versions.value.find(item => item.status === 'draft'));
 const publishedVersion = computed(() => versions.value.find(item => item.id === template.value?.current_version_id) || versions.value.find(item => item.status === 'published'));
 const ruleCount = computed(() => {
-  const schema = previewSchema.value;
+  const schema = parsedSchema.value;
   if (Array.isArray(schema)) return schema.length;
   return Array.isArray(schema?.rule) ? schema.rule.length : 0;
 });
@@ -110,7 +109,7 @@ function safeParse(value: string, fallback: Record<string, any>) {
     jsonError.value = '';
     return JSON.parse(value || '{}');
   } catch (error) {
-    jsonError.value = error instanceof Error ? error.message : 'JSON 格式不正确';
+    jsonError.value = error instanceof Error ? error.message : 'JSON format is invalid';
     return fallback;
   }
 }
@@ -168,6 +167,15 @@ function syncJsonFromDesigner() {
   optionsText.value = JSON.stringify(options || {}, null, 2);
 }
 
+function syncPreviewFromDesigner() {
+  const designer = designerRef.value;
+  if (!designer) return;
+  const rule = designer.getRule?.() ?? [];
+  const options = designer.getOptions?.() ?? {};
+  previewRule.value = JSON.parse(JSON.stringify(rule));
+  previewOptionState.value = JSON.parse(JSON.stringify(options || {}));
+}
+
 function currentRuleList() {
   const schema = safeParse(schemaText.value, { rule: [] });
   if (Array.isArray(schema)) return { schema: { rule: schema }, rule: schema };
@@ -178,7 +186,7 @@ function currentRuleList() {
 function addQuickField() {
   syncJsonFromDesigner();
   if (!quickField.title || !quickField.field) {
-    message.warning('请填写字段标题和字段名');
+    message.warning('Please fill in both field title and field name');
     return;
   }
   const { schema, rule } = currentRuleList();
@@ -197,12 +205,12 @@ function addQuickField() {
   }
   if (quickField.type === 'select') {
     item.options = [
-      { label: '选项一', value: 'option_1' },
-      { label: '选项二', value: 'option_2' },
+      { label: 'Option 1', value: 'option_1' },
+      { label: 'Option 2', value: 'option_2' },
     ];
   }
   if (quickField.required) {
-    item.validate = [{ message: `请填写${quickField.title}`, required: true, trigger: 'blur' }];
+    item.validate = [{ message: `Please fill in ${quickField.title}`, required: true, trigger: 'blur' }];
   }
   rule.push(item);
   schemaText.value = JSON.stringify(schema, null, 2);
@@ -218,7 +226,17 @@ function formatJson() {
 }
 
 function openPreview() {
-  if (activeEditorTab.value === 'designer') syncJsonFromDesigner();
+  // 先同步设计器数据到文本字段（无论当前是哪个标签页）
+  if (activeEditorTab.value === 'designer') {
+    syncJsonFromDesigner();
+  }
+  // 统一从 schemaText 和 optionsText 读取数据进行预览
+  const schema = safeParse(schemaText.value, { rule: [] });
+  const options = safeParse(optionsText.value, {});
+  const rawRule = Array.isArray(schema) ? schema : schema.rule || [];
+  previewRule.value = JSON.parse(JSON.stringify(rawRule));
+  previewOptionState.value = JSON.parse(JSON.stringify(options || {}));
+  previewData.value = {};
   showPreviewModal.value = true;
 }
 
@@ -245,7 +263,7 @@ async function saveTemplateMeta() {
 async function ensureDraft() {
   if (!template.value) return;
   const draft = await createDynamicFormDraft(template.value.id);
-  message.success(`已创建 v${draft.version} 草稿`);
+  message.success(`已创建v${draft.version} 草稿`);
   await fetchDetail();
 }
 
@@ -260,7 +278,7 @@ async function saveDraft() {
   try {
     await saveTemplateMeta();
     await saveDynamicFormDraft(template.value.id, payload);
-    message.success('草稿已保存，未影响已发布版本');
+    message.success('草稿已保存，不影响已发布版本');
     await fetchDetail();
   } catch {
     message.error('保存草稿失败');
@@ -280,7 +298,7 @@ async function publishDraft() {
   try {
     await saveTemplateMeta();
     const version = await publishDynamicFormDraft(template.value.id, payload);
-    message.success(`已发布 v${version.version}`);
+    message.success(`已发布v${version.version}`);
     changeLog.value = '';
     await fetchDetail();
   } catch {
@@ -295,7 +313,7 @@ function loadVersion(row: DynamicFormTemplateVersion) {
   optionsText.value = JSON.stringify(row.options || {}, null, 2);
   showVersionModal.value = false;
   nextTick(loadDesignerFromJson);
-  message.info(`已载入 v${row.version} ${row.status === 'draft' ? '草稿' : '快照'}`);
+  message.info(`已加载v${row.version} ${row.status === 'draft' ? '草稿' : '发布'}`);
 }
 
 function statusTag(row: DynamicFormTemplateVersion) {
@@ -340,7 +358,7 @@ const versionColumns: DataTableColumns<DynamicFormTemplateVersion> = [
     title: '操作',
     key: 'actions',
     width: 90,
-    render: row => h(NButton, { size: 'small', onClick: () => loadVersion(row) }, () => '载入'),
+    render: row => h(NButton, { size: 'small', onClick: () => loadVersion(row) }, () => '导入'),
   },
 ];
 
@@ -364,7 +382,7 @@ onMounted(fetchDetail);
             发布 v{{ publishedVersion?.version || '-' }}
           </NTag>
           <NTag size="small" :bordered="false" :type="draftVersion ? 'warning' : 'default'">
-            草稿 {{ draftVersion ? `v${draftVersion.version}` : '无' }}
+            草稿 {{ draftVersion ? 'v' + draftVersion.version : '无' }}
           </NTag>
         </div>
 
@@ -407,7 +425,7 @@ onMounted(fetchDetail);
             <NInput v-model:value="quickField.title" placeholder="页面显示名称" />
           </NFormItem>
           <NFormItem label="字段名">
-            <NInput v-model:value="quickField.field" placeholder="如 owner_unit_note" />
+            <NInput v-model:value="quickField.field" placeholder="如：owner_unit_note" />
           </NFormItem>
           <div class="side-grid">
             <NFormItem label="字段类型">
@@ -426,7 +444,7 @@ onMounted(fetchDetail);
         <div class="designer-toolbar">
           <div class="toolbar-title">
             <span>表单规则</span>
-            <small>保存草稿不会影响历史数据；发布后新提交绑定新版本</small>
+            <small>保存草稿不会影响历史数据；发布后将同步生成新版本</small>
           </div>
           <NSpace :size="8">
             <NButton size="small" @click="router.push({ name: 'FormTemplates' })">返回</NButton>
@@ -464,7 +482,11 @@ onMounted(fetchDetail);
     </div>
 
     <NModal v-model:show="showPreviewModal" preset="card" title="表单预览" style="width: min(860px, calc(100vw - 32px))">
-      <DynamicFormRenderer v-model="previewData" :options="previewOptions" :schema="previewSchema" />
+      <FormPreview
+        v-model="previewData"
+        :options="previewOptionState"
+        :rule="previewRule"
+      />
     </NModal>
 
     <NModal v-model:show="showVersionModal" preset="card" title="版本历史" style="width: min(860px, calc(100vw - 32px))">
@@ -918,3 +940,7 @@ onMounted(fetchDetail);
   }
 }
 </style>
+
+
+
+

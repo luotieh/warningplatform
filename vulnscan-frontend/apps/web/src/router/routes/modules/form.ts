@@ -5,7 +5,7 @@ import { BasicLayout } from '#/layouts';
 const routes: RouteRecordRaw[] = [
   {
     component: BasicLayout,
-    meta: { icon: 'lucide:clipboard-list', order: 7, title: '表单中心' },
+    meta: { icon: 'lucide:clipboard-list', order: 12, title: '表单中心' },
     name: 'FormCenter',
     path: '/form',
     redirect: '/form/templates',

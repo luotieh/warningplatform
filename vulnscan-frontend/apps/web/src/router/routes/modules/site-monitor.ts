@@ -5,7 +5,7 @@ import { BasicLayout } from '#/layouts';
 const routes: RouteRecordRaw[] = [
   {
     component: BasicLayout,
-    meta: { icon: 'ri:radar-line', order: 3, title: '站点监控' },
+    meta: { icon: 'ri:radar-line', order: 3, title: '风险监测' },
     name: 'SiteMonitor',
     path: '/monitor',
     redirect: '/monitor/dashboard',
@@ -66,6 +66,12 @@ const routes: RouteRecordRaw[] = [
         path: 'config',
         component: () => import('#/views/site-monitor/config/index.vue'),
         meta: { title: '监测配置', icon: 'ri:settings-4-line' },
+      },
+      {
+        name: 'MonitorComplianceBaselines',
+        path: 'baselines',
+        component: () => import('#/views/compliance/index.vue'),
+        meta: { title: '基线检查', icon: 'lucide:shield-check' },
       },
     ],
   },

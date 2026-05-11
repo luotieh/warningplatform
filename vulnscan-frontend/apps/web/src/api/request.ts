@@ -139,19 +139,98 @@ export const requestClient = createRequestClient(apiURL, {
   responseReturn: 'data',
 });
 
+let authProbePromise: null | Promise<boolean> = null;
+
+export async function probeAuthentication() {
+  if (import.meta.env.VITE_SKIP_AUTH === 'true') {
+    return true;
+  }
+  if (authProbePromise) {
+    return authProbePromise;
+  }
+  authProbePromise = (async () => {
+    try {
+      await requestClient.get('/me/profile');
+      return true;
+    } catch {
+      return false;
+    } finally {
+      authProbePromise = null;
+    }
+  })();
+  return authProbePromise;
+}
+
 function createBaseRequestClient(baseURL: string) {
   const AUTH_REVOKED_CODES = new Set([19301, 19302, 19303, 19304, 19401, 19402, 19403]);
 
   const client = new RequestClient({ baseURL });
+  let isReAuthenticating = false;
+
+  async function doReAuthenticate() {
+    if (isReAuthenticating) return;
+    isReAuthenticating = true;
+    try {
+      const accessStore = useAccessStore();
+      accessStore.setAccessToken(null);
+      if (
+        preferences.app.loginExpiredMode === 'modal' &&
+        accessStore.isAccessChecked
+      ) {
+        accessStore.setLoginExpired(true);
+      } else {
+        localStorage.removeItem('iam_refresh_token');
+        localStorage.removeItem('iam_current_app_id');
+        resetAllStores();
+        if (!window.location.pathname.includes(LOGIN_PATH)) {
+          const current = window.location.pathname + window.location.search;
+          const redirect =
+            current === '/' ? '' : `?redirect=${encodeURIComponent(current)}`;
+          window.location.href = `${LOGIN_PATH}${redirect}`;
+        }
+      }
+    } finally {
+      isReAuthenticating = false;
+    }
+  }
+
+  async function doRefreshToken() {
+    const accessStore = useAccessStore();
+    const resp = await refreshTokenApi();
+    const newToken = resp.access_token;
+    accessStore.setAccessToken(newToken);
+
+    if (resp.refresh_token) {
+      localStorage.setItem('iam_refresh_token', resp.refresh_token);
+    }
+
+    return newToken;
+  }
+
+  function formatToken(token: null | string) {
+    return token ? `Bearer ${token}` : null;
+  }
+
   client.addRequestInterceptor({
     fulfilled: async (config) => {
       const accessStore = useAccessStore();
       const token = accessStore.accessToken;
-      config.headers.Authorization = token ? `Bearer ${token}` : null;
+      config.headers.Authorization = formatToken(token);
       config.headers['Accept-Language'] = preferences.app.locale;
       return config;
     },
   });
+
+  client.addResponseInterceptor(
+    authenticateResponseInterceptor({
+      client,
+      doReAuthenticate,
+      doRefreshToken,
+      enableRefreshToken: preferences.app.enableRefreshToken,
+      formatToken,
+    }),
+  );
+
   client.addResponseInterceptor({
     fulfilled: async (response: any) => {
       const code = response?.data?.code;
@@ -169,6 +248,17 @@ function createBaseRequestClient(baseURL: string) {
         );
       }
       return response;
+    },
+    rejected: async (error: any) => {
+      if (error?.__silent) return Promise.reject(error);
+      const responseData = error?.response?.data ?? {};
+      const code = responseData?.code;
+      if (code && AUTH_REVOKED_CODES.has(code)) {
+        return Promise.reject(
+          Object.assign(new Error('auth_revoked'), { __silent: true }),
+        );
+      }
+      return Promise.reject(error);
     },
   });
   return client;

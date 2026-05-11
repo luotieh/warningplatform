@@ -11,7 +11,6 @@ import (
 	"code.yt-security.com/public/core/v2/generate/qulid"
 	"code.yt-security.com/public/core/v2/web"
 	iamsdk "code.yt-security.com/public/sdk"
-	"code.yt-security.com/public/sdk/permission"
 	"github.com/gin-gonic/gin"
 	"github.com/xuri/excelize/v2"
 )
@@ -40,7 +39,7 @@ func (h *HandlerAsset) List(c *gin.Context) {
 		return
 	}
 
-	scope := iamsdk.DataFilterScope(c, permission.DefaultFieldMapping)
+	scope := iamsdk.DataFilterScope(c, assetFieldMapping)
 	items, count, err := h.svc.List(query, scope)
 	if err != nil {
 		web.Resp(c, web.InternalError)
@@ -331,7 +330,7 @@ func (h *HandlerAsset) Export(c *gin.Context) {
 	query.Page = 1
 	query.PageSize = 10000
 
-	scope := iamsdk.DataFilterScope(c, permission.DefaultFieldMapping)
+	scope := iamsdk.DataFilterScope(c, assetFieldMapping)
 	items, _, err := h.svc.List(query, scope)
 	if err != nil {
 		web.Resp(c, web.InternalError)

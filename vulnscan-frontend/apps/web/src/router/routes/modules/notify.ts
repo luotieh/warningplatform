@@ -5,7 +5,7 @@ import { BasicLayout } from '#/layouts';
 const routes: RouteRecordRaw[] = [
   {
     component: BasicLayout,
-    meta: { icon: 'lucide:bell', order: 10, title: '通知中心' },
+    meta: { icon: 'lucide:bell', order: 14, title: '通知中心' },
     name: 'Notify',
     path: '/notify',
     redirect: '/notify/list',

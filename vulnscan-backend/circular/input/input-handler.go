@@ -22,11 +22,12 @@ func (h *HandlerInput) Add(c *gin.Context) {
 		return
 	}
 	user, _ := iamsdk.GetCurrentUser(c)
-	if err := h.svc.Add(c.Request.Context(), req, user.UserID); err != nil {
+	id, err := h.svc.Add(c.Request.Context(), req, user.UserID)
+	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.OK(c).Data(gin.H{"id": id}).Send()
 }
 
 func (h *HandlerInput) List(c *gin.Context) {

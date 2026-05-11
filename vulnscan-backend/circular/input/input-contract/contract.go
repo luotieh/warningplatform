@@ -72,7 +72,7 @@ type InputDetailResp struct {
 }
 
 type ServiceInput interface {
-	Add(ctx context.Context, req InputAddReq, createdBy string) error
+	Add(ctx context.Context, req InputAddReq, createdBy string) (string, error)
 	List(ctx context.Context, req ListQuery) (int64, []ListResp, error)
 	Detail(ctx context.Context, id string) (*InputDetailResp, error)
 	Delete(ctx context.Context, id string) error

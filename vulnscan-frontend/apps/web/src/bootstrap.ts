@@ -10,6 +10,7 @@ import '@vben/styles';
 import '@vben/styles/naive';
 
 import formCreatePlugin from '@form-create/naive-ui';
+import formCreateAutoImport from '@form-create/naive-ui/auto-import';
 import '@form-create/naive-ui/src/style/index.css';
 import FcDesigner from '@form-create/designer';
 import '@form-create/designer/src/style/index.css';
@@ -84,9 +85,13 @@ async function bootstrap(namespace: string) {
   ]);
 
   const app = createApp(App);
+  const formCreate =
+    (formCreatePlugin as any).default ?? formCreatePlugin;
+
+  ((formCreateAutoImport as any).default ?? formCreateAutoImport)(formCreate);
 
   setupGlobalErrorHandlers(app);
-  app.use((formCreatePlugin as any).default ?? formCreatePlugin);
+  app.use(formCreate);
   app.use(ElementPlus);
   app.use((FcDesigner as any).default ?? FcDesigner);
 

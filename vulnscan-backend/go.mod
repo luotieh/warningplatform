@@ -2,15 +2,13 @@ module vulnscan-backend
 
 go 1.26.0
 
-replace code.yt-security.com/public/sdk => ../../sdk
-
 require (
 	code.yt-security.com/public/core/v2 v2.0.0
 	code.yt-security.com/public/core/v2/cache/redis v0.1.0
 	code.yt-security.com/public/core/v2/db v0.1.0
 	code.yt-security.com/public/core/v2/product v0.1.0
 	code.yt-security.com/public/core/v2/web v0.2.0
-	code.yt-security.com/public/sdk v1.3.0
+	code.yt-security.com/public/sdk v1.4.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/go-rod/rod v0.116.2
 	github.com/gocolly/colly/v2 v2.3.0

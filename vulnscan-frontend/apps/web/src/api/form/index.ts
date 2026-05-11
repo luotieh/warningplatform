@@ -161,11 +161,73 @@ export function normalizeFormRule(schema?: Record<string, any>) {
   return [];
 }
 
+const formCreateComponentMap: Record<string, string> = {
+  nAutoComplete: 'NAutoComplete',
+  nButton: 'NButton',
+  nCascader: 'NCascader',
+  nCheckbox: 'NCheckbox',
+  nCheckboxGroup: 'NCheckboxGroup',
+  nCol: 'NCol',
+  nColorPicker: 'NColorPicker',
+  nDatePicker: 'NDatePicker',
+  nDynamicTags: 'NDynamicTags',
+  nForm: 'NForm',
+  nFormItem: 'NFormItem',
+  nIcon: 'NIcon',
+  nInput: 'NInput',
+  nInputGroup: 'NInputGroup',
+  nInputGroupLabel: 'NInputGroupLabel',
+  nInputNumber: 'NInputNumber',
+  nModal: 'NModal',
+  nPopover: 'NPopover',
+  nRadio: 'NRadio',
+  nRadioGroup: 'NRadioGroup',
+  nRate: 'NRate',
+  nRow: 'NRow',
+  nSelect: 'NSelect',
+  nSlider: 'NSlider',
+  nSwitch: 'NSwitch',
+  nTimePicker: 'NTimePicker',
+  nTooltip: 'NTooltip',
+  nTree: 'NTree',
+  nUpload: 'NUpload',
+};
+
+function normalizeFormCreateNode(node: any): any {
+  if (Array.isArray(node)) {
+    return node.map(normalizeFormCreateNode);
+  }
+  if (!node || typeof node !== 'object') {
+    return node;
+  }
+
+  const normalized = { ...node };
+  if (typeof normalized.type === 'string' && formCreateComponentMap[normalized.type]) {
+    normalized.type = formCreateComponentMap[normalized.type];
+  }
+  if (Array.isArray(normalized.children)) {
+    normalized.children = normalized.children.map(normalizeFormCreateNode);
+  }
+  if (Array.isArray(normalized.control)) {
+    normalized.control = normalized.control.map((item: any) => ({
+      ...item,
+      rule: Array.isArray(item?.rule)
+        ? item.rule.map(normalizeFormCreateNode)
+        : item?.rule,
+    }));
+  }
+  return normalized;
+}
+
+export function normalizeRuntimeFormRule(schema?: Record<string, any>) {
+  return normalizeFormRule(schema).map(normalizeFormCreateNode);
+}
+
 export function normalizeFormOptions(
   schema?: Record<string, any>,
   options?: Record<string, any>,
 ) {
-  return {
+  const normalized = {
     submitBtn: false,
     resetBtn: false,
     labelWidth: 120,
@@ -173,4 +235,30 @@ export function normalizeFormOptions(
     ...(schema?.options ?? {}),
     ...(options ?? {}),
   };
+
+  const form = normalized.form;
+  if (form && typeof form === 'object') {
+    const nextForm = { ...form } as Record<string, any>;
+
+    if (nextForm.labelPosition && !nextForm.labelPlacement) {
+      nextForm.labelPlacement = nextForm.labelPosition;
+    }
+    delete nextForm.labelPosition;
+    delete nextForm.hideRequiredAsterisk;
+
+    if (typeof nextForm.size === 'string') {
+      const size = nextForm.size.toLowerCase();
+      if (size === 'default') {
+        delete nextForm.size;
+      } else if (size === 'small' || size === 'medium' || size === 'large') {
+        nextForm.size = size;
+      } else {
+        delete nextForm.size;
+      }
+    }
+
+    normalized.form = nextForm;
+  }
+
+  return normalized;
 }
