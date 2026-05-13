@@ -41,6 +41,7 @@ import {
 } from '#/api/task';
 
 import { createIncident, type CreateIncidentReq } from '#/api/incident';
+import { taskStatusLabels, taskStatusTypes } from '#/constants/status';
 import TopologyGraph from '../components/topology-graph.vue';
 
 defineOptions({ name: 'ScanTaskDetail' });
@@ -69,53 +70,7 @@ const detailItem = ref<ScanFinding | null>(null);
 const assets = ref<AssetSummary[]>([]);
 const assetsLoading = ref(false);
 
-interface TreeNode {
-  key: string;
-  label: string;
-  host: string;
-  port?: number;
-  service?: string;
-  isHost: boolean;
-  children?: TreeNode[];
-  findingCount?: number;
-}
-
 const selectedTreeNode = ref<string>('');
-
-const targetTree = computed<TreeNode[]>(() => {
-  if (assets.value.length === 0) return [];
-  return assets.value.map((a) => {
-    const children: TreeNode[] = (a.ports ?? []).map((p) => ({
-      key: `${a.target}:${p.port}`,
-      label: `:${p.port}${p.service ? ' ' + p.service : ''}${p.version ? ' ' + p.version : ''}`,
-      host: a.target,
-      port: p.port,
-      service: p.service,
-      isHost: false,
-    }));
-    return {
-      key: a.target,
-      label: a.target + (a.title ? ` (${a.title})` : ''),
-      host: a.target,
-      isHost: true,
-      children,
-      findingCount: a.finding_ids?.length ?? 0,
-    };
-  });
-});
-
-const filteredByTree = computed(() => {
-  if (!selectedTreeNode.value) return mergedFindings.value;
-  const node = selectedTreeNode.value;
-  return mergedFindings.value.filter((f) => {
-    if (node.includes(':')) {
-      const [host, portStr] = node.split(':');
-      const port = parseInt(portStr, 10);
-      return (f.target === host || f.target.startsWith(host)) && f.port === port;
-    }
-    return f.target === node || f.target.startsWith(node + ':');
-  });
-});
 
 interface EndpointNode {
   key: string;
@@ -314,15 +269,6 @@ const profileLabels: Record<string, string> = {
   recon: '信息收集',
   vuln: '漏洞扫描',
   'vuln-full': '深度漏洞',
-};
-
-const statusConfig: Record<string, { type: string; label: string }> = {
-  pending: { type: 'default', label: '等待中' },
-  queued: { type: 'info', label: '排队中' },
-  running: { type: 'warning', label: '扫描中' },
-  completed: { type: 'success', label: '已完成' },
-  failed: { type: 'error', label: '失败' },
-  cancelled: { type: 'default', label: '已取消' },
 };
 
 const typeLabels: Record<string, string> = {
@@ -1456,8 +1402,8 @@ onUnmounted(() => {
               <div class="header-title-info">
                 <span class="header-task-name">{{ task.name }}</span>
                 <div class="header-tags">
-                  <NTag :type="(statusConfig[task.status]?.type || 'default') as any" size="small" round>
-                    {{ statusConfig[task.status]?.label || task.status }}
+                  <NTag :type="(taskStatusTypes[task.status] || 'default') as any" size="small" round>
+                    {{ taskStatusLabels[task.status] || task.status }}
                   </NTag>
                   <NTag v-if="task.type" size="small" :bordered="false" round style="background: #f0f5ff; color: #1890ff">
                     {{ profileLabels[task.type] ?? task.type }}

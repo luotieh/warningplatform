@@ -4,23 +4,20 @@ import (
 	"context"
 	"time"
 
+	"code.yt-security.com/public/core/v2/db"
 	"code.yt-security.com/public/core/v2/web"
 	"code.yt-security.com/public/sdk/authorize"
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
-
-	"vulnscan-backend/model"
 )
 
 type Handler struct {
-	db  *gorm.DB
 	agg *Aggregator
 }
 
-func NewHandler(db *gorm.DB) *Handler {
+func NewHandler(database *db.DB) *Handler {
+	session, _ := database.GetDBSession()
 	return &Handler{
-		db:  db,
-		agg: NewAggregator(db),
+		agg: NewAggregator(session),
 	}
 }
 
@@ -30,10 +27,10 @@ func (h *Handler) Overview(c *gin.Context) {
 
 	posture, err := h.agg.GetSecurityPosture(ctx)
 	if err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.RespContent(c, web.Success, posture)
+	web.OK(c).Data(posture).Send()
 }
 
 func (h *Handler) VulnTrend(c *gin.Context) {
@@ -42,7 +39,7 @@ func (h *Handler) VulnTrend(c *gin.Context) {
 
 	days := 30
 	trend := h.agg.getVulnTrend(ctx, days)
-	web.RespContent(c, web.Success, trend)
+	web.OK(c).Data(trend).Send()
 }
 
 func (h *Handler) TaskTrend(c *gin.Context) {
@@ -50,7 +47,7 @@ func (h *Handler) TaskTrend(c *gin.Context) {
 	defer cancel()
 
 	trend := h.agg.getTaskTrend(ctx, 30)
-	web.RespContent(c, web.Success, trend)
+	web.OK(c).Data(trend).Send()
 }
 
 func (h *Handler) TopVulnAssets(c *gin.Context) {
@@ -58,59 +55,23 @@ func (h *Handler) TopVulnAssets(c *gin.Context) {
 	defer cancel()
 
 	assets := h.agg.getTopVulnAssets(ctx, 10)
-	web.RespContent(c, web.Success, assets)
+	web.OK(c).Data(assets).Send()
 }
 
 func (h *Handler) TaskStatusDist(c *gin.Context) {
-	var counts []struct {
-		Status string
-		Count  int
-	}
-	h.db.Model(&model.ScanTask{}).
-		Select("status, count(*) as count").
-		Group("status").
-		Find(&counts)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+	defer cancel()
 
-	result := make(map[string]int, len(counts))
-	for _, c := range counts {
-		result[c.Status] = c.Count
-	}
-	web.RespContent(c, web.Success, result)
+	result := h.agg.GetTaskStatusDist(ctx)
+	web.OK(c).Data(result).Send()
 }
 
 func (h *Handler) RecentActivity(c *gin.Context) {
-	type activity struct {
-		Type      string    `json:"type"`
-		Title     string    `json:"title"`
-		Detail    string    `json:"detail"`
-		CreatedAt time.Time `json:"created_at"`
-	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+	defer cancel()
 
-	var activities []activity
-
-	var recentTasks []model.ScanTask
-	h.db.Order("created_at DESC").Limit(5).Find(&recentTasks)
-	for _, t := range recentTasks {
-		activities = append(activities, activity{
-			Type:      "task",
-			Title:     t.Name,
-			Detail:    t.Status,
-			CreatedAt: t.CreatedAt,
-		})
-	}
-
-	var recentVulns []model.Vulnerability
-	h.db.Order("created_at DESC").Limit(5).Find(&recentVulns)
-	for _, v := range recentVulns {
-		activities = append(activities, activity{
-			Type:      "vuln",
-			Title:     v.Title,
-			Detail:    v.Severity,
-			CreatedAt: v.CreatedAt,
-		})
-	}
-
-	web.RespContent(c, web.Success, activities)
+	activities := h.agg.GetRecentActivity(ctx)
+	web.OK(c).Data(activities).Send()
 }
 
 type Dashboard struct {

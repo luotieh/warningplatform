@@ -10,7 +10,7 @@ import type { DataTableColumns } from 'naive-ui';
 import {
   searchCyberspace, hostLookup, getProviders,
   type CyberAsset, type CyberProvider,
-} from '#/api/cyberspace';
+} from '#/api/cyberquery';
 
 const message = useMessage();
 const loading = ref(false);

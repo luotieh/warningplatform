@@ -22,16 +22,15 @@ import {
   useMessage,
 } from 'naive-ui';
 
-import type { DynamicFormTemplate, DynamicFormTemplateVersion } from '#/api/form';
+import type { DynamicFormTemplate, DynamicFormTemplateVersion } from '#/api/formdesign';
 import {
   createDynamicFormDraft,
   getDynamicFormTemplate,
   getDynamicFormTemplateVersions,
-  normalizeFormOptions,
   publishDynamicFormDraft,
   saveDynamicFormDraft,
   updateDynamicFormTemplate,
-} from '#/api/form';
+} from '#/api/formdesign';
 import FormPreview from '#/components/dynamic-form/FormPreview.vue';
 
 defineOptions({ name: 'FormDesigner' });
@@ -102,6 +101,7 @@ const designerConfig = {
   formOptions: { form: { labelWidth: '120px' }, submitBtn: false },
   showAi: false,
   showLanguage: false,
+  showPreviewBtn: false,
 };
 
 function safeParse(value: string, fallback: Record<string, any>) {
@@ -165,15 +165,6 @@ function syncJsonFromDesigner() {
   const options = designer.getOptions?.() ?? {};
   schemaText.value = JSON.stringify({ rule }, null, 2);
   optionsText.value = JSON.stringify(options || {}, null, 2);
-}
-
-function syncPreviewFromDesigner() {
-  const designer = designerRef.value;
-  if (!designer) return;
-  const rule = designer.getRule?.() ?? [];
-  const options = designer.getOptions?.() ?? {};
-  previewRule.value = JSON.parse(JSON.stringify(rule));
-  previewOptionState.value = JSON.parse(JSON.stringify(options || {}));
 }
 
 function currentRuleList() {
@@ -520,6 +511,7 @@ onMounted(fetchDetail);
   padding: 12px 14px 16px;
   color: var(--designer-text);
   background: var(--designer-bg);
+  isolation: isolate;
 }
 
 :global(.dark) .form-designer-page {
@@ -689,6 +681,8 @@ onMounted(fetchDetail);
 .visual-designer :deep(._fc-designer) {
   color: var(--designer-text);
   background: var(--designer-surface);
+  border-color: var(--designer-border);
+  --fc-tool-border-color: rgba(76, 157, 255, 0.38);
   --el-bg-color: var(--designer-surface);
   --el-bg-color-overlay: var(--designer-paper);
   --el-border-color: var(--designer-border);
@@ -709,6 +703,11 @@ onMounted(fetchDetail);
   --el-text-color-primary: var(--designer-text);
   --el-text-color-regular: var(--designer-text-2);
   --el-text-color-secondary: var(--designer-muted);
+}
+
+:global(.dark) .form-designer-page {
+  --n-border-color: rgba(148, 163, 184, 0.16);
+  --n-divider-color: rgba(148, 163, 184, 0.16);
 }
 
 .visual-designer :deep(._fc-l),
@@ -910,6 +909,38 @@ onMounted(fetchDetail);
 .visual-designer :deep(._fd-draggable-drag.drag-holder:after),
 .visual-designer :deep(._fc-child-empty:after) {
   color: var(--designer-muted);
+}
+
+:global(.dark) .visual-designer :deep(._fd-drag-tool) {
+  outline: 1px dashed rgba(76, 157, 255, 0.22);
+}
+
+:global(.dark) .visual-designer :deep(._fd-drag-tool:hover) {
+  outline-color: rgba(76, 157, 255, 0.32);
+  outline-style: solid;
+}
+
+:global(.dark) .visual-designer :deep(._fd-drag-tool.active) {
+  outline: 1px solid rgba(76, 157, 255, 0.52);
+}
+
+:global(.dark) .visual-designer :deep(._fd-drag-btn) {
+  background-color: rgba(76, 157, 255, 0.92);
+}
+
+:global(.dark) .visual-designer :deep(._fd-drag-danger) {
+  background-color: rgba(255, 78, 106, 0.92);
+}
+
+:global(.dark) .visual-designer :deep(._fd-draggable-drag.drag-holder),
+:global(.dark) .visual-designer :deep(._fd-tableFormColumn-drag.drag-holder),
+:global(.dark) .visual-designer :deep(._fd-elTabPane-drag.drag-holder),
+:global(.dark) .visual-designer :deep(._fd-group-drag.drag-holder),
+:global(.dark) .visual-designer :deep(._fd-subForm-drag.drag-holder),
+:global(.dark) .visual-designer :deep(._fd-elCard-drag.drag-holder),
+:global(.dark) .visual-designer :deep(._fd-elCollapseItem-drag.drag-holder),
+:global(.dark) .visual-designer :deep(._fd-row._fc-child-empty) {
+  background: rgba(148, 163, 184, 0.04);
 }
 
 .json-editor {

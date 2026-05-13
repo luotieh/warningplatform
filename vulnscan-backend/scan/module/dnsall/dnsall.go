@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"vulnscan-backend/scan/engine"
+	"vulnscan-backend/scan/core"
 )
 
 type DNSEnumerator struct{}
@@ -20,9 +20,9 @@ func (m *DNSEnumerator) ID() string       { return "dns_all" }
 func (m *DNSEnumerator) Name() string     { return "DNS 全量枚举" }
 func (m *DNSEnumerator) Category() string { return "recon" }
 
-func (m *DNSEnumerator) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
+func (m *DNSEnumerator) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {
 	start := time.Now()
-	result := &engine.ModuleResult{ModuleID: m.ID()}
+	result := &core.ModuleResult{ModuleID: m.ID()}
 
 	var mu sync.Mutex
 
@@ -36,7 +36,7 @@ func (m *DNSEnumerator) Run(ctx context.Context, targets []*engine.Target, confi
 
 		mu.Lock()
 		for _, r := range records {
-			result.Findings = append(result.Findings, &engine.Finding{
+			result.Findings = append(result.Findings, &core.Finding{
 				ModuleID:         m.ID(),
 				Target:           t,
 				Type:             "dns_record",

@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"vulnscan-backend/model"
-	"vulnscan-backend/scan/engine"
+	"vulnscan-backend/scan/core"
 	"vulnscan-backend/scan/rulestore"
 )
 
@@ -52,9 +52,9 @@ type detectResult struct {
 	Evidence string
 }
 
-func (m *TechDetector) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
+func (m *TechDetector) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {
 	start := time.Now()
-	result := &engine.ModuleResult{ModuleID: m.ID()}
+	result := &core.ModuleResult{ModuleID: m.ID()}
 
 	rules := m.store.Get(model.RuleTypeTechDetect)
 	if len(rules) == 0 {
@@ -74,7 +74,7 @@ func (m *TechDetector) Run(ctx context.Context, targets []*engine.Target, config
 
 		wg.Add(1)
 		sem <- struct{}{}
-		go func(target *engine.Target, u string) {
+		go func(target *core.Target, u string) {
 			defer wg.Done()
 			defer func() { <-sem }()
 
@@ -86,7 +86,7 @@ func (m *TechDetector) Run(ctx context.Context, targets []*engine.Target, config
 				if tech.Version != "" {
 					title = fmt.Sprintf("%s v%s", tech.Name, tech.Version)
 				}
-				result.Findings = append(result.Findings, &engine.Finding{
+				result.Findings = append(result.Findings, &core.Finding{
 					ModuleID:   m.ID(),
 					Target:     target,
 					Type:       "tech_stack",
@@ -273,7 +273,7 @@ func findCategory(name string, rules []*rulestore.CompiledRule) string {
 	return "Misc"
 }
 
-func buildBaseURL(t *engine.Target) string {
+func buildBaseURL(t *core.Target) string {
 	if t.URL != "" {
 		return strings.TrimRight(t.URL, "/")
 	}

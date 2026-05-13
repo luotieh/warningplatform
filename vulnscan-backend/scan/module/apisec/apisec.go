@@ -7,11 +7,13 @@ import (
 	"strings"
 	"time"
 
-	"vulnscan-backend/scan/engine"
+	"vulnscan-backend/scan/core"
+	"vulnscan-backend/scan/scanhttp"
+	"vulnscan-backend/scan/vulnkit"
 )
 
 type APISecScanner struct {
-	base *engine.VulnScanner
+	base *vulnkit.VulnScanner
 }
 
 func New() *APISecScanner {
@@ -57,10 +59,10 @@ var sensitiveEndpoints = []struct {
 	{"/_cat/indices", "health", "critical", "Elasticsearch未授权"},
 }
 
-func (m *APISecScanner) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
-	m.base = engine.NewVulnScanner(config, engine.WithRedirectPolicy(engine.RedirectNoFollow))
+func (m *APISecScanner) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {
+	m.base = vulnkit.NewVulnScanner(config, scanhttp.WithRedirectPolicy(scanhttp.RedirectNoFollow))
 
-	result := m.base.RunTargets(ctx, m.ID(), targets, func(ctx context.Context, target *engine.Target) []*engine.Finding {
+	result := m.base.RunTargets(ctx, m.ID(), targets, func(ctx context.Context, target *core.Target) []*core.Finding {
 		baseURL := buildBaseURL(target)
 		if baseURL == "" {
 			return nil
@@ -68,12 +70,12 @@ func (m *APISecScanner) Run(ctx context.Context, targets []*engine.Target, confi
 		return m.testTarget(ctx, target, baseURL)
 	})
 
-	engine.LogModuleComplete(m.ID(), len(targets), len(result.Findings), result.Duration)
+	vulnkit.LogModuleComplete(m.ID(), len(targets), len(result.Findings), result.Duration)
 	return result, nil
 }
 
-func (m *APISecScanner) testTarget(ctx context.Context, target *engine.Target, baseURL string) []*engine.Finding {
-	var findings []*engine.Finding
+func (m *APISecScanner) testTarget(ctx context.Context, target *core.Target, baseURL string) []*core.Finding {
+	var findings []*core.Finding
 
 	findings = append(findings, m.discoverEndpoints(ctx, target, baseURL)...)
 	findings = append(findings, m.testUnauthAccess(ctx, target, baseURL)...)
@@ -85,8 +87,8 @@ func (m *APISecScanner) testTarget(ctx context.Context, target *engine.Target, b
 	return findings
 }
 
-func (m *APISecScanner) discoverEndpoints(ctx context.Context, target *engine.Target, baseURL string) []*engine.Finding {
-	var findings []*engine.Finding
+func (m *APISecScanner) discoverEndpoints(ctx context.Context, target *core.Target, baseURL string) []*core.Finding {
+	var findings []*core.Finding
 
 	for _, path := range commonAPIPaths {
 		select {
@@ -104,7 +106,7 @@ func (m *APISecScanner) discoverEndpoints(ctx context.Context, target *engine.Ta
 		if resp.StatusCode == 200 || resp.StatusCode == 301 || resp.StatusCode == 302 {
 			for _, ep := range sensitiveEndpoints {
 				if path == ep.path && (ep.indicator == "" || strings.Contains(strings.ToLower(body), ep.indicator)) {
-					findings = append(findings, &engine.Finding{
+					findings = append(findings, &core.Finding{
 						ModuleID:    m.ID(),
 						Target:      target,
 						Type:        "api_endpoint_exposed",
@@ -112,7 +114,7 @@ func (m *APISecScanner) discoverEndpoints(ctx context.Context, target *engine.Ta
 						Description: ep.detail,
 						Severity:    ep.severity,
 						Confidence:  75,
-						Evidence:    engine.Truncate(body, 500),
+						Evidence:    vulnkit.Truncate(body, 500),
 						Timestamp:   time.Now(),
 						Data: map[string]string{
 							"path":   path,
@@ -128,8 +130,8 @@ func (m *APISecScanner) discoverEndpoints(ctx context.Context, target *engine.Ta
 	return findings
 }
 
-func (m *APISecScanner) testUnauthAccess(ctx context.Context, target *engine.Target, baseURL string) []*engine.Finding {
-	var findings []*engine.Finding
+func (m *APISecScanner) testUnauthAccess(ctx context.Context, target *core.Target, baseURL string) []*core.Finding {
+	var findings []*core.Finding
 
 	adminPaths := []string{
 		"/api/admin/users", "/api/admin/settings",
@@ -150,7 +152,7 @@ func (m *APISecScanner) testUnauthAccess(ctx context.Context, target *engine.Tar
 		if status == 200 && len(body) > 50 {
 			isJSON := strings.HasPrefix(strings.TrimSpace(body), "{") || strings.HasPrefix(strings.TrimSpace(body), "[")
 			if isJSON {
-				findings = append(findings, &engine.Finding{
+				findings = append(findings, &core.Finding{
 					ModuleID:    m.ID(),
 					Target:      target,
 					Type:        "api_unauth_access",
@@ -158,7 +160,7 @@ func (m *APISecScanner) testUnauthAccess(ctx context.Context, target *engine.Tar
 					Description: fmt.Sprintf("无需认证即可访问管理接口 %s，返回JSON数据", path),
 					Severity:    "high",
 					Confidence:  70,
-					Evidence:    engine.Truncate(body, 500),
+					Evidence:    vulnkit.Truncate(body, 500),
 					Timestamp:   time.Now(),
 					Data: map[string]string{
 						"path":     path,
@@ -173,7 +175,7 @@ func (m *APISecScanner) testUnauthAccess(ctx context.Context, target *engine.Tar
 	return findings
 }
 
-func (m *APISecScanner) testRateLimit(ctx context.Context, target *engine.Target, baseURL string) []*engine.Finding {
+func (m *APISecScanner) testRateLimit(ctx context.Context, target *core.Target, baseURL string) []*core.Finding {
 	testURL := strings.TrimRight(baseURL, "/") + "/api/v1/login"
 	_, status := m.base.FetchWithStatus(ctx, testURL)
 	if status == 404 || status == 0 {
@@ -205,7 +207,7 @@ func (m *APISecScanner) testRateLimit(ctx context.Context, target *engine.Target
 	}
 
 	if successCount >= 18 {
-		return []*engine.Finding{{
+		return []*core.Finding{{
 			ModuleID:    m.ID(),
 			Target:      target,
 			Type:        "api_no_rate_limit",
@@ -225,8 +227,8 @@ func (m *APISecScanner) testRateLimit(ctx context.Context, target *engine.Target
 	return nil
 }
 
-func (m *APISecScanner) testInfoLeak(ctx context.Context, target *engine.Target, baseURL string) []*engine.Finding {
-	var findings []*engine.Finding
+func (m *APISecScanner) testInfoLeak(ctx context.Context, target *core.Target, baseURL string) []*core.Finding {
+	var findings []*core.Finding
 
 	resp, _ := m.base.FetchFullResponse(ctx, baseURL)
 	if resp == nil {
@@ -245,7 +247,7 @@ func (m *APISecScanner) testInfoLeak(ctx context.Context, target *engine.Target,
 
 	for _, leak := range leaks {
 		if val := resp.Header.Get(leak.header); val != "" {
-			findings = append(findings, &engine.Finding{
+			findings = append(findings, &core.Finding{
 				ModuleID:    m.ID(),
 				Target:      target,
 				Type:        "api_info_leak_header",
@@ -264,7 +266,7 @@ func (m *APISecScanner) testInfoLeak(ctx context.Context, target *engine.Target,
 
 	corsOrigin := resp.Header.Get("Access-Control-Allow-Origin")
 	if corsOrigin == "*" {
-		findings = append(findings, &engine.Finding{
+		findings = append(findings, &core.Finding{
 			ModuleID:    m.ID(),
 			Target:      target,
 			Type:        "api_cors_wildcard",
@@ -285,7 +287,7 @@ func (m *APISecScanner) testInfoLeak(ctx context.Context, target *engine.Target,
 		errBody := m.base.FetchBody(ctx, u)
 		if strings.Contains(errBody, "stack") || strings.Contains(errBody, "traceback") ||
 			strings.Contains(errBody, "at ") || strings.Contains(errBody, "Exception") {
-			findings = append(findings, &engine.Finding{
+			findings = append(findings, &core.Finding{
 				ModuleID:    m.ID(),
 				Target:      target,
 				Type:        "api_verbose_error",
@@ -293,7 +295,7 @@ func (m *APISecScanner) testInfoLeak(ctx context.Context, target *engine.Target,
 				Description: "错误响应中包含堆栈跟踪或异常信息",
 				Severity:    "medium",
 				Confidence:  70,
-				Evidence:    engine.Truncate(errBody, 500),
+				Evidence:    vulnkit.Truncate(errBody, 500),
 				Timestamp:   time.Now(),
 			})
 			break
@@ -303,8 +305,8 @@ func (m *APISecScanner) testInfoLeak(ctx context.Context, target *engine.Target,
 	return findings
 }
 
-func (m *APISecScanner) testIDOR(ctx context.Context, target *engine.Target, baseURL string) []*engine.Finding {
-	var findings []*engine.Finding
+func (m *APISecScanner) testIDOR(ctx context.Context, target *core.Target, baseURL string) []*core.Finding {
+	var findings []*core.Finding
 
 	idorPaths := []string{
 		"/api/users/%s",
@@ -337,7 +339,7 @@ func (m *APISecScanner) testIDOR(ctx context.Context, target *engine.Target, bas
 		}
 
 		if successCount >= 2 {
-			findings = append(findings, &engine.Finding{
+			findings = append(findings, &core.Finding{
 				ModuleID:    m.ID(),
 				Target:      target,
 				Type:        "api_idor",
@@ -357,15 +359,15 @@ func (m *APISecScanner) testIDOR(ctx context.Context, target *engine.Target, bas
 	return findings
 }
 
-func (m *APISecScanner) testGraphQL(ctx context.Context, target *engine.Target, baseURL string) []*engine.Finding {
-	var findings []*engine.Finding
+func (m *APISecScanner) testGraphQL(ctx context.Context, target *core.Target, baseURL string) []*core.Finding {
+	var findings []*core.Finding
 
 	gqlURL := strings.TrimRight(baseURL, "/") + "/graphql"
 	introspection := `{"query":"{ __schema { types { name } } }"}`
 	body, status := m.base.SendJSON(ctx, gqlURL, introspection)
 
 	if status == 200 && strings.Contains(body, "__schema") {
-		findings = append(findings, &engine.Finding{
+		findings = append(findings, &core.Finding{
 			ModuleID:    m.ID(),
 			Target:      target,
 			Type:        "api_graphql_introspection",
@@ -373,7 +375,7 @@ func (m *APISecScanner) testGraphQL(ctx context.Context, target *engine.Target, 
 			Description: "GraphQL端点允许内省查询(__schema)，攻击者可获取完整API模式",
 			Severity:    "medium",
 			Confidence:  90,
-			Evidence:    engine.Truncate(body, 500),
+			Evidence:    vulnkit.Truncate(body, 500),
 			Timestamp:   time.Now(),
 			Data: map[string]string{
 				"url": gqlURL,
@@ -394,7 +396,7 @@ func (m *APISecScanner) testGraphQL(ctx context.Context, target *engine.Target, 
 							}
 						}
 						if len(typeNames) > 0 {
-							findings = append(findings, &engine.Finding{
+							findings = append(findings, &core.Finding{
 								ModuleID:    m.ID(),
 								Target:      target,
 								Type:        "api_graphql_types",
@@ -414,7 +416,7 @@ func (m *APISecScanner) testGraphQL(ctx context.Context, target *engine.Target, 
 	return findings
 }
 
-func buildBaseURL(t *engine.Target) string {
+func buildBaseURL(t *core.Target) string {
 	if t.URL != "" {
 		return t.URL
 	}

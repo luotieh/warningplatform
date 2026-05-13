@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import type { DataTableColumns, DataTableRowKey } from 'naive-ui';
 
-import type { FileEntry } from '#/api/monitor';
+import type { FileEntry } from '#/api/sitemonitor';
 
 import { computed, h, onMounted, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -31,7 +31,7 @@ import {
   getFileEntryList,
   getFileLibraryDetail,
   importFileEntries,
-} from '#/api/monitor';
+} from '#/api/sitemonitor';
 
 defineOptions({ name: 'FileLibraryDetail' });
 

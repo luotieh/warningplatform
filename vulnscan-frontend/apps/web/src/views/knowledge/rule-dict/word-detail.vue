@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import type { DataTableColumns, DataTableRowKey } from 'naive-ui';
 
-import type { WordCategory, WordEntry } from '#/api/monitor';
+import type { WordCategory, WordEntry } from '#/api/sitemonitor';
 
 import { computed, h, onMounted, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -34,7 +34,7 @@ import {
   getWordLibraryDetail,
   importWordEntries,
   updateWordCategory,
-} from '#/api/monitor';
+} from '#/api/sitemonitor';
 
 defineOptions({ name: 'RuleDictWordDetail' });
 

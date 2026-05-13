@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"vulnscan-backend/scan/engine"
+	"vulnscan-backend/scan/core"
 )
 
 type GitLeakScanner struct {
@@ -52,9 +52,9 @@ var leakPatterns = []leakRule{
 	{"API Endpoint", regexp.MustCompile(`(?i)https?://(?:api|internal|staging|dev)\.[a-z0-9.-]+`), "low"},
 }
 
-func (m *GitLeakScanner) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
+func (m *GitLeakScanner) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {
 	start := time.Now()
-	result := &engine.ModuleResult{ModuleID: m.ID()}
+	result := &core.ModuleResult{ModuleID: m.ID()}
 
 	org := parseString(config, "organization", "")
 	domain := parseString(config, "domain", "")
@@ -199,8 +199,8 @@ func (m *GitLeakScanner) searchGitHub(ctx context.Context, query string, maxResu
 	return result.Items
 }
 
-func (m *GitLeakScanner) analyzeContent(item searchItem) []*engine.Finding {
-	var findings []*engine.Finding
+func (m *GitLeakScanner) analyzeContent(item searchItem) []*core.Finding {
+	var findings []*core.Finding
 
 	var content string
 	for _, tm := range item.TextMatches {
@@ -210,7 +210,7 @@ func (m *GitLeakScanner) analyzeContent(item searchItem) []*engine.Finding {
 	for _, rule := range leakPatterns {
 		matches := rule.pattern.FindAllString(content, 5)
 		for _, match := range matches {
-			findings = append(findings, &engine.Finding{
+			findings = append(findings, &core.Finding{
 				ModuleID:   "git_leak",
 				Type:       "code_leak",
 				Title:      fmt.Sprintf("[GitHub] %s in %s", rule.name, item.Repository.FullName),

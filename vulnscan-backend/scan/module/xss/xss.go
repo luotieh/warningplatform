@@ -12,13 +12,15 @@ import (
 
 	"vulnscan-backend/model"
 	"vulnscan-backend/pkg/payload"
-	"vulnscan-backend/scan/engine"
+	"vulnscan-backend/scan/core"
+	"vulnscan-backend/scan/scanhttp"
+	"vulnscan-backend/scan/vulnkit"
 )
 
 type XSSScanner struct {
-	base     *engine.VulnScanner
-	scanCtx  *engine.ScanContext
-	wafEnc   *engine.WAFBypassEncoder
+	base     *vulnkit.VulnScanner
+	scanCtx  *vulnkit.ScanContext
+	wafEnc   *vulnkit.WAFBypassEncoder
 	payloads *payload.Loader
 }
 
@@ -30,44 +32,44 @@ func (m *XSSScanner) ID() string       { return "xss" }
 func (m *XSSScanner) Name() string     { return "XSS 检测" }
 func (m *XSSScanner) Category() string { return "vuln" }
 
-func (m *XSSScanner) Params() []engine.ModuleParam {
-	return []engine.ModuleParam{engine.VulnVerificationParam()}
+func (m *XSSScanner) Params() []core.ModuleParam {
+	return []core.ModuleParam{core.VulnVerificationParam()}
 }
 
-func (m *XSSScanner) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
-	m.base = engine.NewVulnScanner(config, engine.WithTimeout(10*time.Second))
-	m.wafEnc = engine.NewWAFBypassEncoder(engine.BuildScanContext(config))
-	verifyLevel := engine.GetConfigValue(config, "verification_level", "both")
+func (m *XSSScanner) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {
+	m.base = vulnkit.NewVulnScanner(config, scanhttp.WithTimeout(10*time.Second))
+	m.wafEnc = vulnkit.NewWAFBypassEncoder(vulnkit.BuildScanContext(config))
+	verifyLevel := core.GetConfigValue(config, "verification_level", "both")
 
-	result := m.base.RunTargets(ctx, m.ID(), targets, func(ctx context.Context, target *engine.Target) []*engine.Finding {
+	result := m.base.RunTargets(ctx, m.ID(), targets, func(ctx context.Context, target *core.Target) []*core.Finding {
 		return m.testTarget(ctx, target, verifyLevel)
 	})
 
-	engine.LogModuleComplete(m.ID(), len(targets), len(result.Findings), result.Duration)
+	vulnkit.LogModuleComplete(m.ID(), len(targets), len(result.Findings), result.Duration)
 	return result, nil
 }
 
-func (m *XSSScanner) testTarget(ctx context.Context, target *engine.Target, verifyLevel string) []*engine.Finding {
-	points := engine.ExtractInjectionPoints(target)
+func (m *XSSScanner) testTarget(ctx context.Context, target *core.Target, verifyLevel string) []*core.Finding {
+	points := vulnkit.ExtractInjectionPoints(target)
 	if len(points) == 0 {
 		parsedURL, err := url.Parse(target.URL)
 		if err != nil || len(parsedURL.Query()) == 0 {
 			return nil
 		}
 		for param := range parsedURL.Query() {
-			points = append(points, engine.InjectionPoint{
-				Type: engine.InjectQuery,
+			points = append(points, vulnkit.InjectionPoint{
+				Type: vulnkit.InjectQuery,
 				Name: param,
 			})
 		}
 	}
 
-	var findings []*engine.Finding
+	var findings []*core.Finding
 
-	if engine.ShouldRunPrinciple(verifyLevel) {
+	if core.ShouldRunPrinciple(verifyLevel) {
 		for _, point := range points {
 			if f := m.testReflected(ctx, target, point); f != nil {
-				f.VerificationLevel = engine.VerifyPrinciple
+				f.VerificationLevel = core.VerifyPrinciple
 				f.VerificationDetail = "payload-reflected"
 				findings = append(findings, f)
 			}
@@ -75,7 +77,7 @@ func (m *XSSScanner) testTarget(ctx context.Context, target *engine.Target, veri
 
 		if f := m.testDOMSinks(ctx, target); f != nil {
 			for _, finding := range f {
-				finding.VerificationLevel = engine.VerifyPrinciple
+				finding.VerificationLevel = core.VerifyPrinciple
 				finding.VerificationDetail = "dom-sink-detected"
 			}
 			findings = append(findings, f...)
@@ -85,7 +87,7 @@ func (m *XSSScanner) testTarget(ctx context.Context, target *engine.Target, veri
 	return findings
 }
 
-func (m *XSSScanner) testReflected(ctx context.Context, target *engine.Target, point engine.InjectionPoint) *engine.Finding {
+func (m *XSSScanner) testReflected(ctx context.Context, target *core.Target, point vulnkit.InjectionPoint) *core.Finding {
 	canary := generateCanary()
 
 	probeBody, _, _ := m.base.SendInjected(ctx, target, point, canary)
@@ -103,7 +105,7 @@ func (m *XSSScanner) testReflected(ctx context.Context, target *engine.Target, p
 		}
 
 		if strings.Contains(body, expect) {
-			return &engine.Finding{
+			return &core.Finding{
 				ModuleID:    m.ID(),
 				Target:      target,
 				Type:        "xss_reflected",
@@ -111,7 +113,7 @@ func (m *XSSScanner) testReflected(ctx context.Context, target *engine.Target, p
 				Description: fmt.Sprintf("%s参数 %s 的值被直接反射到响应中且未充分编码 (context: %s)", point.Type, point.Name, p.Context),
 				Severity:    "medium",
 				Confidence:  80,
-				Evidence:    engine.Truncate(extractContext(body, expect, 200), 500),
+				Evidence:    vulnkit.Truncate(extractContext(body, expect, 200), 500),
 				Timestamp:   time.Now(),
 				Data: map[string]string{
 					"param":      point.Name,
@@ -157,13 +159,13 @@ func (m *XSSScanner) getDOMSourcePatterns() []model.VulnPayloadPattern {
 	return defaultDOMSourcePatterns()
 }
 
-func (m *XSSScanner) testDOMSinks(ctx context.Context, target *engine.Target) []*engine.Finding {
+func (m *XSSScanner) testDOMSinks(ctx context.Context, target *core.Target) []*core.Finding {
 	body := m.base.FetchBody(ctx, target.URL)
 	if body == "" {
 		return nil
 	}
 
-	var findings []*engine.Finding
+	var findings []*core.Finding
 	foundSinks := map[string]bool{}
 	foundSources := map[string]bool{}
 
@@ -190,7 +192,7 @@ func (m *XSSScanner) testDOMSinks(ctx context.Context, target *engine.Target) []
 			sourceList = append(sourceList, s)
 		}
 
-		findings = append(findings, &engine.Finding{
+		findings = append(findings, &core.Finding{
 			ModuleID:    m.ID(),
 			Target:      target,
 			Type:        "xss_dom",

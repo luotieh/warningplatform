@@ -99,17 +99,17 @@ func (h *Handler) GetCVE(c *gin.Context) {
 	cveID := c.Param("id")
 	entry := h.matcher.MatchByCVE(cveID)
 	if entry == nil {
-		web.Resp(c, web.NotFound)
+		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.RespContent(c, web.Success, entry)
+	web.OK(c).Data(entry).Send()
 }
 
 func (h *Handler) MatchFingerprint(c *gin.Context) {
 	product := c.Query("product")
 	version := c.Query("version")
 	if product == "" {
-		web.Resp(c, web.ParamsMissingRequired)
+		web.Err(c, web.ParamsMissingRequired).Send()
 		return
 	}
 
@@ -124,20 +124,12 @@ func (h *Handler) MatchFingerprint(c *gin.Context) {
 
 func (h *Handler) GetSources(c *gin.Context) {
 	sources := h.sync.GetSources()
-	web.RespContent(c, web.Success, sources)
+	web.OK(c).Data(sources).Send()
 }
 
 func (h *Handler) AddSource(c *gin.Context) {
-	var req struct {
-		Name         string `json:"name" binding:"required"`
-		Type         string `json:"type" binding:"required"`
-		URL          string `json:"url" binding:"required"`
-		SyncInterval string `json:"sync_interval"`
-		APIKey       string `json:"api_key"`
-		Enabled      bool   `json:"enabled"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		web.Resp(c, web.ParamsMissingRequired)
+	req, ok := web.BindJSON[AddSourceReq](c)
+	if !ok {
 		return
 	}
 
@@ -151,20 +143,14 @@ func (h *Handler) AddSource(c *gin.Context) {
 		Custom:       true,
 	}
 	h.sync.AddSource(source)
-	web.RespContent(c, web.Success, source)
+	web.OK(c).Data(source).Send()
 }
 
 func (h *Handler) UpdateSource(c *gin.Context) {
 	name := c.Param("name")
 
-	var req struct {
-		URL          *string `json:"url"`
-		SyncInterval *string `json:"sync_interval"`
-		APIKey       *string `json:"api_key"`
-		Enabled      *bool   `json:"enabled"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		web.Resp(c, web.ParamsMissingRequired)
+	req, ok := web.BindJSON[UpdateSourceReq](c)
+	if !ok {
 		return
 	}
 
@@ -184,19 +170,19 @@ func (h *Handler) UpdateSource(c *gin.Context) {
 	})
 
 	if !updated {
-		web.Resp(c, web.NotFound)
+		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 func (h *Handler) DeleteSource(c *gin.Context) {
 	name := c.Param("name")
 	if !h.sync.DeleteSource(name) {
-		web.Resp(c, web.NotFound)
+		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 func (h *Handler) SyncNow(c *gin.Context) {
@@ -248,7 +234,7 @@ func (h *Handler) GetStats(c *gin.Context) {
 func (h *Handler) AnalyzeAsset(c *gin.Context) {
 	assetID := c.Param("asset_id")
 	if h.db == nil {
-		web.Resp(c, web.InternalError)
+		web.Err(c, web.InternalError).Send()
 		return
 	}
 
@@ -411,7 +397,7 @@ func (h *Handler) TrendAnalysis(c *gin.Context) {
 		}).Send()
 
 	default:
-		web.Resp(c, web.ParamsMissingRequired)
+		web.Err(c, web.ParamsMissingRequired).Send()
 	}
 }
 
@@ -453,15 +439,16 @@ func (h *Handler) TopEPSS(c *gin.Context) {
 
 func (h *Handler) BatchAnalyze(c *gin.Context) {
 	if h.db == nil {
-		web.Resp(c, web.InternalError)
+		web.Err(c, web.InternalError).Send()
 		return
 	}
 
-	var req struct {
-		AssetIDs []string `json:"asset_ids"`
+	req, ok := web.BindJSON[BatchAnalyzeReq](c)
+	if !ok {
+		return
 	}
-	if err := c.ShouldBindJSON(&req); err != nil || len(req.AssetIDs) == 0 {
-		web.Resp(c, web.ParamsMissingRequired)
+	if len(req.AssetIDs) == 0 {
+		web.Err(c, web.ParamsMissingRequired).Send()
 		return
 	}
 	if len(req.AssetIDs) > 100 {

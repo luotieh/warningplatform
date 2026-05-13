@@ -2,7 +2,7 @@
 import { h, onMounted, ref } from 'vue';
 import {
   NButton, NCard, NDataTable, NEmpty, NForm, NFormItem, NGrid, NGridItem,
-  NInput, NInputNumber, NModal, NProgress, NSelect, NSpace, NStatistic,
+  NInput, NInputNumber, NModal, NProgress, NSpace, NStatistic,
   NTabPane, NTabs, NTag, useMessage,
 } from 'naive-ui';
 import type { ComplianceReport, FrameworkSummary, Rule } from '#/api/compliance';

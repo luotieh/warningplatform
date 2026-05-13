@@ -8,14 +8,8 @@ const routes: RouteRecordRaw[] = [
     meta: { icon: 'lucide:server', order: 2, title: '资产管理' },
     name: 'Asset',
     path: '/asset',
-    redirect: '/asset/overview',
+    redirect: '/asset/ledger',
     children: [
-      {
-        name: 'AssetOverview',
-        path: 'overview',
-        component: () => import('#/views/asset/overview.vue'),
-        meta: { icon: 'lucide:layout-dashboard', title: '资产总览' },
-      },
       {
         name: 'AssetLedger',
         path: 'ledger',
@@ -32,10 +26,21 @@ const routes: RouteRecordRaw[] = [
         },
       },
       {
+        name: 'AssetDetail',
+        path: 'detail/:id',
+        component: () => import('#/views/asset/detail.vue'),
+        meta: {
+          hideInMenu: true,
+          icon: 'lucide:file-search',
+          title: '资产详情',
+        },
+      },
+      {
         name: 'AssetGroup',
         path: 'group',
         component: () => import('#/views/asset/group.vue'),
         meta: {
+          hideInMenu: true,
           icon: 'lucide:folder',
           title: '资产分组',
           perms: [
@@ -48,13 +53,7 @@ const routes: RouteRecordRaw[] = [
         name: 'AssetOrgTag',
         path: 'org-tag',
         component: () => import('#/views/asset/org-tag.vue'),
-        meta: { icon: 'lucide:building-2', title: '组织标签' },
-      },
-      {
-        name: 'AssetLifecycle',
-        path: 'lifecycle',
-        component: () => import('#/views/asset/lifecycle.vue'),
-        meta: { icon: 'lucide:refresh-cw', title: '生命周期' },
+        meta: { icon: 'lucide:building-2', title: '单位标签' },
       },
       {
         name: 'AssetVerifyTasks',
@@ -67,12 +66,6 @@ const routes: RouteRecordRaw[] = [
         path: 'archive',
         component: () => import('#/views/asset/archive.vue'),
         meta: { icon: 'lucide:archive', title: '资产归档' },
-      },
-      {
-        name: 'AssetChangeLog',
-        path: 'changelog',
-        component: () => import('#/views/asset/changelog.vue'),
-        meta: { icon: 'lucide:file-clock', title: '变更日志' },
       },
     ],
   },

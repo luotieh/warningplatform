@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"vulnscan-backend/model"
-	"vulnscan-backend/scan/engine"
+	"vulnscan-backend/scan/core"
 	"vulnscan-backend/scan/rulestore"
 )
 
@@ -50,9 +50,9 @@ type JSFinding struct {
 	Confidence int
 }
 
-func (m *JSAnalyzer) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
+func (m *JSAnalyzer) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {
 	start := time.Now()
-	result := &engine.ModuleResult{ModuleID: m.ID()}
+	result := &core.ModuleResult{ModuleID: m.ID()}
 
 	rules := m.store.Get(model.RuleTypeJSAnalyze)
 	if len(rules) == 0 {
@@ -77,7 +77,7 @@ func (m *JSAnalyzer) Run(ctx context.Context, targets []*engine.Target, config m
 
 		wg.Add(1)
 		sem <- struct{}{}
-		go func(target *engine.Target, u string) {
+		go func(target *core.Target, u string) {
 			defer wg.Done()
 			defer func() { <-sem }()
 
@@ -85,7 +85,7 @@ func (m *JSAnalyzer) Run(ctx context.Context, targets []*engine.Target, config m
 
 			mu.Lock()
 			for _, f := range findings {
-				result.Findings = append(result.Findings, &engine.Finding{
+				result.Findings = append(result.Findings, &core.Finding{
 					ModuleID:   m.ID(),
 					Target:     target,
 					Type:       f.Category,

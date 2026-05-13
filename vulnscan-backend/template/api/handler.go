@@ -31,8 +31,7 @@ type templateQuery struct {
 }
 
 func (h *Handler) List(c *gin.Context) {
-	var q templateQuery
-	_ = c.ShouldBindQuery(&q)
+	q, _ := web.BindQuery[templateQuery](c)
 	if q.PageSize <= 0 {
 		q.PageSize = 20
 	}
@@ -74,14 +73,14 @@ func (h *Handler) List(c *gin.Context) {
 		results = append(results, vo)
 	}
 
-	web.RespContentWithNum(c, web.Success, count, results)
+	web.OK(c).List(count, results).Send()
 }
 
 func (h *Handler) GetByID(c *gin.Context) {
 	id := c.Param("id")
 	var item model.ScanTemplate
 	if err := h.db.Where("id = ?", id).First(&item).Error; err != nil {
-		web.Resp(c, web.NotFound)
+		web.Err(c, web.NotFound).Send()
 		return
 	}
 
@@ -100,26 +99,27 @@ func (h *Handler) GetByID(c *gin.Context) {
 		}
 	}
 
-	web.RespContent(c, web.Success, vo)
+	web.OK(c).Data(vo).Send()
+}
+
+type createTemplateReq struct {
+	Name        string                     `json:"name"`
+	Code        string                     `json:"code"`
+	Category    string                     `json:"category"`
+	Description string                     `json:"description"`
+	Icon        string                     `json:"icon"`
+	Tags        []string                   `json:"tags"`
+	Params      []tmplEngine.TemplateParam `json:"params"`
+	Stages      []tmplEngine.TemplateStage `json:"stages"`
 }
 
 func (h *Handler) Create(c *gin.Context) {
-	var req struct {
-		Name        string                     `json:"name"`
-		Code        string                     `json:"code"`
-		Category    string                     `json:"category"`
-		Description string                     `json:"description"`
-		Icon        string                     `json:"icon"`
-		Tags        []string                   `json:"tags"`
-		Params      []tmplEngine.TemplateParam `json:"params"`
-		Stages      []tmplEngine.TemplateStage `json:"stages"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		web.Resp(c, web.ParamsMissingRequired)
+	req, ok := web.BindJSON[createTemplateReq](c)
+	if !ok {
 		return
 	}
 	if req.Name == "" {
-		web.Resp(c, web.ParamsMissingRequired)
+		web.Err(c, web.ParamsMissingRequired).Send()
 		return
 	}
 
@@ -145,10 +145,22 @@ func (h *Handler) Create(c *gin.Context) {
 
 	if err := h.db.Create(&item).Error; err != nil {
 		slog.Error("[Template] create failed", "error", err)
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.RespContent(c, web.Success, item)
+	web.OK(c).Data(item).Send()
+}
+
+type updateTemplateReq struct {
+	Name        string                     `json:"name"`
+	Code        string                     `json:"code"`
+	Category    string                     `json:"category"`
+	Description string                     `json:"description"`
+	Icon        string                     `json:"icon"`
+	Tags        []string                   `json:"tags"`
+	Params      []tmplEngine.TemplateParam `json:"params"`
+	Stages      []tmplEngine.TemplateStage `json:"stages"`
+	Enabled     *bool                      `json:"enabled"`
 }
 
 func (h *Handler) Update(c *gin.Context) {
@@ -156,23 +168,12 @@ func (h *Handler) Update(c *gin.Context) {
 
 	var existing model.ScanTemplate
 	if err := h.db.Where("id = ?", id).First(&existing).Error; err != nil {
-		web.Resp(c, web.NotFound)
+		web.Err(c, web.NotFound).Send()
 		return
 	}
 
-	var req struct {
-		Name        string                     `json:"name"`
-		Code        string                     `json:"code"`
-		Category    string                     `json:"category"`
-		Description string                     `json:"description"`
-		Icon        string                     `json:"icon"`
-		Tags        []string                   `json:"tags"`
-		Params      []tmplEngine.TemplateParam `json:"params"`
-		Stages      []tmplEngine.TemplateStage `json:"stages"`
-		Enabled     *bool                      `json:"enabled"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		web.Resp(c, web.ParamsMissingRequired)
+	req, ok := web.BindJSON[updateTemplateReq](c)
+	if !ok {
 		return
 	}
 
@@ -215,10 +216,10 @@ func (h *Handler) Update(c *gin.Context) {
 	}
 
 	if err := h.db.Model(&model.ScanTemplate{}).Where("id = ?", id).Updates(updates).Error; err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 func (h *Handler) Delete(c *gin.Context) {
@@ -226,36 +227,37 @@ func (h *Handler) Delete(c *gin.Context) {
 
 	var item model.ScanTemplate
 	if err := h.db.Where("id = ?", id).First(&item).Error; err != nil {
-		web.Resp(c, web.NotFound)
+		web.Err(c, web.NotFound).Send()
 		return
 	}
 	if item.Builtin {
-		web.Resp(c, web.InternalError)
+		web.Err(c, web.InternalError).Send()
 		return
 	}
 
 	if err := h.db.Where("id = ?", id).Delete(&model.ScanTemplate{}).Error; err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
+}
+
+type toggleTemplateReq struct {
+	Enabled bool `json:"enabled"`
 }
 
 func (h *Handler) Toggle(c *gin.Context) {
 	id := c.Param("id")
-	var req struct {
-		Enabled bool `json:"enabled"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		web.Resp(c, web.ParamsMissingRequired)
+	req, ok := web.BindJSON[toggleTemplateReq](c)
+	if !ok {
 		return
 	}
 
 	if err := h.db.Model(&model.ScanTemplate{}).Where("id = ?", id).Update("enabled", req.Enabled).Error; err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 func (h *Handler) SeedBuiltins(c *gin.Context) {
@@ -282,10 +284,10 @@ func (h *Handler) SeedBuiltins(c *gin.Context) {
 		}
 		h.db.Create(&item)
 	}
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 func (h *Handler) ListBuiltins(c *gin.Context) {
 	builtins := tmplEngine.BuiltinTemplates()
-	web.RespContent(c, web.Success, builtins)
+	web.OK(c).Data(builtins).Send()
 }

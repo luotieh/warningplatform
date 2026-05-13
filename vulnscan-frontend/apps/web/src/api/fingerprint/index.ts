@@ -1,4 +1,5 @@
 import { baseRequestClient, requestClient } from '#/api/request';
+import { normalizePagedResponse } from '#/api/helpers';
 
 export interface ServiceFingerprint {
   id: string;
@@ -42,9 +43,7 @@ export interface ServiceFingerprint {
 
 export async function getFingerprintList(params?: Record<string, any>) {
   const res = await baseRequestClient.get<any>('/fingerprint/list', { params });
-  const body = (res as Record<string, unknown>).data ?? res;
-  const typed = body as { data?: ServiceFingerprint[]; count?: number };
-  return { items: typed.data ?? [], total: typed.count ?? 0 };
+  return normalizePagedResponse<ServiceFingerprint>(res);
 }
 
 export function createFingerprint(data: Partial<ServiceFingerprint>) {

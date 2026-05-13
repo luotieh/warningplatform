@@ -15,7 +15,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"vulnscan-backend/scan/engine"
+	"vulnscan-backend/scan/core"
 )
 
 type ServiceProbe struct {
@@ -36,9 +36,9 @@ func (m *ServiceProbe) Category() string { return "probe" }
 
 func (m *ServiceProbe) Store() *FingerprintStore { return m.store }
 
-func (m *ServiceProbe) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
+func (m *ServiceProbe) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {
 	start := time.Now()
-	result := &engine.ModuleResult{ModuleID: m.ID()}
+	result := &core.ModuleResult{ModuleID: m.ID()}
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 
@@ -56,7 +56,7 @@ func (m *ServiceProbe) Run(ctx context.Context, targets []*engine.Target, config
 
 		wg.Add(1)
 		sem <- struct{}{}
-		go func(target *engine.Target) {
+		go func(target *core.Target) {
 			defer wg.Done()
 			defer func() { <-sem }()
 
@@ -67,7 +67,7 @@ func (m *ServiceProbe) Run(ctx context.Context, targets []*engine.Target, config
 				return
 			}
 
-			enriched := &engine.Target{
+			enriched := &core.Target{
 				Host:     target.Host,
 				IP:       target.IP,
 				Port:     target.Port,
@@ -139,7 +139,7 @@ func (m *ServiceProbe) Run(ctx context.Context, targets []*engine.Target, config
 			}
 
 			mu.Lock()
-			result.Findings = append(result.Findings, &engine.Finding{
+			result.Findings = append(result.Findings, &core.Finding{
 				ModuleID:   m.ID(),
 				Target:     enriched,
 				Type:       "service",
@@ -188,7 +188,7 @@ func isActiveOnlyPort(port int) bool {
 	}
 }
 
-func (m *ServiceProbe) adaptiveTimeout(target *engine.Target, base time.Duration) time.Duration {
+func (m *ServiceProbe) adaptiveTimeout(target *core.Target, base time.Duration) time.Duration {
 	host := target.Host
 	if target.IP != "" {
 		host = target.IP
@@ -213,7 +213,7 @@ func (m *ServiceProbe) adaptiveTimeout(target *engine.Target, base time.Duration
 	return adaptive
 }
 
-func (m *ServiceProbe) probeFast(ctx context.Context, target *engine.Target, timeout time.Duration, enableTLS bool) *serviceMatch {
+func (m *ServiceProbe) probeFast(ctx context.Context, target *core.Target, timeout time.Duration, enableTLS bool) *serviceMatch {
 	host := target.Host
 	if target.IP != "" {
 		host = target.IP
@@ -299,7 +299,7 @@ func (m *ServiceProbe) probeFast(ctx context.Context, target *engine.Target, tim
 }
 
 // probeActiveOnly: skip banner wait entirely — these ports require sending data first
-func (m *ServiceProbe) probeActiveOnly(ctx context.Context, target *engine.Target, addr string, timeout time.Duration, probes []*CompiledFingerprint) *serviceMatch {
+func (m *ServiceProbe) probeActiveOnly(ctx context.Context, target *core.Target, addr string, timeout time.Duration, probes []*CompiledFingerprint) *serviceMatch {
 	for _, probe := range probes {
 		select {
 		case <-ctx.Done():
@@ -365,7 +365,7 @@ func (m *ServiceProbe) matchProbeResponse(probe *CompiledFingerprint, response s
 	return nil
 }
 
-func (m *ServiceProbe) activeProbeRemaining(ctx context.Context, target *engine.Target, addr string, timeout time.Duration, probes []*CompiledFingerprint) *serviceMatch {
+func (m *ServiceProbe) activeProbeRemaining(ctx context.Context, target *core.Target, addr string, timeout time.Duration, probes []*CompiledFingerprint) *serviceMatch {
 	for _, probe := range probes {
 		select {
 		case <-ctx.Done():
@@ -404,7 +404,7 @@ func (m *ServiceProbe) activeProbeRemaining(ctx context.Context, target *engine.
 	return nil
 }
 
-func (m *ServiceProbe) tlsProbe(ctx context.Context, addr string, target *engine.Target, timeout time.Duration) *serviceMatch {
+func (m *ServiceProbe) tlsProbe(ctx context.Context, addr string, target *core.Target, timeout time.Duration) *serviceMatch {
 	dialer := &net.Dialer{Timeout: timeout}
 	rawConn, err := dialer.DialContext(ctx, "tcp", addr)
 	if err != nil {
@@ -441,7 +441,7 @@ func (m *ServiceProbe) tlsProbe(ctx context.Context, addr string, target *engine
 	}
 }
 
-func (m *ServiceProbe) fallbackPortMap(target *engine.Target) *serviceMatch {
+func (m *ServiceProbe) fallbackPortMap(target *core.Target) *serviceMatch {
 	if svc := m.store.LookupPort(target.Port); svc != "" {
 		return &serviceMatch{Service: svc, Method: "port_map", Confidence: 40}
 	}

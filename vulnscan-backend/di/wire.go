@@ -8,9 +8,13 @@ import (
 	"vulnscan-backend/boot"
 	"vulnscan-backend/circular"
 	"vulnscan-backend/cluster"
+	"vulnscan-backend/compliance"
+	"vulnscan-backend/dashboard"
 	"vulnscan-backend/incident"
+	"vulnscan-backend/notify"
 	"vulnscan-backend/organize"
-	"vulnscan-backend/sitemonitor"
+	"vulnscan-backend/report"
+	sitemon "vulnscan-backend/sitemonitor"
 	"vulnscan-backend/tagging"
 	"vulnscan-backend/task"
 	"vulnscan-backend/vuln"
@@ -35,12 +39,17 @@ func InitializeHandlers() *Handlers {
 		tagging.Set,
 		organize.Set,
 		assetmgr.Set,
-		sitemonitor.WireSet,
+		sitemon.WireSet,
 		circular.WireSet,
 		incident.WireSet,
+		dashboard.WireSet,
+		notify.WireSet,
+		compliance.WireSet,
+		report.WireSet,
 
 		wire.Struct(new(Handlers), "Config", "Web", "DB", "Cache", "Product", "IAM",
-			"Asset", "Task", "Vuln", "Cluster", "Tagging", "Organize", "AssetMgr", "SiteMonitor", "Circular", "Incident"),
+			"Asset", "Task", "Vuln", "Cluster", "Tagging", "Organize", "AssetMgr", "SiteMonitor", "Circular", "Incident",
+			"Dashboard", "Notify", "Compliance", "Report"),
 	)
 	return nil
 }

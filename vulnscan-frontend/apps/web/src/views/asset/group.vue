@@ -24,7 +24,6 @@ const ruleFieldOptions = [
   { label: '类型', value: 'type' },
   { label: '系统类型', value: 'system_type' },
   { label: '保护等级', value: 'security_protection_level' },
-  { label: '生命周期', value: 'lifecycle_state' },
   { label: '数据来源', value: 'data_source' },
   { label: '地址', value: 'address' },
   { label: '域名', value: 'domain' },

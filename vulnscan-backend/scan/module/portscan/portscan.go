@@ -12,7 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"vulnscan-backend/scan/engine"
+	"vulnscan-backend/scan/core"
 )
 
 type PortScanner struct{}
@@ -23,15 +23,15 @@ func (m *PortScanner) ID() string       { return "port_scan" }
 func (m *PortScanner) Name() string     { return "端口扫描" }
 func (m *PortScanner) Category() string { return "host" }
 
-func (m *PortScanner) Params() []engine.ModuleParam {
-	return []engine.ModuleParam{
+func (m *PortScanner) Params() []core.ModuleParam {
+	return []core.ModuleParam{
 		{
 			Key:          "ports",
 			Name:         "端口范围",
 			Type:         "select",
 			DefaultValue: "top100",
 			Description:  "扫描的端口范围，也可输入自定义范围如 80,443,1-1000",
-			Options: []engine.ParamOption{
+			Options: []core.ParamOption{
 				{Value: "top100", Label: "常用100端口"},
 				{Value: "top1000", Label: "常用1000端口"},
 				{Value: "full", Label: "全端口 (1-65535)"},
@@ -40,14 +40,14 @@ func (m *PortScanner) Params() []engine.ModuleParam {
 	}
 }
 
-func (m *PortScanner) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
+func (m *PortScanner) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {
 	start := time.Now()
 
 	ports := parsePorts(config)
 	baseTimeout := parseTimeout(config)
 	concurrency := parseConcurrency(config)
 
-	result := &engine.ModuleResult{ModuleID: m.ID()}
+	result := &core.ModuleResult{ModuleID: m.ID()}
 	var mu sync.Mutex
 	var scanned atomic.Int64
 
@@ -92,7 +92,7 @@ func (m *PortScanner) Run(ctx context.Context, targets []*engine.Target, config 
 			ac.acquire()
 			wg.Add(1)
 
-			go func(t *engine.Target, dstIP string, p int, to time.Duration) {
+			go func(t *core.Target, dstIP string, p int, to time.Duration) {
 				defer wg.Done()
 				defer ac.release()
 
@@ -111,14 +111,14 @@ func (m *PortScanner) Run(ctx context.Context, targets []*engine.Target, config 
 				conn.Close()
 				ac.reportSuccess(elapsed)
 
-				newTarget := &engine.Target{
+				newTarget := &core.Target{
 					Host:     t.Host,
 					IP:       dstIP,
 					Port:     p,
 					Protocol: "tcp",
 				}
 
-				finding := &engine.Finding{
+				finding := &core.Finding{
 					ModuleID:         "port_scan",
 					Target:           newTarget,
 					Type:             "port_open",
@@ -287,7 +287,7 @@ func probeRTT(ip string, maxTimeout time.Duration) time.Duration {
 	return 0
 }
 
-func resolveHost(t *engine.Target) string {
+func resolveHost(t *core.Target) string {
 	if t.IP != "" {
 		return t.IP
 	}

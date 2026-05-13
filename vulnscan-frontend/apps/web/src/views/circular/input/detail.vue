@@ -3,8 +3,8 @@ import { onMounted, ref } from 'vue';
 import { NButton, NCard, NDescriptions, NDescriptionsItem, NSpace, NSteps, NStep, NTag, NTimeline, NTimelineItem, NEmpty, NSpin } from 'naive-ui';
 import { useRoute, useRouter } from 'vue-router';
 
-import type { DynamicFormTemplate } from '#/api/form';
-import { getDynamicFormTemplate } from '#/api/form';
+import type { DynamicFormTemplate } from '#/api/formdesign';
+import { getDynamicFormTemplate } from '#/api/formdesign';
 import {
   getInputDetail,
   getCircularOplogs,

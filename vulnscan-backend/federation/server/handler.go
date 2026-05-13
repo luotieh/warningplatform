@@ -31,9 +31,8 @@ func NewHandler(db *gorm.DB) *Handler {
 
 // Register handles sub-master registration.
 func (h *Handler) Register(c *gin.Context) {
-	var req fedSync.RegisterRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		web.Fail(c).Msg(err.Error()).Send()
+	req, ok := web.BindJSON[fedSync.RegisterRequest](c)
+	if !ok {
 		return
 	}
 
@@ -109,9 +108,8 @@ func (h *Handler) Register(c *gin.Context) {
 
 // Heartbeat handles sub-master heartbeats.
 func (h *Handler) Heartbeat(c *gin.Context) {
-	var req fedSync.HeartbeatRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		web.Fail(c).Msg(err.Error()).Send()
+	req, ok := web.BindJSON[fedSync.HeartbeatRequest](c)
+	if !ok {
 		return
 	}
 
@@ -209,21 +207,33 @@ func (h *Handler) SyncManifest(c *gin.Context) {
 	}).Send()
 }
 
+// vulnReportPayload is the request body for ReceiveVulnReport.
+type vulnReportPayload struct {
+	ReportAt   time.Time        `json:"report_at"`
+	Period     string           `json:"period"`
+	TotalVulns int64            `json:"total_vulns"`
+	BySeverity map[string]int64 `json:"by_severity"`
+	ByType     map[string]int64 `json:"by_type"`
+	NewVulns   int64            `json:"new_vulns"`
+	FixedVulns int64            `json:"fixed_vulns"`
+}
+
+// scanReportPayload is the request body for ReceiveScanReport.
+type scanReportPayload struct {
+	ReportAt       time.Time `json:"report_at"`
+	ActiveTasks    int64     `json:"active_tasks"`
+	CompletedToday int64     `json:"completed_today"`
+	TotalTargets   int64     `json:"total_targets"`
+	ActiveWorkers  int64     `json:"active_workers"`
+	AvgScanTime    float64   `json:"avg_scan_time_sec"`
+}
+
 // ReceiveVulnReport accepts vulnerability summary reports from sub-masters.
 func (h *Handler) ReceiveVulnReport(c *gin.Context) {
 	subCode := c.GetString("sub_master_code")
 
-	var payload struct {
-		ReportAt   time.Time        `json:"report_at"`
-		Period     string           `json:"period"`
-		TotalVulns int64            `json:"total_vulns"`
-		BySeverity map[string]int64 `json:"by_severity"`
-		ByType     map[string]int64 `json:"by_type"`
-		NewVulns   int64            `json:"new_vulns"`
-		FixedVulns int64            `json:"fixed_vulns"`
-	}
-	if err := c.ShouldBindJSON(&payload); err != nil {
-		web.Fail(c).Msg(err.Error()).Send()
+	payload, ok := web.BindJSON[vulnReportPayload](c)
+	if !ok {
 		return
 	}
 
@@ -256,16 +266,8 @@ func (h *Handler) ReceiveVulnReport(c *gin.Context) {
 func (h *Handler) ReceiveScanReport(c *gin.Context) {
 	subCode := c.GetString("sub_master_code")
 
-	var payload struct {
-		ReportAt       time.Time `json:"report_at"`
-		ActiveTasks    int64     `json:"active_tasks"`
-		CompletedToday int64     `json:"completed_today"`
-		TotalTargets   int64     `json:"total_targets"`
-		ActiveWorkers  int64     `json:"active_workers"`
-		AvgScanTime    float64   `json:"avg_scan_time_sec"`
-	}
-	if err := c.ShouldBindJSON(&payload); err != nil {
-		web.Fail(c).Msg(err.Error()).Send()
+	payload, ok := web.BindJSON[scanReportPayload](c)
+	if !ok {
 		return
 	}
 

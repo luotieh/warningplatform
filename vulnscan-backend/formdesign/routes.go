@@ -14,7 +14,7 @@ func NewRoutes(handler *Handler) *Routes {
 }
 
 func (r *Routes) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
-	return authorize.RegisterRoutes(e.Group("/form"), []authorize.Route{
+	return authorize.RegisterRoutes(e.Group("/formdesign"), []authorize.Route{
 		{
 			Name: "表单中心", Enabled: true,
 			Children: []authorize.Route{

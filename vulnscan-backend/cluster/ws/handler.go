@@ -44,8 +44,8 @@ func (h *WSHandler) RegisterRoutes(router *gin.RouterGroup) {
 
 // Status returns hub statistics as JSON.
 func (h *WSHandler) Status(c *gin.Context) {
-	web.RespContent(c, web.Success, map[string]interface{}{
+	web.OK(c).Data(map[string]interface{}{
 		"connected_workers": h.hub.WorkerCount(),
 		"worker_ids":        h.hub.OnlineWorkerIDs(),
-	})
+	}).Send()
 }

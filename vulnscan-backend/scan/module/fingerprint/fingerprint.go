@@ -18,7 +18,7 @@ import (
 	"gorm.io/gorm"
 
 	"vulnscan-backend/model"
-	"vulnscan-backend/scan/engine"
+	"vulnscan-backend/scan/core"
 )
 
 type WebFingerprinter struct {
@@ -86,9 +86,9 @@ func (m *WebFingerprinter) ID() string       { return "web_fingerprint" }
 func (m *WebFingerprinter) Name() string     { return "Web 指纹识别" }
 func (m *WebFingerprinter) Category() string { return "recon" }
 
-func (m *WebFingerprinter) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
+func (m *WebFingerprinter) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {
 	start := time.Now()
-	result := &engine.ModuleResult{ModuleID: m.ID()}
+	result := &core.ModuleResult{ModuleID: m.ID()}
 
 	m.ensureRulesLoaded()
 
@@ -111,7 +111,7 @@ func (m *WebFingerprinter) Run(ctx context.Context, targets []*engine.Target, co
 
 		wg.Add(1)
 		sem <- struct{}{}
-		go func(target *engine.Target) {
+		go func(target *core.Target) {
 			defer wg.Done()
 			defer func() { <-sem }()
 
@@ -121,7 +121,7 @@ func (m *WebFingerprinter) Run(ctx context.Context, targets []*engine.Target, co
 			}
 
 			for _, match := range matches {
-				finding := &engine.Finding{
+				finding := &core.Finding{
 					ModuleID:   m.ID(),
 					Target:     target,
 					Type:       "fingerprint",
@@ -265,7 +265,7 @@ func compileDBRule(rec model.WebFingerprint) (*FingerprintRule, error) {
 	return rule, nil
 }
 
-func (m *WebFingerprinter) fingerprint(ctx context.Context, target *engine.Target, rules []FingerprintRule) []FingerprintMatch {
+func (m *WebFingerprinter) fingerprint(ctx context.Context, target *core.Target, rules []FingerprintRule) []FingerprintMatch {
 	url := buildURL(target)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -359,7 +359,7 @@ func (m *WebFingerprinter) matchRule(rule FingerprintRule, headers http.Header, 
 	return headerMatched && bodyMatched && metaMatched && hasCondition
 }
 
-func (m *WebFingerprinter) fetchFaviconHash(ctx context.Context, target *engine.Target) string {
+func (m *WebFingerprinter) fetchFaviconHash(ctx context.Context, target *core.Target) string {
 	url := buildURL(target) + "/favicon.ico"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -395,7 +395,7 @@ func (m *WebFingerprinter) Reload() {
 	m.ensureRulesLoaded()
 }
 
-func buildURL(target *engine.Target) string {
+func buildURL(target *core.Target) string {
 	if target.URL != "" {
 		return target.URL
 	}
@@ -410,7 +410,7 @@ func buildURL(target *engine.Target) string {
 	return fmt.Sprintf("%s://%s:%d", scheme, host, target.Port)
 }
 
-func isHTTPTarget(t *engine.Target) bool {
+func isHTTPTarget(t *core.Target) bool {
 	if t.URL != "" {
 		return true
 	}

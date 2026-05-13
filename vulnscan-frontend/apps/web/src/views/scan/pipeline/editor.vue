@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { computed, h, onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 
 import {
   NButton,
@@ -7,8 +7,6 @@ import {
   NSpace,
   NTag,
   NEmpty,
-  NGrid,
-  NGi,
   NCollapse,
   NCollapseItem,
   NTooltip,
@@ -244,7 +242,7 @@ onMounted(loadData);
           <NCard
             size="small"
             :style="{
-              borderLeft: `4px solid ${categoryColors[stage.modules[0]?.category] || '#1890ff'}`,
+              borderLeft: `4px solid ${categoryColors[stage.modules[0]?.category ?? ''] || '#1890ff'}`,
             }"
           >
             <template #header>

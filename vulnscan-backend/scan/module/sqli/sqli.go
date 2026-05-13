@@ -9,13 +9,14 @@ import (
 	"time"
 
 	"vulnscan-backend/pkg/payload"
-	"vulnscan-backend/scan/engine"
+	"vulnscan-backend/scan/core"
+	"vulnscan-backend/scan/vulnkit"
 )
 
 type SQLiScanner struct {
-	base     *engine.VulnScanner
-	scanCtx  *engine.ScanContext
-	wafEnc   *engine.WAFBypassEncoder
+	base     *vulnkit.VulnScanner
+	scanCtx  *vulnkit.ScanContext
+	wafEnc   *vulnkit.WAFBypassEncoder
 	payloads *payload.Loader
 }
 
@@ -27,34 +28,34 @@ func (m *SQLiScanner) ID() string       { return "sqli" }
 func (m *SQLiScanner) Name() string     { return "SQL 注入检测" }
 func (m *SQLiScanner) Category() string { return "vuln" }
 
-func (m *SQLiScanner) Params() []engine.ModuleParam {
-	return []engine.ModuleParam{engine.VulnVerificationParam()}
+func (m *SQLiScanner) Params() []core.ModuleParam {
+	return []core.ModuleParam{core.VulnVerificationParam()}
 }
 
-func (m *SQLiScanner) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
-	m.base = engine.NewVulnScanner(config)
-	m.scanCtx = engine.BuildScanContext(config)
-	m.wafEnc = engine.NewWAFBypassEncoder(m.scanCtx)
-	verifyLevel := engine.GetConfigValue(config, "verification_level", "both")
+func (m *SQLiScanner) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {
+	m.base = vulnkit.NewVulnScanner(config)
+	m.scanCtx = vulnkit.BuildScanContext(config)
+	m.wafEnc = vulnkit.NewWAFBypassEncoder(m.scanCtx)
+	verifyLevel := core.GetConfigValue(config, "verification_level", "both")
 
-	result := m.base.RunTargets(ctx, m.ID(), targets, func(ctx context.Context, target *engine.Target) []*engine.Finding {
+	result := m.base.RunTargets(ctx, m.ID(), targets, func(ctx context.Context, target *core.Target) []*core.Finding {
 		return m.testTarget(ctx, target, verifyLevel)
 	})
 
-	engine.LogModuleComplete(m.ID(), len(targets), len(result.Findings), result.Duration)
+	vulnkit.LogModuleComplete(m.ID(), len(targets), len(result.Findings), result.Duration)
 	return result, nil
 }
 
-func (m *SQLiScanner) testTarget(ctx context.Context, target *engine.Target, verifyLevel string) []*engine.Finding {
-	points := engine.ExtractInjectionPoints(target)
+func (m *SQLiScanner) testTarget(ctx context.Context, target *core.Target, verifyLevel string) []*core.Finding {
+	points := vulnkit.ExtractInjectionPoints(target)
 	if len(points) == 0 {
 		parsedURL, err := url.Parse(target.URL)
 		if err != nil || len(parsedURL.Query()) == 0 {
 			return nil
 		}
 		for param := range parsedURL.Query() {
-			points = append(points, engine.InjectionPoint{
-				Type: engine.InjectQuery,
+			points = append(points, vulnkit.InjectionPoint{
+				Type: vulnkit.InjectQuery,
 				Name: param,
 			})
 		}
@@ -65,21 +66,21 @@ func (m *SQLiScanner) testTarget(ctx context.Context, target *engine.Target, ver
 	}
 
 	baseBody := m.base.FetchBody(ctx, target.URL)
-	var findings []*engine.Finding
+	var findings []*core.Finding
 
 	for _, point := range points {
 		found := false
 
-		if engine.ShouldRunPrinciple(verifyLevel) {
+		if core.ShouldRunPrinciple(verifyLevel) {
 			if f := m.testErrorBased(ctx, target, point); f != nil {
-				f.VerificationLevel = engine.VerifyPrinciple
+				f.VerificationLevel = core.VerifyPrinciple
 				f.VerificationDetail = "error-pattern-match"
 				findings = append(findings, f)
 				found = true
 			}
 			if !found {
 				if f := m.testUnionBased(ctx, target, point); f != nil {
-					f.VerificationLevel = engine.VerifyPrinciple
+					f.VerificationLevel = core.VerifyPrinciple
 					f.VerificationDetail = "union-column-probe"
 					findings = append(findings, f)
 					found = true
@@ -87,16 +88,16 @@ func (m *SQLiScanner) testTarget(ctx context.Context, target *engine.Target, ver
 			}
 		}
 
-		if engine.ShouldRunExploit(verifyLevel) {
+		if core.ShouldRunExploit(verifyLevel) {
 			if f := m.testBooleanBased(ctx, target, point, baseBody); f != nil {
-				f.VerificationLevel = engine.VerifyExploit
+				f.VerificationLevel = core.VerifyExploit
 				f.VerificationDetail = "boolean-response-diff"
 				findings = append(findings, f)
 				found = true
 			}
 			if !found {
 				if f := m.testTimeBased(ctx, target, point); f != nil {
-					f.VerificationLevel = engine.VerifyExploit
+					f.VerificationLevel = core.VerifyExploit
 					f.VerificationDetail = "time-delay-confirmed"
 					findings = append(findings, f)
 				}
@@ -107,7 +108,7 @@ func (m *SQLiScanner) testTarget(ctx context.Context, target *engine.Target, ver
 	return findings
 }
 
-func (m *SQLiScanner) testErrorBased(ctx context.Context, target *engine.Target, point engine.InjectionPoint) *engine.Finding {
+func (m *SQLiScanner) testErrorBased(ctx context.Context, target *core.Target, point vulnkit.InjectionPoint) *core.Finding {
 	payloads := m.getErrorPayloads()
 
 	for _, p := range payloads {
@@ -118,7 +119,7 @@ func (m *SQLiScanner) testErrorBased(ctx context.Context, target *engine.Target,
 
 		for _, pattern := range m.getErrorPatterns() {
 			if pattern.MatchString(body) {
-				return &engine.Finding{
+				return &core.Finding{
 					ModuleID:    m.ID(),
 					Target:      target,
 					Type:        "sqli_error",
@@ -126,7 +127,7 @@ func (m *SQLiScanner) testErrorBased(ctx context.Context, target *engine.Target,
 					Description: fmt.Sprintf("%s参数 %s 使用 payload '%s' 触发了数据库错误", point.Type, point.Name, p),
 					Severity:    "high",
 					Confidence:  85,
-					Evidence:    engine.Truncate(body, 500),
+					Evidence:    vulnkit.Truncate(body, 500),
 					Timestamp:   time.Now(),
 					Data: map[string]string{
 						"param":      point.Name,
@@ -142,7 +143,7 @@ func (m *SQLiScanner) testErrorBased(ctx context.Context, target *engine.Target,
 	return nil
 }
 
-func (m *SQLiScanner) testBooleanBased(ctx context.Context, target *engine.Target, point engine.InjectionPoint, baseBody string) *engine.Finding {
+func (m *SQLiScanner) testBooleanBased(ctx context.Context, target *core.Target, point vulnkit.InjectionPoint, baseBody string) *core.Finding {
 	boolPairs := m.getBooleanPairs()
 
 	for _, pair := range boolPairs {
@@ -164,7 +165,7 @@ func (m *SQLiScanner) testBooleanBased(ctx context.Context, target *engine.Targe
 		tfDiff := levenshteinRatio(trueBody, falseBody)
 
 		if trueDiff > 0.75 && falseDiff < 0.5 && tfDiff < 0.6 {
-			return &engine.Finding{
+			return &core.Finding{
 				ModuleID:    m.ID(),
 				Target:      target,
 				Type:        "sqli_boolean",
@@ -189,7 +190,7 @@ func (m *SQLiScanner) testBooleanBased(ctx context.Context, target *engine.Targe
 	return nil
 }
 
-func (m *SQLiScanner) testTimeBased(ctx context.Context, target *engine.Target, point engine.InjectionPoint) *engine.Finding {
+func (m *SQLiScanner) testTimeBased(ctx context.Context, target *core.Target, point vulnkit.InjectionPoint) *core.Finding {
 	timePayloads := m.getTimePayloads()
 
 	baseStart := time.Now()
@@ -224,7 +225,7 @@ func (m *SQLiScanner) testTimeBased(ctx context.Context, target *engine.Target, 
 					dbType = tp.Databases[0]
 				}
 
-				return &engine.Finding{
+				return &core.Finding{
 					ModuleID:    m.ID(),
 					Target:      target,
 					Type:        "sqli_time",
@@ -251,7 +252,7 @@ func (m *SQLiScanner) testTimeBased(ctx context.Context, target *engine.Target, 
 	return nil
 }
 
-func (m *SQLiScanner) testUnionBased(ctx context.Context, target *engine.Target, point engine.InjectionPoint) *engine.Finding {
+func (m *SQLiScanner) testUnionBased(ctx context.Context, target *core.Target, point vulnkit.InjectionPoint) *core.Finding {
 	for cols := 1; cols <= 10; cols++ {
 		select {
 		case <-ctx.Done():
@@ -278,7 +279,7 @@ func (m *SQLiScanner) testUnionBased(ctx context.Context, target *engine.Target,
 		}
 
 		if !hasError && cols > 1 {
-			return &engine.Finding{
+			return &core.Finding{
 				ModuleID:    m.ID(),
 				Target:      target,
 				Type:        "sqli_union",

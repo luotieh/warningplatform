@@ -48,7 +48,7 @@ func (h *Handler) Search(c *gin.Context) {
 	}
 
 	if query == "" {
-		web.Resp(c, web.ParamsMissingRequired)
+		web.Err(c, web.ParamsMissingRequired).Send()
 		return
 	}
 
@@ -56,14 +56,14 @@ func (h *Handler) Search(c *gin.Context) {
 	if providerName != "" {
 		p, ok := h.providers[providerName]
 		if !ok {
-			web.Resp(c, web.ParamsMissingRequired)
+			web.Err(c, web.ParamsMissingRequired).Send()
 			return
 		}
 		var err error
 		assets, err = p.Search(query, maxResults)
 		if err != nil {
 			slog.Error("cyberspace search failed", "provider", providerName, "error", err)
-			web.Resp(c, web.InternalError)
+			web.Fail(c).Err(err).Send()
 			return
 		}
 	} else {
@@ -77,13 +77,13 @@ func (h *Handler) Search(c *gin.Context) {
 		}
 	}
 
-	web.RespContentWithNum(c, web.Success, int64(len(assets)), assets)
+	web.OK(c).List(int64(len(assets)), assets).Send()
 }
 
 func (h *Handler) HostLookup(c *gin.Context) {
 	ip := c.Query("ip")
 	if ip == "" {
-		web.Resp(c, web.ParamsMissingRequired)
+		web.Err(c, web.ParamsMissingRequired).Send()
 		return
 	}
 
@@ -97,7 +97,7 @@ func (h *Handler) HostLookup(c *gin.Context) {
 		assets = append(assets, results...)
 	}
 
-	web.RespContentWithNum(c, web.Success, int64(len(assets)), assets)
+	web.OK(c).List(int64(len(assets)), assets).Send()
 }
 
 func (h *Handler) ListProviders(c *gin.Context) {
@@ -114,7 +114,7 @@ func (h *Handler) ListProviders(c *gin.Context) {
 		})
 	}
 
-	web.RespContent(c, web.Success, list)
+	web.OK(c).Data(list).Send()
 }
 
 type CyberQuery struct {
@@ -126,7 +126,7 @@ func NewCyberQuery(handler *Handler) *CyberQuery {
 }
 
 func (m *CyberQuery) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
-	return authorize.RegisterRoutes(e.Group("/cyberspace"), []authorize.Route{
+	return authorize.RegisterRoutes(e.Group("/cyberquery"), []authorize.Route{
 		{
 			Name: "网络空间搜索", Enabled: true,
 			Children: []authorize.Route{

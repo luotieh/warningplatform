@@ -135,7 +135,6 @@ type VerifyTaskActionReq struct {
 type VerifyTaskResp struct {
 	model.AssetVerifyTask
 	AssetName  string `json:"asset_name"`
-	SystemName string `json:"system_name"`
 	Address    string `json:"address"`
 	AssetType  string `json:"asset_type"`
 	DataNumber string `json:"data_number"`

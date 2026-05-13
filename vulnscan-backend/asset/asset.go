@@ -1,3 +1,4 @@
+// Package asset 资产台账管理：CRUD、导入导出、富化、去重、风险计算。
 package asset
 
 import (
@@ -32,11 +33,6 @@ func (m *Asset) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
 				{Name: "批量导出", Path: "export", Method: "GET", Handler: m.handler.Export, Enabled: true},
 				{Name: "更新资产", Path: ":id", Method: "PUT", Handler: m.handler.Update, Enabled: true},
 				{Name: "删除资产", Path: ":id", Method: "DELETE", Handler: m.handler.Delete, Enabled: true},
-				{Name: "子资产列表", Path: ":id/children", Method: "GET", Handler: m.enrichHandler.ChildrenList, Enabled: true},
-				{Name: "设置父资产", Path: ":id/parent", Method: "PUT", Handler: m.enrichHandler.SetParent, Enabled: true},
-				{Name: "关联关系列表", Path: ":id/relations", Method: "GET", Handler: m.enrichHandler.RelationList, Enabled: true},
-				{Name: "创建关联关系", Path: "relation", Method: "POST", Handler: m.enrichHandler.RelationCreate, Enabled: true},
-				{Name: "删除关联关系", Path: "relation/:relationId", Method: "DELETE", Handler: m.enrichHandler.RelationDelete, Enabled: true},
 				{Name: "资产去重", Path: "dedup", Method: "POST", Handler: m.enrichHandler.Dedup, Enabled: true},
 				{Name: "网络空间入库", Path: "import-cyberspace", Method: "POST", Handler: m.enrichHandler.ImportFromCyberspace, Enabled: true},
 				{Name: "信息富化", Path: ":id/enrich-run", Method: "POST", Handler: m.enrichHandler.EnrichAsset, Enabled: true},

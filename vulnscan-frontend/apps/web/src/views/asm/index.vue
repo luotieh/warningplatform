@@ -3,17 +3,19 @@ import { h, onMounted, ref } from 'vue';
 import {
   NButton, NCard, NDataTable, NDrawer, NDrawerContent, NEmpty, NForm,
   NFormItem, NGrid, NGridItem, NInput, NModal, NPopconfirm, NSelect,
-  NSpace, NStatistic, NTabPane, NTabs, NTag, useMessage,
+  NSpace, NStatistic, NTabPane, NTabs, NTag,
 } from 'naive-ui';
 import type { ASMChange, ASMDiscoveredAsset, ASMProject, ASMSeed } from '#/api/asm';
 import {
   addSeed, createProject, deleteProject, deleteSeed,
   getChanges, getDiscoveredAssets, getExposureReport, getProject, getProjects, runDiscovery,
 } from '#/api/asm';
+import { message } from '#/adapter/naive';
+import { useErrorHandler } from '#/composables/useErrorHandler';
 
 defineOptions({ name: 'ASMIndex' });
 
-const message = useMessage();
+const { handleError } = useErrorHandler();
 const loading = ref(false);
 const projects = ref<ASMProject[]>([]);
 const showCreate = ref(false);
@@ -86,7 +88,7 @@ async function fetchProjects() {
     const res: any = await getProjects();
     const body = res?.data ?? res;
     projects.value = body?.data ?? [];
-  } catch { message.error('获取项目列表失败'); }
+  } catch (e) { handleError(e, '获取项目列表失败'); }
   finally { loading.value = false; }
 }
 
@@ -99,12 +101,12 @@ async function onCreate() {
     showCreate.value = false;
     createForm.value = { name: '', description: '', schedule: '0 0 * * *', seeds: [{ type: 'domain', value: '' }] };
     fetchProjects();
-  } catch { message.error('创建失败'); }
+  } catch (e) { handleError(e, '创建失败'); }
 }
 
 async function onDelete(id: string) {
   try { await deleteProject(id); message.success('已删除'); fetchProjects(); }
-  catch { message.error('删除失败'); }
+  catch (e) { handleError(e, '删除失败'); }
 }
 
 async function openProject(project: ASMProject) {
@@ -148,7 +150,7 @@ async function onRunDiscovery(id: string) {
     if (activeProject.value?.id === id) {
       await loadProjectData(id);
     }
-  } catch { message.error('发现执行失败'); }
+  } catch (e) { handleError(e, '发现执行失败'); }
   finally { discovering.value = false; }
 }
 
@@ -172,7 +174,7 @@ async function onAddSeed() {
     newSeedValue.value = '';
     const res: any = await getProject(activeProject.value.id);
     projectSeeds.value = (res?.data ?? res)?.seeds ?? [];
-  } catch { message.error('添加失败'); }
+  } catch (e) { handleError(e, '添加失败'); }
 }
 
 async function onDeleteSeed(seedId: string) {
@@ -181,7 +183,7 @@ async function onDeleteSeed(seedId: string) {
     await deleteSeed(activeProject.value.id, seedId);
     projectSeeds.value = projectSeeds.value.filter(s => s.id !== seedId);
     message.success('已删除');
-  } catch { message.error('删除失败'); }
+  } catch (e) { handleError(e, '删除失败'); }
 }
 
 onMounted(fetchProjects);

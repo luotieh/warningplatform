@@ -9,11 +9,12 @@ import (
 
 	"vulnscan-backend/model"
 	"vulnscan-backend/pkg/payload"
-	"vulnscan-backend/scan/engine"
+	"vulnscan-backend/scan/core"
+	"vulnscan-backend/scan/vulnkit"
 )
 
 type XXEScanner struct {
-	base     *engine.VulnScanner
+	base     *vulnkit.VulnScanner
 	payloads *payload.Loader
 }
 
@@ -25,8 +26,8 @@ func (m *XXEScanner) ID() string       { return "xxe" }
 func (m *XXEScanner) Name() string     { return "XXE 外部实体注入" }
 func (m *XXEScanner) Category() string { return "vuln" }
 
-func (m *XXEScanner) Params() []engine.ModuleParam {
-	return []engine.ModuleParam{engine.VulnVerificationParam()}
+func (m *XXEScanner) Params() []core.ModuleParam {
+	return []core.ModuleParam{core.VulnVerificationParam()}
 }
 
 var hostnamePattern = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
@@ -44,22 +45,22 @@ var xmlParserErrors = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)EntityRef`),
 }
 
-func (m *XXEScanner) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
-	m.base = engine.NewVulnScanner(config)
-	verifyLevel := engine.GetConfigValue(config, "verification_level", "both")
+func (m *XXEScanner) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {
+	m.base = vulnkit.NewVulnScanner(config)
+	verifyLevel := core.GetConfigValue(config, "verification_level", "both")
 
-	result := m.base.RunTargets(ctx, m.ID(), targets, func(ctx context.Context, target *engine.Target) []*engine.Finding {
+	result := m.base.RunTargets(ctx, m.ID(), targets, func(ctx context.Context, target *core.Target) []*core.Finding {
 		return m.testTarget(ctx, target, verifyLevel)
 	})
 
-	engine.LogModuleComplete(m.ID(), len(targets), len(result.Findings), result.Duration)
+	vulnkit.LogModuleComplete(m.ID(), len(targets), len(result.Findings), result.Duration)
 	return result, nil
 }
 
-func (m *XXEScanner) testTarget(ctx context.Context, target *engine.Target, verifyLevel string) []*engine.Finding {
-	var findings []*engine.Finding
+func (m *XXEScanner) testTarget(ctx context.Context, target *core.Target, verifyLevel string) []*core.Finding {
+	var findings []*core.Finding
 
-	if engine.ShouldRunPrinciple(verifyLevel) {
+	if core.ShouldRunPrinciple(verifyLevel) {
 		if f := m.testXMLAcceptance(ctx, target); f != nil {
 			findings = append(findings, f)
 		}
@@ -68,7 +69,7 @@ func (m *XXEScanner) testTarget(ctx context.Context, target *engine.Target, veri
 		}
 	}
 
-	if engine.ShouldRunExploit(verifyLevel) {
+	if core.ShouldRunExploit(verifyLevel) {
 		if f := m.testFileRead(ctx, target); f != nil {
 			findings = append(findings, f)
 		}
@@ -80,7 +81,7 @@ func (m *XXEScanner) testTarget(ctx context.Context, target *engine.Target, veri
 	return findings
 }
 
-func (m *XXEScanner) testXMLAcceptance(ctx context.Context, target *engine.Target) *engine.Finding {
+func (m *XXEScanner) testXMLAcceptance(ctx context.Context, target *core.Target) *core.Finding {
 	malformedXML := `<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxetest "xxe_test_value">]><root>&xxetest;</root>`
 
 	body := m.base.SendXML(ctx, target.URL, malformedXML)
@@ -90,7 +91,7 @@ func (m *XXEScanner) testXMLAcceptance(ctx context.Context, target *engine.Targe
 
 	for _, pattern := range xmlParserErrors {
 		if pattern.MatchString(body) {
-			return &engine.Finding{
+			return &core.Finding{
 				ModuleID:           m.ID(),
 				Target:             target,
 				Type:               "xxe_error",
@@ -98,8 +99,8 @@ func (m *XXEScanner) testXMLAcceptance(ctx context.Context, target *engine.Targe
 				Description:        "目标接受XML输入并泄露解析器错误信息",
 				Severity:           "medium",
 				Confidence:         65,
-				Evidence:           engine.Truncate(body, 500),
-				VerificationLevel:  engine.VerifyPrinciple,
+				Evidence:           vulnkit.Truncate(body, 500),
+				VerificationLevel:  core.VerifyPrinciple,
 				VerificationDetail: "xml-parser-error-detected",
 				Timestamp:          time.Now(),
 				Data: map[string]string{
@@ -113,7 +114,7 @@ func (m *XXEScanner) testXMLAcceptance(ctx context.Context, target *engine.Targe
 	return nil
 }
 
-func (m *XXEScanner) testEntityEcho(ctx context.Context, target *engine.Target) *engine.Finding {
+func (m *XXEScanner) testEntityEcho(ctx context.Context, target *core.Target) *core.Finding {
 	payload := `<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxecanary "xxe_49_test">]><root><data>&xxecanary;</data></root>`
 
 	body := m.base.SendXML(ctx, target.URL, payload)
@@ -122,7 +123,7 @@ func (m *XXEScanner) testEntityEcho(ctx context.Context, target *engine.Target) 
 	}
 
 	if strings.Contains(body, "xxe_49_test") {
-		return &engine.Finding{
+		return &core.Finding{
 			ModuleID:           m.ID(),
 			Target:             target,
 			Type:               "xxe_entity",
@@ -130,8 +131,8 @@ func (m *XXEScanner) testEntityEcho(ctx context.Context, target *engine.Target) 
 			Description:        "目标解析并回显了XML内部实体定义，表明XML解析器处理DTD",
 			Severity:           "high",
 			Confidence:         75,
-			Evidence:           engine.Truncate(body, 500),
-			VerificationLevel:  engine.VerifyPrinciple,
+			Evidence:           vulnkit.Truncate(body, 500),
+			VerificationLevel:  core.VerifyPrinciple,
 			VerificationDetail: "internal-entity-resolved",
 			Timestamp:          time.Now(),
 			Data: map[string]string{
@@ -204,7 +205,7 @@ func defaultFilePayloads() []xxeFilePayload {
 	}
 }
 
-func (m *XXEScanner) testFileRead(ctx context.Context, target *engine.Target) *engine.Finding {
+func (m *XXEScanner) testFileRead(ctx context.Context, target *core.Target) *core.Finding {
 	for _, fp := range m.getFilePayloads() {
 		select {
 		case <-ctx.Done():
@@ -228,7 +229,7 @@ func (m *XXEScanner) testFileRead(ctx context.Context, target *engine.Target) *e
 		}
 
 		if detected {
-			return &engine.Finding{
+			return &core.Finding{
 				ModuleID:           m.ID(),
 				Target:             target,
 				Type:               "xxe_file_read",
@@ -236,8 +237,8 @@ func (m *XXEScanner) testFileRead(ctx context.Context, target *engine.Target) *e
 				Description:        fmt.Sprintf("通过XXE成功读取服务器文件 %s", fp.file),
 				Severity:           "critical",
 				Confidence:         92,
-				Evidence:           engine.Truncate(body, 500),
-				VerificationLevel:  engine.VerifyExploit,
+				Evidence:           vulnkit.Truncate(body, 500),
+				VerificationLevel:  core.VerifyExploit,
 				VerificationDetail: "file-content-confirmed",
 				Timestamp:          time.Now(),
 				Data: map[string]string{
@@ -303,7 +304,7 @@ func defaultSSRFPayloads() []xxeSSRFPayload {
 	}
 }
 
-func (m *XXEScanner) testSSRFViaXXE(ctx context.Context, target *engine.Target) *engine.Finding {
+func (m *XXEScanner) testSSRFViaXXE(ctx context.Context, target *core.Target) *core.Finding {
 	for _, mp := range m.getSSRFPayloads() {
 		select {
 		case <-ctx.Done():
@@ -317,7 +318,7 @@ func (m *XXEScanner) testSSRFViaXXE(ctx context.Context, target *engine.Target) 
 		}
 
 		if strings.Contains(body, mp.evidence) {
-			return &engine.Finding{
+			return &core.Finding{
 				ModuleID:           m.ID(),
 				Target:             target,
 				Type:               "xxe_ssrf",
@@ -325,8 +326,8 @@ func (m *XXEScanner) testSSRFViaXXE(ctx context.Context, target *engine.Target) 
 				Description:        fmt.Sprintf("通过XXE实体访问内部服务 %s 成功", mp.target),
 				Severity:           "critical",
 				Confidence:         93,
-				Evidence:           engine.Truncate(body, 500),
-				VerificationLevel:  engine.VerifyExploit,
+				Evidence:           vulnkit.Truncate(body, 500),
+				VerificationLevel:  core.VerifyExploit,
 				VerificationDetail: "internal-service-accessed",
 				Timestamp:          time.Now(),
 				Data: map[string]string{

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"vulnscan-backend/scan/engine"
+	"vulnscan-backend/scan/core"
 )
 
 type hopResult struct {
@@ -20,7 +20,7 @@ type hopResult struct {
 	Timeout bool
 }
 
-func (m *NetTopoScanner) traceroute(ctx context.Context, target *engine.Target, host string) []*engine.Finding {
+func (m *NetTopoScanner) traceroute(ctx context.Context, target *core.Target, host string) []*core.Finding {
 	ip := target.IP
 	if ip == "" {
 		ips, err := net.DefaultResolver.LookupHost(ctx, host)
@@ -62,7 +62,7 @@ func (m *NetTopoScanner) traceroute(ctx context.Context, target *engine.Target, 
 		return nil
 	}
 
-	var findings []*engine.Finding
+	var findings []*core.Finding
 
 	hopStrs := make([]string, 0, len(hops))
 	var validHops int
@@ -75,7 +75,7 @@ func (m *NetTopoScanner) traceroute(ctx context.Context, target *engine.Target, 
 		}
 	}
 
-	findings = append(findings, &engine.Finding{
+	findings = append(findings, &core.Finding{
 		ModuleID:    "nettopo",
 		Target:      target,
 		Type:        "traceroute",
@@ -95,7 +95,7 @@ func (m *NetTopoScanner) traceroute(ctx context.Context, target *engine.Target, 
 
 	gateways := detectGateways(hops)
 	if len(gateways) > 0 {
-		findings = append(findings, &engine.Finding{
+		findings = append(findings, &core.Finding{
 			ModuleID:    "nettopo",
 			Target:      target,
 			Type:        "network_gateway",

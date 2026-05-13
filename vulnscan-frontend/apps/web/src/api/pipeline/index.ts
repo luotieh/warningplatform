@@ -1,4 +1,5 @@
 import { baseRequestClient } from '#/api/request';
+import { normalizeListResponse } from '#/api/helpers';
 
 export interface ModuleInfo {
   id: string;
@@ -20,20 +21,17 @@ export interface ProfileInfo {
 
 export async function getPipelineModules() {
   const res = await baseRequestClient.get<any>('/pipeline/modules');
-  const body = (res as Record<string, unknown>).data ?? res;
-  return ((body as { data?: ModuleInfo[] }).data ?? []) as ModuleInfo[];
+  return normalizeListResponse<ModuleInfo>(res);
 }
 
 export async function getPipelineStages() {
   const res = await baseRequestClient.get<any>('/pipeline/stages');
-  const body = (res as Record<string, unknown>).data ?? res;
-  return ((body as { data?: StageInfo[] }).data ?? []) as StageInfo[];
+  return normalizeListResponse<StageInfo>(res);
 }
 
 export async function getPipelineProfiles() {
   const res = await baseRequestClient.get<any>('/pipeline/profiles');
-  const body = (res as Record<string, unknown>).data ?? res;
-  return ((body as { data?: ProfileInfo[] }).data ?? []) as ProfileInfo[];
+  return normalizeListResponse<ProfileInfo>(res);
 }
 
 export interface ModuleParam {
@@ -57,6 +55,5 @@ export interface ModuleConfigInfo {
 
 export async function getModuleConfigs() {
   const res = await baseRequestClient.get<any>('/pipeline/modules/config');
-  const body = (res as Record<string, unknown>).data ?? res;
-  return ((body as { data?: ModuleConfigInfo[] }).data ?? []) as ModuleConfigInfo[];
+  return normalizeListResponse<ModuleConfigInfo>(res);
 }

@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue';
 
 import { NEmpty } from 'naive-ui';
 
-import { normalizeFormOptions, normalizeRuntimeFormRule } from '#/api/form';
+import { normalizeFormOptions, normalizeRuntimeFormRule } from '#/api/formdesign';
 
 defineOptions({ name: 'DynamicFormRenderer' });
 

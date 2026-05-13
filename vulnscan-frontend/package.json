@@ -11,7 +11,7 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "dev": "pnpm --silent -F @vben/web-template run dev",
+    "dev": "pnpm --silent -F @vben/web-template run dev --host 0.0.0.0",
     "build": "cross-env NODE_OPTIONS=--max-old-space-size=8192 pnpm --silent -F @vben/web-template run build",
     "build:prod": "pnpm -r run stub --if-present && pnpm -F @vben-core/design run build && pnpm run build",
     "preview": "pnpm -F @vben/web-template run preview",

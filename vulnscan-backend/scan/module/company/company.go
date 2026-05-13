@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"vulnscan-backend/scan/engine"
+	"vulnscan-backend/scan/core"
 )
 
 type CompanyRecon struct {
@@ -48,9 +48,9 @@ type CompanyAsset struct {
 	Extra      map[string]string
 }
 
-func (m *CompanyRecon) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
+func (m *CompanyRecon) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {
 	start := time.Now()
-	result := &engine.ModuleResult{ModuleID: m.ID()}
+	result := &core.ModuleResult{ModuleID: m.ID()}
 
 	companyName := parseString(config, "company_name", "")
 	if companyName == "" && len(targets) > 0 {
@@ -108,7 +108,7 @@ func (m *CompanyRecon) Run(ctx context.Context, targets []*engine.Target, config
 	wg.Wait()
 
 	for _, a := range allAssets {
-		result.Findings = append(result.Findings, &engine.Finding{
+		result.Findings = append(result.Findings, &core.Finding{
 			ModuleID:   m.ID(),
 			Type:       a.Type,
 			Title:      fmt.Sprintf("[%s] %s", a.Type, a.Value),

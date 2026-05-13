@@ -16,7 +16,6 @@ type Monitor struct {
 	handler       *HandlerMonitor
 	nats          *NatsServiceImpl
 	db            *db.DB
-	agentAPI      *AgentAPI
 	scheduler     *CronScheduler
 	healthChecker *AgentHealthChecker
 }
@@ -39,7 +38,6 @@ func NewMonitor(
 		}
 	}
 
-	agentAPI := NewAgentAPI(database, svcImpl)
 	scheduler := NewCronScheduler(database, svcImpl)
 	healthChecker := NewAgentHealthChecker(database)
 
@@ -47,14 +45,13 @@ func NewMonitor(
 		handler:       handler,
 		nats:          natsSvc,
 		db:            database,
-		agentAPI:      agentAPI,
 		scheduler:     scheduler,
 		healthChecker: healthChecker,
 	}
 }
 
 func (m *Monitor) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
-	return authorize.RegisterRoutes(e.Group("/monitor"), []authorize.Route{
+	return authorize.RegisterRoutes(e.Group("/sitemonitor"), []authorize.Route{
 		{Name: "网站监测", Enabled: true, Children: []authorize.Route{
 			// 词库
 			{Name: "词库列表", Path: "word-libraries", Method: "GET", Handler: m.handler.ListWordLibraries, Enabled: true},
@@ -221,15 +218,16 @@ func (m *Monitor) handleBatchUpdateSchedule(c *gin.Context) {
 	m.handler.BatchUpdateSchedule(c)
 }
 
+type generateReportReq struct {
+	StartDate string   `json:"start_date"`
+	EndDate   string   `json:"end_date"`
+	TaskIDs   []string `json:"task_ids"`
+	Format    string   `json:"format"`
+}
+
 func (m *Monitor) handleGenerateReport(c *gin.Context) {
-	var req struct {
-		StartDate string   `json:"start_date"`
-		EndDate   string   `json:"end_date"`
-		TaskIDs   []string `json:"task_ids"`
-		Format    string   `json:"format"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		web.Err(c, web.CodeDataParamsValidatorError).Msg("请求参数无效").Send()
+	req, ok := web.BindJSON[generateReportReq](c)
+	if !ok {
 		return
 	}
 
@@ -269,10 +267,6 @@ func (m *Monitor) handleScheduleOverview(c *gin.Context) {
 		"active_tasks": m.scheduler.ActiveCount(),
 		"entries":      info,
 	}).Send()
-}
-
-func (m *Monitor) RegisterAgentAPI(e *gin.Engine, pathPrefix string) {
-	m.agentAPI.RegisterRoutes(e, pathPrefix)
 }
 
 func (m *Monitor) GetNatsService() *NatsServiceImpl {

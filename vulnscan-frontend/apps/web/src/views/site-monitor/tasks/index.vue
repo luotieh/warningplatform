@@ -8,9 +8,10 @@ import type {
   MonitorExecution,
   MonitorTask,
   WordLibrary,
-} from '#/api/monitor';
+} from '#/api/sitemonitor';
 
 import { computed, h, onMounted, reactive, ref } from 'vue';
+import { useRouter } from 'vue-router';
 
 import { Page } from '@vben/common-ui';
 
@@ -71,6 +72,7 @@ import {
 } from 'naive-ui';
 
 import { dialog, message } from '#/adapter/naive';
+import { useErrorHandler } from '#/composables/useErrorHandler';
 import {
   batchDeleteExecutions,
   batchDeleteTasks,
@@ -94,7 +96,7 @@ import {
   runTask,
   updateDisposition,
   updateTask,
-} from '#/api/monitor';
+} from '#/api/sitemonitor';
 
 import AvailabilityDetail from '../executions/components/AvailabilityDetail.vue';
 import BlacklinkDetail from '../executions/components/BlacklinkDetail.vue';
@@ -106,6 +108,8 @@ import DimensionConfigForm from './components/DimensionConfigForm.vue';
 
 defineOptions({ name: 'MonitorTasks' });
 
+const router = useRouter();
+const { handleError } = useErrorHandler();
 const loading = ref(false);
 const dataList = ref<MonitorTask[]>([]);
 const safeDataList = computed(() =>
@@ -275,7 +279,9 @@ const columns = computed<DataTableColumns<MonitorTask>>(() => [
             text: true,
             type: 'info',
             size: 'small',
-            onClick: () => openRecordsDialog(row),
+            onClick: () => {
+              router.push(`/monitor/records/${row.id}`);
+            },
           },
           { default: () => '记录' },
         ),
@@ -341,8 +347,8 @@ async function onSearch() {
     });
     dataList.value = res.data || [];
     pagination.itemCount = (res as any).count || 0;
-  } catch (e: any) {
-    message.error(e?.msg || '获取列表失败');
+  } catch (e) {
+    handleError(e, '获取列表失败');
     dataList.value = [];
   } finally {
     loading.value = false;
@@ -375,8 +381,6 @@ const highFreqPresets = [
   { label: '自定义', value: 'custom' },
 ];
 
-const schedulePresets = highFreqPresets;
-
 const dimScheduleDefaults: Record<string, string> = {
   availability: '0 */5 * * * *',
   blacklink: '0 0 */6 * * *',
@@ -385,11 +389,6 @@ const dimScheduleDefaults: Record<string, string> = {
   sensitive_word: '0 0 0 * * *',
   tamper: '0 0 */2 * * *',
 };
-
-function getCronLabel(cronExpr: string) {
-  const p = highFreqPresets.find((x) => x.value === cronExpr);
-  return p ? p.label : cronExpr;
-}
 
 const createForm = reactive({
   dim_availability: true,
@@ -512,8 +511,8 @@ async function handleCreate() {
     message.success('任务创建成功，定时调度已启用');
     createVisible.value = false;
     onSearch();
-  } catch (e: any) {
-    message.error(e?.msg || '创建失败');
+  } catch (e) {
+    handleError(e, '创建失败');
   }
 }
 
@@ -576,8 +575,8 @@ async function handleDrawerSave() {
     message.success('配置已保存');
     drawerVisible.value = false;
     onSearch();
-  } catch (e: any) {
-    message.error(e?.msg || '保存失败');
+  } catch (e) {
+    handleError(e, '保存失败');
   }
 }
 
@@ -586,8 +585,8 @@ async function handleDelete(row: MonitorTask) {
     await deleteTask(row.id);
     message.success('删除成功');
     onSearch();
-  } catch (e: any) {
-    message.error(e?.msg || '删除失败');
+  } catch (e) {
+    handleError(e, '删除失败');
   }
 }
 
@@ -601,8 +600,8 @@ async function handleRun(row: MonitorTask) {
       message.warning((res as any)?.msg || '无可监测维度');
     }
     onSearch();
-  } catch (e: any) {
-    message.error(e?.msg || '触发失败');
+  } catch (e) {
+    handleError(e, '触发失败');
   }
 }
 
@@ -611,8 +610,8 @@ async function handleToggleEnabled(row: MonitorTask) {
     await updateTask(row.id, { enabled: !row.enabled } as any);
     message.success(row.enabled ? '已停止' : '已启动');
     onSearch();
-  } catch (e: any) {
-    message.error(e?.msg || '操作失败');
+  } catch (e) {
+    handleError(e, '操作失败');
   }
 }
 
@@ -632,8 +631,8 @@ function handleBatchToggle() {
         message.success('批量启停成功');
         checkedRowKeys.value = [];
         onSearch();
-      } catch (e: any) {
-        message.error(e?.msg || '批量启停失败');
+      } catch (e) {
+        handleError(e, '批量启停失败');
       }
     },
   });
@@ -655,8 +654,8 @@ function handleBatchSyncNames() {
         message.success(`已同步 ${(res as any).data?.updated || 0} 个任务名称`);
         checkedRowKeys.value = [];
         onSearch();
-      } catch (e: any) {
-        message.error(e?.msg || '批量同步失败');
+      } catch (e) {
+        handleError(e, '批量同步失败');
       }
     },
   });
@@ -678,8 +677,8 @@ function handleBatchDelete() {
         message.success('批量删除成功');
         checkedRowKeys.value = [];
         onSearch();
-      } catch (e: any) {
-        message.error(e?.msg || '批量删除失败');
+      } catch (e) {
+        handleError(e, '批量删除失败');
       }
     },
   });
@@ -703,8 +702,8 @@ async function handleImportFile({ file }: { file: UploadFileInfo }) {
     importDialogVisible.value = false;
     importResultVisible.value = true;
     onSearch();
-  } catch (e: any) {
-    message.error(e?.msg || '导入失败');
+  } catch (e) {
+    handleError(e, '导入失败');
   } finally {
     importUploading.value = false;
   }
@@ -749,8 +748,8 @@ async function handleBatchModifySave() {
     batchModifyVisible.value = false;
     checkedRowKeys.value = [];
     onSearch();
-  } catch (e: any) {
-    message.error(e?.msg || '批量修改失败');
+  } catch (e) {
+    handleError(e, '批量修改失败');
   }
 }
 
@@ -1020,19 +1019,6 @@ const availBarOption = computed(() => {
   };
 });
 
-function openRecordsDialog(row: MonitorTask) {
-  recordsTask.value = row;
-  recordsFilter.dimension = '';
-  recordsFilter.hasIssue = '';
-  recordsFilter.disposition = '';
-  recordsFilter.dateRange = null;
-  recordsPagination.page = 1;
-  trendData.value = null;
-  recordsVisible.value = true;
-  loadRecords();
-  loadTrend(row.id);
-}
-
 async function loadRecords() {
   if (!recordsTask.value) return;
   recordsLoading.value = true;
@@ -1057,8 +1043,8 @@ async function loadRecords() {
     const res = await getExecutionList(params);
     recordsList.value = res.data || [];
     recordsPagination.itemCount = (res as any).count || 0;
-  } catch (e: any) {
-    message.error(e?.msg || '加载监测记录失败');
+  } catch (e) {
+    handleError(e, '加载监测记录失败');
     recordsList.value = [];
   } finally {
     recordsLoading.value = false;
@@ -1102,8 +1088,8 @@ async function submitDisposition() {
     message.success('处置成功');
     dispDialogVisible.value = false;
     loadRecords();
-  } catch (e: any) {
-    message.error(e?.msg || '处置失败');
+  } catch (e) {
+    handleError(e, '处置失败');
   } finally {
     dispLoading.value = false;
   }
@@ -1114,8 +1100,8 @@ async function handleDeleteExecution(row: MonitorExecution) {
     await deleteExecution(row.id);
     message.success('删除成功');
     loadRecords();
-  } catch (e: any) {
-    message.error(e?.msg || '删除失败');
+  } catch (e) {
+    handleError(e, '删除失败');
   }
 }
 
@@ -1152,8 +1138,8 @@ function handleDeleteAllExecutions() {
         await batchDeleteExecutions(ids);
         message.success(`已删除 ${ids.length} 条记录`);
         loadRecords();
-      } catch (e: any) {
-        message.error(e?.msg || '批量删除失败');
+      } catch (e) {
+        handleError(e, '批量删除失败');
       }
     },
   });
@@ -1181,8 +1167,8 @@ async function openDetailDialog(row: MonitorExecution) {
   try {
     const res: any = await getExecutionDetail(row.id);
     detailData.value = res?.data ?? res;
-  } catch (e: any) {
-    message.error(e?.msg || '加载详情失败');
+  } catch (e) {
+    handleError(e, '加载详情失败');
   } finally {
     detailLoading.value = false;
   }

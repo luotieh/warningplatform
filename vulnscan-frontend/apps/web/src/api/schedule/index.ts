@@ -1,3 +1,4 @@
+import { normalizePagedResponse } from '#/api/helpers';
 import { baseRequestClient, requestClient } from '#/api/request';
 
 export interface ScanSchedule {
@@ -22,9 +23,7 @@ export interface ScanSchedule {
 
 export async function getScheduleList(params?: Record<string, any>) {
   const res = await baseRequestClient.get<any>('/schedule/list', { params });
-  const body = (res as Record<string, unknown>).data ?? res;
-  const typed = body as { data?: ScanSchedule[]; count?: number };
-  return { items: typed.data ?? [], total: typed.count ?? 0 };
+  return normalizePagedResponse<ScanSchedule>(res);
 }
 
 export function getScheduleDetail(id: string) {

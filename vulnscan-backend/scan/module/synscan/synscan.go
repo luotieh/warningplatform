@@ -14,7 +14,7 @@ import (
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 
-	"vulnscan-backend/scan/engine"
+	"vulnscan-backend/scan/core"
 )
 
 type SYNScanner struct{}
@@ -25,15 +25,15 @@ func (m *SYNScanner) ID() string       { return "syn_scan" }
 func (m *SYNScanner) Name() string     { return "SYN 半开扫描" }
 func (m *SYNScanner) Category() string { return "host" }
 
-func (m *SYNScanner) Params() []engine.ModuleParam {
-	return []engine.ModuleParam{
+func (m *SYNScanner) Params() []core.ModuleParam {
+	return []core.ModuleParam{
 		{
 			Key:          "ports",
 			Name:         "端口范围",
 			Type:         "select",
 			DefaultValue: "top100",
 			Description:  "扫描的端口范围，也可输入自定义范围如 80,443,1-1000",
-			Options: []engine.ParamOption{
+			Options: []core.ParamOption{
 				{Value: "top100", Label: "常用100端口"},
 				{Value: "top1000", Label: "常用1000端口"},
 				{Value: "full", Label: "全端口 (1-65535)"},
@@ -45,15 +45,15 @@ func (m *SYNScanner) Params() []engine.ModuleParam {
 			Type:         "number",
 			DefaultValue: 10000,
 			Description:  "SYN模式每秒发包数量",
-			Min:          engine.PtrFloat(100),
-			Max:          engine.PtrFloat(100000),
+			Min:          core.PtrFloat(100),
+			Max:          core.PtrFloat(100000),
 		},
 	}
 }
 
-func (m *SYNScanner) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
+func (m *SYNScanner) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {
 	start := time.Now()
-	result := &engine.ModuleResult{ModuleID: m.ID()}
+	result := &core.ModuleResult{ModuleID: m.ID()}
 
 	ports := parsePorts(config)
 	timeout := parseTimeout(config)
@@ -70,7 +70,7 @@ func (m *SYNScanner) Run(ctx context.Context, targets []*engine.Target, config m
 
 // --- 真正的 raw socket SYN 扫描 ---
 
-func (m *SYNScanner) rawSYNScan(ctx context.Context, targets []*engine.Target, ports []int, timeout time.Duration, rateLimit int, result *engine.ModuleResult, start time.Time) *engine.ModuleResult {
+func (m *SYNScanner) rawSYNScan(ctx context.Context, targets []*core.Target, ports []int, timeout time.Duration, rateLimit int, result *core.ModuleResult, start time.Time) *core.ModuleResult {
 	localIP := getLocalIP()
 
 	conn, err := net.ListenPacket("ip4:tcp", "0.0.0.0")
@@ -133,7 +133,7 @@ waitRecv:
 		for _, port := range ports {
 			key := net.JoinHostPort(ip, strconv.Itoa(port))
 			if openPorts.has(key) {
-				newTarget := &engine.Target{
+				newTarget := &core.Target{
 					Host:     t.Host,
 					IP:       ip,
 					Port:     port,
@@ -225,9 +225,9 @@ func buildSYNPacket(srcIP, dstIP string, dstPort int) []byte {
 
 // --- 高速 TCP Connect 回退（非 root 场景）---
 
-func (m *SYNScanner) fastTCPConnect(ctx context.Context, targets []*engine.Target, ports []int, timeout time.Duration, concurrency int) *engine.ModuleResult {
+func (m *SYNScanner) fastTCPConnect(ctx context.Context, targets []*core.Target, ports []int, timeout time.Duration, concurrency int) *core.ModuleResult {
 	start := time.Now()
-	result := &engine.ModuleResult{ModuleID: m.ID()}
+	result := &core.ModuleResult{ModuleID: m.ID()}
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	var scanned atomic.Int64
@@ -256,7 +256,7 @@ func (m *SYNScanner) fastTCPConnect(ctx context.Context, targets []*engine.Targe
 
 			wg.Add(1)
 			sem <- struct{}{}
-			go func(target *engine.Target, dstIP string, p int) {
+			go func(target *core.Target, dstIP string, p int) {
 				defer wg.Done()
 				defer func() { <-sem }()
 
@@ -268,7 +268,7 @@ func (m *SYNScanner) fastTCPConnect(ctx context.Context, targets []*engine.Targe
 				}
 				conn.Close()
 
-				newTarget := &engine.Target{
+				newTarget := &core.Target{
 					Host:     target.Host,
 					IP:       dstIP,
 					Port:     p,
@@ -293,7 +293,7 @@ func (m *SYNScanner) fastTCPConnect(ctx context.Context, targets []*engine.Targe
 	return result
 }
 
-func probeRTT(targets []*engine.Target, maxTimeout time.Duration) time.Duration {
+func probeRTT(targets []*core.Target, maxTimeout time.Duration) time.Duration {
 	if len(targets) == 0 {
 		return 0
 	}
@@ -367,7 +367,7 @@ func getLocalIP() string {
 	return "0.0.0.0"
 }
 
-func resolveIP(t *engine.Target) string {
+func resolveIP(t *core.Target) string {
 	if t.IP != "" {
 		return t.IP
 	}

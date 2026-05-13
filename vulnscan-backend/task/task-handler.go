@@ -20,36 +20,35 @@ func NewHandlerTask(svc taskContract.ServiceTask) *HandlerTask {
 }
 
 func (h *HandlerTask) List(c *gin.Context) {
-	var query taskContract.TaskQuery
-	if err := c.ShouldBindQuery(&query); err != nil {
-		web.Resp(c, web.ParamsMissingRequired)
+	query, ok := web.BindQuery[taskContract.TaskQuery](c)
+	if !ok {
 		return
 	}
 
 	scope := iamsdk.DataFilterScope(c, permission.DefaultFieldMapping)
 	items, count, err := h.svc.List(query, scope)
 	if err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
 
-	web.RespContentWithNum(c, web.Success, count, items)
+	web.OK(c).List(count, items).Send()
 }
 
 func (h *HandlerTask) GetByID(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
-		web.Resp(c, web.ParamsMissingRequired)
+		web.Err(c, web.ParamsMissingRequired).Send()
 		return
 	}
 
 	item, err := h.svc.GetByID(id)
 	if err != nil {
-		web.Resp(c, web.NotFound)
+		web.Err(c, web.NotFound).Send()
 		return
 	}
 
-	web.RespContent(c, web.Success, item)
+	web.OK(c).Data(item).Send()
 }
 
 func (h *HandlerTask) Create(c *gin.Context) {
@@ -77,128 +76,127 @@ func (h *HandlerTask) Create(c *gin.Context) {
 	}
 
 	if err := h.svc.Create(&item); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
 
-	web.RespContent(c, web.Success, item)
+	web.OK(c).Data(item).Send()
 }
 
 func (h *HandlerTask) Cancel(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
-		web.Resp(c, web.ParamsMissingRequired)
+		web.Err(c, web.ParamsMissingRequired).Send()
 		return
 	}
 
 	if err := h.svc.Cancel(id); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
 
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 func (h *HandlerTask) Pause(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.svc.Pause(id); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 func (h *HandlerTask) Resume(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.svc.Resume(id); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 func (h *HandlerTask) Delete(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
-		web.Resp(c, web.ParamsMissingRequired)
+		web.Err(c, web.ParamsMissingRequired).Send()
 		return
 	}
 
 	if err := h.svc.Delete(id); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
 
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 func (h *HandlerTask) ListFindings(c *gin.Context) {
 	taskID := c.Param("id")
 	if taskID == "" {
-		web.Resp(c, web.ParamsMissingRequired)
+		web.Err(c, web.ParamsMissingRequired).Send()
 		return
 	}
 
-	var query taskContract.FindingQuery
-	if err := c.ShouldBindQuery(&query); err != nil {
-		web.Resp(c, web.ParamsMissingRequired)
+	query, ok := web.BindQuery[taskContract.FindingQuery](c)
+	if !ok {
 		return
 	}
 	query.TaskID = taskID
 
 	items, count, err := h.svc.ListFindings(query)
 	if err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
 
-	web.RespContentWithNum(c, web.Success, count, items)
+	web.OK(c).List(count, items).Send()
 }
 
 func (h *HandlerTask) FindingSummary(c *gin.Context) {
 	taskID := c.Param("id")
 	if taskID == "" {
-		web.Resp(c, web.ParamsMissingRequired)
+		web.Err(c, web.ParamsMissingRequired).Send()
 		return
 	}
 
 	summary, err := h.svc.FindingSummary(taskID)
 	if err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
 
-	web.RespContent(c, web.Success, summary)
+	web.OK(c).Data(summary).Send()
 }
 
 func (h *HandlerTask) ListAssets(c *gin.Context) {
 	taskID := c.Param("id")
 	if taskID == "" {
-		web.Resp(c, web.ParamsMissingRequired)
+		web.Err(c, web.ParamsMissingRequired).Send()
 		return
 	}
 
 	assets, err := h.svc.ListAssets(taskID)
 	if err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
 
-	web.RespContent(c, web.Success, assets)
+	web.OK(c).Data(assets).Send()
 }
 
 func (h *HandlerTask) ListLogs(c *gin.Context) {
 	taskID := c.Param("id")
 	if taskID == "" {
-		web.Resp(c, web.ParamsMissingRequired)
+		web.Err(c, web.ParamsMissingRequired).Send()
 		return
 	}
 
 	logs, err := h.svc.ListLogs(taskID, 200)
 	if err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
 
-	web.RespContent(c, web.Success, logs)
+	web.OK(c).Data(logs).Send()
 }

@@ -1,10 +1,16 @@
 <script lang="ts" setup>
 import { computed, h, onMounted, reactive, ref } from 'vue';
+import type { TreeOption } from 'naive-ui';
 import {
-  NButton, NCard, NCascader, NDataTable, NDescriptions, NDescriptionsItem, NDrawer, NDrawerContent,
-  NForm, NFormItem, NGrid, NGridItem, NInput, NInputNumber, NModal, NPopconfirm,
-  NSelect, NSpace, NSwitch, NTabPane, NTabs, NTag, NUpload, useMessage,
+  NButton, NCard, NCascader, NDataTable,
+  NEmpty, NForm, NFormItem, NGrid, NGridItem, NInput, NInputNumber, NModal, NPopconfirm,
+  NSelect, NSpace, NSwitch, NTag, NTree, NTooltip, NUpload, NDropdown, useMessage,
 } from 'naive-ui';
+import {
+  Plus, Download, Upload, Edit, Scan, Trash2, MoreHorizontal,
+  Server, Globe, ShieldAlert, Activity, CheckCircle2, AlertTriangle, Search,
+  Pencil, FileText,
+} from 'lucide-vue-next';
 import type { UploadFileInfo } from 'naive-ui';
 import { NStatistic } from 'naive-ui';
 import { useRouter } from 'vue-router';
@@ -12,27 +18,25 @@ import type { Asset } from '#/api/asset';
 import {
   createAsset,
   deleteAsset,
-  getAssetDetail,
-  getAssetEnrich,
   getAssetList,
+  getAssetStats,
   importAssets,
   updateAsset,
 } from '#/api/asset';
-import type { ConstructionOrg } from '#/api/assetmgr';
-import { createConstruction, createVerifyTasks, getConstructionList } from '#/api/assetmgr';
-import { getPermissionApi } from '#/api/core/auth';
-import type { DynamicFormSubmissionDetail, DynamicFormTemplate } from '#/api/form';
+import type { ConstructionOrg, Organize } from '#/api/assetmgr';
+import { createConstruction, createVerifyTasks, getConstructionList, getOrganizeList, getOrganizeTree } from '#/api/assetmgr';
+import type { DynamicFormSubmissionDetail, DynamicFormTemplate } from '#/api/formdesign';
 import {
   getDynamicFormSubmission,
   getDynamicFormSubmissions,
   getDynamicFormTemplates,
   normalizePagedResponse,
   saveDynamicFormSubmission,
-} from '#/api/form';
+} from '#/api/formdesign';
 import { dictItemsToOptions, getSystemDictItems } from '#/api/system/dict';
 import { createTask } from '#/api/task';
 import { requestClient } from '#/api/request';
-import { regionLabelFromCode, regionOptions } from '#/utils/region';
+import { regionCodeFromLabel, regionLabelFromCode, regionOptions } from '#/utils/region';
 import DynamicFormRenderer from '#/components/dynamic-form/DynamicFormRenderer.vue';
 
 defineOptions({ name: 'AssetLedger' });
@@ -50,11 +54,9 @@ const quickConstructionTarget = ref<'construction' | 'operation'>('construction'
 const linkQuickConstructionToBoth = ref(false);
 const checkedKeys = ref<string[]>([]);
 const showModal = ref(false);
-const showDetail = ref(false);
 const showImport = ref(false);
 const importLoading = ref(false);
 const editingId = ref<null | string>(null);
-const detailItem = ref<Asset | null>(null);
 const assetDynamicTemplate = ref<DynamicFormTemplate | null>(null);
 const assetDynamicFormData = ref<Record<string, any>>({});
 const assetDynamicSubmission = ref<DynamicFormSubmissionDetail | null>(null);
@@ -70,6 +72,66 @@ const batchEditForm = reactive({
   value: '' as string,
 });
 const exportLoading = ref(false);
+
+const batchOptions = computed(() => [
+  {
+    label: '批量扫描',
+    key: 'batch-scan',
+    icon: () => h(Scan, { size: 16 }),
+    disabled: !checkedKeys.value.length,
+  },
+  {
+    label: '发送监控',
+    key: 'send-monitor',
+    icon: () => h(Activity, { size: 16 }),
+    disabled: !checkedKeys.value.length,
+  },
+  {
+    label: '提交核验',
+    key: 'submit-verify',
+    icon: () => h(CheckCircle2, { size: 16 }),
+    disabled: !checkedKeys.value.length,
+  },
+  {
+    type: 'divider' as const,
+    key: 'divider',
+  },
+  {
+    label: '批量编辑',
+    key: 'batch-edit',
+    icon: () => h(Edit, { size: 16 }),
+    disabled: !checkedKeys.value.length,
+  },
+  {
+    label: '批量删除',
+    key: 'batch-delete',
+    icon: () => h(Trash2, { size: 16 }),
+    disabled: !checkedKeys.value.length,
+    props: {
+      style: { color: '#d03050' },
+    },
+  },
+]);
+
+const handleBatchSelect = (key: string | number) => {
+  switch (key) {
+    case 'batch-scan':
+      onBatchScan();
+      break;
+    case 'send-monitor':
+      onSendToMonitor();
+      break;
+    case 'submit-verify':
+      onSubmitToVerify();
+      break;
+    case 'batch-edit':
+      openBatchEdit();
+      break;
+    case 'batch-delete':
+      onBatchDelete();
+      break;
+  }
+};
 
 const assetDynamicRenderOptions = computed(() => {
   const raw =
@@ -109,10 +171,6 @@ function setAssetModalVisible(visible: boolean) {
   setOverlayVisible(showModal, visible);
 }
 
-function setDetailVisible(visible: boolean) {
-  setOverlayVisible(showDetail, visible);
-}
-
 function setImportVisible(visible: boolean) {
   setOverlayVisible(showImport, visible);
 }
@@ -138,8 +196,60 @@ const pagination = reactive({
 const searchForm = reactive({
   keyword: '', data_number: '', system_type: undefined as string | undefined,
   security_protection_level: undefined as string | undefined,
-  lifecycle_state: undefined as string | undefined, data_source: undefined as string | undefined,
+  data_source: undefined as string | undefined,
+  asset_family: undefined as string | undefined, region_code: undefined as string | undefined,
+  risk_score_min: undefined as number | undefined, risk_score_max: undefined as number | undefined,
+  is_key: undefined as string | undefined, organize_id: undefined as string | undefined,
 });
+
+const showAdvancedFilter = ref(false);
+
+const orgTree = ref<TreeOption[]>([]);
+const selectedOrgKey = ref<null | string>(null);
+const treeLoading = ref(false);
+
+const stats = ref({
+  keyAssets: 0,
+  online: 0,
+  riskHigh: 0,
+  total: 0,
+  withVulns: 0,
+});
+
+const now = new Date();
+const thirtyDaysLater = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+const expiringSslAssets = computed(() =>
+  data.value.filter(item => {
+    if (!item.ssl_expires_at) return false;
+    const d = new Date(item.ssl_expires_at);
+    return d <= thirtyDaysLater && d >= now;
+  }).slice(0, 10),
+);
+
+const expiringDomainAssets = computed(() =>
+  data.value.filter(item => {
+    if (!item.domain_expires_at) return false;
+    const d = new Date(item.domain_expires_at);
+    return d <= thirtyDaysLater && d >= now;
+  }).slice(0, 10),
+);
+
+const expiredSslAssets = computed(() =>
+  data.value.filter(item => {
+    if (!item.ssl_expires_at) return false;
+    return new Date(item.ssl_expires_at) < now;
+  }).slice(0, 10),
+);
+
+const expiredDomainAssets = computed(() =>
+  data.value.filter(item => {
+    if (!item.domain_expires_at) return false;
+    return new Date(item.domain_expires_at) < now;
+  }).slice(0, 10),
+);
+
+const activeFamilyView = ref<'all' | 'ip' | 'domain_site' | 'business_system' | 'hardware' | 'software'>('all');
 
 const extraDefaults = {
   unit_type: '',
@@ -160,13 +270,13 @@ const extraDefaults = {
 };
 
 type AssetExtra = typeof extraDefaults;
-type ExtraKey = keyof AssetExtra;
 
 const formData = reactive({
   name: '', type: 'server', address: '', port: 0, domain: '', ipv4: '', ipv6: '', url: '', protocol: '',
-  service: '', version: '', os: '', data_number: '', system_name: '', system_type: '',
+  service: '', version: '', os: '', data_number: '', system_type: '',
   is_online: true, is_key: false, security_protection_level: '', filing_cert_number: '',
-  icp_filing_number: '', organize_id: '', construction_org_id: '', operation_org_id: '', data_source: 'manual_import',
+  icp_filing_number: '', public_security_filing: '', organize_id: '', construction_org_id: '', operation_org_id: '', data_source: 'manual_import',
+  asset_family: 'ip', asset_subtype: '', region_code: '', region_name: '',
   responsible_user_name: '', remark: '', tags: [] as string[],
   extra: { ...extraDefaults } as AssetExtra,
 });
@@ -181,36 +291,6 @@ const quickConstructionForm = reactive({
   security_filing: '',
 });
 
-const assetInfoFields = [
-  { label: '系统名称', key: 'system_name' },
-  { label: '系统类型', key: 'system_type', map: systemTypeLabel },
-  { label: '是否联网', key: 'is_online', map: booleanLabel },
-  { label: 'IPv4地址', key: 'ipv4' },
-  { label: 'IPv6地址', key: 'ipv6' },
-  { label: '网址', key: 'url' },
-  { label: '是否是关键信息基础设施', key: 'is_key', map: booleanLabel },
-  { label: '安全保护等级', key: 'security_protection_level', map: securityLabel },
-  { label: '备案证明编号', key: 'filing_cert_number' },
-  { label: 'ICP备案号', key: 'icp_filing_number' },
-] as const;
-
-const unitInfoFields = [
-  { label: '单位类型', key: 'unit_type' },
-  { label: '行业分类', key: 'industry_category' },
-  { label: '是否是通报机制成员单位', key: 'is_notification_member', map: booleanLabel },
-  { label: '统一社会信用代码', key: 'unified_social_credit_code' },
-  { label: '单位地址', key: 'unit_address' },
-  { label: '单位详细地址', key: 'unit_detail_address' },
-  { label: '分管领导姓名', key: 'leader_name' },
-  { label: '分管领导职务/职称', key: 'leader_title' },
-  { label: '责任部门名称', key: 'responsible_department_name' },
-  { label: '责任部门负责人姓名', key: 'department_leader_name' },
-  { label: '负责人职务/职称', key: 'department_leader_title' },
-  { label: '负责人电话', key: 'department_leader_phone' },
-  { label: '联系人姓名', key: 'contact_name' },
-  { label: '联系人职务/职称', key: 'contact_title' },
-  { label: '联系人电话', key: 'contact_phone' },
-] as const;
 
 type DictOption = { label: string; value: string };
 
@@ -220,6 +300,63 @@ const defaultSystemTypeOptions: DictOption[] = [
   { label: '网络设备', value: 'network' }, { label: '安全设备', value: 'security' },
 ];
 const defaultAssetTypeOptions: DictOption[] = [...defaultSystemTypeOptions];
+const assetFamilyOptions: DictOption[] = [
+  { label: 'IP资产', value: 'ip' },
+  { label: '域名网站', value: 'domain_site' },
+  { label: '业务系统', value: 'business_system' },
+  { label: '硬件设备', value: 'hardware' },
+  { label: '软件资产', value: 'software' },
+  { label: 'APP', value: 'app' },
+  { label: '小程序', value: 'mini_program' },
+  { label: '公众号', value: 'official_account' },
+  { label: '公共邮箱', value: 'public_mailbox' },
+];
+const assetSubtypeMap: Record<string, DictOption[]> = {
+  app: [
+    { label: 'Android APP', value: 'android_app' },
+    { label: 'iOS APP', value: 'ios_app' },
+    { label: '双端APP', value: 'multi_app' },
+  ],
+  business_system: [
+    { label: '业务信息系统', value: 'business_info_system' },
+    { label: '业务支撑系统', value: 'support_system' },
+    { label: '门户网站', value: 'portal_site' },
+  ],
+  domain_site: [
+    { label: '门户网站', value: 'portal_site' },
+    { label: '业务网站', value: 'business_site' },
+    { label: '域名', value: 'domain' },
+  ],
+  hardware: [
+    { label: '服务器', value: 'server' },
+    { label: '防火墙', value: 'firewall' },
+    { label: 'VPN设备', value: 'vpn' },
+    { label: 'WAF', value: 'waf' },
+    { label: '交换机/路由器', value: 'network_device' },
+  ],
+  ip: [
+    { label: 'IPv4', value: 'ipv4' },
+    { label: 'IPv6', value: 'ipv6' },
+    { label: '公网IP', value: 'public_ip' },
+    { label: '内网IP', value: 'private_ip' },
+  ],
+  mini_program: [
+    { label: '微信小程序', value: 'wechat_mini_program' },
+    { label: '支付宝小程序', value: 'alipay_mini_program' },
+  ],
+  official_account: [
+    { label: '服务号', value: 'service_account' },
+    { label: '订阅号', value: 'subscription_account' },
+  ],
+  public_mailbox: [
+    { label: '公共邮箱', value: 'public_mailbox' },
+  ],
+  software: [
+    { label: '基础软件', value: 'base_software' },
+    { label: '中间件', value: 'middleware' },
+    { label: '应用软件', value: 'application_software' },
+  ],
+};
 const defaultSecurityOptions: DictOption[] = [
   { label: '一级', value: 'level1' }, { label: '二级', value: 'level2' },
   { label: '三级', value: 'level3' }, { label: '四级', value: 'level4' }, { label: '五级', value: 'level5' },
@@ -228,92 +365,107 @@ const defaultSourceOptions: DictOption[] = [
   { label: '手动导入', value: 'manual_import' }, { label: '自动探测', value: 'auto_detect' },
   { label: '外部集成', value: 'external' },
 ];
-const lifecycleOptions = [
-  { label: '已发现', value: 'discovered' }, { label: '已确认', value: 'confirmed' },
-  { label: '已登记', value: 'registered' }, { label: '运营中', value: 'operating' },
-  { label: '退役中', value: 'decommission' }, { label: '已下线', value: 'offline' },
-];
 
 const systemTypeOptions = ref<DictOption[]>([...defaultSystemTypeOptions]);
 const assetTypeOptions = ref<DictOption[]>([...defaultAssetTypeOptions]);
 const securityOptions = ref<DictOption[]>([...defaultSecurityOptions]);
 const sourceOptions = ref<DictOption[]>([...defaultSourceOptions]);
+const assetSubtypeOptions = computed<DictOption[]>(() => assetSubtypeMap[formData.asset_family] || []);
+const showAddressFields = computed(() => ['business_system', 'domain_site', 'hardware', 'ip', 'software', 'app'].includes(formData.asset_family));
+const showPortField = computed(() => ['business_system', 'domain_site', 'hardware', 'software'].includes(formData.asset_family));
+const showConstructionFields = computed(() => ['business_system', 'domain_site', 'hardware', 'software', 'app', 'mini_program', 'official_account', 'public_mailbox'].includes(formData.asset_family));
+const showResponsibleField = computed(() => formData.asset_family !== 'ip');
+const showTypeField = computed(() => ['hardware', 'software', 'business_system', 'domain_site'].includes(formData.asset_family));
+
+function onAssetFamilyChange(value: string) {
+  formData.asset_family = value;
+  formData.asset_subtype = '';
+}
+
+function changeFamilyView(view: 'all' | 'ip' | 'domain_site' | 'business_system' | 'hardware' | 'software') {
+  activeFamilyView.value = view;
+  searchForm.asset_family = view === 'all' ? undefined : view;
+  pagination.page = 1;
+  fetchList();
+}
+
+function familyViewButtonType(view: 'all' | 'ip' | 'domain_site' | 'business_system' | 'hardware' | 'software') {
+  return activeFamilyView.value === view ? 'primary' : 'default';
+}
+
+function assetFamilyLabel(value?: string) {
+  if (!value) return '-';
+  return assetFamilyOptions.find(item => item.value === value)?.label || value;
+}
+
+function assetSubtypeLabel(family?: string, subtype?: string) {
+  if (!subtype) return '-';
+  return (assetSubtypeMap[family || ''] || []).find(item => item.value === subtype)?.label || subtype;
+}
+
+function assetPrimaryIdentifier(asset?: Partial<Asset> | null) {
+  if (!asset) return '-';
+  if (asset.asset_family === 'domain_site') {
+    return asset.domain || asset.url || asset.address || '-';
+  }
+  if (asset.asset_family === 'ip') {
+    return asset.ipv4 || asset.ipv6 || asset.address || '-';
+  }
+  if (asset.asset_family === 'public_mailbox') {
+    return asset.address || asset.url || '-';
+  }
+  return asset.address || asset.domain || asset.url || '-';
+}
+
+function formatDateTime(value?: string) {
+  if (!value) return '-';
+  return value.replace('T', ' ').replace(/\.\d+.*$/, '');
+}
+
+const visibleColumns = computed(() => {
+  const common = ['name', 'asset_family', 'organize_id', 'region_name', 'risk_score', 'vuln_count', 'responsible_user_name', 'created_at', 'actions'];
+  const byView: Record<string, string[]> = {
+    all: ['primary_identifier'],
+    ip: ['primary_identifier'],
+    domain_site: ['primary_identifier'],
+    business_system: ['primary_identifier'],
+    hardware: ['primary_identifier'],
+    software: ['primary_identifier'],
+  };
+  const keys = new Set([...common, ...(byView[activeFamilyView.value] ?? byView.all ?? [])]);
+  return columns.filter((column: any) => {
+    if (column.type === 'selection') return true;
+    return keys.has(column.key);
+  });
+});
 
 const systemTypeMap = computed<Record<string, string>>(() => Object.fromEntries(systemTypeOptions.value.map(o => [o.value, o.label])));
 const assetTypeMap = computed<Record<string, string>>(() => Object.fromEntries(assetTypeOptions.value.map(o => [o.value, o.label])));
-const securityMap = computed<Record<string, string>>(() => Object.fromEntries(securityOptions.value.map(o => [o.value, o.label])));
 const sourceMap = computed<Record<string, string>>(() => Object.fromEntries(sourceOptions.value.map(o => [o.value, o.label])));
-const lifecycleMap: Record<string, { label: string; type: 'default' | 'error' | 'info' | 'success' | 'warning' }> = {
-  discovered: { label: '已发现', type: 'default' }, confirmed: { label: '已确认', type: 'info' },
-  registered: { label: '已登记', type: 'info' }, operating: { label: '运营中', type: 'success' },
-  decommission: { label: '退役中', type: 'warning' }, offline: { label: '已下线', type: 'error' },
-};
-
-function booleanLabel(value: unknown) {
-  return value === true ? '是' : value === false ? '否' : '-';
-}
-
-function systemTypeLabel(value: unknown) {
-  const key = String(value ?? '');
-  return systemTypeMap.value[key] || key || '-';
-}
 
 function assetTypeLabel(value: unknown) {
   const key = String(value ?? '');
   return assetTypeMap.value[key] || key || '-';
 }
 
-function securityLabel(value: unknown) {
-  const key = String(value ?? '');
-  return securityMap.value[key] || key || '-';
-}
-
-function textLabel(value: unknown) {
-  if (value === undefined || value === null || value === '') return '-';
-  return String(value);
+function inferAssetFamily(asset: Partial<Asset>) {
+  if (asset.asset_family) return asset.asset_family;
+  if (asset.url || asset.domain) return 'domain_site';
+  if (asset.type === 'network' || asset.type === 'security') return 'hardware';
+  if (asset.system_type === 'application') return 'business_system';
+  return 'ip';
 }
 
 function mergeExtra(extra?: Record<string, any> | null): AssetExtra {
   return { ...extraDefaults, ...(extra ?? {}) };
 }
 
-function extraText(asset: Asset | null, key: ExtraKey, map?: (value: unknown) => string) {
-  const value = asset?.extra?.[key];
-  return map ? map(value) : textLabel(value);
-}
-
-function assetText(asset: Asset | null, key: keyof Asset, map?: (value: unknown) => string) {
-  const value = asset?.[key];
-  return map ? map(value) : textLabel(value);
-}
-
-function assetFieldText(
-  asset: Asset | null,
-  field: { key: keyof Asset; map?: (value: unknown) => string },
-) {
-  return assetText(asset, field.key, field.map);
-}
-
-function extraFieldText(
-  asset: Asset | null,
-  field: { key: ExtraKey; map?: (value: unknown) => string },
-) {
-  return extraText(asset, field.key, field.map);
-}
 
 function organizeLabel(id?: string) {
   if (!id) return '-';
   return organizeOptions.value.find(item => item.value === id)?.label || id;
 }
 
-function constructionLabel(id?: string) {
-  if (!id) return '-';
-  return constructionMap.value[id]?.name || constructionOptions.value.find(item => item.value === id)?.label || id;
-}
-
-function constructionFieldText(id: string | undefined, key: keyof ConstructionOrg) {
-  return textLabel(id ? constructionMap.value[id]?.[key] : undefined);
-}
 
 function normalizeListResponse<T>(res: any): T[] {
   const body = res?.data ?? res;
@@ -407,11 +559,13 @@ async function loadDictOptions() {
 
 async function loadReferenceOptions() {
   try {
-    const bundle = await getPermissionApi();
-    organizeOptions.value = (bundle?.organizes ?? []).map((item: any) => ({
-      label: item.name || item.organize_name || item.id || item.organize_id,
-      value: item.id || item.organize_id,
-    })).filter(item => item.label && item.value);
+    const res = await getOrganizeList({ page: 1, page_size: 500 });
+    const body = (res as any)?.data ?? res;
+    const items = (body?.data ?? body?.items ?? []) as Organize[];
+    organizeOptions.value = items.map((item) => ({
+      label: item.name,
+      value: item.id,
+    }));
   } catch {
     organizeOptions.value = [];
   }
@@ -496,39 +650,55 @@ async function onQuickConstructionSave() {
 
 const columns = [
   { type: 'selection' as const, width: 50 },
-  { title: '数据编号', key: 'data_number', width: 130, ellipsis: { tooltip: true } },
-  { title: '系统名称', key: 'system_name', width: 160, ellipsis: { tooltip: true },
-    render: (row: Asset) => row.system_name || row.name },
-  { title: '地址', key: 'address', width: 160, ellipsis: { tooltip: true } },
-  { title: '资产所属单位', key: 'organize_id', width: 150, ellipsis: { tooltip: true },
+  { title: '系统名称', key: 'name', width: 160, ellipsis: { tooltip: true },
+    render: (row: Asset) => row.name || '-' },
+  { title: '资产分类', key: 'asset_family', width: 100,
+    render: (row: Asset) => assetFamilyLabel(row.asset_family) },
+  { title: '访问地址', key: 'primary_identifier', width: 180, ellipsis: { tooltip: true },
+    render: (row: Asset) => assetPrimaryIdentifier(row) },
+  { title: '所属单位', key: 'organize_id', width: 140, ellipsis: { tooltip: true },
     render: (row: Asset) => organizeLabel(row.organize_id) },
-  { title: '系统类型', key: 'system_type', width: 100,
-    render: (row: Asset) => systemTypeMap.value[row.system_type ?? ''] || assetTypeLabel(row.type) },
-  { title: '保护等级', key: 'security_protection_level', width: 90,
-    render: (row: Asset) => row.security_protection_level
-      ? h(NTag, { size: 'small', type: 'info' }, () => securityMap.value[row.security_protection_level!] || row.security_protection_level)
-      : '-' },
-  { title: '生命周期', key: 'lifecycle_state', width: 90,
-    render: (row: Asset) => { const m = lifecycleMap[row.lifecycle_state ?? '']; return m ? h(NTag, { size: 'small', type: m.type }, () => m.label) : '-'; } },
-  { title: '风险分', key: 'risk_score', width: 70,
+  { title: '地域', key: 'region_name', width: 120, ellipsis: { tooltip: true },
+    render: (row: Asset) => row.region_name || '-' },
+  { title: '风险分', key: 'risk_score', width: 80,
     render: (row: Asset) => h('span', { style: { color: (row.risk_score ?? 0) >= 70 ? '#d03050' : (row.risk_score ?? 0) >= 40 ? '#f0a020' : '#18a058' } }, String(row.risk_score ?? 0)) },
   { title: '漏洞', key: 'vuln_count', width: 60,
     render: (row: Asset) => (row.vuln_count ?? 0) > 0
       ? h(NTag, { size: 'small', type: 'error', bordered: false }, () => String(row.vuln_count))
       : h('span', { style: 'color: #ccc' }, '0') },
-  { title: '责任人', key: 'responsible_user_name', width: 80 },
-  { title: '数据来源', key: 'data_source', width: 80,
-    render: (row: Asset) => sourceMap.value[row.data_source ?? ''] || row.data_source || '-' },
-  { title: '操作', key: 'actions', width: 230, fixed: 'right' as const,
-    render: (row: Asset) => h(NSpace, { size: 4 }, () => [
+  { title: '责任人', key: 'responsible_user_name', width: 100 },
+  { title: '创建时间', key: 'created_at', width: 150,
+    render: (row: Asset) => formatDateTime(row.created_at) },
+  { title: '操作', key: 'actions', width: 160, fixed: 'right' as const,
+    render: (row: Asset) => h(NSpace, { size: 2 }, () => [
       h(NPopconfirm, { onPositiveClick: () => onScan(row) }, {
-        trigger: () => h(NButton, { size: 'small', type: 'warning' }, () => '扫描'),
-        default: () => `对 ${row.address} 发起漏洞扫描？`,
+        trigger: () => h(NTooltip, { trigger: 'hover' }, {
+          trigger: () => h(NButton, { size: 'small', type: 'warning', quaternary: true }, {
+            default: () => h(Scan, { size: 16 }),
+          }),
+          default: () => '扫描',
+        }),
+        default: () => `对 ${assetPrimaryIdentifier(row)} 发起漏洞扫描？`,
       }),
-      h(NButton, { size: 'small', type: 'info', onClick: () => onDetail(row) }, () => '详情'),
-      h(NButton, { size: 'small', onClick: () => onEdit(row) }, () => '编辑'),
+      h(NTooltip, { trigger: 'hover' }, {
+        trigger: () => h(NButton, { size: 'small', type: 'info', quaternary: true, onClick: () => onDetail(row) }, {
+          default: () => h(FileText, { size: 16 }),
+        }),
+        default: () => '详情',
+      }),
+      h(NTooltip, { trigger: 'hover' }, {
+        trigger: () => h(NButton, { size: 'small', quaternary: true, onClick: () => onEdit(row) }, {
+          default: () => h(Pencil, { size: 16 }),
+        }),
+        default: () => '编辑',
+      }),
       h(NPopconfirm, { onPositiveClick: () => onDelete(row.id) }, {
-        trigger: () => h(NButton, { size: 'small', type: 'error' }, () => '删除'),
+        trigger: () => h(NTooltip, { trigger: 'hover' }, {
+          trigger: () => h(NButton, { size: 'small', type: 'error', quaternary: true }, {
+            default: () => h(Trash2, { size: 16 }),
+          }),
+          default: () => '删除',
+        }),
         default: () => '确认删除？',
       }),
     ]),
@@ -538,26 +708,64 @@ const columns = [
 async function fetchList() {
   loading.value = true;
   try {
-    const params: Record<string, any> = { page: pagination.page, page_size: pagination.pageSize, ...searchForm };
+    const params: Record<string, any> = {
+      page: pagination.page,
+      page_size: pagination.pageSize,
+      ...searchForm,
+    };
     const res = await getAssetList(params);
     data.value = res.items ?? [];
     pagination.itemCount = res.total ?? 0;
   } catch { message.error('获取资产台账失败'); }
   finally { loading.value = false; }
+  fetchStats();
+}
+
+async function fetchStats() {
+  try {
+    const params: Record<string, any> = {};
+    if (searchForm.asset_family) {
+      params.asset_family = searchForm.asset_family;
+    }
+    const res = await getAssetStats(params);
+    const body = (res as any)?.data ?? res;
+    Object.assign(stats.value, {
+      keyAssets: body?.key_assets ?? 0,
+      online: body?.active ?? 0,
+      riskHigh: body?.risk_high ?? 0,
+      total: body?.total ?? 0,
+      withVulns: body?.with_vulns ?? 0,
+    });
+  } catch { /* 统计加载失败不影响主流程 */ }
 }
 
 function onSearch() { pagination.page = 1; fetchList(); }
 function onReset() {
-  Object.assign(searchForm, { keyword: '', data_number: '', system_type: undefined, security_protection_level: undefined, lifecycle_state: undefined, data_source: undefined });
+  activeFamilyView.value = 'all';
+  showAdvancedFilter.value = false;
+  Object.assign(searchForm, {
+    keyword: '',
+    data_number: '',
+    system_type: undefined,
+    security_protection_level: undefined,
+    data_source: undefined,
+    asset_family: undefined,
+    region_code: undefined,
+    risk_score_min: undefined,
+    risk_score_max: undefined,
+    is_key: undefined,
+    organize_id: undefined,
+  });
   onSearch();
 }
 
 function resetForm() {
   Object.assign(formData, {
     name: '', type: 'server', address: '', port: 0, domain: '', ipv4: '', ipv6: '', url: '', protocol: '',
-    service: '', version: '', os: '', data_number: '', system_name: '', system_type: '',
+    service: '', version: '', os: '', data_number: '', system_type: '',
     is_online: true, is_key: false, security_protection_level: '', filing_cert_number: '',
-    icp_filing_number: '', organize_id: '', construction_org_id: '', operation_org_id: '', data_source: 'manual_import',
+    icp_filing_number: '', public_security_filing: '', organize_id: '', construction_org_id: '', operation_org_id: '', data_source: 'manual_import',
+    asset_family: 'ip', asset_subtype: '', region_code: '', region_name: '',
     responsible_user_name: '', remark: '', tags: [], extra: mergeExtra(),
   });
   showUnitExtraFields.value = false;
@@ -579,13 +787,18 @@ async function onEdit(row: Asset) {
     domain: row.domain ?? '', ipv4: row.ipv4 ?? '', url: row.url ?? '', protocol: row.protocol ?? '',
     ipv6: row.ipv6 ?? '',
     service: row.service ?? '', version: row.version ?? '', os: row.os ?? '',
-    data_number: row.data_number ?? '', system_name: row.system_name ?? '', system_type: row.system_type ?? '',
+    data_number: row.data_number ?? '', system_type: row.system_type ?? '',
     is_online: row.is_online ?? true, is_key: row.is_key ?? false,
     security_protection_level: row.security_protection_level ?? '',
     filing_cert_number: row.filing_cert_number ?? '', icp_filing_number: row.icp_filing_number ?? '',
+    public_security_filing: row.public_security_filing ?? '',
     organize_id: row.organize_id ?? '',
     construction_org_id: row.construction_org_id ?? '', operation_org_id: row.operation_org_id ?? '',
     data_source: row.data_source ?? 'manual_import',
+    asset_family: row.asset_family ?? inferAssetFamily(row),
+    asset_subtype: row.asset_subtype ?? '',
+    region_code: row.region_code ?? regionCodeFromLabel(row.region_name) ?? '',
+    region_name: row.region_name ?? '',
     responsible_user_name: row.responsible_user_name ?? '', remark: row.remark ?? '',
     tags: row.tags ?? [], extra: mergeExtra(row.extra),
   });
@@ -595,32 +808,33 @@ async function onEdit(row: Asset) {
   setAssetModalVisible(true);
 }
 
-const detailVulns = ref<any[]>([]);
-const detailMonitorTasks = ref<any[]>([]);
-
-async function onDetail(row: Asset) {
-  detailItem.value = row;
-  detailVulns.value = [];
-  detailMonitorTasks.value = [];
-  assetDynamicSubmission.value = null;
-  assetDynamicFormData.value = {};
-  setDetailVisible(true);
-  try {
-    detailItem.value = await getAssetDetail(row.id);
-  } catch { /* fallback to list row */ }
-  await loadAssetDynamicTemplate(detailItem.value?.type || detailItem.value?.system_type);
-  await loadAssetDynamicSubmission(row.id);
-  try {
-    const enrich = await getAssetEnrich(row.id);
-    detailVulns.value = enrich?.asset_vulns?.length ? enrich.asset_vulns : enrich?.vulns ?? [];
-    detailMonitorTasks.value = enrich?.monitor_tasks ?? [];
-  } catch { /* detail enrichment is non-critical */ }
+function onDetail(row: Asset) {
+  router.push(`/asset/detail/${row.id}`);
 }
 
 async function onSaveWithDynamicForm() {
-  if (!formData.name || !formData.address) {
-    message.warning('请填写名称和地址');
+  if (!formData.name) {
+    message.warning('请填写系统名称');
     return;
+  }
+  if (!formData.system_type) {
+    message.warning('请选择系统类型');
+    return;
+  }
+  if (!formData.ipv4 && !formData.address) {
+    message.warning('请填写IPV4地址或访问地址');
+    return;
+  }
+  if (!formData.security_protection_level) {
+    message.warning('请选择安全保护等级');
+    return;
+  }
+  if (!formData.address && formData.ipv4) {
+    formData.address = formData.ipv4;
+  }
+  formData.region_name = regionLabelFromCode(formData.region_code) || '';
+  if (!formData.asset_subtype) {
+    formData.asset_subtype = formData.type;
   }
   try {
     let assetId = editingId.value || '';
@@ -663,7 +877,7 @@ function buildTarget(row: Asset): string {
 async function onScan(row: Asset) {
   try {
     await createTask({
-      name: `扫描-${row.system_name || row.name}`,
+      name: `扫描-${row.name || row.address}`,
       targets: [buildTarget(row)],
     });
     message.success('扫描任务已创建，请到扫描中心查看');
@@ -755,7 +969,6 @@ async function onSubmitToVerify() {
 const batchEditFieldOptions = [
   { label: '系统类型', value: 'system_type' },
   { label: '保护等级', value: 'security_protection_level' },
-  { label: '生命周期', value: 'lifecycle_state' },
   { label: '数据来源', value: 'data_source' },
   { label: '责任人', value: 'responsible_user_name' },
   { label: '状态(1活跃/0不活跃)', value: 'status' },
@@ -765,7 +978,6 @@ const batchEditFieldOptions = [
 const batchEditValueOptions = computed<Record<string, DictOption[]>>(() => ({
   system_type: systemTypeOptions.value,
   security_protection_level: securityOptions.value,
-  lifecycle_state: lifecycleOptions,
   data_source: sourceOptions.value,
   status: [{ label: '活跃', value: '1' }, { label: '不活跃', value: '0' }],
   is_key: [{ label: '是', value: 'true' }, { label: '否', value: 'false' }],
@@ -803,9 +1015,10 @@ async function onExport() {
   try {
     const params: Record<string, string> = { format: 'xlsx' };
     if (searchForm.keyword) params.keyword = searchForm.keyword;
+    if (searchForm.asset_family) params.asset_family = searchForm.asset_family;
     if (searchForm.system_type) params.system_type = searchForm.system_type;
+    if (searchForm.region_code) params.region_code = searchForm.region_code;
     if (searchForm.security_protection_level) params.security_protection_level = searchForm.security_protection_level;
-    if (searchForm.lifecycle_state) params.lifecycle_state = searchForm.lifecycle_state;
     if (searchForm.data_source) params.data_source = searchForm.data_source;
 
     const blob = await requestClient.download<Blob>('/asset/export', { params });
@@ -824,51 +1037,293 @@ async function onExport() {
   }
 }
 
+interface OrgItem {
+  id: string;
+  name: string;
+  parent_id?: string;
+}
+
+function buildTree(items: OrgItem[]): TreeOption[] {
+  const map = new Map<string, TreeOption>();
+  const roots: TreeOption[] = [];
+
+  for (const item of items) {
+    map.set(item.id, { children: [], key: item.id, label: item.name });
+  }
+
+  for (const item of items) {
+    const node = map.get(item.id);
+    if (!node) continue;
+    if (item.parent_id && map.has(item.parent_id)) {
+      map.get(item.parent_id)?.children?.push(node);
+    } else {
+      roots.push(node);
+    }
+  }
+
+  return roots.map(pruneTreeNode);
+}
+
+function pruneTreeNode(node: TreeOption): TreeOption {
+  if (node.children?.length) {
+    return { ...node, children: node.children.map(pruneTreeNode) };
+  }
+  return { key: node.key, label: node.label };
+}
+
+async function fetchTree() {
+  treeLoading.value = true;
+  try {
+    const res = await getOrganizeTree();
+    const body = (res as any)?.data ?? res;
+    const items: OrgItem[] = body?.data ?? body ?? [];
+    orgTree.value = [
+      { children: buildTree(items), key: '__all__', label: '全部单位' },
+    ];
+  } catch {
+    orgTree.value = [{ key: '__all__', label: '全部单位' }];
+  } finally {
+    treeLoading.value = false;
+  }
+}
+
+function onSelectOrg(keys: string[]) {
+  const key = keys[0] ?? null;
+  selectedOrgKey.value = key;
+  searchForm.organize_id = key && key !== '__all__' ? key : undefined;
+  pagination.page = 1;
+  fetchList();
+}
+
 onMounted(() => {
   fetchList();
   loadReferenceOptions();
   loadDictOptions();
+  fetchTree();
 });
 </script>
 
 <template>
-  <div style="padding: 16px">
-    <NCard title="资产台账" size="small">
+  <div class="asset-ledger-page">
+    <NCard class="asset-ledger-page__tree" size="small">
+      <template #header>
+        <div class="org-tree-header">
+          <span class="org-tree-title">单位筛选</span>
+          <span class="org-tree-desc">按所属单位过滤资产列表</span>
+        </div>
+      </template>
+      <NTree
+        v-if="orgTree.length"
+        :data="orgTree"
+        :default-expanded-keys="['__all__']"
+        :selected-keys="selectedOrgKey ? [selectedOrgKey] : []"
+        block-line
+        selectable
+        @update:selected-keys="onSelectOrg"
+      />
+      <NEmpty v-else description="暂无单位数据" size="small" />
+    </NCard>
+
+    <div class="asset-ledger-page__main">
+    <NCard class="asset-ledger-card" title="资产台账" size="small">
       <template #header-extra>
         <NSpace :size="8">
-          <NButton type="primary" size="small" @click="onAdd">登记资产</NButton>
-          <NButton size="small" @click="setImportVisible(true)">导入</NButton>
-          <NButton size="small" :loading="exportLoading" @click="onExport">导出</NButton>
-          <NButton size="small" :disabled="!checkedKeys.length" @click="openBatchEdit">
-            批量编辑{{ checkedKeys.length ? ` (${checkedKeys.length})` : '' }}
+          <NButton type="primary" size="small" @click="onAdd">
+            <template #icon><Plus size="16" /></template>
+            登记资产
           </NButton>
-          <NPopconfirm @positive-click="onBatchScan">
-            <template #trigger><NButton type="warning" size="small" :disabled="!checkedKeys.length">批量扫描</NButton></template>
-            对选中的资产发起漏洞扫描？
-          </NPopconfirm>
-          <NButton type="info" size="small" :loading="sendingToMonitor" :disabled="!checkedKeys.length" @click="onSendToMonitor">
-            发送监控{{ checkedKeys.length ? ` (${checkedKeys.length})` : '' }}
+          <NButton size="small" @click="setImportVisible(true)">
+            <template #icon><Upload size="16" /></template>
+            导入
           </NButton>
-          <NButton type="primary" size="small" secondary :loading="submittingToVerify" :disabled="!checkedKeys.length" @click="onSubmitToVerify">
-            提交核验{{ checkedKeys.length ? ` (${checkedKeys.length})` : '' }}
+          <NButton size="small" :loading="exportLoading" @click="onExport">
+            <template #icon><Download size="16" /></template>
+            导出
           </NButton>
-          <NPopconfirm @positive-click="onBatchDelete">
-            <template #trigger><NButton type="error" size="small" :disabled="!checkedKeys.length">批量删除</NButton></template>
-            确认删除选中的资产？
-          </NPopconfirm>
+          <NDropdown
+            :options="batchOptions"
+            @select="handleBatchSelect"
+          >
+            <NButton size="small">
+              <template #icon><MoreHorizontal size="16" /></template>
+              批量操作{{ checkedKeys.length ? ` (${checkedKeys.length})` : '' }}
+            </NButton>
+          </NDropdown>
         </NSpace>
       </template>
 
-      <NForm inline label-placement="left" :show-feedback="false" style="margin-bottom: 16px">
-        <NFormItem label="关键词"><NInput v-model:value="searchForm.keyword" placeholder="名称/地址" clearable style="width: 160px" /></NFormItem>
-        <NFormItem label="编号"><NInput v-model:value="searchForm.data_number" placeholder="数据编号" clearable style="width: 130px" /></NFormItem>
-        <NFormItem label="类型"><NSelect v-model:value="searchForm.system_type" :options="systemTypeOptions" placeholder="全部" clearable style="width: 110px" /></NFormItem>
-        <NFormItem label="等保"><NSelect v-model:value="searchForm.security_protection_level" :options="securityOptions" placeholder="全部" clearable style="width: 90px" /></NFormItem>
-        <NFormItem label="状态"><NSelect v-model:value="searchForm.lifecycle_state" :options="lifecycleOptions" placeholder="全部" clearable style="width: 100px" /></NFormItem>
-        <NFormItem><NSpace :size="8"><NButton type="primary" @click="onSearch">查询</NButton><NButton @click="onReset">重置</NButton></NSpace></NFormItem>
-      </NForm>
+      <div class="asset-tabs">
+        <NSpace :size="4" wrap>
+          <NButton
+            v-for="view in [
+              { key: 'all', label: '全部', icon: Server },
+              { key: 'ip', label: 'IP资产', icon: Globe },
+              { key: 'domain_site', label: '域名网站', icon: Globe },
+              { key: 'business_system', label: '业务系统', icon: Server },
+              { key: 'hardware', label: '硬件设备', icon: Server },
+              { key: 'software', label: '软件资产', icon: Activity },
+            ]"
+            :key="view.key"
+            :type="familyViewButtonType(view.key as any)"
+            size="small"
+            class="asset-tab-btn"
+            @click="changeFamilyView(view.key as any)"
+          >
+            <component :is="view.icon" size="14" />
+            {{ view.label }}
+          </NButton>
+        </NSpace>
+      </div>
 
-      <NDataTable v-model:checked-row-keys="checkedKeys" :columns="columns" :data="data" :loading="loading"
+      <NGrid :cols="5" :x-gap="12" responsive="screen" class="stats-grid">
+        <NGridItem>
+          <div class="stat-card">
+            <div class="stat-icon stat-icon--indigo">
+              <Server size="20" />
+            </div>
+            <div class="stat-content">
+              <div class="stat-value">{{ stats.total }}</div>
+              <div class="stat-label">资产总数</div>
+            </div>
+          </div>
+        </NGridItem>
+        <NGridItem>
+          <div class="stat-card">
+            <div class="stat-icon stat-icon--emerald">
+              <CheckCircle2 size="20" />
+            </div>
+            <div class="stat-content">
+              <div class="stat-value">{{ stats.online }}</div>
+              <div class="stat-label">在线资产</div>
+            </div>
+          </div>
+        </NGridItem>
+        <NGridItem>
+          <div class="stat-card">
+            <div class="stat-icon stat-icon--indigo">
+              <ShieldAlert size="20" />
+            </div>
+            <div class="stat-content">
+              <div class="stat-value">{{ stats.keyAssets }}</div>
+              <div class="stat-label">关键资产</div>
+            </div>
+          </div>
+        </NGridItem>
+        <NGridItem>
+          <div class="stat-card">
+            <div class="stat-icon stat-icon--red">
+              <AlertTriangle size="20" />
+            </div>
+            <div class="stat-content">
+              <div class="stat-value">{{ stats.riskHigh }}</div>
+              <div class="stat-label">高风险</div>
+            </div>
+          </div>
+        </NGridItem>
+        <NGridItem>
+          <div class="stat-card">
+            <div class="stat-icon stat-icon--amber">
+              <ShieldAlert size="20" />
+            </div>
+            <div class="stat-content">
+              <div class="stat-value">{{ stats.withVulns }}</div>
+              <div class="stat-label">有漏洞</div>
+            </div>
+          </div>
+        </NGridItem>
+      </NGrid>
+
+      <NCard v-if="expiredSslAssets.length || expiredDomainAssets.length || expiringSslAssets.length || expiringDomainAssets.length" size="small" type="warning" class="alert-card">
+        <NSpace vertical :size="8">
+          <div v-if="expiredSslAssets.length">
+            <span class="alert-title alert-title--error">SSL证书已过期 ({{ expiredSslAssets.length }})：</span>
+            <NSpace wrap :size="4" class="alert-tags">
+              <NTag v-for="item in expiredSslAssets" :key="item.id" type="error" size="small" class="alert-tag" @click="router.push(`/asset/detail/${item.id}`)">
+                {{ item.name || '-' }}
+              </NTag>
+            </NSpace>
+          </div>
+          <div v-if="expiredDomainAssets.length">
+            <span class="alert-title alert-title--error">域名已过期 ({{ expiredDomainAssets.length }})：</span>
+            <NSpace wrap :size="4" class="alert-tags">
+              <NTag v-for="item in expiredDomainAssets" :key="item.id" type="error" size="small" class="alert-tag" @click="router.push(`/asset/detail/${item.id}`)">
+                {{ item.name || '-' }}
+              </NTag>
+            </NSpace>
+          </div>
+          <div v-if="expiringSslAssets.length">
+            <span class="alert-title alert-title--warning">SSL证书即将过期 ({{ expiringSslAssets.length }})：</span>
+            <NSpace wrap :size="4" class="alert-tags">
+              <NTag v-for="item in expiringSslAssets" :key="item.id" type="warning" size="small" class="alert-tag" @click="router.push(`/asset/detail/${item.id}`)">
+                {{ item.name || '-' }} ({{ item.ssl_expires_at?.slice(0, 10) }})
+              </NTag>
+            </NSpace>
+          </div>
+          <div v-if="expiringDomainAssets.length">
+            <span class="alert-title alert-title--warning">域名即将过期 ({{ expiringDomainAssets.length }})：</span>
+            <NSpace wrap :size="4" class="alert-tags">
+              <NTag v-for="item in expiringDomainAssets" :key="item.id" type="warning" size="small" class="alert-tag" @click="router.push(`/asset/detail/${item.id}`)">
+                {{ item.name || '-' }} ({{ item.domain_expires_at?.slice(0, 10) }})
+              </NTag>
+            </NSpace>
+          </div>
+        </NSpace>
+      </NCard>
+
+      <div class="filter-section">
+        <div class="filter-row">
+          <NForm inline label-placement="left" :show-feedback="false" class="filter-form">
+            <NFormItem label="关键词">
+              <NInput v-model:value="searchForm.keyword" placeholder="名称/地址" clearable style="width: 180px">
+                <template #prefix><Search size="14" /></template>
+              </NInput>
+            </NFormItem>
+            <NFormItem label="编号">
+              <NInput v-model:value="searchForm.data_number" placeholder="数据编号" clearable style="width: 140px" />
+            </NFormItem>
+            <NFormItem label="类型">
+              <NSelect v-model:value="searchForm.system_type" :options="systemTypeOptions" placeholder="全部" clearable style="width: 120px" />
+            </NFormItem>
+            <NFormItem label="地域">
+              <NCascader v-model:value="searchForm.region_code" :options="regionOptions" clearable placeholder="全部" style="width: 190px" check-strategy="child" />
+            </NFormItem>
+            <NFormItem label="等保">
+              <NSelect v-model:value="searchForm.security_protection_level" :options="securityOptions" placeholder="全部" clearable style="width: 100px" />
+            </NFormItem>
+            <NFormItem>
+              <NSpace :size="8">
+                <NButton type="primary" size="small" @click="onSearch">
+                  <template #icon><Search size="14" /></template>
+                  查询
+                </NButton>
+                <NButton size="small" @click="onReset">重置</NButton>
+                <NButton text type="info" size="small" @click="showAdvancedFilter = !showAdvancedFilter">
+                  {{ showAdvancedFilter ? '收起' : '高级筛选' }}
+                </NButton>
+              </NSpace>
+            </NFormItem>
+          </NForm>
+        </div>
+
+        <div v-if="showAdvancedFilter" class="advanced-filter">
+          <NForm inline label-placement="left" :show-feedback="false">
+            <NFormItem label="风险分≥">
+              <NInputNumber v-model:value="searchForm.risk_score_min" :min="0" :max="100" placeholder="最低" style="width: 100px" />
+            </NFormItem>
+            <NFormItem label="风险分≤">
+              <NInputNumber v-model:value="searchForm.risk_score_max" :min="0" :max="100" placeholder="最高" style="width: 100px" />
+            </NFormItem>
+            <NFormItem label="关键资产">
+              <NSelect v-model:value="searchForm.is_key" :options="[{ label: '是', value: 'true' }, { label: '否', value: 'false' }]" placeholder="全部" clearable style="width: 100px" />
+            </NFormItem>
+            <NFormItem label="数据来源">
+              <NSelect v-model:value="searchForm.data_source" :options="sourceOptions" placeholder="全部" clearable style="width: 120px" />
+            </NFormItem>
+          </NForm>
+        </div>
+      </div>
+
+      <NDataTable v-model:checked-row-keys="checkedKeys" :columns="visibleColumns" :data="data" :loading="loading"
         :pagination="pagination" :row-key="(row: Asset) => row.id" :bordered="false" :scroll-x="1500" size="small" striped remote />
     </NCard>
 
@@ -886,25 +1341,25 @@ onMounted(() => {
         <div class="asset-form-section">
           <div class="asset-section-title">资产信息</div>
           <NGrid :cols="2" :x-gap="16">
-          <NGridItem><NFormItem label="资产名称" required><NInput v-model:value="formData.name" /></NFormItem></NGridItem>
-          <NGridItem><NFormItem label="系统名称"><NInput v-model:value="formData.system_name" /></NFormItem></NGridItem>
-          <NGridItem><NFormItem label="地址" required><NInput v-model:value="formData.address" /></NFormItem></NGridItem>
-          <NGridItem><NFormItem label="端口"><NInputNumber v-model:value="formData.port" :min="0" :max="65535" style="width: 100%" /></NFormItem></NGridItem>
-          <NGridItem><NFormItem label="域名"><NInput v-model:value="formData.domain" /></NFormItem></NGridItem>
-          <NGridItem><NFormItem label="IPv4地址"><NInput v-model:value="formData.ipv4" /></NFormItem></NGridItem>
-          <NGridItem><NFormItem label="IPv6地址"><NInput v-model:value="formData.ipv6" /></NFormItem></NGridItem>
-          <NGridItem><NFormItem label="网址"><NInput v-model:value="formData.url" /></NFormItem></NGridItem>
-          <NGridItem><NFormItem label="协议"><NInput v-model:value="formData.protocol" /></NFormItem></NGridItem>
-          <NGridItem><NFormItem label="系统类型"><NSelect v-model:value="formData.system_type" :options="systemTypeOptions" /></NFormItem></NGridItem>
-          <NGridItem><NFormItem label="资产类型"><NSelect v-model:value="formData.type" :options="assetTypeOptions" /></NFormItem></NGridItem>
-          <NGridItem><NFormItem label="数据编号"><NInput v-model:value="formData.data_number" /></NFormItem></NGridItem>
-          <NGridItem><NFormItem label="安全保护等级"><NSelect v-model:value="formData.security_protection_level" :options="securityOptions" clearable /></NFormItem></NGridItem>
-          <NGridItem><NFormItem label="是否联网"><NSwitch v-model:value="formData.is_online" /></NFormItem></NGridItem>
-          <NGridItem><NFormItem label="关键信息基础设施"><NSwitch v-model:value="formData.is_key" /></NFormItem></NGridItem>
+          <NGridItem><NFormItem label="系统名称" required><NInput v-model:value="formData.name" /></NFormItem></NGridItem>
+          <NGridItem><NFormItem label="所属单位" required><NSelect v-model:value="formData.organize_id" :options="organizeOptions" filterable clearable /></NFormItem></NGridItem>
+          <NGridItem><NFormItem label="系统类型" required><NSelect v-model:value="formData.system_type" :options="systemTypeOptions" /></NFormItem></NGridItem>
+          <NGridItem><NFormItem label="是否联网" required><NSwitch v-model:value="formData.is_online" /></NFormItem></NGridItem>
+          <NGridItem><NFormItem label="IPV4地址" required><NInput v-model:value="formData.ipv4" placeholder="多个用逗号分隔" /></NFormItem></NGridItem>
+          <NGridItem><NFormItem label="IPV6地址"><NInput v-model:value="formData.ipv6" placeholder="无则留空" /></NFormItem></NGridItem>
+          <NGridItem><NFormItem label="网址"><NInput v-model:value="formData.url" placeholder="https://example.com" /></NFormItem></NGridItem>
+          <NGridItem><NFormItem label="是否关键基础设施"><NSwitch v-model:value="formData.is_key" /></NFormItem></NGridItem>
+          <NGridItem><NFormItem label="安全保护等级" required><NSelect v-model:value="formData.security_protection_level" :options="securityOptions" /></NFormItem></NGridItem>
           <NGridItem><NFormItem label="备案证明编号"><NInput v-model:value="formData.filing_cert_number" /></NFormItem></NGridItem>
           <NGridItem><NFormItem label="ICP备案号"><NInput v-model:value="formData.icp_filing_number" /></NFormItem></NGridItem>
-          <NGridItem><NFormItem label="所属单位"><NSelect v-model:value="formData.organize_id" :options="organizeOptions" filterable clearable /></NFormItem></NGridItem>
-          <NGridItem>
+          <NGridItem><NFormItem label="公网安备案号"><NInput v-model:value="formData.public_security_filing" /></NFormItem></NGridItem>
+          <NGridItem v-if="showAddressFields"><NFormItem label="地址" required><NInput v-model:value="formData.address" /></NFormItem></NGridItem>
+          <NGridItem v-if="showPortField"><NFormItem label="端口"><NInputNumber v-model:value="formData.port" :min="0" :max="65535" style="width: 100%" /></NFormItem></NGridItem>
+          <NGridItem><NFormItem label="资产分类"><NSelect :value="formData.asset_family" :options="assetFamilyOptions" @update:value="onAssetFamilyChange" /></NFormItem></NGridItem>
+          <NGridItem><NFormItem label="资产子类"><NSelect v-model:value="formData.asset_subtype" :options="assetSubtypeOptions" clearable /></NFormItem></NGridItem>
+          <NGridItem v-if="showTypeField"><NFormItem label="资产类型"><NSelect v-model:value="formData.type" :options="assetTypeOptions" /></NFormItem></NGridItem>
+          <NGridItem><NFormItem label="地域"><NCascader v-model:value="formData.region_code" :options="regionOptions" clearable check-strategy="child" /></NFormItem></NGridItem>
+          <NGridItem v-if="showConstructionFields">
             <NFormItem label="建设单位">
               <NSpace vertical :size="6" style="width: 100%">
                 <NSelect v-model:value="formData.construction_org_id" :options="constructionOptions" filterable clearable />
@@ -915,7 +1370,7 @@ onMounted(() => {
               </NSpace>
             </NFormItem>
           </NGridItem>
-          <NGridItem>
+          <NGridItem v-if="showConstructionFields">
             <NFormItem label="运维单位">
               <NSpace vertical :size="6" style="width: 100%">
                 <NSelect v-model:value="formData.operation_org_id" :options="constructionOptions" filterable clearable />
@@ -927,7 +1382,7 @@ onMounted(() => {
             </NFormItem>
           </NGridItem>
           <NGridItem><NFormItem label="数据来源"><NSelect v-model:value="formData.data_source" :options="sourceOptions" /></NFormItem></NGridItem>
-          <NGridItem><NFormItem label="责任人"><NInput v-model:value="formData.responsible_user_name" /></NFormItem></NGridItem>
+          <NGridItem v-if="showResponsibleField"><NFormItem label="责任人"><NInput v-model:value="formData.responsible_user_name" /></NFormItem></NGridItem>
           <NGridItem span="2"><NFormItem label="备注"><NInput v-model:value="formData.remark" type="textarea" :rows="2" /></NFormItem></NGridItem>
           </NGrid>
         </div>
@@ -978,110 +1433,6 @@ onMounted(() => {
       </div>
       <template #action><NSpace><NButton @click="setAssetModalVisible(false)">取消</NButton><NButton type="primary" @click="onSaveWithDynamicForm">确认</NButton></NSpace></template>
     </NModal>
-
-    <!-- 详情抽屉 -->
-    <NDrawer v-model:show="showDetail" :width="720" @update:show="setDetailVisible">
-      <NDrawerContent :title="detailItem?.system_name || detailItem?.name || '资产详情'">
-        <NTabs v-if="detailItem" type="line" size="small">
-          <NTabPane name="info" tab="资产信息">
-            <NDescriptions class="asset-detail-section" label-placement="left" bordered :column="1" size="small">
-              <NDescriptionsItem label="ID">{{ detailItem.id }}</NDescriptionsItem>
-              <NDescriptionsItem label="名称">{{ detailItem.name }}</NDescriptionsItem>
-              <NDescriptionsItem label="地址">{{ detailItem.address }}</NDescriptionsItem>
-              <NDescriptionsItem label="域名">{{ detailItem.domain || '-' }}</NDescriptionsItem>
-              <NDescriptionsItem label="端口">{{ detailItem.port || '-' }}</NDescriptionsItem>
-              <NDescriptionsItem
-                v-for="field in assetInfoFields"
-                :key="field.key"
-                :label="field.label"
-              >
-                {{ assetFieldText(detailItem, field) }}
-              </NDescriptionsItem>
-              <NDescriptionsItem label="数据编号">{{ detailItem.data_number || '-' }}</NDescriptionsItem>
-              <NDescriptionsItem label="所属单位">{{ organizeLabel(detailItem.organize_id) }}</NDescriptionsItem>
-              <NDescriptionsItem label="建设单位">{{ constructionLabel(detailItem.construction_org_id) }}</NDescriptionsItem>
-              <NDescriptionsItem label="运维单位">{{ constructionLabel(detailItem.operation_org_id) }}</NDescriptionsItem>
-              <NDescriptionsItem label="生命周期">{{ lifecycleMap[detailItem.lifecycle_state ?? '']?.label || detailItem.lifecycle_state || '-' }}</NDescriptionsItem>
-              <NDescriptionsItem label="风险分">{{ detailItem.risk_score ?? 0 }}</NDescriptionsItem>
-              <NDescriptionsItem label="漏洞数">{{ detailItem.vuln_count ?? 0 }}</NDescriptionsItem>
-              <NDescriptionsItem label="责任人">{{ detailItem.responsible_user_name || '-' }}</NDescriptionsItem>
-              <NDescriptionsItem label="数据来源">{{ sourceMap[detailItem.data_source ?? ''] || detailItem.data_source || '-' }}</NDescriptionsItem>
-              <NDescriptionsItem label="等保证号">{{ detailItem.filing_cert_number || '-' }}</NDescriptionsItem>
-              <NDescriptionsItem label="ICP备案">{{ detailItem.icp_filing_number || '-' }}</NDescriptionsItem>
-              <NDescriptionsItem label="最近扫描">{{ detailItem.last_scan_at || '-' }}</NDescriptionsItem>
-              <NDescriptionsItem label="SSL到期">{{ detailItem.ssl_expires_at || '-' }}</NDescriptionsItem>
-              <NDescriptionsItem label="创建时间">{{ detailItem.created_at }}</NDescriptionsItem>
-              <NDescriptionsItem label="备注">{{ detailItem.remark || '-' }}</NDescriptionsItem>
-            </NDescriptions>
-          </NTabPane>
-          <NTabPane name="unit" tab="单位信息">
-            <NDescriptions label-placement="left" bordered :column="1" size="small">
-              <NDescriptionsItem label="所属单位">{{ organizeLabel(detailItem.organize_id) }}</NDescriptionsItem>
-              <NDescriptionsItem
-                v-for="field in unitInfoFields"
-                :key="field.key"
-                :label="field.label"
-              >
-                {{ extraFieldText(detailItem, field) }}
-              </NDescriptionsItem>
-            </NDescriptions>
-          </NTabPane>
-          <NTabPane name="construction" tab="建设单位">
-            <NDescriptions label-placement="left" bordered :column="1" size="small">
-              <NDescriptionsItem label="公网安备案号">{{ constructionFieldText(detailItem.construction_org_id, 'security_filing') }}</NDescriptionsItem>
-              <NDescriptionsItem label="建设单位名称">{{ constructionLabel(detailItem.construction_org_id) }}</NDescriptionsItem>
-              <NDescriptionsItem label="系统建设单位所在地">{{ constructionFieldText(detailItem.construction_org_id, 'location') }}</NDescriptionsItem>
-              <NDescriptionsItem label="系统建设单位详细地址">{{ constructionFieldText(detailItem.construction_org_id, 'address') }}</NDescriptionsItem>
-              <NDescriptionsItem label="系统建设负责人及职务">{{ constructionFieldText(detailItem.construction_org_id, 'charge_person') }}</NDescriptionsItem>
-              <NDescriptionsItem label="系统建设联系电话">{{ constructionFieldText(detailItem.construction_org_id, 'charge_phone') }}</NDescriptionsItem>
-            </NDescriptions>
-          </NTabPane>
-          <NTabPane name="operation" tab="运维单位">
-            <NDescriptions label-placement="left" bordered :column="1" size="small">
-              <NDescriptionsItem label="运维单位名称">{{ constructionLabel(detailItem.operation_org_id) }}</NDescriptionsItem>
-              <NDescriptionsItem label="系统运维负责人及职务">{{ constructionFieldText(detailItem.operation_org_id, 'charge_person') }}</NDescriptionsItem>
-              <NDescriptionsItem label="系统运维联系电话">{{ constructionFieldText(detailItem.operation_org_id, 'charge_phone') }}</NDescriptionsItem>
-              <NDescriptionsItem label="系统建设单位所在地">{{ constructionFieldText(detailItem.operation_org_id, 'location') }}</NDescriptionsItem>
-              <NDescriptionsItem label="系统建设单位详细地址">{{ constructionFieldText(detailItem.operation_org_id, 'address') }}</NDescriptionsItem>
-            </NDescriptions>
-          </NTabPane>
-          <NTabPane v-if="assetDynamicTemplate || assetDynamicSubmission?.version" name="dynamic" tab="扩展信息">
-            <NCard :bordered="false" size="small" :loading="assetDynamicLoading">
-              <div v-if="assetDynamicSubmission?.version" class="asset-dynamic-note">
-                该扩展信息按填写时的 v{{ assetDynamicSubmission.version.version }} 表单快照渲染。
-              </div>
-              <DynamicFormRenderer
-                v-if="assetDynamicTemplate || assetDynamicSubmission?.version"
-                v-model="assetDynamicFormData"
-                readonly
-                :schema="assetDynamicSubmission?.version?.schema || assetDynamicTemplate?.schema || {}"
-                :options="assetDynamicRenderOptions"
-              />
-              <div v-else class="asset-empty-dynamic">暂无扩展表单数据</div>
-            </NCard>
-          </NTabPane>
-          <NTabPane name="vulns" tab="关联漏洞">
-            <div v-if="detailVulns.length === 0" style="padding: 20px; text-align: center; color: #999">暂无关联漏洞</div>
-            <NDataTable v-else :data="detailVulns" :bordered="false" size="small" :columns="[
-              { title: '漏洞', key: 'title', ellipsis: { tooltip: true } },
-              { title: '严重度', key: 'severity', width: 70 },
-              { title: '状态', key: 'status', width: 70 },
-              { title: '时间', key: 'created_at', width: 150 },
-            ]" :max-height="400" />
-            <NButton v-if="detailVulns.length > 0" text type="info" style="margin-top: 8px" @click="router.push(`/scan/vulns?asset_id=${detailItem.id}`)">查看全部漏洞 →</NButton>
-          </NTabPane>
-          <NTabPane name="monitor" tab="关联监控">
-            <div v-if="detailMonitorTasks.length === 0" style="padding: 20px; text-align: center; color: #999">暂无关联监控任务</div>
-            <NDataTable v-else :data="detailMonitorTasks" :bordered="false" size="small" :columns="[
-              { title: '任务名', key: 'task_name', ellipsis: { tooltip: true } },
-              { title: '首页', key: 'target_homepage', width: 180, ellipsis: { tooltip: true } },
-              { title: '状态', key: 'enabled', width: 60, render: (row: any) => row.enabled ? '启用' : '停用' },
-            ]" :max-height="400" />
-            <NButton v-if="detailMonitorTasks.length > 0" text type="info" style="margin-top: 8px" @click="router.push('/monitor/tasks')">查看监控任务 →</NButton>
-          </NTabPane>
-        </NTabs>
-      </NDrawerContent>
-    </NDrawer>
 
     <!-- 快速新增建设运维单位 -->
     <NModal
@@ -1228,10 +1579,75 @@ onMounted(() => {
       </template>
       <template #action><NButton @click="setMonitorResultVisible(false)">关闭</NButton></template>
     </NModal>
+    </div>
   </div>
 </template>
 
 <style scoped>
+.asset-ledger-page {
+  display: flex;
+  gap: 16px;
+  padding: 16px;
+  height: calc(100vh - 64px);
+}
+
+.asset-ledger-page__tree {
+  width: 240px;
+  flex-shrink: 0;
+  overflow-y: auto;
+}
+
+.org-tree-header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.org-tree-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.org-tree-desc {
+  font-size: 11px;
+  color: var(--n-text-color-3);
+}
+
+.asset-ledger-page__main {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+}
+
+.stat-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+
+.stat-dot--success {
+  background-color: #18a058;
+}
+
+.stat-symbol {
+  font-size: 14px;
+  vertical-align: middle;
+}
+
+.stat-symbol--primary {
+  color: #2080f0;
+}
+
+.stat-symbol--danger {
+  color: #d03050;
+}
+
+.stat-symbol--warning {
+  color: #f0a020;
+}
+
 :deep(.asset-modal .n-dialog) {
   display: flex;
   flex-direction: column;
@@ -1403,5 +1819,187 @@ onMounted(() => {
   .asset-form :deep(.n-form-item-label) {
     min-width: 112px;
   }
+}
+
+.asset-ledger-card {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.asset-tabs {
+  padding: 8px 0 16px;
+  border-bottom: 1px solid var(--n-border-color-split);
+  margin-bottom: 16px;
+}
+
+.asset-tab-btn {
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.asset-tab-btn:hover {
+  transform: translateY(-1px);
+}
+
+.stats-grid {
+  margin-bottom: 16px;
+}
+
+.stat-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 10px;
+  background: var(--n-color-embedded, var(--n-color));
+  border: 1px solid var(--n-border-color);
+  border-left: 3px solid var(--n-border-color);
+  transition: all 0.2s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.stat-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  color: var(--n-text-color-3);
+  background: var(--n-color-embedded, var(--n-color));
+  transition: all 0.2s ease;
+}
+
+.stat-icon--indigo {
+  color: #6366f1;
+  background: rgba(99, 102, 241, 0.08);
+}
+
+.stat-icon--emerald {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.stat-icon--red {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.stat-icon--amber {
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.stat-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.stat-value {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--n-text-color);
+}
+
+.stat-label {
+  font-size: 13px;
+  color: var(--n-text-color-3);
+  margin-top: 2px;
+}
+
+.alert-card {
+  margin-bottom: 16px;
+  border-left: 4px solid #F59E0B;
+}
+
+.alert-title {
+  font-weight: 600;
+}
+
+.alert-title--error {
+  color: #d03050;
+}
+
+.alert-title--warning {
+  color: #f0a020;
+}
+
+.alert-tags {
+  display: inline-flex;
+  vertical-align: middle;
+}
+
+.alert-tag {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.alert-tag:hover {
+  transform: translateY(-1px);
+}
+
+.filter-section {
+  margin-bottom: 16px;
+}
+
+.filter-row {
+  padding: 12px 16px;
+  background: var(--n-color-embedded, var(--n-color));
+  border-radius: 8px;
+  border: 1px solid var(--n-border-color);
+}
+
+.filter-form :deep(.n-form-item) {
+  margin-bottom: 0;
+}
+
+.advanced-filter {
+  margin-top: 12px;
+  padding: 12px 16px;
+  background: var(--n-color-embedded, var(--n-color));
+  border-radius: 8px;
+  border: 1px dashed var(--n-border-color);
+  animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.asset-ledger-page :deep(.n-card__header) {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--n-border-color-split);
+}
+
+.asset-ledger-page :deep(.n-data-table) {
+  border-radius: 8px;
+}
+
+.asset-ledger-page :deep(.n-data-table-th) {
+  background: var(--n-color-embedded, var(--n-color));
+}
+
+.asset-ledger-page :deep(.n-data-table-tr:hover .n-data-table-td) {
+  background: var(--n-color-hover);
+}
+
+.asset-ledger-page :deep(.n-button--quaternary) {
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.asset-ledger-page :deep(.n-button--quaternary:hover) {
+  transform: translateY(-1px);
 }
 </style>

@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"vulnscan-backend/model"
-	"vulnscan-backend/scan/engine"
+	"vulnscan-backend/scan/core"
 	"vulnscan-backend/scan/rulestore"
 )
 
@@ -51,9 +51,9 @@ var testPayloads = []string{
 	"/?cmd=cat+/etc/passwd",
 }
 
-func (m *WAFDetector) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
+func (m *WAFDetector) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {
 	start := time.Now()
-	result := &engine.ModuleResult{ModuleID: m.ID()}
+	result := &core.ModuleResult{ModuleID: m.ID()}
 
 	rules := m.store.Get(model.RuleTypeWAFDetect)
 	if len(rules) == 0 {
@@ -73,7 +73,7 @@ func (m *WAFDetector) Run(ctx context.Context, targets []*engine.Target, config 
 
 		wg.Add(1)
 		sem <- struct{}{}
-		go func(target *engine.Target, base string) {
+		go func(target *core.Target, base string) {
 			defer wg.Done()
 			defer func() { <-sem }()
 
@@ -81,7 +81,7 @@ func (m *WAFDetector) Run(ctx context.Context, targets []*engine.Target, config 
 
 			mu.Lock()
 			for _, waf := range detected {
-				result.Findings = append(result.Findings, &engine.Finding{
+				result.Findings = append(result.Findings, &core.Finding{
 					ModuleID:   m.ID(),
 					Target:     target,
 					Type:       "waf",
@@ -248,7 +248,7 @@ func matchRule(r *rulestore.CompiledRule, resp *httpResponse) (bool, string) {
 	return false, ""
 }
 
-func buildBaseURL(t *engine.Target) string {
+func buildBaseURL(t *core.Target) string {
 	if t.URL != "" {
 		return strings.TrimRight(t.URL, "/")
 	}

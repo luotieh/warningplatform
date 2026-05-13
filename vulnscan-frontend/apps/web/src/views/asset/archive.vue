@@ -53,8 +53,7 @@ const columns = [
     width: 110,
     render: (row: AssetArchiveSnapshot) => h(NTag, { size: 'small' }, () => row.status || 'archived'),
   },
-  { title: '资产名称', key: 'asset_name', width: 180, ellipsis: { tooltip: true } },
-  { title: '系统名称', key: 'system_name', width: 180, ellipsis: { tooltip: true } },
+  { title: '系统名称', key: 'asset_name', width: 180, ellipsis: { tooltip: true } },
   { title: '访问地址', key: 'address', minWidth: 220, ellipsis: { tooltip: true } },
   { title: '资产所属单位', key: 'organize_id', width: 150, ellipsis: { tooltip: true } },
   { title: '资产ID', key: 'asset_id', width: 170, ellipsis: { tooltip: true } },
@@ -133,7 +132,7 @@ onMounted(() => {
     <NCard title="资产归档查询" size="small">
       <NForm inline label-placement="left" :show-feedback="false" class="asset-toolbar">
         <NFormItem label="关键词">
-          <NInput v-model:value="searchForm.keyword" clearable placeholder="资产名称 / 系统名称 / 地址" />
+          <NInput v-model:value="searchForm.keyword" clearable placeholder="系统名称 / 地址" />
         </NFormItem>
         <NFormItem label="资产ID">
           <NInput v-model:value="searchForm.asset_id" clearable placeholder="资产ID" />
@@ -174,8 +173,7 @@ onMounted(() => {
     <NDrawer v-model:show="drawer" :width="720">
       <NDrawerContent title="归档快照" :native-scrollbar="false">
         <NDescriptions v-if="detail" label-placement="left" bordered size="small" :column="1">
-          <NDescriptionsItem label="资产名称">{{ detail.asset_name || '-' }}</NDescriptionsItem>
-          <NDescriptionsItem label="系统名称">{{ detail.system_name || '-' }}</NDescriptionsItem>
+          <NDescriptionsItem label="系统名称">{{ detail.asset_name || '-' }}</NDescriptionsItem>
           <NDescriptionsItem label="访问地址">{{ detail.address || '-' }}</NDescriptionsItem>
           <NDescriptionsItem label="资产所属单位">{{ detail.organize_id || '-' }}</NDescriptionsItem>
           <NDescriptionsItem label="资产ID">{{ detail.asset_id }}</NDescriptionsItem>

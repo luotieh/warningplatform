@@ -1,4 +1,5 @@
 import { baseRequestClient, requestClient } from '#/api/request';
+import { normalizePagedResponse } from '#/api/helpers';
 
 export interface SubMaster {
   id: string;
@@ -26,9 +27,7 @@ export interface FederationStats {
 
 export async function getSubMasterList(params?: Record<string, any>) {
   const res = await baseRequestClient.get<any>('/federation/sub-masters', { params });
-  const body = (res as Record<string, unknown>).data ?? res;
-  const typed = body as { data?: SubMaster[]; count?: number };
-  return { items: typed.data ?? [], total: typed.count ?? 0 };
+  return normalizePagedResponse<SubMaster>(res);
 }
 
 export function getFederationStats() {

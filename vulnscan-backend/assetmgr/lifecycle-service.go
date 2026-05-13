@@ -46,24 +46,13 @@ func (s *serviceLifecycle) ListTransitions(req ac.LifecycleListReq) ([]model.Ass
 
 func (s *serviceLifecycle) Transition(assetID, toState, operator, remark string) error {
 	return s.session().Transaction(func(tx *gorm.DB) error {
-		var asset model.Asset
-		if err := tx.Select("id, lifecycle_state").Where("id = ?", assetID).First(&asset).Error; err != nil {
-			return err
-		}
-
 		record := model.AssetLifecycle{
-			AssetID:   assetID,
-			FromState: asset.LifecycleState,
-			ToState:   toState,
-			Operator:  operator,
-			Remark:    remark,
+			AssetID:  assetID,
+			ToState:  toState,
+			Operator: operator,
+			Remark:   remark,
 		}
-		if err := tx.Create(&record).Error; err != nil {
-			return err
-		}
-
-		return tx.Model(&model.Asset{}).Where("id = ?", assetID).
-			Update("lifecycle_state", toState).Error
+		return tx.Create(&record).Error
 	})
 }
 

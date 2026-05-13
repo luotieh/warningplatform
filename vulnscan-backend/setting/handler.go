@@ -1,112 +1,71 @@
 package setting
 
 import (
-	"encoding/json"
-	"log/slog"
-	"strconv"
-	"sync"
-	"time"
-
-	"vulnscan-backend/model"
-
 	"code.yt-security.com/public/core/v2/web"
 	"code.yt-security.com/public/sdk/authorize"
 	"code.yt-security.com/public/sdk/middleware"
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 type Handler struct {
-	db    *gorm.DB
-	cache sync.Map
+	svc *ServiceSetting
 }
 
-func NewHandler(db *gorm.DB) *Handler {
-	h := &Handler{db: db}
-	h.warmCache()
-	return h
+func NewHandler(svc *ServiceSetting) *Handler {
+	return &Handler{svc: svc}
 }
 
-func (h *Handler) warmCache() {
-	var items []model.SystemSetting
-	if err := h.db.Find(&items).Error; err != nil {
-		slog.Error("加载系统设置缓存失败", "error", err)
-		return
-	}
-	for _, item := range items {
-		h.cache.Store(item.Key, item.Value)
-	}
-	slog.Info("[+] 系统设置缓存已加载", "count", len(items))
-}
-
+// Get delegates to the service cache.
 func (h *Handler) Get(key, fallback string) string {
-	if v, ok := h.cache.Load(key); ok {
-		return v.(string)
-	}
-	return fallback
+	return h.svc.Get(key, fallback)
 }
 
+// GetInt delegates to the service cache.
 func (h *Handler) GetInt(key string, fallback int) int {
-	s := h.Get(key, "")
-	if s == "" {
-		return fallback
-	}
-	v, err := strconv.Atoi(s)
-	if err != nil {
-		return fallback
-	}
-	return v
+	return h.svc.GetInt(key, fallback)
 }
 
+// GetBool delegates to the service cache.
 func (h *Handler) GetBool(key string, fallback bool) bool {
-	s := h.Get(key, "")
-	if s == "" {
-		return fallback
-	}
-	v, err := strconv.ParseBool(s)
-	if err != nil {
-		return fallback
-	}
-	return v
+	return h.svc.GetBool(key, fallback)
 }
 
+// GetJSON delegates to the service cache.
 func (h *Handler) GetJSON(key string, target interface{}) error {
-	s := h.Get(key, "")
-	if s == "" {
-		return nil
-	}
-	return json.Unmarshal([]byte(s), target)
+	return h.svc.GetJSON(key, target)
+}
+
+// SeedDefaults delegates to the service.
+func (h *Handler) SeedDefaults() {
+	h.svc.SeedDefaults()
 }
 
 func (h *Handler) ListAll(c *gin.Context) {
 	group := c.Query("group")
-	var items []model.SystemSetting
-	tx := h.db.Model(&model.SystemSetting{})
-	if group != "" {
-		tx = tx.Where("`group` = ?", group)
+	items, err := h.svc.ListAll(group)
+	if err != nil {
+		web.Fail(c).Err(err).Send()
+		return
 	}
-	tx.Order("`group`, `key`").Find(&items)
-
 	for i := range items {
 		if items[i].IsSecret && items[i].Value != "" {
 			items[i].Value = "******"
 		}
 	}
-	web.RespContent(c, web.Success, items)
+	web.OK(c).Data(items).Send()
 }
 
 func (h *Handler) GetByKey(c *gin.Context) {
 	key := c.Param("key")
-	var item model.SystemSetting
-	if err := h.db.Where("`key` = ?", key).First(&item).Error; err != nil {
-		web.Resp(c, web.NotFound)
+	item, err := h.svc.GetByKey(key)
+	if err != nil {
+		web.Err(c, web.NotFound).Send()
 		return
 	}
 	if item.IsSecret && item.Value != "" {
 		item.Value = "******"
 	}
-	web.RespContent(c, web.Success, item)
+	web.OK(c).Data(item).Send()
 }
 
 type batchUpdateReq struct {
@@ -117,9 +76,8 @@ type batchUpdateReq struct {
 }
 
 func (h *Handler) BatchUpdate(c *gin.Context) {
-	var req batchUpdateReq
-	if err := c.ShouldBindJSON(&req); err != nil {
-		web.Resp(c, web.ParamsMissingRequired)
+	req, ok := web.BindJSON[batchUpdateReq](c)
+	if !ok {
 		return
 	}
 
@@ -129,44 +87,26 @@ func (h *Handler) BatchUpdate(c *gin.Context) {
 		updatedBy = user.UserID
 	}
 
-	now := time.Now()
-	err := h.db.Transaction(func(tx *gorm.DB) error {
-		for _, item := range req.Items {
-			result := tx.Model(&model.SystemSetting{}).
-				Where("`key` = ?", item.Key).
-				Updates(map[string]any{
-					"value":      item.Value,
-					"updated_at": now,
-					"updated_by": updatedBy,
-				})
-			if result.RowsAffected == 0 {
-				return tx.Create(&model.SystemSetting{
-					Key:       item.Key,
-					Value:     item.Value,
-					UpdatedAt: now,
-					UpdatedBy: updatedBy,
-				}).Error
-			}
-			if result.Error != nil {
-				return result.Error
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		web.Resp(c, web.InternalError)
-		return
+	svcItems := make([]struct {
+		Key   string
+		Value string
+	}, len(req.Items))
+	for i, item := range req.Items {
+		svcItems[i] = struct {
+			Key   string
+			Value string
+		}{Key: item.Key, Value: item.Value}
 	}
 
-	for _, item := range req.Items {
-		h.cache.Store(item.Key, item.Value)
+	if err := h.svc.BatchUpdate(svcItems, updatedBy); err != nil {
+		web.Fail(c).Err(err).Send()
+		return
 	}
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 func (h *Handler) ResetGroup(c *gin.Context) {
 	group := c.Param("group")
-	defaults := defaultSettings()
 
 	user, _ := middleware.GetCurrentUser(c)
 	updatedBy := ""
@@ -174,53 +114,11 @@ func (h *Handler) ResetGroup(c *gin.Context) {
 		updatedBy = user.UserID
 	}
 
-	now := time.Now()
-	err := h.db.Transaction(func(tx *gorm.DB) error {
-		for _, d := range defaults {
-			if d.Group != group {
-				continue
-			}
-			tx.Clauses(clause.OnConflict{
-				Columns:   []clause.Column{{Name: "key"}},
-				DoUpdates: clause.AssignmentColumns([]string{"value", "updated_at", "updated_by"}),
-			}).Create(&model.SystemSetting{
-				Key:       d.Key,
-				Value:     d.Value,
-				Group:     d.Group,
-				Label:     d.Label,
-				ValueType: d.ValueType,
-				UpdatedAt: now,
-				UpdatedBy: updatedBy,
-			})
-			h.cache.Store(d.Key, d.Value)
-		}
-		return nil
-	})
-	if err != nil {
-		web.Resp(c, web.InternalError)
+	if err := h.svc.ResetGroup(group, updatedBy); err != nil {
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.Resp(c, web.Success)
-}
-
-func (h *Handler) SeedDefaults() {
-	defaults := defaultSettings()
-	now := time.Now()
-	for _, d := range defaults {
-		h.db.Clauses(clause.OnConflict{DoNothing: true}).Create(&model.SystemSetting{
-			Key:         d.Key,
-			Value:       d.Value,
-			Group:       d.Group,
-			Label:       d.Label,
-			Description: d.Description,
-			ValueType:   d.ValueType,
-			IsSecret:    d.IsSecret,
-			UpdatedAt:   now,
-		})
-		if _, loaded := h.cache.Load(d.Key); !loaded {
-			h.cache.Store(d.Key, d.Value)
-		}
-	}
+	web.OK(c).Send()
 }
 
 type SettingRoutes struct {

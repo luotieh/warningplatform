@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"vulnscan-backend/scan/engine"
+	"vulnscan-backend/scan/core"
 )
 
 type RealIPFinder struct {
@@ -44,9 +44,9 @@ type ipCandidate struct {
 	Confidence int
 }
 
-func (m *RealIPFinder) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
+func (m *RealIPFinder) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {
 	start := time.Now()
-	result := &engine.ModuleResult{ModuleID: m.ID()}
+	result := &core.ModuleResult{ModuleID: m.ID()}
 
 	for _, t := range targets {
 		domain := t.Host
@@ -57,7 +57,7 @@ func (m *RealIPFinder) Run(ctx context.Context, targets []*engine.Target, config
 		candidates := m.findRealIP(ctx, domain)
 
 		for _, c := range candidates {
-			result.Findings = append(result.Findings, &engine.Finding{
+			result.Findings = append(result.Findings, &core.Finding{
 				ModuleID:   m.ID(),
 				Target:     t,
 				Type:       "real_ip",

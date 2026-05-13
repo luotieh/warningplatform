@@ -83,6 +83,10 @@ export function deleteOrganize(id: string) {
   return requestClient.delete(`/organize/${id}`);
 }
 
+export function syncIamOrganizes() {
+  return requestClient.post('/organize/sync-iam');
+}
+
 // ── 建设运维单位 ──
 
 export interface ConstructionOrg {
@@ -202,7 +206,6 @@ export interface AssetVerifyTask {
   id: string;
   asset_id: string;
   asset_name?: string;
-  system_name?: string;
   address?: string;
   asset_type?: string;
   data_number?: string;
@@ -246,7 +249,6 @@ export interface AssetArchiveSnapshot {
   batch_id?: string;
   organize_id?: string;
   asset_name?: string;
-  system_name?: string;
   address?: string;
   status?: string;
   snapshot?: Record<string, any>;

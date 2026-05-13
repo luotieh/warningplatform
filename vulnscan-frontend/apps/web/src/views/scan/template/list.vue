@@ -2,9 +2,9 @@
 import { ref, computed, h, onMounted } from 'vue';
 import {
   NCard, NDataTable, NButton, NSpace, NTag, NModal, NForm,
-  NFormItem, NInput, NSelect, NSwitch, NPopconfirm, NGrid,
+  NInput, NSelect, NSwitch, NPopconfirm, NGrid,
   NFormItemGi, useMessage, NDynamicTags, NDrawer, NDrawerContent,
-  NDescriptions, NDescriptionsItem, NInputNumber, NIcon, NEmpty,
+  NDescriptions, NDescriptionsItem, NEmpty,
   NDivider, NTimeline, NTimelineItem,
 } from 'naive-ui';
 import type { DataTableColumns } from 'naive-ui';
@@ -260,7 +260,7 @@ function openDetail(row: ScanTemplate) {
             <NFormItemGi :show-feedback="false">
               <NSpace>
                 <NSwitch v-model:value="p.required" size="small" /> <span style="font-size:12px">必填</span>
-                <NButton size="tiny" type="error" quaternary @click="removeParam(idx)">移除</NButton>
+                <NButton size="tiny" type="error" quaternary @click="removeParam(idx as number)">移除</NButton>
               </NSpace>
             </NFormItemGi>
           </NGrid>
@@ -279,7 +279,7 @@ function openDetail(row: ScanTemplate) {
             <NFormItemGi :show-feedback="false">
               <NSpace>
                 <NSwitch v-model:value="s.parallel" size="small" /> <span style="font-size:12px">并行</span>
-                <NButton size="tiny" type="error" quaternary @click="removeStage(idx)">移除</NButton>
+                <NButton size="tiny" type="error" quaternary @click="removeStage(idx as number)">移除</NButton>
               </NSpace>
             </NFormItemGi>
           </NGrid>

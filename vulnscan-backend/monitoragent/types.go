@@ -1,7 +1,6 @@
 package monitoragent
 
 import (
-	"context"
 	"time"
 )
 
@@ -91,16 +90,4 @@ type ScriptInfo struct {
 	Src        string `json:"src"`
 	IsExternal bool   `json:"is_external"`
 	Snippet    string `json:"content_snippet"`
-}
-
-// Engine 检测引擎接口
-type Engine interface {
-	Name() string
-	Run(ctx context.Context, task *TaskMessage, page *PageSnapshot) (map[string]any, error)
-}
-
-// RuleStore 规则数据访问
-type RuleStore interface {
-	GetModuleRules(moduleKey string) ([]byte, error)
-	GetAllRules() (map[string][]byte, error)
 }

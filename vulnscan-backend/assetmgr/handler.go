@@ -49,14 +49,13 @@ func NewHandler(
 // ── 生命周期 ──
 
 func (h *Handler) LifecycleList(c *gin.Context) {
-	var req ac.LifecycleListReq
-	_ = c.ShouldBindQuery(&req)
+	req, _ := web.BindQuery[ac.LifecycleListReq](c)
 	items, count, err := h.lifecycle.ListTransitions(req)
 	if err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.RespContentWithNum(c, web.Success, count, items)
+	web.OK(c).List(count, items).Send()
 }
 
 func (h *Handler) LifecycleTransition(c *gin.Context) {
@@ -66,62 +65,60 @@ func (h *Handler) LifecycleTransition(c *gin.Context) {
 	}
 	user, _ := iamsdk.GetCurrentUser(c)
 	if err := h.lifecycle.Transition(req.AssetID, req.ToState, user.UserID, req.Remark); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 // ── 风险评分 ──
 
 func (h *Handler) RiskList(c *gin.Context) {
-	var req ac.RiskListReq
-	_ = c.ShouldBindQuery(&req)
+	req, _ := web.BindQuery[ac.RiskListReq](c)
 	items, count, err := h.risk.List(req)
 	if err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.RespContentWithNum(c, web.Success, count, items)
+	web.OK(c).List(count, items).Send()
 }
 
 func (h *Handler) RiskDetail(c *gin.Context) {
 	item, err := h.risk.GetByAssetID(c.Param("asset_id"))
 	if err != nil {
-		web.Resp(c, web.NotFound)
+		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.RespContent(c, web.Success, item)
+	web.OK(c).Data(item).Send()
 }
 
 func (h *Handler) RiskRecalculate(c *gin.Context) {
 	if err := h.risk.Recalculate(c.Param("asset_id")); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 func (h *Handler) RiskRecalculateAll(c *gin.Context) {
 	count, err := h.risk.RecalculateAll()
 	if err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.RespContent(c, web.Success, gin.H{"recalculated": count})
+	web.OK(c).Data(gin.H{"recalculated": count}).Send()
 }
 
 // ── 告警 ──
 
 func (h *Handler) AlertList(c *gin.Context) {
-	var req ac.AlertListReq
-	_ = c.ShouldBindQuery(&req)
+	req, _ := web.BindQuery[ac.AlertListReq](c)
 	items, count, err := h.alert.List(req)
 	if err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.RespContentWithNum(c, web.Success, count, items)
+	web.OK(c).List(count, items).Send()
 }
 
 func (h *Handler) AlertCreate(c *gin.Context) {
@@ -132,40 +129,39 @@ func (h *Handler) AlertCreate(c *gin.Context) {
 	user, _ := iamsdk.GetCurrentUser(c)
 	item.CreatedBy = user.UserID
 	if err := h.alert.Create(&item); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.RespContent(c, web.Success, item)
+	web.OK(c).Data(item).Send()
 }
 
 func (h *Handler) AlertAck(c *gin.Context) {
 	user, _ := iamsdk.GetCurrentUser(c)
 	if err := h.alert.Ack(c.Param("id"), user.UserID); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 func (h *Handler) AlertResolve(c *gin.Context) {
 	if err := h.alert.Resolve(c.Param("id")); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 // ── 审核 ──
 
 func (h *Handler) VerifyList(c *gin.Context) {
-	var req ac.VerifyListReq
-	_ = c.ShouldBindQuery(&req)
+	req, _ := web.BindQuery[ac.VerifyListReq](c)
 	items, count, err := h.verify.List(req)
 	if err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.RespContentWithNum(c, web.Success, count, items)
+	web.OK(c).List(count, items).Send()
 }
 
 func (h *Handler) VerifySubmit(c *gin.Context) {
@@ -177,10 +173,10 @@ func (h *Handler) VerifySubmit(c *gin.Context) {
 	item.CreatedBy = user.UserID
 	item.OrganizeID = user.OrganizeID
 	if err := h.verify.Submit(&item); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.RespContent(c, web.Success, item)
+	web.OK(c).Data(item).Send()
 }
 
 func (h *Handler) VerifyReview(c *gin.Context) {
@@ -190,10 +186,10 @@ func (h *Handler) VerifyReview(c *gin.Context) {
 	}
 	user, _ := iamsdk.GetCurrentUser(c)
 	if err := h.verify.Review(c.Param("id"), req.ReviewStatus, req.ReviewRemark, user.UserID); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 // ── 合规项 ──
@@ -205,10 +201,10 @@ func (h *Handler) VerifyTaskList(c *gin.Context) {
 	}
 	items, count, err := h.verifyTask.ListTasks(req)
 	if err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.RespContentWithNum(c, web.Success, count, items)
+	web.OK(c).List(count, items).Send()
 }
 
 func (h *Handler) VerifyTaskCreate(c *gin.Context) {
@@ -219,10 +215,10 @@ func (h *Handler) VerifyTaskCreate(c *gin.Context) {
 	user, _ := iamsdk.GetCurrentUser(c)
 	items, err := h.verifyTask.CreateTasks(req, user.UserID, user.OrganizeID)
 	if err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.RespContent(c, web.Success, gin.H{"items": items, "count": len(items)})
+	web.OK(c).Data(gin.H{"items": items, "count": len(items)}).Send()
 }
 
 func (h *Handler) VerifyTaskReceive(c *gin.Context) {
@@ -232,10 +228,10 @@ func (h *Handler) VerifyTaskReceive(c *gin.Context) {
 	}
 	user, _ := iamsdk.GetCurrentUser(c)
 	if err := h.verifyTask.Receive(c.Param("id"), user.UserID, user.OrganizeID, req.Remark); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 func (h *Handler) VerifyTaskConfirm(c *gin.Context) {
@@ -245,10 +241,10 @@ func (h *Handler) VerifyTaskConfirm(c *gin.Context) {
 	}
 	user, _ := iamsdk.GetCurrentUser(c)
 	if err := h.verifyTask.Confirm(c.Param("id"), user.UserID, req.Remark); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 func (h *Handler) VerifyTaskReject(c *gin.Context) {
@@ -258,10 +254,10 @@ func (h *Handler) VerifyTaskReject(c *gin.Context) {
 	}
 	user, _ := iamsdk.GetCurrentUser(c)
 	if err := h.verifyTask.Reject(c.Param("id"), user.UserID, req.RejectReason, req.Remark); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 func (h *Handler) VerifyTaskForward(c *gin.Context) {
@@ -271,10 +267,10 @@ func (h *Handler) VerifyTaskForward(c *gin.Context) {
 	}
 	user, _ := iamsdk.GetCurrentUser(c)
 	if err := h.verifyTask.Forward(c.Param("id"), req.TargetOrganizeID, user.UserID, req.Remark); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 func (h *Handler) VerifyTaskReturn(c *gin.Context) {
@@ -284,10 +280,10 @@ func (h *Handler) VerifyTaskReturn(c *gin.Context) {
 	}
 	user, _ := iamsdk.GetCurrentUser(c)
 	if err := h.verifyTask.Return(c.Param("id"), user.UserID, req.Remark); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 func (h *Handler) VerifyTaskArchive(c *gin.Context) {
@@ -297,10 +293,10 @@ func (h *Handler) VerifyTaskArchive(c *gin.Context) {
 	}
 	user, _ := iamsdk.GetCurrentUser(c)
 	if err := h.verifyTask.Archive(c.Param("id"), user.UserID, req.Remark); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 func (h *Handler) VerifyTaskReactivate(c *gin.Context) {
@@ -310,10 +306,10 @@ func (h *Handler) VerifyTaskReactivate(c *gin.Context) {
 	}
 	user, _ := iamsdk.GetCurrentUser(c)
 	if err := h.verifyTask.Reactivate(c.Param("id"), user.UserID, req.Remark); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 func (h *Handler) VerifyTaskLogs(c *gin.Context) {
@@ -326,10 +322,10 @@ func (h *Handler) VerifyTaskLogs(c *gin.Context) {
 	}
 	items, count, err := h.verifyTask.ListLogs(req)
 	if err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.RespContentWithNum(c, web.Success, count, items)
+	web.OK(c).List(count, items).Send()
 }
 
 func (h *Handler) ArchiveList(c *gin.Context) {
@@ -339,30 +335,29 @@ func (h *Handler) ArchiveList(c *gin.Context) {
 	}
 	items, count, err := h.verifyTask.ListArchives(req)
 	if err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.RespContentWithNum(c, web.Success, count, items)
+	web.OK(c).List(count, items).Send()
 }
 
 func (h *Handler) ArchiveDetail(c *gin.Context) {
 	item, err := h.verifyTask.GetArchive(c.Param("id"))
 	if err != nil {
-		web.Resp(c, web.NotFound)
+		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.RespContent(c, web.Success, item)
+	web.OK(c).Data(item).Send()
 }
 
 func (h *Handler) ComplianceList(c *gin.Context) {
-	var req ac.ComplianceItemReq
-	_ = c.ShouldBindQuery(&req)
+	req, _ := web.BindQuery[ac.ComplianceItemReq](c)
 	items, count, err := h.compliance.List(req)
 	if err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.RespContentWithNum(c, web.Success, count, items)
+	web.OK(c).List(count, items).Send()
 }
 
 func (h *Handler) ComplianceCreate(c *gin.Context) {
@@ -371,46 +366,44 @@ func (h *Handler) ComplianceCreate(c *gin.Context) {
 		return
 	}
 	if err := h.compliance.Create(&item); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.RespContent(c, web.Success, item)
+	web.OK(c).Data(item).Send()
 }
 
 func (h *Handler) ComplianceUpdate(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
-	var body map[string]interface{}
-	if err := c.ShouldBindJSON(&body); err != nil {
-		web.Resp(c, web.ParamsMissingRequired)
+	body, ok := web.BindJSON[map[string]interface{}](c)
+	if !ok {
 		return
 	}
 	if err := h.compliance.Update(id, body); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 func (h *Handler) ComplianceDelete(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err := h.compliance.Delete(id); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 // ── 责任人 ──
 
 func (h *Handler) ResponsibleList(c *gin.Context) {
-	var req ac.ResponsibleListReq
-	_ = c.ShouldBindQuery(&req)
+	req, _ := web.BindQuery[ac.ResponsibleListReq](c)
 	items, count, err := h.responsible.List(req)
 	if err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.RespContentWithNum(c, web.Success, count, items)
+	web.OK(c).List(count, items).Send()
 }
 
 func (h *Handler) ResponsibleCreate(c *gin.Context) {
@@ -419,57 +412,55 @@ func (h *Handler) ResponsibleCreate(c *gin.Context) {
 		return
 	}
 	if err := h.responsible.Create(&item); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.RespContent(c, web.Success, item)
+	web.OK(c).Data(item).Send()
 }
 
 func (h *Handler) ResponsibleUpdate(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
-	var body map[string]interface{}
-	if err := c.ShouldBindJSON(&body); err != nil {
-		web.Resp(c, web.ParamsMissingRequired)
+	body, ok := web.BindJSON[map[string]interface{}](c)
+	if !ok {
 		return
 	}
 	if err := h.responsible.Update(id, body); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 func (h *Handler) ResponsibleDelete(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err := h.responsible.Delete(id); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 // ── 合规模板 ──
 
 func (h *Handler) TemplateList(c *gin.Context) {
-	var req ac.TemplateListReq
-	_ = c.ShouldBindQuery(&req)
+	req, _ := web.BindQuery[ac.TemplateListReq](c)
 	items, count, err := h.tmpl.List(req)
 	if err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.RespContentWithNum(c, web.Success, count, items)
+	web.OK(c).List(count, items).Send()
 }
 
 func (h *Handler) TemplateDetail(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 	item, err := h.tmpl.GetByID(id)
 	if err != nil {
-		web.Resp(c, web.NotFound)
+		web.Err(c, web.NotFound).Send()
 		return
 	}
 	tmplItems, _ := h.tmpl.ListItems(id)
-	web.RespContent(c, web.Success, gin.H{"template": item, "items": tmplItems})
+	web.OK(c).Data(gin.H{"template": item, "items": tmplItems}).Send()
 }
 
 func (h *Handler) TemplateCreate(c *gin.Context) {
@@ -478,10 +469,10 @@ func (h *Handler) TemplateCreate(c *gin.Context) {
 		return
 	}
 	if err := h.tmpl.Create(&item); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.RespContent(c, web.Success, item)
+	web.OK(c).Data(item).Send()
 }
 
 func (h *Handler) TemplateItemCreate(c *gin.Context) {
@@ -490,23 +481,22 @@ func (h *Handler) TemplateItemCreate(c *gin.Context) {
 		return
 	}
 	if err := h.tmpl.CreateItem(&item); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.RespContent(c, web.Success, item)
+	web.OK(c).Data(item).Send()
 }
 
 // ── 合规检查结果 ──
 
 func (h *Handler) CheckResultList(c *gin.Context) {
-	var req ac.CheckResultListReq
-	_ = c.ShouldBindQuery(&req)
+	req, _ := web.BindQuery[ac.CheckResultListReq](c)
 	items, count, err := h.check.List(req)
 	if err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.RespContentWithNum(c, web.Success, count, items)
+	web.OK(c).List(count, items).Send()
 }
 
 func (h *Handler) CheckResultUpsert(c *gin.Context) {
@@ -517,23 +507,22 @@ func (h *Handler) CheckResultUpsert(c *gin.Context) {
 	user, _ := iamsdk.GetCurrentUser(c)
 	item.CheckedBy = user.UserID
 	if err := h.check.Upsert(&item); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 // ── 集成数据源 ──
 
 func (h *Handler) IntSourceList(c *gin.Context) {
-	var req ac.IntSourceListReq
-	_ = c.ShouldBindQuery(&req)
+	req, _ := web.BindQuery[ac.IntSourceListReq](c)
 	items, count, err := h.integration.ListSources(req)
 	if err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.RespContentWithNum(c, web.Success, count, items)
+	web.OK(c).List(count, items).Send()
 }
 
 func (h *Handler) IntSourceCreate(c *gin.Context) {
@@ -542,46 +531,44 @@ func (h *Handler) IntSourceCreate(c *gin.Context) {
 		return
 	}
 	if err := h.integration.CreateSource(&item); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.RespContent(c, web.Success, item)
+	web.OK(c).Data(item).Send()
 }
 
 func (h *Handler) IntSourceUpdate(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
-	var body map[string]interface{}
-	if err := c.ShouldBindJSON(&body); err != nil {
-		web.Resp(c, web.ParamsMissingRequired)
+	body, ok := web.BindJSON[map[string]interface{}](c)
+	if !ok {
 		return
 	}
 	if err := h.integration.UpdateSource(id, body); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 func (h *Handler) IntSourceDelete(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err := h.integration.DeleteSource(id); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 // ── 工作流 ──
 
 func (h *Handler) WorkflowList(c *gin.Context) {
-	var req ac.WorkflowListReq
-	_ = c.ShouldBindQuery(&req)
+	req, _ := web.BindQuery[ac.WorkflowListReq](c)
 	items, count, err := h.workflow.List(req)
 	if err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.RespContentWithNum(c, web.Success, count, items)
+	web.OK(c).List(count, items).Send()
 }
 
 func (h *Handler) WorkflowCreate(c *gin.Context) {
@@ -593,41 +580,39 @@ func (h *Handler) WorkflowCreate(c *gin.Context) {
 	item.CreatedBy = user.UserID
 	item.ID = qulid.GenerateID()
 	if err := h.workflow.Create(&item); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.RespContent(c, web.Success, item)
+	web.OK(c).Data(item).Send()
 }
 
 func (h *Handler) WorkflowUpdate(c *gin.Context) {
 	id := c.Param("id")
-	var body map[string]interface{}
-	if err := c.ShouldBindJSON(&body); err != nil {
-		web.Resp(c, web.ParamsMissingRequired)
+	body, ok := web.BindJSON[map[string]interface{}](c)
+	if !ok {
 		return
 	}
 	if err := h.workflow.Update(id, body); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 func (h *Handler) WorkflowDelete(c *gin.Context) {
 	if err := h.workflow.Delete(c.Param("id")); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 func (h *Handler) WorkflowExecutions(c *gin.Context) {
-	var req ac.ExecutionListReq
-	_ = c.ShouldBindQuery(&req)
+	req, _ := web.BindQuery[ac.ExecutionListReq](c)
 	items, count, err := h.workflow.ListExecutions(req)
 	if err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.RespContentWithNum(c, web.Success, count, items)
+	web.OK(c).List(count, items).Send()
 }

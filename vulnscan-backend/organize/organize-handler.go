@@ -20,26 +20,25 @@ func NewHandlerOrganize(svc oc.ServiceOrganize) *HandlerOrganize {
 }
 
 func (h *HandlerOrganize) List(c *gin.Context) {
-	var req oc.OrganizeListReq
-	if err := c.ShouldBindQuery(&req); err != nil {
-		web.Resp(c, web.ParamsMissingRequired)
+	req, ok := web.BindQuery[oc.OrganizeListReq](c)
+	if !ok {
 		return
 	}
 	items, count, err := h.svc.List(req)
 	if err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.RespContentWithNum(c, web.Success, count, items)
+	web.OK(c).List(count, items).Send()
 }
 
 func (h *HandlerOrganize) GetByID(c *gin.Context) {
 	item, err := h.svc.GetByID(c.Param("id"))
 	if err != nil {
-		web.Resp(c, web.NotFound)
+		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.RespContent(c, web.Success, item)
+	web.OK(c).Data(item).Send()
 }
 
 func (h *HandlerOrganize) Create(c *gin.Context) {
@@ -50,41 +49,40 @@ func (h *HandlerOrganize) Create(c *gin.Context) {
 	user, _ := iamsdk.GetCurrentUser(c)
 	item.CreatedBy = user.UserID
 	if err := h.svc.Create(&item); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.RespContent(c, web.Success, item)
+	web.OK(c).Data(item).Send()
 }
 
 func (h *HandlerOrganize) Update(c *gin.Context) {
 	id := c.Param("id")
-	var body map[string]interface{}
-	if err := c.ShouldBindJSON(&body); err != nil {
-		web.Resp(c, web.ParamsMissingRequired)
+	body, ok := web.BindJSON[map[string]interface{}](c)
+	if !ok {
 		return
 	}
 	if err := h.svc.Update(id, body); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 func (h *HandlerOrganize) Delete(c *gin.Context) {
 	if err := h.svc.Delete(c.Param("id")); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 func (h *HandlerOrganize) Tree(c *gin.Context) {
 	items, err := h.svc.Tree()
 	if err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.RespContent(c, web.Success, items)
+	web.OK(c).Data(items).Send()
 }
 
 // ── 建设运维单位 Handler ──
@@ -98,26 +96,25 @@ func NewHandlerConstruction(svc oc.ServiceConstruction) *HandlerConstruction {
 }
 
 func (h *HandlerConstruction) List(c *gin.Context) {
-	var req oc.ConstructionListReq
-	if err := c.ShouldBindQuery(&req); err != nil {
-		web.Resp(c, web.ParamsMissingRequired)
+	req, ok := web.BindQuery[oc.ConstructionListReq](c)
+	if !ok {
 		return
 	}
 	items, count, err := h.svc.List(req)
 	if err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.RespContentWithNum(c, web.Success, count, items)
+	web.OK(c).List(count, items).Send()
 }
 
 func (h *HandlerConstruction) GetByID(c *gin.Context) {
 	item, err := h.svc.GetByID(c.Param("id"))
 	if err != nil {
-		web.Resp(c, web.NotFound)
+		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.RespContent(c, web.Success, item)
+	web.OK(c).Data(item).Send()
 }
 
 func (h *HandlerConstruction) Create(c *gin.Context) {
@@ -128,30 +125,29 @@ func (h *HandlerConstruction) Create(c *gin.Context) {
 	user, _ := iamsdk.GetCurrentUser(c)
 	item.CreatedBy = user.UserID
 	if err := h.svc.Create(&item); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.RespContent(c, web.Success, item)
+	web.OK(c).Data(item).Send()
 }
 
 func (h *HandlerConstruction) Update(c *gin.Context) {
 	id := c.Param("id")
-	var body map[string]interface{}
-	if err := c.ShouldBindJSON(&body); err != nil {
-		web.Resp(c, web.ParamsMissingRequired)
+	body, ok := web.BindJSON[map[string]interface{}](c)
+	if !ok {
 		return
 	}
 	if err := h.svc.Update(id, body); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 func (h *HandlerConstruction) Delete(c *gin.Context) {
 	if err := h.svc.Delete(c.Param("id")); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }

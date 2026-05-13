@@ -19,14 +19,14 @@ import {
   useMessage,
 } from 'naive-ui';
 
-import type { DynamicFormTemplate } from '#/api/form';
+import type { DynamicFormTemplate } from '#/api/formdesign';
 import {
   createDynamicFormTemplate,
   deleteDynamicFormTemplate,
   getDynamicFormTemplates,
   normalizePagedResponse,
   updateDynamicFormTemplate,
-} from '#/api/form';
+} from '#/api/formdesign';
 
 defineOptions({ name: 'FormTemplates' });
 

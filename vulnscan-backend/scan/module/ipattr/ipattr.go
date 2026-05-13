@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"vulnscan-backend/scan/engine"
+	"vulnscan-backend/scan/core"
 )
 
 type IPAttributor struct {
@@ -120,9 +120,9 @@ var cdnASNKeywords = []string{
 	"cachefly", "chinacache", "wangsu", "baishan",
 }
 
-func (m *IPAttributor) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
+func (m *IPAttributor) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {
 	start := time.Now()
-	result := &engine.ModuleResult{ModuleID: m.ID()}
+	result := &core.ModuleResult{ModuleID: m.ID()}
 
 	var mu sync.Mutex
 	var wg sync.WaitGroup
@@ -143,7 +143,7 @@ func (m *IPAttributor) Run(ctx context.Context, targets []*engine.Target, config
 
 		wg.Add(1)
 		sem <- struct{}{}
-		go func(target *engine.Target, ipAddr string) {
+		go func(target *core.Target, ipAddr string) {
 			defer wg.Done()
 			defer func() { <-sem }()
 
@@ -161,7 +161,7 @@ func (m *IPAttributor) Run(ctx context.Context, targets []*engine.Target, config
 				attr = "代理/反向代理"
 			}
 
-			result.Findings = append(result.Findings, &engine.Finding{
+			result.Findings = append(result.Findings, &core.Finding{
 				ModuleID:   m.ID(),
 				Target:     target,
 				Type:       "ip_attribution",

@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"vulnscan-backend/dict"
-	"vulnscan-backend/scan/engine"
+	"vulnscan-backend/scan/core"
 )
 
 type DirScanner struct {
@@ -57,9 +57,9 @@ func (m *DirScanner) ID() string       { return "dir_scan" }
 func (m *DirScanner) Name() string     { return "目录扫描" }
 func (m *DirScanner) Category() string { return "recon" }
 
-func (m *DirScanner) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
+func (m *DirScanner) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {
 	start := time.Now()
-	result := &engine.ModuleResult{ModuleID: m.ID()}
+	result := &core.ModuleResult{ModuleID: m.ID()}
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	var scanned atomic.Int64
@@ -85,7 +85,7 @@ func (m *DirScanner) Run(ctx context.Context, targets []*engine.Target, config m
 
 			wg.Add(1)
 			sem <- struct{}{}
-			go func(target *engine.Target, base, p string) {
+			go func(target *core.Target, base, p string) {
 				defer wg.Done()
 				defer func() { <-sem }()
 
@@ -98,7 +98,7 @@ func (m *DirScanner) Run(ctx context.Context, targets []*engine.Target, config m
 				}
 
 				if m.isInteresting(status, length, baselineStatus, baselineLen) {
-					finding := &engine.Finding{
+					finding := &core.Finding{
 						ModuleID:   m.ID(),
 						Target:     target,
 						Type:       "directory",
@@ -198,7 +198,7 @@ func (m *DirScanner) classifySeverity(path string, status int) string {
 	return "low"
 }
 
-func buildBaseURL(t *engine.Target) string {
+func buildBaseURL(t *core.Target) string {
 	if t.URL != "" {
 		return strings.TrimRight(t.URL, "/")
 	}

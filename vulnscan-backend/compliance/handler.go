@@ -44,17 +44,17 @@ func (h *Handler) ListFrameworks(c *gin.Context) {
 			"rule_count":  len(fw.Rules),
 		})
 	}
-	web.RespContent(c, web.Success, list)
+	web.OK(c).Data(list).Send()
 }
 
 func (h *Handler) GetFramework(c *gin.Context) {
 	id := c.Param("id")
 	fw, ok := h.frameworks[id]
 	if !ok {
-		web.Resp(c, web.NotFound)
+		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.RespContent(c, web.Success, fw)
+	web.OK(c).Data(fw).Send()
 }
 
 func (h *Handler) RunCheck(c *gin.Context) {
@@ -101,7 +101,7 @@ func (h *Handler) GetRules(c *gin.Context) {
 	id := c.Param("id")
 	fw, ok := h.frameworks[id]
 	if !ok {
-		web.Resp(c, web.NotFound)
+		web.Err(c, web.NotFound).Send()
 		return
 	}
 
@@ -118,5 +118,5 @@ func (h *Handler) GetRules(c *gin.Context) {
 		}
 		filtered = append(filtered, rule)
 	}
-	web.RespContent(c, web.Success, filtered)
+	web.OK(c).Data(filtered).Send()
 }

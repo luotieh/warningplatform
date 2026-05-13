@@ -9,11 +9,13 @@ import (
 
 	"vulnscan-backend/model"
 	"vulnscan-backend/pkg/payload"
-	"vulnscan-backend/scan/engine"
+	"vulnscan-backend/scan/core"
+	"vulnscan-backend/scan/scanhttp"
+	"vulnscan-backend/scan/vulnkit"
 )
 
 type LFIScanner struct {
-	base     *engine.VulnScanner
+	base     *vulnkit.VulnScanner
 	payloads *payload.Loader
 }
 
@@ -25,8 +27,8 @@ func (m *LFIScanner) ID() string       { return "lfi" }
 func (m *LFIScanner) Name() string     { return "本地文件包含/路径穿越检测" }
 func (m *LFIScanner) Category() string { return "vuln" }
 
-func (m *LFIScanner) Params() []engine.ModuleParam {
-	return []engine.ModuleParam{engine.VulnVerificationParam()}
+func (m *LFIScanner) Params() []core.ModuleParam {
+	return []core.ModuleParam{core.VulnVerificationParam()}
 }
 
 type lfiPayloadEntry struct {
@@ -100,31 +102,31 @@ func defaultPayloads() []lfiPayloadEntry {
 	}
 }
 
-func (m *LFIScanner) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
-	m.base = engine.NewVulnScanner(config,
-		engine.WithRedirectPolicy(engine.RedirectNoFollow),
-		engine.WithMaxResponseBody(512*1024),
+func (m *LFIScanner) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {
+	m.base = vulnkit.NewVulnScanner(config,
+		scanhttp.WithRedirectPolicy(scanhttp.RedirectNoFollow),
+		scanhttp.WithMaxResponseBody(512*1024),
 	)
-	verifyLevel := engine.GetConfigValue(config, "verification_level", "both")
+	verifyLevel := core.GetConfigValue(config, "verification_level", "both")
 
-	result := m.base.RunTargets(ctx, m.ID(), targets, func(ctx context.Context, target *engine.Target) []*engine.Finding {
+	result := m.base.RunTargets(ctx, m.ID(), targets, func(ctx context.Context, target *core.Target) []*core.Finding {
 		return m.testTarget(ctx, target, verifyLevel)
 	})
 
-	engine.LogModuleComplete(m.ID(), len(targets), len(result.Findings), result.Duration)
+	vulnkit.LogModuleComplete(m.ID(), len(targets), len(result.Findings), result.Duration)
 	return result, nil
 }
 
-func (m *LFIScanner) testTarget(ctx context.Context, target *engine.Target, verifyLevel string) []*engine.Finding {
-	points := engine.ExtractInjectionPoints(target)
+func (m *LFIScanner) testTarget(ctx context.Context, target *core.Target, verifyLevel string) []*core.Finding {
+	points := vulnkit.ExtractInjectionPoints(target)
 	if len(points) == 0 {
 		parsed, err := url.Parse(target.URL)
 		if err != nil || len(parsed.Query()) == 0 {
 			return nil
 		}
 		for param := range parsed.Query() {
-			points = append(points, engine.InjectionPoint{
-				Type: engine.InjectQuery,
+			points = append(points, vulnkit.InjectionPoint{
+				Type: vulnkit.InjectQuery,
 				Name: param,
 			})
 		}
@@ -134,7 +136,7 @@ func (m *LFIScanner) testTarget(ctx context.Context, target *engine.Target, veri
 		return nil
 	}
 
-	var findings []*engine.Finding
+	var findings []*core.Finding
 	baseBody := m.base.FetchBody(ctx, target.URL)
 
 	for _, point := range points {
@@ -166,11 +168,11 @@ func (m *LFIScanner) testTarget(ctx context.Context, target *engine.Target, veri
 					confidence = 95
 				}
 
-				if !engine.ShouldRunExploit(verifyLevel) {
+				if !core.ShouldRunExploit(verifyLevel) {
 					continue
 				}
 
-				findings = append(findings, &engine.Finding{
+				findings = append(findings, &core.Finding{
 					ModuleID:           m.ID(),
 					Target:             target,
 					Type:               "lfi",
@@ -178,8 +180,8 @@ func (m *LFIScanner) testTarget(ctx context.Context, target *engine.Target, veri
 					Description:        fmt.Sprintf("%s参数 %s 使用 %s 变体读取到敏感文件内容", point.Type, point.Name, p.variant),
 					Severity:           severity,
 					Confidence:         confidence,
-					Evidence:           engine.Truncate(body, 500),
-					VerificationLevel:  engine.VerifyExploit,
+					Evidence:           vulnkit.Truncate(body, 500),
+					VerificationLevel:  core.VerifyExploit,
 					VerificationDetail: "file-content-confirmed",
 					Timestamp:          time.Now(),
 					Data: map[string]string{

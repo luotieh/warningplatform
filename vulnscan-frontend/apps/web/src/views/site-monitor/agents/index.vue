@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import type { DataTableColumns } from 'naive-ui';
 
-import type { MonitorAgent } from '#/api/monitor';
+import type { MonitorAgent } from '#/api/sitemonitor';
 
 import { computed, h, onMounted, onUnmounted, ref } from 'vue';
 
@@ -16,7 +16,7 @@ import {
   getAgentList,
   shutdownAgent,
   syncAgentRules,
-} from '#/api/monitor';
+} from '#/api/sitemonitor';
 
 defineOptions({ name: 'MonitorAgents' });
 const loading = ref(false);

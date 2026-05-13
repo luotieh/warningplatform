@@ -1,3 +1,4 @@
+import { normalizePagedResponse } from '#/api/helpers';
 import { baseRequestClient, requestClient } from '#/api/request';
 
 export interface WorkerNode {
@@ -19,9 +20,7 @@ export interface WorkerNode {
 
 export async function getWorkerList(params?: Record<string, any>) {
   const res = await baseRequestClient.get<any>('/cluster/workers', { params });
-  const body = (res as Record<string, unknown>).data ?? res;
-  const typed = body as { data?: WorkerNode[]; count?: number };
-  return { items: typed.data ?? [], total: typed.count ?? 0 };
+  return normalizePagedResponse<WorkerNode>(res);
 }
 
 export function getWorkerDetail(id: string) {

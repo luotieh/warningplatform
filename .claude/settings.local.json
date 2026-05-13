@@ -24,7 +24,17 @@
       "Bash(npx vue-tsc *)",
       "Bash(grep \"\\\\.go$\")",
       "Bash(grep -E \"^f:/code/vulnerability-scan-new/vulnscan-backend/[^/]+$\")",
-      "Bash(Get-ChildItem -Path \"f:\\\\code\\\\vulnerability-scan-new\" -Directory)"
+      "Bash(Get-ChildItem -Path \"f:\\\\code\\\\vulnerability-scan-new\" -Directory)",
+      "Bash(Get-ChildItem -Path \"F:\\\\code\\\\vulnerability-scan-new\\\\vulnscan-backend\" -Directory)",
+      "Bash(Select-Object -ExpandProperty Name)",
+      "Bash(powershell -Command \"Get-ChildItem -Path scan\\\\core -File | Select-Object Name, Length | Sort-Object Length -Descending | Format-Table -AutoSize\")",
+      "Bash(powershell -Command \"Get-ChildItem -Path scheduler -File | Select-Object Name, Length | Sort-Object Length -Descending | Format-Table -AutoSize\")",
+      "Bash(powershell -Command \"Get-ChildItem -Path nuclei -File | Select-Object Name, Length | Sort-Object Length -Descending | Format-Table -AutoSize\")",
+      "Bash(powershell -Command \"Get-ChildItem -Path monitoragent -File | Select-Object Name, Length | Sort-Object Length -Descending | Format-Table -AutoSize\")",
+      "Bash(powershell -Command \"Get-ChildItem -Path engine -File | Select-Object Name, Length | Sort-Object Length -Descending | Format-Table -AutoSize\")",
+      "Bash(dir /s /b *.go)",
+      "PowerShell(Get-ChildItem *)",
+      "PowerShell(New-Item *)"
     ]
   }
 }

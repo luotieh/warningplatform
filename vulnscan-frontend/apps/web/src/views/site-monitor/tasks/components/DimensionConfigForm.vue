@@ -3,7 +3,7 @@ import type {
   DimensionConfig,
   FileLibrary,
   WordLibrary,
-} from '#/api/monitor';
+} from '#/api/sitemonitor';
 
 import {
   NInputNumber,

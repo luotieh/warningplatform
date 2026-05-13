@@ -1,4 +1,5 @@
 import { baseRequestClient } from '#/api/request';
+import { normalizeListResponse } from '#/api/helpers';
 
 export interface SystemSetting {
   key: string;
@@ -16,8 +17,7 @@ export async function getSettings(group?: string) {
   const params: Record<string, string> = {};
   if (group) params.group = group;
   const res = await baseRequestClient.get<any>('/setting/list', { params });
-  const body = (res as Record<string, unknown>).data ?? res;
-  return ((body as any).data ?? []) as SystemSetting[];
+  return normalizeListResponse<SystemSetting>(res);
 }
 
 export async function batchUpdateSettings(

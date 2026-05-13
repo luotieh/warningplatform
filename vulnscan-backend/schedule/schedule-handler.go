@@ -3,20 +3,18 @@ package schedule
 import (
 	"vulnscan-backend/model"
 
-	"code.yt-security.com/public/core/v2/generate/qulid"
 	"code.yt-security.com/public/core/v2/web"
 	iamsdk "code.yt-security.com/public/sdk"
 	"code.yt-security.com/public/sdk/permission"
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 type Handler struct {
-	db *gorm.DB
+	svc *ServiceSchedule
 }
 
-func NewHandler(db *gorm.DB) *Handler {
-	return &Handler{db: db}
+func NewHandler(svc *ServiceSchedule) *Handler {
+	return &Handler{svc: svc}
 }
 
 type scheduleQuery struct {
@@ -26,146 +24,84 @@ type scheduleQuery struct {
 }
 
 func (h *Handler) List(c *gin.Context) {
-	var q scheduleQuery
-	_ = c.ShouldBindQuery(&q)
+	q, _ := web.BindQuery[scheduleQuery](c)
 
 	scope := iamsdk.DataFilterScope(c, permission.DefaultFieldMapping)
-	tx := h.db.Model(&model.ScanSchedule{}).Scopes(scope)
-	if q.Keyword != "" {
-		tx = tx.Where("name LIKE ?", "%"+q.Keyword+"%")
+	items, count, err := h.svc.List(q, scope)
+	if err != nil {
+		web.Fail(c).Err(err).Send()
+		return
 	}
-
-	var count int64
-	tx.Count(&count)
-	if q.PageSize <= 0 {
-		q.PageSize = 20
-	}
-	if q.Page <= 0 {
-		q.Page = 1
-	}
-
-	var items []model.ScanSchedule
-	tx.Order("created_at DESC").Offset((q.Page - 1) * q.PageSize).Limit(q.PageSize).Find(&items)
-	web.RespContentWithNum(c, web.Success, count, items)
+	web.OK(c).List(count, items).Send()
 }
 
 func (h *Handler) GetByID(c *gin.Context) {
 	id := c.Param("id")
-	var item model.ScanSchedule
-	if err := h.db.Where("id = ?", id).First(&item).Error; err != nil {
-		web.Resp(c, web.NotFound)
+	item, err := h.svc.GetByID(id)
+	if err != nil {
+		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.RespContent(c, web.Success, item)
+	web.OK(c).Data(item).Send()
 }
 
 func (h *Handler) Create(c *gin.Context) {
-	var item model.ScanSchedule
-	if err := c.ShouldBindJSON(&item); err != nil {
-		web.Resp(c, web.ParamsMissingRequired)
+	item, ok := web.BindJSON[model.ScanSchedule](c)
+	if !ok {
 		return
 	}
-	item.ID = qulid.GenerateID()
-	item.Status = model.ScheduleStatusIdle
-
-	next := calcNextRun(item)
-	item.NextRunAt = next
-
-	if err := h.db.Create(&item).Error; err != nil {
-		web.Resp(c, web.InternalError)
+	if err := h.svc.Create(&item); err != nil {
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.RespContent(c, web.Success, item)
+	web.OK(c).Data(item).Send()
 }
 
 func (h *Handler) Update(c *gin.Context) {
 	id := c.Param("id")
-	var updates map[string]any
-	if err := c.ShouldBindJSON(&updates); err != nil {
-		web.Resp(c, web.ParamsMissingRequired)
+	updates, ok := web.BindJSON[map[string]any](c)
+	if !ok {
 		return
 	}
-	if err := h.db.Model(&model.ScanSchedule{}).Where("id = ?", id).Updates(updates).Error; err != nil {
-		web.Resp(c, web.InternalError)
+	if err := h.svc.Update(id, updates); err != nil {
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 func (h *Handler) Delete(c *gin.Context) {
 	id := c.Param("id")
-	if err := h.db.Where("id = ?", id).Delete(&model.ScanSchedule{}).Error; err != nil {
-		web.Resp(c, web.InternalError)
+	if err := h.svc.Delete(id); err != nil {
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
+}
+
+type toggleReq struct {
+	Enabled bool `json:"enabled"`
 }
 
 func (h *Handler) Toggle(c *gin.Context) {
 	id := c.Param("id")
-	var req struct {
-		Enabled bool `json:"enabled"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		web.Resp(c, web.ParamsMissingRequired)
+	req, ok := web.BindJSON[toggleReq](c)
+	if !ok {
 		return
 	}
-
-	updates := map[string]any{"enabled": req.Enabled}
-	if req.Enabled {
-		var item model.ScanSchedule
-		if err := h.db.Where("id = ?", id).First(&item).Error; err == nil {
-			item.Enabled = true
-			next := calcNextRun(item)
-			updates["next_run_at"] = next
-		}
-	}
-
-	if err := h.db.Model(&model.ScanSchedule{}).Where("id = ?", id).Updates(updates).Error; err != nil {
-		web.Resp(c, web.InternalError)
+	if err := h.svc.Toggle(id, req.Enabled); err != nil {
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 func (h *Handler) RunNow(c *gin.Context) {
 	id := c.Param("id")
-	var item model.ScanSchedule
-	if err := h.db.Where("id = ?", id).First(&item).Error; err != nil {
-		web.Resp(c, web.NotFound)
+	taskID, err := h.svc.RunNow(id)
+	if err != nil {
+		web.Err(c, web.NotFound).Send()
 		return
 	}
-
-	taskID := qulid.GenerateID()
-	task := model.ScanTask{
-		ID:           taskID,
-		Name:         item.Name + " (手动触发)",
-		TemplateID:   item.TemplateID,
-		TemplateName: item.TemplateName,
-		Type:         "full",
-		Targets:      item.Targets,
-		Config:       item.Config,
-		Priority:     5,
-		Status:       model.TaskStatusPending,
-		ScheduleID:   item.ID,
-		CreatedBy:    item.CreatedBy,
-		OrganizeID:   item.OrganizeID,
-	}
-	if item.Config != nil {
-		if p, ok := item.Config["profile"].(string); ok {
-			task.Type = p
-		}
-	}
-
-	if err := h.db.Create(&task).Error; err != nil {
-		web.Resp(c, web.InternalError)
-		return
-	}
-
-	h.db.Model(&model.ScanSchedule{}).Where("id = ?", id).Updates(map[string]any{
-		"last_task_id": taskID,
-		"run_count":    gorm.Expr("run_count + 1"),
-	})
-
-	web.RespContent(c, web.Success, gin.H{"task_id": taskID})
+	web.OK(c).Data(gin.H{"task_id": taskID}).Send()
 }

@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"vulnscan-backend/scan/engine"
+	"vulnscan-backend/scan/core"
 )
 
 type EmailCollector struct {
@@ -32,9 +32,9 @@ func (m *EmailCollector) Category() string { return "recon" }
 
 var emailRe = regexp.MustCompile(`[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}`)
 
-func (m *EmailCollector) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
+func (m *EmailCollector) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {
 	start := time.Now()
-	result := &engine.ModuleResult{ModuleID: m.ID()}
+	result := &core.ModuleResult{ModuleID: m.ID()}
 
 	domain := parseString(config, "domain", "")
 	if domain == "" && len(targets) > 0 {
@@ -79,7 +79,7 @@ func (m *EmailCollector) Run(ctx context.Context, targets []*engine.Target, conf
 	wg.Wait()
 
 	for email, source := range allEmails {
-		result.Findings = append(result.Findings, &engine.Finding{
+		result.Findings = append(result.Findings, &core.Finding{
 			ModuleID:   m.ID(),
 			Type:       "email",
 			Title:      fmt.Sprintf("发现邮箱: %s", email),

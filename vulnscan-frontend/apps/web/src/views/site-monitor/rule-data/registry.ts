@@ -1,4 +1,4 @@
-import type { ModuleDef } from '#/api/monitor';
+import type { ModuleDef } from '#/api/sitemonitor';
 
 export const MODULE_REGISTRY: Record<string, ModuleDef> = {
   availability: {

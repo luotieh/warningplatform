@@ -18,8 +18,8 @@ type AssetQuery struct {
 	DataNumber              string `form:"data_number"`
 	SystemType              string `form:"system_type"`
 	SecurityProtectionLevel string `form:"security_protection_level"`
-	LifecycleState          string `form:"lifecycle_state"`
 	DataSource              string `form:"data_source"`
+	AssetFamily             string `form:"asset_family"`
 }
 
 type CreateAssetReq struct {
@@ -40,13 +40,15 @@ type CreateAssetReq struct {
 	Version                 string        `json:"version"`
 	OS                      string        `json:"os"`
 	DataNumber              string        `json:"data_number"`
-	SystemName              string        `json:"system_name"`
 	SystemType              string        `json:"system_type"`
+	AssetFamily             string        `json:"asset_family"`
+	AssetSubtype            string        `json:"asset_subtype"`
 	IsOnline                bool          `json:"is_online"`
 	IsKey                   bool          `json:"is_key"`
 	SecurityProtectionLevel string        `json:"security_protection_level"`
 	FilingCertNumber        string        `json:"filing_cert_number"`
 	IcpFilingNumber         string        `json:"icp_filing_number"`
+	PublicSecurityFiling    string        `json:"public_security_filing"`
 	ConstructionOrgID       string        `json:"construction_org_id"`
 	OperationOrgID          string        `json:"operation_org_id"`
 	DataSource              string        `json:"data_source"`

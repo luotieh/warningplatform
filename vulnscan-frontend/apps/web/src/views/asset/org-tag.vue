@@ -14,7 +14,7 @@ const activeTab = ref('organize');
   <div style="padding: 16px">
     <NCard :bordered="false" size="small">
       <NTabs v-model:value="activeTab" type="line">
-        <NTabPane name="organize" tab="组织管理"><OrganizePanel /></NTabPane>
+        <NTabPane name="organize" tab="单位管理"><OrganizePanel /></NTabPane>
         <NTabPane name="construction" tab="建设运维单位"><ConstructionPanel /></NTabPane>
         <NTabPane name="tag" tab="标签管理"><TagPanel /></NTabPane>
       </NTabs>

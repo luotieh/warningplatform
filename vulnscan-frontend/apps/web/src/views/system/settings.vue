@@ -98,10 +98,6 @@ async function onReset(group: string) {
   }
 }
 
-function renderInput(item: SystemSetting) {
-  return { item };
-}
-
 onMounted(loadSettings);
 </script>
 

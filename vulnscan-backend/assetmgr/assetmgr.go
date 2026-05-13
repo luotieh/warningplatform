@@ -1,3 +1,4 @@
+// Package assetmgr 资产治理：生命周期、合规、核查、告警、责任人、工作流。
 package assetmgr
 
 import (

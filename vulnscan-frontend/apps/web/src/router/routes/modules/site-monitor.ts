@@ -8,20 +8,14 @@ const routes: RouteRecordRaw[] = [
     meta: { icon: 'ri:radar-line', order: 3, title: '风险监测' },
     name: 'SiteMonitor',
     path: '/monitor',
-    redirect: '/monitor/dashboard',
+    redirect: '/monitor/center',
     children: [
       {
-        name: 'MonitorDashboard',
-        path: 'dashboard',
+        name: 'MonitorCenter',
+        path: 'center',
         component: () =>
-          import('#/views/site-monitor/dashboard/analysis.vue'),
-        meta: { title: '数据分析', icon: 'ri:dashboard-line' },
-      },
-      {
-        name: 'MonitorLedger',
-        path: 'ledger',
-        component: () => import('#/views/site-monitor/ledger/index.vue'),
-        meta: { title: '监测台账', icon: 'ri:file-list-line' },
+          import('#/views/site-monitor/monitor-center.vue'),
+        meta: { title: '监测中心', icon: 'ri:dashboard-line' },
       },
       {
         name: 'MonitorTasks',
@@ -60,6 +54,13 @@ const routes: RouteRecordRaw[] = [
           activePath: '/monitor/tasks',
           hideInMenu: true,
         },
+      },
+      {
+        name: 'MonitorRecords',
+        path: 'records/:taskId',
+        component: () => import('#/views/site-monitor/records/index.vue'),
+        props: true,
+        meta: { title: '监测记录', icon: 'ri:file-list-line', hideInMenu: true },
       },
       {
         name: 'MonitorConfig',

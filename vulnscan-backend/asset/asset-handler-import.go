@@ -27,27 +27,27 @@ type assetImportColumn struct {
 }
 
 var assetImportColumns = []assetImportColumn{
-	{Field: "name", Group: "系统基本信息", Title: "资产名称", Example: "OA系统", Required: true},
-	{Field: "address", Group: "系统基本信息", Title: "地址", Example: "192.168.1.100", Required: true},
+	{Field: "name", Group: "系统基本信息", Title: "系统名称", Example: "办公自动化系统", Required: true},
+	{Field: "organize_name", Group: "系统基本信息", Title: "单位名称", Example: "某某单位", Required: true},
+	{Field: "system_type", Group: "系统基本信息", Title: "系统类型", Example: "应用系统", Required: true},
+	{Field: "is_online", Group: "系统基本信息", Title: "是否联网", Example: "是", Required: true},
+	{Field: "ipv4", Group: "系统基本信息", Title: "IPV4地址", Example: "192.168.1.100", Required: true},
+	{Field: "ipv6", Group: "系统基本信息", Title: "IPV6地址", Example: "无", Required: true},
+	{Field: "url", Group: "系统基本信息", Title: "网址", Example: "https://oa.example.com", Required: true},
+	{Field: "is_key", Group: "系统基本信息", Title: "是否是关键信息基础设施", Example: "否", Required: true},
+	{Field: "security_protection_level", Group: "系统基本信息", Title: "安全保护等级", Example: "三级", Required: true},
+	{Field: "filing_cert_number", Group: "系统基本信息", Title: "备案证明编号", Example: "CERT-2024-001"},
+	{Field: "icp_filing_number", Group: "系统基本信息", Title: "ICP备案号", Example: "京ICP备12345678号"},
+	{Field: "public_security_filing", Group: "系统基本信息", Title: "公网安备案号", Example: "京公网安备11010802000000号"},
+	{Field: "address", Group: "系统基本信息", Title: "地址", Example: "192.168.1.100"},
 	{Field: "type", Group: "系统基本信息", Title: "资产类型", Example: "server"},
-	{Field: "system_name", Group: "系统基本信息", Title: "系统名称", Example: "办公自动化系统"},
-	{Field: "system_type", Group: "系统基本信息", Title: "系统类型", Example: "应用系统"},
 	{Field: "data_number", Group: "系统基本信息", Title: "数据编号", Example: "DN-2024-001"},
 	{Field: "domain", Group: "系统基本信息", Title: "域名", Example: "oa.example.com"},
-	{Field: "ipv4", Group: "系统基本信息", Title: "IPv4", Example: "192.168.1.100"},
-	{Field: "ipv6", Group: "系统基本信息", Title: "IPv6", Example: "2408::100"},
-	{Field: "url", Group: "系统基本信息", Title: "URL", Example: "https://oa.example.com"},
 	{Field: "port", Group: "系统基本信息", Title: "端口", Example: "443"},
 	{Field: "protocol", Group: "系统基本信息", Title: "协议", Example: "https"},
 	{Field: "service", Group: "系统基本信息", Title: "服务", Example: "nginx"},
 	{Field: "version", Group: "系统基本信息", Title: "版本", Example: "1.24"},
 	{Field: "os", Group: "系统基本信息", Title: "操作系统", Example: "Ubuntu 22.04"},
-	{Field: "is_online", Group: "系统基本信息", Title: "是否联网", Example: "是"},
-	{Field: "is_key", Group: "系统基本信息", Title: "关键信息基础设施", Example: "否"},
-	{Field: "security_protection_level", Group: "系统基本信息", Title: "安全保护等级", Example: "三级"},
-	{Field: "filing_cert_number", Group: "系统基本信息", Title: "备案证明编号", Example: "CERT-2024-001"},
-	{Field: "icp_filing_number", Group: "系统基本信息", Title: "ICP备案号", Example: "京ICP备12345678号"},
-	{Field: "organize_id", Group: "单位基本信息", Title: "资产所属单位ID", Example: "org_xxx"},
 	{Field: "unit_type", Group: "单位基本信息", Title: "单位类型", Example: "事业单位"},
 	{Field: "industry_category", Group: "单位基本信息", Title: "行业分类", Example: "政务"},
 	{Field: "is_notification_member", Group: "单位基本信息", Title: "通报机制成员单位", Example: "是"},
@@ -76,7 +76,6 @@ var assetImportColumns = []assetImportColumn{
 	{Field: "operation_org_charge_phone", Group: "系统运维单位基本情况", Title: "联系电话", Example: "13900000000"},
 	{Field: "operation_org_security_filing", Group: "系统运维单位基本情况", Title: "公网安备备案号", Example: "京公网安备11010802000001号"},
 	{Field: "data_source", Group: "资产管理信息", Title: "数据来源", Example: "手动导入"},
-	{Field: "lifecycle_state", Group: "资产管理信息", Title: "生命周期", Example: "已发现"},
 	{Field: "responsible_user_name", Group: "资产管理信息", Title: "责任人", Example: "张三"},
 	{Field: "tags", Group: "资产管理信息", Title: "标签", Example: "核心,互联网"},
 	{Field: "remark", Group: "资产管理信息", Title: "备注", Example: "核心业务系统"},
@@ -97,15 +96,10 @@ var assetDictImportIDs = map[string]string{
 	"data_source":               "asset_data_source",
 }
 
-var lifecycleImportValues = map[string]string{
-	"已发现": "discovered", "已确认": "confirmed", "已登记": "registered", "运营中": "operating", "退役中": "decommission", "已下线": "offline",
-	"discovered": "discovered", "confirmed": "confirmed", "registered": "registered", "operating": "operating", "decommission": "decommission", "offline": "offline",
-}
-
 func (h *HandlerAsset) ImportAssets(c *gin.Context) {
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
-		web.Resp(c, web.ParamsMissingRequired)
+		web.Err(c, web.ParamsMissingRequired).Send()
 		return
 	}
 	defer file.Close()
@@ -138,13 +132,16 @@ func (h *HandlerAsset) ImportAssets(c *gin.Context) {
 
 	var items []*model.Asset
 	for _, row := range rows[dataStart:] {
+		orgID := getCell(row, headerMap, "organize_id")
+		if orgID == "" {
+			orgID = resolver.resolveOrganizeName(getCell(row, headerMap, "organize_name"))
+		}
 		item := &model.Asset{
-			ID:             qulid.GenerateID(),
-			CreatedBy:      user.UserID,
-			OrganizeID:     firstNonEmpty(getCell(row, headerMap, "organize_id"), user.OrganizeID),
-			Status:         1,
-			DataSource:     "manual_import",
-			LifecycleState: "discovered",
+			ID:         qulid.GenerateID(),
+			CreatedBy:  user.UserID,
+			OrganizeID: firstNonEmpty(orgID, user.OrganizeID),
+			Status:     1,
+			DataSource: "manual_import",
 		}
 		item.Name = getCell(row, headerMap, "name")
 		item.Address = getCell(row, headerMap, "address")
@@ -159,7 +156,6 @@ func (h *HandlerAsset) ImportAssets(c *gin.Context) {
 		if item.Type == "" {
 			item.Type = "server"
 		}
-		item.SystemName = getCell(row, headerMap, "system_name")
 		item.SystemType = resolver.resolveDictValue("system_type", getCell(row, headerMap, "system_type"))
 		item.DataNumber = getCell(row, headerMap, "data_number")
 		item.Domain = getCell(row, headerMap, "domain")
@@ -173,10 +169,10 @@ func (h *HandlerAsset) ImportAssets(c *gin.Context) {
 		item.SecurityProtectionLevel = resolver.resolveDictValue("security_protection_level", getCell(row, headerMap, "security_protection_level"))
 		item.FilingCertNumber = getCell(row, headerMap, "filing_cert_number")
 		item.IcpFilingNumber = getCell(row, headerMap, "icp_filing_number")
+		item.PublicSecurityFiling = getCell(row, headerMap, "public_security_filing")
 		item.IsOnline = parseBoolDefault(getCell(row, headerMap, "is_online"), true)
 		item.IsKey = parseBoolDefault(getCell(row, headerMap, "is_key"), false)
 		item.DataSource = model.DataSourceType(firstNonEmpty(resolver.resolveDictValue("data_source", getCell(row, headerMap, "data_source")), "manual_import"))
-		item.LifecycleState = model.LifecycleState(resolveLifecycleValue(getCell(row, headerMap, "lifecycle_state")))
 		item.ConstructionOrgID = resolver.resolveConstructionOrg(buildConstructionOrgImport(row, headerMap, "construction_org"), user.UserID)
 		item.OperationOrgID = resolver.resolveConstructionOrg(buildConstructionOrgImport(row, headerMap, "operation_org"), user.UserID)
 		item.ResponsibleUserName = getCell(row, headerMap, "responsible_user_name")
@@ -197,11 +193,11 @@ func (h *HandlerAsset) ImportAssets(c *gin.Context) {
 
 	count, err := h.svc.BatchImport(items)
 	if err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
 
-	web.RespContent(c, web.Success, gin.H{"imported": count, "total": len(items)})
+	web.OK(c).Data(gin.H{"imported": count, "total": len(items)}).Send()
 }
 
 func (h *HandlerAsset) DownloadTemplate(c *gin.Context) {
@@ -230,7 +226,7 @@ func (h *HandlerAsset) DownloadTemplate(c *gin.Context) {
 	c.Header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 	c.Header("Content-Disposition", "attachment; filename=asset_import_template.xlsx")
 	if err := f.Write(c.Writer); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 	}
 }
 
@@ -362,10 +358,9 @@ func lastColumnName(count int) string {
 func buildHeaderMap(headers []string) map[string]int {
 	m := make(map[string]int, len(headers))
 	nameAliases := map[string]string{
-		"资产名称(必填)": "name", "资产名称": "name", "名称": "name", "name": "name",
+		"资产名称(必填)": "name", "资产名称": "name", "名称": "name", "name": "name", "系统名称": "name", "system_name": "name",
 		"地址(必填)": "address", "地址": "address", "address": "address", "ip": "address",
 		"资产类型": "type", "type": "type",
-		"系统名称": "system_name", "system_name": "system_name",
 		"系统类型": "system_type", "system_type": "system_type",
 		"数据编号": "data_number", "data_number": "data_number", "编号": "data_number",
 		"域名": "domain", "domain": "domain",
@@ -377,11 +372,13 @@ func buildHeaderMap(headers []string) map[string]int {
 		"版本": "version", "version": "version",
 		"操作系统": "os", "os": "os",
 		"是否联网": "is_online", "is_online": "is_online",
-		"关键信息基础设施": "is_key", "是否关键资产": "is_key", "is_key": "is_key",
+		"关键信息基础设施": "is_key", "是否关键资产": "is_key", "是否是关键信息基础设施": "is_key", "is_key": "is_key",
 		"保护等级": "security_protection_level", "安全保护等级": "security_protection_level", "security_protection_level": "security_protection_level", "等保等级": "security_protection_level",
 		"等保证号": "filing_cert_number", "备案证明编号": "filing_cert_number", "filing_cert_number": "filing_cert_number",
 		"icp备案号": "icp_filing_number", "icp_filing_number": "icp_filing_number", "icp备案": "icp_filing_number",
+		"公网安备案号": "public_security_filing", "public_security_filing": "public_security_filing", "公网安备": "public_security_filing",
 		"资产所属单位id": "organize_id", "所属单位id": "organize_id", "organize_id": "organize_id",
+		"单位名称": "organize_name", "organize_name": "organize_name",
 		"建设单位": "construction_org", "建设单位名称": "construction_org", "建设单位id": "construction_org", "construction_org_id": "construction_org", "construction_org": "construction_org",
 		"建设单位所在地": "construction_org_location", "construction_org_location": "construction_org_location",
 		"建设单位详细地址": "construction_org_address", "construction_org_address": "construction_org_address",
@@ -395,7 +392,6 @@ func buildHeaderMap(headers []string) map[string]int {
 		"运维单位联系电话": "operation_org_charge_phone", "operation_org_charge_phone": "operation_org_charge_phone",
 		"运维单位公网安备备案号": "operation_org_security_filing", "operation_org_security_filing": "operation_org_security_filing",
 		"数据来源": "data_source", "data_source": "data_source",
-		"生命周期": "lifecycle_state", "lifecycle_state": "lifecycle_state",
 		"责任人": "responsible_user_name", "responsible_user_name": "responsible_user_name",
 		"标签": "tags", "tags": "tags",
 		"单位类型": "unit_type", "unit_type": "unit_type",
@@ -517,28 +513,20 @@ func buildConstructionOrgImport(row []string, headerMap map[string]int, prefix s
 	}
 }
 
-func resolveLifecycleValue(value string) string {
-	if value == "" {
-		return "discovered"
-	}
-	if mapped, ok := lifecycleImportValues[strings.TrimSpace(value)]; ok {
-		return mapped
-	}
-	return value
-}
-
 type assetImportResolver struct {
-	db        *gorm.DB
-	dictMaps  map[string]map[string]string
-	orgByName map[string]string
-	orgByID   map[string]model.ConstructionOrg
+	db             *gorm.DB
+	dictMaps       map[string]map[string]string
+	orgByName      map[string]string
+	orgByID        map[string]model.ConstructionOrg
+	organizeByName map[string]string
 }
 
 func (h *HandlerAsset) newAssetImportResolver() *assetImportResolver {
 	resolver := &assetImportResolver{
-		dictMaps:  map[string]map[string]string{},
-		orgByName: map[string]string{},
-		orgByID:   map[string]model.ConstructionOrg{},
+		dictMaps:       map[string]map[string]string{},
+		orgByName:      map[string]string{},
+		orgByID:        map[string]model.ConstructionOrg{},
+		organizeByName: map[string]string{},
 	}
 	if svc, ok := h.svc.(*serviceAsset); ok {
 		resolver.db = svc.session()
@@ -563,7 +551,23 @@ func (h *HandlerAsset) newAssetImportResolver() *assetImportResolver {
 		resolver.orgByName[org.Name] = org.ID
 		resolver.orgByID[org.ID] = org
 	}
+	var organizes []model.Organize
+	_ = resolver.db.Select("id, name").Find(&organizes).Error
+	for _, o := range organizes {
+		resolver.organizeByName[o.Name] = o.ID
+	}
 	return resolver
+}
+
+func (r *assetImportResolver) resolveOrganizeName(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ""
+	}
+	if id, ok := r.organizeByName[name]; ok {
+		return id
+	}
+	return ""
 }
 
 func (r *assetImportResolver) resolveDictValue(field string, value string) string {

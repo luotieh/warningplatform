@@ -1,4 +1,5 @@
 import { baseRequestClient, requestClient } from '#/api/request';
+import { normalizePagedResponse } from '#/api/helpers';
 
 export namespace AppApi {
   /** iframe 自定义参数注入方式 */
@@ -104,11 +105,7 @@ export async function getAppList(params?: {
   display?: string;
 }) {
   const res = await baseRequestClient.get<any>('/applications', { params });
-  const body = res.data ?? res;
-  return {
-    items: (body.data ?? []) as AppApi.AppItem[],
-    total: body.count ?? 0,
-  };
+  return normalizePagedResponse<AppApi.AppItem>(res);
 }
 
 export function getAppDetail(id: string) {

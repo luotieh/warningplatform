@@ -58,3 +58,91 @@ type IntelSource struct {
 	APIKey       string    `json:"api_key,omitempty"`
 	Custom       bool      `json:"custom"`
 }
+
+// --- Request types for parameter binding ---
+
+// handler.go
+
+type AddSourceReq struct {
+	Name         string `json:"name" binding:"required"`
+	Type         string `json:"type" binding:"required"`
+	URL          string `json:"url" binding:"required"`
+	SyncInterval string `json:"sync_interval"`
+	APIKey       string `json:"api_key"`
+	Enabled      bool   `json:"enabled"`
+}
+
+type UpdateSourceReq struct {
+	URL          *string `json:"url"`
+	SyncInterval *string `json:"sync_interval"`
+	APIKey       *string `json:"api_key"`
+	Enabled      *bool   `json:"enabled"`
+}
+
+type BatchAnalyzeReq struct {
+	AssetIDs []string `json:"asset_ids"`
+}
+
+// ioc.go
+
+type CreateIOCReq struct {
+	Type        string   `json:"type" binding:"required"`
+	Value       string   `json:"value" binding:"required"`
+	ThreatType  string   `json:"threat_type"`
+	Severity    string   `json:"severity"`
+	Source      string   `json:"source"`
+	Description string   `json:"description"`
+	Tags        []string `json:"tags"`
+	ExpiresAt   *string  `json:"expires_at"`
+}
+
+type BatchImportIOCReq struct {
+	Items []BatchImportIOCItem `json:"items"`
+}
+
+type BatchImportIOCItem struct {
+	Type        string `json:"type"`
+	Value       string `json:"value"`
+	ThreatType  string `json:"threat_type"`
+	Severity    string `json:"severity"`
+	Source      string `json:"source"`
+	Description string `json:"description"`
+}
+
+type CheckIOCReq struct {
+	Values []string `json:"values" binding:"required"`
+}
+
+// subscription.go
+
+type CreateSubscriptionReq struct {
+	Name        string   `json:"name" binding:"required"`
+	Products    []string `json:"products"`
+	Keywords    []string `json:"keywords"`
+	Severities  []string `json:"severities"`
+	OnlyExploit bool     `json:"only_exploit"`
+	OnlyKEV     bool     `json:"only_kev"`
+}
+
+type UpdateSubscriptionReq struct {
+	Name        *string  `json:"name"`
+	Products    []string `json:"products"`
+	Keywords    []string `json:"keywords"`
+	Severities  []string `json:"severities"`
+	OnlyExploit *bool    `json:"only_exploit"`
+	OnlyKEV     *bool    `json:"only_kev"`
+	Enabled     *bool    `json:"enabled"`
+}
+
+// cpe_mapping.go
+
+type AddCPEMappingReq struct {
+	Product    string   `json:"product" binding:"required"`
+	Version    string   `json:"version"`
+	CPEMatches []string `json:"cpe_matches" binding:"required"`
+}
+
+type UpdateCPEMappingReq struct {
+	Version    *string  `json:"version"`
+	CPEMatches []string `json:"cpe_matches"`
+}

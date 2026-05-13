@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import type { DataTableColumns } from 'naive-ui';
 
-import type { MonitorExecution } from '#/api/monitor';
+import type { MonitorExecution } from '#/api/sitemonitor';
 
 import { computed, h, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
@@ -21,7 +21,7 @@ import {
 
 import { useMessage } from 'naive-ui';
 
-import { getExecutionList } from '#/api/monitor';
+import { getExecutionList } from '#/api/sitemonitor';
 import { createIncident, type CreateIncidentReq } from '#/api/incident';
 
 defineOptions({ name: 'MonitorExecutions' });

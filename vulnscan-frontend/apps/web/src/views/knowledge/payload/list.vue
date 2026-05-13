@@ -1,17 +1,16 @@
 <script lang="ts" setup>
 import type { DataTableColumns } from 'naive-ui';
 
-import { computed, h, onMounted, ref } from 'vue';
+import { h, onMounted, ref } from 'vue';
 
 import {
   NButton,
   NCard,
   NDataTable,
-  NDrawer,
-  NDrawerContent,
   NForm,
   NFormItem,
   NInput,
+  NInputNumber,
   NModal,
   NPopconfirm,
   NSelect,
@@ -21,17 +20,13 @@ import {
   NTag,
   NText,
   NSwitch,
-  NInputGroup,
   useMessage,
 } from 'naive-ui';
-
-import { dialog } from '#/adapter/naive';
 
 import {
   getPayloadList,
   getPatternList,
   getConfigList,
-  getCategories,
   createPayload,
   updatePayload,
   deletePayload,
@@ -567,7 +562,7 @@ onMounted(() => {
           <NInput v-model:value="payloadForm.description" type="textarea" />
         </NFormItem>
         <NFormItem label="排序">
-          <NInput v-model:value="payloadForm.sort_order" type="number" />
+          <NInputNumber v-model:value="payloadForm.sort_order" />
         </NFormItem>
         <NFormItem label="启用">
           <NSwitch v-model:value="payloadForm.enabled" />

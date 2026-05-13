@@ -1,3 +1,4 @@
+import { normalizePagedResponse } from '#/api/helpers';
 import { baseRequestClient, requestClient } from '#/api/request';
 
 export interface Vulnerability {
@@ -25,9 +26,7 @@ export interface Vulnerability {
 
 export async function getVulnList(params?: Record<string, any>) {
   const res = await baseRequestClient.get<any>('/vuln/list', { params });
-  const body = (res as Record<string, unknown>).data ?? res;
-  const typed = body as { data?: Vulnerability[]; count?: number };
-  return { items: typed.data ?? [], total: typed.count ?? 0 };
+  return normalizePagedResponse<Vulnerability>(res);
 }
 
 export function getVulnDetail(id: string) {

@@ -14,7 +14,7 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
-	"vulnscan-backend/scan/engine"
+	"vulnscan-backend/scan/core"
 )
 
 type WeakPassScanner struct{}
@@ -32,9 +32,9 @@ type credential struct {
 
 type serviceChecker func(ctx context.Context, host string, port int, cred credential) bool
 
-func (m *WeakPassScanner) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
+func (m *WeakPassScanner) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {
 	start := time.Now()
-	result := &engine.ModuleResult{ModuleID: m.ID()}
+	result := &core.ModuleResult{ModuleID: m.ID()}
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 
@@ -66,12 +66,12 @@ func (m *WeakPassScanner) Run(ctx context.Context, targets []*engine.Target, con
 
 			wg.Add(1)
 			sem <- struct{}{}
-			go func(target *engine.Target, c credential, chk serviceChecker) {
+			go func(target *core.Target, c credential, chk serviceChecker) {
 				defer wg.Done()
 				defer func() { <-sem }()
 
 				if chk(ctx, host, target.Port, c) {
-					finding := &engine.Finding{
+					finding := &core.Finding{
 						ModuleID:    m.ID(),
 						Target:      target,
 						Type:        "weak_password",
@@ -107,7 +107,7 @@ func (m *WeakPassScanner) Run(ctx context.Context, targets []*engine.Target, con
 	return result, nil
 }
 
-func (m *WeakPassScanner) getChecker(t *engine.Target) serviceChecker {
+func (m *WeakPassScanner) getChecker(t *core.Target) serviceChecker {
 	checkers := map[int]serviceChecker{
 		21:    checkFTP,
 		22:    checkSSH,
@@ -123,7 +123,7 @@ func (m *WeakPassScanner) getChecker(t *engine.Target) serviceChecker {
 	return nil
 }
 
-func (m *WeakPassScanner) getCredentials(t *engine.Target) []credential {
+func (m *WeakPassScanner) getCredentials(t *core.Target) []credential {
 	usernames := defaultUsernames(t.Port)
 	passwords := defaultPasswords()
 

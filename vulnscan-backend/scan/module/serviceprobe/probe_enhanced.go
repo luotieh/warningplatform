@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"vulnscan-backend/scan/engine"
+	"vulnscan-backend/scan/core"
 )
 
 // ProbeResult 探测结果
@@ -55,7 +55,7 @@ type TLSInfo struct {
 }
 
 // probeWithChain 多阶段探测链，一次连接多次探测
-func (m *ServiceProbe) probeWithChain(ctx context.Context, target *engine.Target, timeout time.Duration, enableTLS bool) *ProbeResult {
+func (m *ServiceProbe) probeWithChain(ctx context.Context, target *core.Target, timeout time.Duration, enableTLS bool) *ProbeResult {
 	host := target.Host
 	if target.IP != "" {
 		host = target.IP
@@ -136,7 +136,7 @@ func (m *ServiceProbe) probeWithChain(ctx context.Context, target *engine.Target
 }
 
 // probeActiveOnlyWithChain 仅主动探测模式（带探测链）
-func (m *ServiceProbe) probeActiveOnlyWithChain(ctx context.Context, target *engine.Target, addr string, timeout time.Duration, probes []*CompiledFingerprint) *ProbeResult {
+func (m *ServiceProbe) probeActiveOnlyWithChain(ctx context.Context, target *core.Target, addr string, timeout time.Duration, probes []*CompiledFingerprint) *ProbeResult {
 	for _, probe := range probes {
 		select {
 		case <-ctx.Done():
@@ -228,7 +228,7 @@ func (m *ServiceProbe) probeActiveWithConn(ctx context.Context, conn net.Conn, a
 }
 
 // probeHTTPDepth HTTP 深度识别
-func (m *ServiceProbe) probeHTTPDepth(ctx context.Context, target *engine.Target, timeout time.Duration, service string) *HTTPInfo {
+func (m *ServiceProbe) probeHTTPDepth(ctx context.Context, target *core.Target, timeout time.Duration, service string) *HTTPInfo {
 	host := target.Host
 	if target.IP != "" {
 		host = target.IP
@@ -323,7 +323,7 @@ func (m *ServiceProbe) probeHTTPDepth(ctx context.Context, target *engine.Target
 }
 
 // probeTLS TLS 证书分析
-func (m *ServiceProbe) probeTLS(ctx context.Context, addr string, target *engine.Target, timeout time.Duration) *TLSInfo {
+func (m *ServiceProbe) probeTLS(ctx context.Context, addr string, target *core.Target, timeout time.Duration) *TLSInfo {
 	dialer := &net.Dialer{Timeout: timeout}
 	tlsConfig := &tls.Config{
 		InsecureSkipVerify: true,
@@ -463,7 +463,7 @@ func isHTTPService(service string) bool {
 }
 
 // fallbackPortMapWithResult 端口映射兜底（返回 ProbeResult）
-func (m *ServiceProbe) fallbackPortMapWithResult(target *engine.Target) *ProbeResult {
+func (m *ServiceProbe) fallbackPortMapWithResult(target *core.Target) *ProbeResult {
 	if svc := m.store.LookupPort(target.Port); svc != "" {
 		return &ProbeResult{Service: svc, Method: "port_map", Confidence: 40}
 	}

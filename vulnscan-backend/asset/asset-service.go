@@ -55,11 +55,11 @@ func (s *serviceAsset) List(query assetContract.AssetQuery, scopes ...func(*gorm
 	if query.SecurityProtectionLevel != "" {
 		tx = tx.Where("security_protection_level = ?", query.SecurityProtectionLevel)
 	}
-	if query.LifecycleState != "" {
-		tx = tx.Where("lifecycle_state = ?", query.LifecycleState)
-	}
 	if query.DataSource != "" {
 		tx = tx.Where("data_source = ?", query.DataSource)
+	}
+	if query.AssetFamily != "" {
+		tx = tx.Where("asset_family = ?", query.AssetFamily)
 	}
 
 	if err := tx.Count(&count).Error; err != nil {
@@ -131,10 +131,10 @@ func (s *serviceAsset) recordChangeLogs(old *model.Asset, updates map[string]any
 		"service":                   func() string { return old.Service },
 		"version":                   func() string { return old.Version },
 		"os":                        func() string { return old.OS },
-		"system_name":               func() string { return old.SystemName },
 		"system_type":               func() string { return old.SystemType },
+		"asset_family":              func() string { return old.AssetFamily },
+		"asset_subtype":             func() string { return old.AssetSubtype },
 		"security_protection_level": func() string { return old.SecurityProtectionLevel },
-		"lifecycle_state":           func() string { return string(old.LifecycleState) },
 		"data_source":               func() string { return string(old.DataSource) },
 		"responsible_user_name":     func() string { return old.ResponsibleUserName },
 		"remark":                    func() string { return old.Remark },

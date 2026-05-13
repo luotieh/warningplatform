@@ -1,7 +1,7 @@
 package sitemonitor
 
 import (
-	mc "vulnscan-backend/sitemonitor/sitemonitor-contract"
+	"vulnscan-backend/sitemonitor/contract"
 
 	"github.com/google/wire"
 )
@@ -10,5 +10,5 @@ var WireSet = wire.NewSet(
 	NewServiceMonitor,
 	NewHandlerMonitor,
 	NewMonitor,
-	wire.Bind(new(mc.ServiceMonitor), new(*serviceMonitor)),
+	wire.Bind(new(contract.ServiceMonitor), new(*serviceMonitor)),
 )

@@ -3,8 +3,8 @@ import { ref, computed, h, onMounted } from 'vue';
 import {
   NCard, NGrid, NGridItem, NButton, NSpace, NSelect, NInput,
   NStatistic, NTag, NDataTable, NModal, NForm, NFormItem,
-  useMessage, NEmpty, NSpin, NDynamicTags, NCheckbox, NCheckboxGroup,
-  NProgress, NDivider,
+  useMessage, NEmpty, NSpin, NCheckbox, NCheckboxGroup,
+  NProgress,
 } from 'naive-ui';
 import type { DataTableColumns } from 'naive-ui';
 import { EchartsUI, useEcharts } from '@vben/plugins/echarts';
@@ -14,6 +14,7 @@ import {
   type ReportData, type ReportRequest, type VulnItem,
 } from '#/api/report';
 import { getRecentTasks } from '#/api/dashboard';
+import { sevLabels, sevColors } from '#/constants/severity';
 
 defineOptions({ name: 'DashboardReport' });
 
@@ -27,12 +28,9 @@ const assetBarRef = ref<EchartsUIType>();
 const { renderEcharts: renderSevPie } = useEcharts(sevPieRef);
 const { renderEcharts: renderAssetBar } = useEcharts(assetBarRef);
 
-const sevColors: Record<string, string> = {
-  critical: '#e53e3e', high: '#dd6b20', medium: '#d69e2e', low: '#38a169', info: '#4299e1',
-};
-const sevLabels: Record<string, string> = {
-  critical: '严重', high: '高危', medium: '中危', low: '低危', info: '信息',
-};
+const sevColorFlat: Record<string, string> = Object.fromEntries(
+  Object.entries(sevColors).map(([k, v]) => [k, v.fg]),
+);
 
 onMounted(async () => {
   try {
@@ -104,11 +102,11 @@ function renderCharts(data: ReportData) {
       type: 'pie', radius: ['35%', '60%'], center: ['50%', '44%'],
       label: { show: true, formatter: '{b}\n{c}', fontSize: 11 },
       data: [
-        { name: '严重', value: s.critical_count, itemStyle: { color: sevColors.critical } },
-        { name: '高危', value: s.high_count, itemStyle: { color: sevColors.high } },
-        { name: '中危', value: s.medium_count, itemStyle: { color: sevColors.medium } },
-        { name: '低危', value: s.low_count, itemStyle: { color: sevColors.low } },
-        { name: '信息', value: s.info_count, itemStyle: { color: sevColors.info } },
+        { name: '严重', value: s.critical_count, itemStyle: { color: sevColorFlat.critical } },
+        { name: '高危', value: s.high_count, itemStyle: { color: sevColorFlat.high } },
+        { name: '中危', value: s.medium_count, itemStyle: { color: sevColorFlat.medium } },
+        { name: '低危', value: s.low_count, itemStyle: { color: sevColorFlat.low } },
+        { name: '信息', value: s.info_count, itemStyle: { color: sevColorFlat.info } },
       ].filter(d => d.value > 0),
     }],
   });
@@ -150,7 +148,7 @@ const vulnColumns = computed<DataTableColumns<VulnItem>>(() => [
   },
   {
     title: '严重级别', key: 'severity', width: 100,
-    render: (row) => h(NTag, { size: 'small', style: { background: (sevColors[row.severity] ?? '#999') + '22', color: sevColors[row.severity] ?? '#999', border: 'none' } }, () => sevLabels[row.severity] || row.severity),
+    render: (row) => h(NTag, { size: 'small', style: { background: (sevColorFlat[row.severity] ?? '#999') + '22', color: sevColorFlat[row.severity] ?? '#999', border: 'none' } }, () => sevLabels[row.severity] || row.severity),
   },
   { title: 'CVE', key: 'cve_id', width: 140 },
   { title: '资产', key: 'asset', width: 200, ellipsis: { tooltip: true } },

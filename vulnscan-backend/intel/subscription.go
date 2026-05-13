@@ -163,7 +163,7 @@ func (h *Handler) ListSubscriptions(c *gin.Context) {
 	}
 	tx.Order("created_at DESC").Find(&items)
 
-	web.RespContent(c, web.Success, items)
+	web.OK(c).Data(items).Send()
 }
 
 func (h *Handler) CreateSubscription(c *gin.Context) {
@@ -173,16 +173,8 @@ func (h *Handler) CreateSubscription(c *gin.Context) {
 		userID = user.UserID
 	}
 
-	var req struct {
-		Name        string   `json:"name" binding:"required"`
-		Products    []string `json:"products"`
-		Keywords    []string `json:"keywords"`
-		Severities  []string `json:"severities"`
-		OnlyExploit bool     `json:"only_exploit"`
-		OnlyKEV     bool     `json:"only_kev"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		web.Resp(c, web.ParamsMissingRequired)
+	req, ok := web.BindJSON[CreateSubscriptionReq](c)
+	if !ok {
 		return
 	}
 
@@ -199,10 +191,10 @@ func (h *Handler) CreateSubscription(c *gin.Context) {
 	}
 
 	if err := h.db.Create(&sub).Error; err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.RespContent(c, web.Success, sub)
+	web.OK(c).Data(sub).Send()
 }
 
 func (h *Handler) UpdateSubscription(c *gin.Context) {
@@ -210,21 +202,12 @@ func (h *Handler) UpdateSubscription(c *gin.Context) {
 
 	var sub model.IntelSubscription
 	if err := h.db.Where("id = ?", id).First(&sub).Error; err != nil {
-		web.Resp(c, web.NotFound)
+		web.Err(c, web.NotFound).Send()
 		return
 	}
 
-	var req struct {
-		Name        *string  `json:"name"`
-		Products    []string `json:"products"`
-		Keywords    []string `json:"keywords"`
-		Severities  []string `json:"severities"`
-		OnlyExploit *bool    `json:"only_exploit"`
-		OnlyKEV     *bool    `json:"only_kev"`
-		Enabled     *bool    `json:"enabled"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		web.Resp(c, web.ParamsMissingRequired)
+	req, ok := web.BindJSON[UpdateSubscriptionReq](c)
+	if !ok {
 		return
 	}
 
@@ -256,13 +239,13 @@ func (h *Handler) UpdateSubscription(c *gin.Context) {
 	}
 
 	h.db.Where("id = ?", id).First(&sub)
-	web.RespContent(c, web.Success, sub)
+	web.OK(c).Data(sub).Send()
 }
 
 func (h *Handler) DeleteSubscription(c *gin.Context) {
 	id := c.Param("id")
 	h.db.Where("id = ?", id).Delete(&model.IntelSubscription{})
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 func (h *Handler) TestSubscription(c *gin.Context) {
@@ -270,7 +253,7 @@ func (h *Handler) TestSubscription(c *gin.Context) {
 
 	var sub model.IntelSubscription
 	if err := h.db.Where("id = ?", id).First(&sub).Error; err != nil {
-		web.Resp(c, web.NotFound)
+		web.Err(c, web.NotFound).Send()
 		return
 	}
 

@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"vulnscan-backend/scan/engine"
+	"vulnscan-backend/scan/core"
 )
 
 type UnauthScanner struct{}
@@ -25,7 +25,7 @@ func (m *UnauthScanner) ID() string       { return "unauth" }
 func (m *UnauthScanner) Name() string     { return "未授权访问检测" }
 func (m *UnauthScanner) Category() string { return "vuln" }
 
-type serviceChecker func(ctx context.Context, host string, port int) *engine.Finding
+type serviceChecker func(ctx context.Context, host string, port int) *core.Finding
 
 // 服务检测映射，根据服务名称而非端口
 var serviceCheckers = map[string]serviceChecker{
@@ -66,9 +66,9 @@ var serviceCheckers = map[string]serviceChecker{
 	"kafka":         checkKafka,
 }
 
-func (m *UnauthScanner) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
+func (m *UnauthScanner) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {
 	start := time.Now()
-	result := &engine.ModuleResult{ModuleID: m.ID()}
+	result := &core.ModuleResult{ModuleID: m.ID()}
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 
@@ -97,7 +97,7 @@ func (m *UnauthScanner) Run(ctx context.Context, targets []*engine.Target, confi
 
 				wg.Add(1)
 				sem <- struct{}{}
-				go func(target *engine.Target, chk serviceChecker) {
+				go func(target *core.Target, chk serviceChecker) {
 					defer wg.Done()
 					defer func() { <-sem }()
 
@@ -127,7 +127,7 @@ func (m *UnauthScanner) Run(ctx context.Context, targets []*engine.Target, confi
 
 					wg.Add(1)
 					sem <- struct{}{}
-					go func(target *engine.Target, chk serviceChecker) {
+					go func(target *core.Target, chk serviceChecker) {
 						defer wg.Done()
 						defer func() { <-sem }()
 
@@ -156,7 +156,7 @@ func (m *UnauthScanner) Run(ctx context.Context, targets []*engine.Target, confi
 
 			wg.Add(1)
 			sem <- struct{}{}
-			go func(target *engine.Target) {
+			go func(target *core.Target) {
 				defer wg.Done()
 				defer func() { <-sem }()
 
@@ -277,7 +277,7 @@ func isLikelyUnauthService(serviceName string) bool {
 		serviceName == "zookeeper"
 }
 
-func checkRedis(ctx context.Context, host string, port int) *engine.Finding {
+func checkRedis(ctx context.Context, host string, port int) *core.Finding {
 	addr := fmt.Sprintf("%s:%d", host, port)
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -304,7 +304,7 @@ func checkRedis(ctx context.Context, host string, port int) *engine.Finding {
 
 	if strings.Contains(resp, "redis_version") || strings.HasPrefix(resp, "$") || strings.HasPrefix(resp, "+") {
 		version := extractRedisVersion(resp, reader)
-		return &engine.Finding{
+		return &core.Finding{
 			ModuleID: "unauth",
 			Type:     "unauthorized_access",
 			Title:    fmt.Sprintf("Redis 未授权访问 - %s:%d", host, port),
@@ -326,7 +326,7 @@ func checkRedis(ctx context.Context, host string, port int) *engine.Finding {
 	return nil
 }
 
-func checkMySQL(ctx context.Context, host string, port int) *engine.Finding {
+func checkMySQL(ctx context.Context, host string, port int) *core.Finding {
 	addr := fmt.Sprintf("%s:%d", host, port)
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -351,7 +351,7 @@ func checkMySQL(ctx context.Context, host string, port int) *engine.Finding {
 	}
 
 	version := extractMySQLVersion(buf[:n])
-	return &engine.Finding{
+	return &core.Finding{
 		ModuleID: "unauth",
 		Type:     "unauthorized_access",
 		Title:    fmt.Sprintf("MySQL 未授权访问（空密码）- %s:%d", host, port),
@@ -385,7 +385,7 @@ func extractMySQLVersion(buf []byte) string {
 	return "unknown"
 }
 
-func checkFTP(ctx context.Context, host string, port int) *engine.Finding {
+func checkFTP(ctx context.Context, host string, port int) *core.Finding {
 	addr := fmt.Sprintf("%s:%d", host, port)
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -431,7 +431,7 @@ func checkFTP(ctx context.Context, host string, port int) *engine.Finding {
 		}
 
 		if strings.HasPrefix(resp, "230") {
-			return &engine.Finding{
+			return &core.Finding{
 				ModuleID: "unauth",
 				Type:     "unauthorized_access",
 				Title:    fmt.Sprintf("FTP 匿名登录 - %s:%d", host, port),
@@ -453,7 +453,7 @@ func checkFTP(ctx context.Context, host string, port int) *engine.Finding {
 	return nil
 }
 
-func checkVNC(ctx context.Context, host string, port int) *engine.Finding {
+func checkVNC(ctx context.Context, host string, port int) *core.Finding {
 	addr := fmt.Sprintf("%s:%d", host, port)
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -490,7 +490,7 @@ func checkVNC(ctx context.Context, host string, port int) *engine.Finding {
 	}
 
 	if n >= 4 && buf[3] == 0x01 {
-		return &engine.Finding{
+		return &core.Finding{
 			ModuleID: "unauth",
 			Type:     "unauthorized_access",
 			Title:    fmt.Sprintf("VNC 未授权访问（无密码）- %s:%d", host, port),
@@ -512,7 +512,7 @@ func checkVNC(ctx context.Context, host string, port int) *engine.Finding {
 	return nil
 }
 
-func checkJenkins(ctx context.Context, host string, port int) *engine.Finding {
+func checkJenkins(ctx context.Context, host string, port int) *core.Finding {
 	url := fmt.Sprintf("http://%s:%d/login", host, port)
 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -541,7 +541,7 @@ func checkJenkins(ctx context.Context, host string, port int) *engine.Finding {
 
 	bodyStr := string(body)
 	if strings.Contains(bodyStr, "Jenkins") && strings.Contains(bodyStr, "dashboard") {
-		return &engine.Finding{
+		return &core.Finding{
 			ModuleID: "unauth",
 			Type:     "unauthorized_access",
 			Title:    fmt.Sprintf("Jenkins 未授权访问 - %s:%d", host, port),
@@ -562,7 +562,7 @@ func checkJenkins(ctx context.Context, host string, port int) *engine.Finding {
 	return nil
 }
 
-func checkJupyter(ctx context.Context, host string, port int) *engine.Finding {
+func checkJupyter(ctx context.Context, host string, port int) *core.Finding {
 	url := fmt.Sprintf("http://%s:%d/api", host, port)
 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -599,7 +599,7 @@ func checkJupyter(ctx context.Context, host string, port int) *engine.Finding {
 		if v, ok := jupyterResp["version"].(string); ok {
 			version = v
 		}
-		return &engine.Finding{
+		return &core.Finding{
 			ModuleID: "unauth",
 			Type:     "unauthorized_access",
 			Title:    fmt.Sprintf("Jupyter Notebook 未授权访问 - %s:%d", host, port),
@@ -621,7 +621,7 @@ func checkJupyter(ctx context.Context, host string, port int) *engine.Finding {
 	return nil
 }
 
-func checkKibana(ctx context.Context, host string, port int) *engine.Finding {
+func checkKibana(ctx context.Context, host string, port int) *core.Finding {
 	url := fmt.Sprintf("http://%s:%d/api/status", host, port)
 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -662,7 +662,7 @@ func checkKibana(ctx context.Context, host string, port int) *engine.Finding {
 						version = v
 					}
 				}
-				return &engine.Finding{
+				return &core.Finding{
 					ModuleID: "unauth",
 					Type:     "unauthorized_access",
 					Title:    fmt.Sprintf("Kibana 未授权访问 - %s:%d", host, port),
@@ -686,7 +686,7 @@ func checkKibana(ctx context.Context, host string, port int) *engine.Finding {
 	return nil
 }
 
-func checkGrafana(ctx context.Context, host string, port int) *engine.Finding {
+func checkGrafana(ctx context.Context, host string, port int) *core.Finding {
 	url := fmt.Sprintf("http://%s:%d/api/health", host, port)
 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -723,7 +723,7 @@ func checkGrafana(ctx context.Context, host string, port int) *engine.Finding {
 		if v, ok := grafanaResp["version"].(string); ok {
 			version = v
 		}
-		return &engine.Finding{
+		return &core.Finding{
 			ModuleID: "unauth",
 			Type:     "unauthorized_access",
 			Title:    fmt.Sprintf("Grafana 未授权访问 - %s:%d", host, port),
@@ -745,7 +745,7 @@ func checkGrafana(ctx context.Context, host string, port int) *engine.Finding {
 	return nil
 }
 
-func checkPrometheus(ctx context.Context, host string, port int) *engine.Finding {
+func checkPrometheus(ctx context.Context, host string, port int) *core.Finding {
 	url := fmt.Sprintf("http://%s:%d/api/v1/status/config", host, port)
 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -778,7 +778,7 @@ func checkPrometheus(ctx context.Context, host string, port int) *engine.Finding
 	}
 
 	if status, ok := promResp["status"].(string); ok && status == "success" {
-		return &engine.Finding{
+		return &core.Finding{
 			ModuleID: "unauth",
 			Type:     "unauthorized_access",
 			Title:    fmt.Sprintf("Prometheus 未授权访问 - %s:%d", host, port),
@@ -799,7 +799,7 @@ func checkPrometheus(ctx context.Context, host string, port int) *engine.Finding
 	return nil
 }
 
-func checkConsul(ctx context.Context, host string, port int) *engine.Finding {
+func checkConsul(ctx context.Context, host string, port int) *core.Finding {
 	url := fmt.Sprintf("http://%s:%d/v1/status/leader", host, port)
 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -828,7 +828,7 @@ func checkConsul(ctx context.Context, host string, port int) *engine.Finding {
 
 	bodyStr := string(body)
 	if strings.Contains(bodyStr, "\"") {
-		return &engine.Finding{
+		return &core.Finding{
 			ModuleID: "unauth",
 			Type:     "unauthorized_access",
 			Title:    fmt.Sprintf("Consul 未授权访问 - %s:%d", host, port),
@@ -849,7 +849,7 @@ func checkConsul(ctx context.Context, host string, port int) *engine.Finding {
 	return nil
 }
 
-func checkEtcd(ctx context.Context, host string, port int) *engine.Finding {
+func checkEtcd(ctx context.Context, host string, port int) *core.Finding {
 	url := fmt.Sprintf("http://%s:%d/version", host, port)
 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -886,7 +886,7 @@ func checkEtcd(ctx context.Context, host string, port int) *engine.Finding {
 		if v, ok := etcdResp["etcdserver"].(string); ok {
 			version = v
 		}
-		return &engine.Finding{
+		return &core.Finding{
 			ModuleID: "unauth",
 			Type:     "unauthorized_access",
 			Title:    fmt.Sprintf("Etcd 未授权访问 - %s:%d", host, port),
@@ -908,7 +908,7 @@ func checkEtcd(ctx context.Context, host string, port int) *engine.Finding {
 	return nil
 }
 
-func checkClickHouse(ctx context.Context, host string, port int) *engine.Finding {
+func checkClickHouse(ctx context.Context, host string, port int) *core.Finding {
 	url := fmt.Sprintf("http://%s:%d/", host, port)
 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -939,7 +939,7 @@ func checkClickHouse(ctx context.Context, host string, port int) *engine.Finding
 
 	version := strings.TrimSpace(string(body))
 	if len(version) > 0 && strings.Contains(version, ".") {
-		return &engine.Finding{
+		return &core.Finding{
 			ModuleID: "unauth",
 			Type:     "unauthorized_access",
 			Title:    fmt.Sprintf("ClickHouse 未授权访问 - %s:%d", host, port),
@@ -961,7 +961,7 @@ func checkClickHouse(ctx context.Context, host string, port int) *engine.Finding
 	return nil
 }
 
-func checkInfluxDB(ctx context.Context, host string, port int) *engine.Finding {
+func checkInfluxDB(ctx context.Context, host string, port int) *core.Finding {
 	url := fmt.Sprintf("http://%s:%d/ping", host, port)
 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -985,7 +985,7 @@ func checkInfluxDB(ctx context.Context, host string, port int) *engine.Finding {
 
 	version := resp.Header.Get("X-Influxdb-Version")
 	if version != "" {
-		return &engine.Finding{
+		return &core.Finding{
 			ModuleID: "unauth",
 			Type:     "unauthorized_access",
 			Title:    fmt.Sprintf("InfluxDB 未授权访问 - %s:%d", host, port),
@@ -1007,7 +1007,7 @@ func checkInfluxDB(ctx context.Context, host string, port int) *engine.Finding {
 	return nil
 }
 
-func checkSolr(ctx context.Context, host string, port int) *engine.Finding {
+func checkSolr(ctx context.Context, host string, port int) *core.Finding {
 	url := fmt.Sprintf("http://%s:%d/solr/admin/info/system", host, port)
 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -1044,7 +1044,7 @@ func checkSolr(ctx context.Context, host string, port int) *engine.Finding {
 		if solrSpec, ok := solrResp["solr-spec-version"].(string); ok {
 			version = solrSpec
 		}
-		return &engine.Finding{
+		return &core.Finding{
 			ModuleID: "unauth",
 			Type:     "unauthorized_access",
 			Title:    fmt.Sprintf("Apache Solr 未授权访问 - %s:%d", host, port),
@@ -1066,7 +1066,7 @@ func checkSolr(ctx context.Context, host string, port int) *engine.Finding {
 	return nil
 }
 
-func checkSpark(ctx context.Context, host string, port int) *engine.Finding {
+func checkSpark(ctx context.Context, host string, port int) *core.Finding {
 	url := fmt.Sprintf("http://%s:%d/api/v1/applications", host, port)
 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -1099,7 +1099,7 @@ func checkSpark(ctx context.Context, host string, port int) *engine.Finding {
 	}
 
 	if len(sparkResp) > 0 {
-		return &engine.Finding{
+		return &core.Finding{
 			ModuleID: "unauth",
 			Type:     "unauthorized_access",
 			Title:    fmt.Sprintf("Apache Spark 未授权访问 - %s:%d", host, port),
@@ -1120,7 +1120,7 @@ func checkSpark(ctx context.Context, host string, port int) *engine.Finding {
 	return nil
 }
 
-func checkAirflow(ctx context.Context, host string, port int) *engine.Finding {
+func checkAirflow(ctx context.Context, host string, port int) *core.Finding {
 	url := fmt.Sprintf("http://%s:%d/admin/", host, port)
 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -1149,7 +1149,7 @@ func checkAirflow(ctx context.Context, host string, port int) *engine.Finding {
 
 	bodyStr := string(body)
 	if strings.Contains(bodyStr, "Airflow") && strings.Contains(bodyStr, "DAGs") {
-		return &engine.Finding{
+		return &core.Finding{
 			ModuleID: "unauth",
 			Type:     "unauthorized_access",
 			Title:    fmt.Sprintf("Apache Airflow 未授权访问 - %s:%d", host, port),
@@ -1170,7 +1170,7 @@ func checkAirflow(ctx context.Context, host string, port int) *engine.Finding {
 	return nil
 }
 
-func checkNacos(ctx context.Context, host string, port int) *engine.Finding {
+func checkNacos(ctx context.Context, host string, port int) *core.Finding {
 	url := fmt.Sprintf("http://%s:%d/nacos/v1/cs/configs?dataId=&group=&tenant=&pageNo=1&pageSize=10", host, port)
 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -1203,7 +1203,7 @@ func checkNacos(ctx context.Context, host string, port int) *engine.Finding {
 	}
 
 	if _, ok := nacosResp["pageItems"].([]interface{}); ok {
-		return &engine.Finding{
+		return &core.Finding{
 			ModuleID: "unauth",
 			Type:     "unauthorized_access",
 			Title:    fmt.Sprintf("Nacos 未授权访问 - %s:%d", host, port),
@@ -1224,7 +1224,7 @@ func checkNacos(ctx context.Context, host string, port int) *engine.Finding {
 	return nil
 }
 
-func checkApollo(ctx context.Context, host string, port int) *engine.Finding {
+func checkApollo(ctx context.Context, host string, port int) *core.Finding {
 	url := fmt.Sprintf("http://%s:%d/openapi/v1/env", host, port)
 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -1257,7 +1257,7 @@ func checkApollo(ctx context.Context, host string, port int) *engine.Finding {
 	}
 
 	if len(apolloResp) > 0 {
-		return &engine.Finding{
+		return &core.Finding{
 			ModuleID: "unauth",
 			Type:     "unauthorized_access",
 			Title:    fmt.Sprintf("Apollo 配置中心未授权访问 - %s:%d", host, port),
@@ -1278,7 +1278,7 @@ func checkApollo(ctx context.Context, host string, port int) *engine.Finding {
 	return nil
 }
 
-func checkDruid(ctx context.Context, host string, port int) *engine.Finding {
+func checkDruid(ctx context.Context, host string, port int) *core.Finding {
 	url := fmt.Sprintf("http://%s:%d/druid/index.html", host, port)
 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -1307,7 +1307,7 @@ func checkDruid(ctx context.Context, host string, port int) *engine.Finding {
 
 	bodyStr := string(body)
 	if strings.Contains(bodyStr, "Druid Stat Index") {
-		return &engine.Finding{
+		return &core.Finding{
 			ModuleID: "unauth",
 			Type:     "unauthorized_access",
 			Title:    fmt.Sprintf("Druid 监控面板未授权访问 - %s:%d", host, port),
@@ -1328,7 +1328,7 @@ func checkDruid(ctx context.Context, host string, port int) *engine.Finding {
 	return nil
 }
 
-func checkJBoss(ctx context.Context, host string, port int) *engine.Finding {
+func checkJBoss(ctx context.Context, host string, port int) *core.Finding {
 	url := fmt.Sprintf("http://%s:%d/jmx-console/", host, port)
 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -1357,7 +1357,7 @@ func checkJBoss(ctx context.Context, host string, port int) *engine.Finding {
 
 	bodyStr := string(body)
 	if strings.Contains(bodyStr, "JBoss") && strings.Contains(bodyStr, "JMX Console") {
-		return &engine.Finding{
+		return &core.Finding{
 			ModuleID: "unauth",
 			Type:     "unauthorized_access",
 			Title:    fmt.Sprintf("JBoss JMX Console 未授权访问 - %s:%d", host, port),
@@ -1378,7 +1378,7 @@ func checkJBoss(ctx context.Context, host string, port int) *engine.Finding {
 	return nil
 }
 
-func checkWebLogic(ctx context.Context, host string, port int) *engine.Finding {
+func checkWebLogic(ctx context.Context, host string, port int) *core.Finding {
 	url := fmt.Sprintf("http://%s:%d/console", host, port)
 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -1407,7 +1407,7 @@ func checkWebLogic(ctx context.Context, host string, port int) *engine.Finding {
 
 	bodyStr := string(body)
 	if strings.Contains(bodyStr, "WebLogic") || strings.Contains(bodyStr, "Oracle") {
-		return &engine.Finding{
+		return &core.Finding{
 			ModuleID: "unauth",
 			Type:     "unauthorized_access",
 			Title:    fmt.Sprintf("WebLogic Console未授权访问 - %s:%d", host, port),
@@ -1428,7 +1428,7 @@ func checkWebLogic(ctx context.Context, host string, port int) *engine.Finding {
 	return nil
 }
 
-func checkTomcat(ctx context.Context, host string, port int) *engine.Finding {
+func checkTomcat(ctx context.Context, host string, port int) *core.Finding {
 	url := fmt.Sprintf("http://%s:%d/manager/html", host, port)
 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -1459,7 +1459,7 @@ func checkTomcat(ctx context.Context, host string, port int) *engine.Finding {
 
 	bodyStr := string(body)
 	if strings.Contains(bodyStr, "Tomcat") && strings.Contains(bodyStr, "Manager") {
-		return &engine.Finding{
+		return &core.Finding{
 			ModuleID: "unauth",
 			Type:     "unauthorized_access",
 			Title:    fmt.Sprintf("Tomcat Manager 未授权访问 - %s:%d", host, port),
@@ -1480,7 +1480,7 @@ func checkTomcat(ctx context.Context, host string, port int) *engine.Finding {
 	return nil
 }
 
-func checkActiveMQ(ctx context.Context, host string, port int) *engine.Finding {
+func checkActiveMQ(ctx context.Context, host string, port int) *core.Finding {
 	url := fmt.Sprintf("http://%s:%d/admin/", host, port)
 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -1511,7 +1511,7 @@ func checkActiveMQ(ctx context.Context, host string, port int) *engine.Finding {
 
 	bodyStr := string(body)
 	if strings.Contains(bodyStr, "ActiveMQ") {
-		return &engine.Finding{
+		return &core.Finding{
 			ModuleID: "unauth",
 			Type:     "unauthorized_access",
 			Title:    fmt.Sprintf("ActiveMQ 控制台未授权访问 - %s:%d", host, port),
@@ -1532,7 +1532,7 @@ func checkActiveMQ(ctx context.Context, host string, port int) *engine.Finding {
 	return nil
 }
 
-func checkKafka(ctx context.Context, host string, port int) *engine.Finding {
+func checkKafka(ctx context.Context, host string, port int) *core.Finding {
 	addr := fmt.Sprintf("%s:%d", host, port)
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -1579,7 +1579,7 @@ func checkKafka(ctx context.Context, host string, port int) *engine.Finding {
 	}
 
 	if n > 0 {
-		return &engine.Finding{
+		return &core.Finding{
 			ModuleID: "unauth",
 			Type:     "unauthorized_access",
 			Title:    fmt.Sprintf("Kafka 未授权访问 - %s:%d", host, port),
@@ -1623,7 +1623,7 @@ func extractRedisVersion(firstLine string, reader *bufio.Reader) string {
 	return "unknown"
 }
 
-func checkMongoDB(ctx context.Context, host string, port int) *engine.Finding {
+func checkMongoDB(ctx context.Context, host string, port int) *core.Finding {
 	addr := fmt.Sprintf("%s:%d", host, port)
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -1651,7 +1651,7 @@ func checkMongoDB(ctx context.Context, host string, port int) *engine.Finding {
 
 	if n > 0 && isValidMongoDBResponse(buf[:n]) {
 		version := extractMongoDBVersion(buf[:n])
-		return &engine.Finding{
+		return &core.Finding{
 			ModuleID: "unauth",
 			Type:     "unauthorized_access",
 			Title:    fmt.Sprintf("MongoDB 未授权访问 - %s:%d", host, port),
@@ -1732,7 +1732,7 @@ func extractMongoDBVersion(buf []byte) string {
 	return "unknown"
 }
 
-func checkMemcached(ctx context.Context, host string, port int) *engine.Finding {
+func checkMemcached(ctx context.Context, host string, port int) *core.Finding {
 	addr := fmt.Sprintf("%s:%d", host, port)
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -1759,7 +1759,7 @@ func checkMemcached(ctx context.Context, host string, port int) *engine.Finding 
 
 	if strings.HasPrefix(line, "STAT ") || strings.HasPrefix(line, "END") {
 		version := extractMemcachedVersion(reader)
-		return &engine.Finding{
+		return &core.Finding{
 			ModuleID: "unauth",
 			Type:     "unauthorized_access",
 			Title:    fmt.Sprintf("Memcached 未授权访问 - %s:%d", host, port),
@@ -1800,7 +1800,7 @@ func extractMemcachedVersion(reader *bufio.Reader) string {
 	return "unknown"
 }
 
-func checkElasticsearch(ctx context.Context, host string, port int) *engine.Finding {
+func checkElasticsearch(ctx context.Context, host string, port int) *core.Finding {
 	url := fmt.Sprintf("http://%s:%d/", host, port)
 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -1844,7 +1844,7 @@ func checkElasticsearch(ctx context.Context, host string, port int) *engine.Find
 			clusterName = name
 		}
 
-		return &engine.Finding{
+		return &core.Finding{
 			ModuleID: "unauth",
 			Type:     "unauthorized_access",
 			Title:    fmt.Sprintf("Elasticsearch 未授权访问 - %s:%d", host, port),
@@ -1867,7 +1867,7 @@ func checkElasticsearch(ctx context.Context, host string, port int) *engine.Find
 	return nil
 }
 
-func checkDockerAPI(ctx context.Context, host string, port int) *engine.Finding {
+func checkDockerAPI(ctx context.Context, host string, port int) *core.Finding {
 	url := fmt.Sprintf("http://%s:%d/version", host, port)
 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -1909,7 +1909,7 @@ func checkDockerAPI(ctx context.Context, host string, port int) *engine.Finding 
 			os = o
 		}
 
-		return &engine.Finding{
+		return &core.Finding{
 			ModuleID: "unauth",
 			Type:     "unauthorized_access",
 			Title:    fmt.Sprintf("Docker API 未授权访问 - %s:%d", host, port),
@@ -1932,7 +1932,7 @@ func checkDockerAPI(ctx context.Context, host string, port int) *engine.Finding 
 	return nil
 }
 
-func checkZookeeper(ctx context.Context, host string, port int) *engine.Finding {
+func checkZookeeper(ctx context.Context, host string, port int) *core.Finding {
 	addr := fmt.Sprintf("%s:%d", host, port)
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -1959,7 +1959,7 @@ func checkZookeeper(ctx context.Context, host string, port int) *engine.Finding 
 
 	if strings.Contains(resp, "Zookeeper version") || strings.Contains(resp, "Latency min/avg/max") {
 		version := extractZookeeperVersion(resp, reader)
-		return &engine.Finding{
+		return &core.Finding{
 			ModuleID: "unauth",
 			Type:     "unauthorized_access",
 			Title:    fmt.Sprintf("Zookeeper 未授权访问 - %s:%d", host, port),
@@ -2004,7 +2004,7 @@ func extractZookeeperVersion(firstLine string, reader *bufio.Reader) string {
 	return "unknown"
 }
 
-func checkHadoopHDFS(ctx context.Context, host string, port int) *engine.Finding {
+func checkHadoopHDFS(ctx context.Context, host string, port int) *core.Finding {
 	url := fmt.Sprintf("http://%s:%d/jmx", host, port)
 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -2038,7 +2038,7 @@ func checkHadoopHDFS(ctx context.Context, host string, port int) *engine.Finding
 
 	if beans, ok := hadoopResp["beans"].([]interface{}); ok && len(beans) > 0 {
 		version := extractHadoopVersion(hadoopResp)
-		return &engine.Finding{
+		return &core.Finding{
 			ModuleID: "unauth",
 			Type:     "unauthorized_access",
 			Title:    fmt.Sprintf("Hadoop HDFS 未授权访问 - %s:%d", host, port),
@@ -2075,7 +2075,7 @@ func extractHadoopVersion(resp map[string]interface{}) string {
 	return "unknown"
 }
 
-func checkHadoopYARN(ctx context.Context, host string, port int) *engine.Finding {
+func checkHadoopYARN(ctx context.Context, host string, port int) *core.Finding {
 	url := fmt.Sprintf("http://%s:%d/ws/v1/cluster/info", host, port)
 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -2113,7 +2113,7 @@ func checkHadoopYARN(ctx context.Context, host string, port int) *engine.Finding
 			if v, ok := clusterInfo["hadoopVersion"].(string); ok {
 				version = v
 			}
-			return &engine.Finding{
+			return &core.Finding{
 				ModuleID: "unauth",
 				Type:     "unauthorized_access",
 				Title:    fmt.Sprintf("Hadoop YARN 未授权访问 - %s:%d", host, port),
@@ -2136,7 +2136,7 @@ func checkHadoopYARN(ctx context.Context, host string, port int) *engine.Finding
 	return nil
 }
 
-func checkCouchDB(ctx context.Context, host string, port int) *engine.Finding {
+func checkCouchDB(ctx context.Context, host string, port int) *core.Finding {
 	url := fmt.Sprintf("http://%s:%d/", host, port)
 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -2173,7 +2173,7 @@ func checkCouchDB(ctx context.Context, host string, port int) *engine.Finding {
 		if v, ok := couchResp["version"].(string); ok {
 			version = v
 		}
-		return &engine.Finding{
+		return &core.Finding{
 			ModuleID: "unauth",
 			Type:     "unauthorized_access",
 			Title:    fmt.Sprintf("CouchDB 未授权访问 - %s:%d", host, port),
@@ -2195,7 +2195,7 @@ func checkCouchDB(ctx context.Context, host string, port int) *engine.Finding {
 	return nil
 }
 
-func checkCassandra(ctx context.Context, host string, port int) *engine.Finding {
+func checkCassandra(ctx context.Context, host string, port int) *core.Finding {
 	addr := fmt.Sprintf("%s:%d", host, port)
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -2222,7 +2222,7 @@ func checkCassandra(ctx context.Context, host string, port int) *engine.Finding 
 	}
 
 	if n > 0 && isValidCassandraResponse(buf[:n]) {
-		return &engine.Finding{
+		return &core.Finding{
 			ModuleID: "unauth",
 			Type:     "unauthorized_access",
 			Title:    fmt.Sprintf("Cassandra 未授权访问 - %s:%d", host, port),
@@ -2267,7 +2267,7 @@ func isValidCassandraResponse(buf []byte) bool {
 	return false
 }
 
-func checkPostgreSQL(ctx context.Context, host string, port int) *engine.Finding {
+func checkPostgreSQL(ctx context.Context, host string, port int) *core.Finding {
 	addr := fmt.Sprintf("%s:%d", host, port)
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -2294,7 +2294,7 @@ func checkPostgreSQL(ctx context.Context, host string, port int) *engine.Finding
 	}
 
 	if n > 0 && isPostgreSQLAuthResponse(buf[:n]) {
-		return &engine.Finding{
+		return &core.Finding{
 			ModuleID: "unauth",
 			Type:     "unauthorized_access",
 			Title:    fmt.Sprintf("PostgreSQL 未授权访问（信任认证）- %s:%d", host, port),
@@ -2349,7 +2349,7 @@ func isPostgreSQLAuthResponse(buf []byte) bool {
 	return false
 }
 
-func checkRabbitMQManagement(ctx context.Context, host string, port int) *engine.Finding {
+func checkRabbitMQManagement(ctx context.Context, host string, port int) *core.Finding {
 	url := fmt.Sprintf("http://%s:%d/api/overview", host, port)
 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -2388,7 +2388,7 @@ func checkRabbitMQManagement(ctx context.Context, host string, port int) *engine
 		if v, ok := rabbitResp["rabbitmq_version"].(string); ok {
 			version = v
 		}
-		return &engine.Finding{
+		return &core.Finding{
 			ModuleID: "unauth",
 			Type:     "unauthorized_access",
 			Title:    fmt.Sprintf("RabbitMQ 管理界面未授权访问 - %s:%d", host, port),

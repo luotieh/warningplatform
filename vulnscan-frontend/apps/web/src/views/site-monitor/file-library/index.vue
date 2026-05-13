@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import type { DataTableColumns } from 'naive-ui';
 
-import type { FileLibrary } from '#/api/monitor';
+import type { FileLibrary } from '#/api/sitemonitor';
 
 import { computed, h, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
@@ -26,7 +26,7 @@ import {
   deleteFileLibrary,
   getFileLibraryList,
   updateFileLibrary,
-} from '#/api/monitor';
+} from '#/api/sitemonitor';
 
 defineOptions({ name: 'FileLibrary' });
 

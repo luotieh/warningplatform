@@ -1,6 +1,7 @@
 import { useAppConfig } from '@vben/hooks';
 import { useAccessStore } from '@vben/stores';
 
+import { normalizePagedResponse } from '#/api/helpers';
 import { baseRequestClient, probeAuthentication, requestClient } from '#/api/request';
 
 export interface ScanTask {
@@ -36,9 +37,7 @@ export interface ScanTask {
 
 export async function getTaskList(params?: Record<string, any>) {
   const res = await baseRequestClient.get<any>('/task/list', { params });
-  const body = (res as Record<string, unknown>).data ?? res;
-  const typed = body as { data?: ScanTask[]; count?: number };
-  return { items: typed.data ?? [], total: typed.count ?? 0 };
+  return normalizePagedResponse<ScanTask>(res);
 }
 
 export function getTaskDetail(id: string) {
@@ -123,9 +122,7 @@ export async function getTaskFindings(
   const res = await baseRequestClient.get<any>(`/task/${taskId}/findings`, {
     params,
   });
-  const body = (res as Record<string, unknown>).data ?? res;
-  const typed = body as { data?: ScanFinding[]; count?: number };
-  return { items: typed.data ?? [], total: typed.count ?? 0 };
+  return normalizePagedResponse<ScanFinding>(res);
 }
 
 export function getTaskFindingSummary(taskId: string) {

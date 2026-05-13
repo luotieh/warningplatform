@@ -21,6 +21,7 @@ import { useRouter } from 'vue-router';
 
 import { getTaskList, createTask, cancelTask, deleteTask, type ScanTask } from '#/api/task';
 import { getTemplateList, type ScanTemplate } from '#/api/template';
+import { taskStatusLabels, taskStatusTypes } from '#/constants/status';
 import ModuleConfigPanel from '../components/module-config-panel.vue';
 
 defineOptions({ name: 'ScanTaskList' });
@@ -108,15 +109,6 @@ const priorityOptions = [
   { label: '最低 (10)', value: 10 },
 ];
 
-const statusConfig: Record<string, { type: string; label: string }> = {
-  pending: { type: 'default', label: '等待中' },
-  queued: { type: 'info', label: '排队中' },
-  running: { type: 'warning', label: '扫描中' },
-  completed: { type: 'success', label: '完成' },
-  failed: { type: 'error', label: '失败' },
-  cancelled: { type: 'default', label: '已取消' },
-};
-
 function formatTime(raw?: string) {
   if (!raw) return '-';
   const d = new Date(raw);
@@ -177,8 +169,9 @@ const columns = [
     key: 'status',
     width: 80,
     render: (row: ScanTask) => {
-      const s = statusConfig[row.status] || { type: 'default', label: row.status };
-      return h(NTag, { type: s.type as any, size: 'small' }, () => s.label);
+      const label = taskStatusLabels[row.status] || row.status;
+      const type = taskStatusTypes[row.status] || 'default';
+      return h(NTag, { type: type as any, size: 'small' }, () => label);
     },
   },
   {
@@ -270,7 +263,7 @@ async function handleCreate() {
     if (form.value.template_id) {
       payload.template_id = form.value.template_id;
     }
-    await createTask(payload);
+    await createTask(payload as Parameters<typeof createTask>[0]);
     message.success('任务创建成功');
     showCreate.value = false;
     showAdvanced.value = false;
@@ -405,7 +398,7 @@ onUnmounted(() => {
           itemCount: total,
           showSizePicker: true,
           pageSizes: [20, 50, 100],
-          prefix: ({ itemCount }: { itemCount: number }) => `共 ${itemCount} 条`,
+          prefix: ({ itemCount }) => `共 ${itemCount} 条`,
           onUpdatePage: (p: number) => { page = p; fetchData(); },
           onUpdatePageSize: (s: number) => { pageSize = s; page = 1; fetchData(); },
         }"

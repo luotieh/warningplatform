@@ -37,6 +37,22 @@ function sevLabel(s: string) {
   return m[s] || s || '-';
 }
 
+function highlightWord(context: string, word: string) {
+  if (!context || !word) return [h('span', { class: 'text-xs text-gray-600' }, context || '-')];
+  const lowerCtx = context.toLowerCase();
+  const lowerWord = word.toLowerCase();
+  const idx = lowerCtx.indexOf(lowerWord);
+  if (idx === -1) return [h('span', { class: 'text-xs text-gray-600' }, context)];
+  const before = context.slice(0, idx);
+  const match = context.slice(idx, idx + word.length);
+  const after = context.slice(idx + word.length);
+  return [
+    h('span', { class: 'text-xs text-gray-600' }, before),
+    h('mark', { class: 'bg-red-100 text-red-600 font-bold px-0.5 rounded' }, match),
+    h('span', { class: 'text-xs text-gray-600' }, after),
+  ];
+}
+
 const matches = computed(() => r.value.matches || []);
 
 const matchCols: DataTableColumns<any> = [
@@ -79,9 +95,8 @@ const matchCols: DataTableColumns<any> = [
     key: 'context',
     title: '上下文',
     minWidth: 260,
-    ellipsis: { tooltip: true },
     render: (row) =>
-      h('span', { class: 'text-xs text-gray-600' }, row.context || '-'),
+      h('span', { class: 'inline' }, highlightWord(row.context, row.word)),
   },
 ];
 </script>

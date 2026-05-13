@@ -5,7 +5,7 @@ import type {
   FileLibrary,
   MonitorDefaultConfig,
   WordLibrary,
-} from '#/api/monitor';
+} from '#/api/sitemonitor';
 
 import { onMounted, reactive, ref } from 'vue';
 
@@ -36,7 +36,7 @@ import {
   getWordLibraryList,
   updateAlertConfig,
   updateDefaultConfig,
-} from '#/api/monitor';
+} from '#/api/sitemonitor';
 
 defineOptions({ name: 'MonitorConfig' });
 

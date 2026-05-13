@@ -12,7 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"vulnscan-backend/scan/engine"
+	"vulnscan-backend/scan/core"
 )
 
 type PingScanner struct{}
@@ -32,9 +32,9 @@ var probePorts = []string{
 	"53", "8888", "9090",
 }
 
-func (m *PingScanner) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
+func (m *PingScanner) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {
 	start := time.Now()
-	result := &engine.ModuleResult{ModuleID: m.ID()}
+	result := &core.ModuleResult{ModuleID: m.ID()}
 
 	timeout := parseTimeout(config)
 	retries := parseRetries(config)
@@ -70,7 +70,7 @@ func (m *PingScanner) Run(ctx context.Context, targets []*engine.Target, config 
 		}
 
 		ips := make([]string, 0, len(batch))
-		ipToTarget := make(map[string]*engine.Target, len(batch))
+		ipToTarget := make(map[string]*core.Target, len(batch))
 		for _, t := range batch {
 			h := t.Host
 			if t.IP != "" {
@@ -162,7 +162,7 @@ func (m *PingScanner) Run(ctx context.Context, targets []*engine.Target, config 
 			continue
 		}
 		aliveCount.Add(1)
-		aliveTarget := &engine.Target{
+		aliveTarget := &core.Target{
 			Host:     t.Host,
 			IP:       ip,
 			Port:     t.Port,
@@ -173,7 +173,7 @@ func (m *PingScanner) Run(ctx context.Context, targets []*engine.Target, config 
 
 		mu.Lock()
 		result.Targets = append(result.Targets, aliveTarget)
-		result.Findings = append(result.Findings, &engine.Finding{
+		result.Findings = append(result.Findings, &core.Finding{
 			ModuleID:   m.ID(),
 			Target:     t,
 			Type:       "host_alive",
@@ -635,11 +635,11 @@ func parseBatchSize(config map[string]interface{}) int {
 
 // --- 工具 ---
 
-func splitTargets(targets []*engine.Target, batchSize int) [][]*engine.Target {
+func splitTargets(targets []*core.Target, batchSize int) [][]*core.Target {
 	if batchSize <= 0 {
 		batchSize = 256
 	}
-	var batches [][]*engine.Target
+	var batches [][]*core.Target
 	for i := 0; i < len(targets); i += batchSize {
 		end := i + batchSize
 		if end > len(targets) {

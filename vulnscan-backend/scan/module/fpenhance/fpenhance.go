@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"vulnscan-backend/scan/engine"
+	"vulnscan-backend/scan/core"
 )
 
 type FPEnhanceScanner struct {
@@ -40,11 +40,11 @@ func (m *FPEnhanceScanner) ID() string       { return "fpenhance" }
 func (m *FPEnhanceScanner) Name() string     { return "增强指纹探测" }
 func (m *FPEnhanceScanner) Category() string { return "recon-deep" }
 
-func (m *FPEnhanceScanner) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
+func (m *FPEnhanceScanner) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {
 	start := time.Now()
-	result := &engine.ModuleResult{ModuleID: m.ID()}
+	result := &core.ModuleResult{ModuleID: m.ID()}
 
-	concurrency := engine.GetConfigInt(config, "concurrency", 8)
+	concurrency := core.GetConfigInt(config, "concurrency", 8)
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, concurrency)
@@ -52,7 +52,7 @@ func (m *FPEnhanceScanner) Run(ctx context.Context, targets []*engine.Target, co
 	for _, t := range targets {
 		wg.Add(1)
 		sem <- struct{}{}
-		go func(target *engine.Target) {
+		go func(target *core.Target) {
 			defer wg.Done()
 			defer func() { <-sem }()
 
@@ -74,8 +74,8 @@ func (m *FPEnhanceScanner) Run(ctx context.Context, targets []*engine.Target, co
 	return result, nil
 }
 
-func (m *FPEnhanceScanner) analyzeTarget(ctx context.Context, target *engine.Target) []*engine.Finding {
-	var findings []*engine.Finding
+func (m *FPEnhanceScanner) analyzeTarget(ctx context.Context, target *core.Target) []*core.Finding {
+	var findings []*core.Finding
 
 	baseURL := buildBaseURL(target)
 	if baseURL == "" {
@@ -90,7 +90,7 @@ func (m *FPEnhanceScanner) analyzeTarget(ctx context.Context, target *engine.Tar
 	return findings
 }
 
-func (m *FPEnhanceScanner) tlsFingerprint(ctx context.Context, target *engine.Target) []*engine.Finding {
+func (m *FPEnhanceScanner) tlsFingerprint(ctx context.Context, target *core.Target) []*core.Finding {
 	if target.Port != 443 && target.Port != 8443 && target.Port != 4443 {
 		return nil
 	}
@@ -135,9 +135,9 @@ func (m *FPEnhanceScanner) tlsFingerprint(ctx context.Context, target *engine.Ta
 	fingerprint := sha256.Sum256(cert.Raw)
 	fpHex := hex.EncodeToString(fingerprint[:])
 
-	var findings []*engine.Finding
+	var findings []*core.Finding
 
-	findings = append(findings, &engine.Finding{
+	findings = append(findings, &core.Finding{
 		ModuleID:    m.ID(),
 		Target:      target,
 		Type:        "tls_fingerprint",
@@ -158,7 +158,7 @@ func (m *FPEnhanceScanner) tlsFingerprint(ctx context.Context, target *engine.Ta
 	})
 
 	if cert.NotAfter.Before(time.Now()) {
-		findings = append(findings, &engine.Finding{
+		findings = append(findings, &core.Finding{
 			ModuleID:    m.ID(),
 			Target:      target,
 			Type:        "tls_cert_expired",
@@ -171,7 +171,7 @@ func (m *FPEnhanceScanner) tlsFingerprint(ctx context.Context, target *engine.Ta
 	}
 
 	if state.Version < tls.VersionTLS12 {
-		findings = append(findings, &engine.Finding{
+		findings = append(findings, &core.Finding{
 			ModuleID:    m.ID(),
 			Target:      target,
 			Type:        "tls_weak_version",
@@ -186,13 +186,13 @@ func (m *FPEnhanceScanner) tlsFingerprint(ctx context.Context, target *engine.Ta
 	return findings
 }
 
-func (m *FPEnhanceScanner) headerFingerprint(ctx context.Context, target *engine.Target, baseURL string) []*engine.Finding {
+func (m *FPEnhanceScanner) headerFingerprint(ctx context.Context, target *core.Target, baseURL string) []*core.Finding {
 	resp, _ := m.sendRequest(ctx, baseURL)
 	if resp == nil {
 		return nil
 	}
 
-	var findings []*engine.Finding
+	var findings []*core.Finding
 
 	headerKeys := make([]string, 0, len(resp.Header))
 	for k := range resp.Header {
@@ -229,7 +229,7 @@ func (m *FPEnhanceScanner) headerFingerprint(ctx context.Context, target *engine
 		data[k] = v
 	}
 
-	findings = append(findings, &engine.Finding{
+	findings = append(findings, &core.Finding{
 		ModuleID:    m.ID(),
 		Target:      target,
 		Type:        "header_fingerprint",
@@ -257,7 +257,7 @@ func (m *FPEnhanceScanner) headerFingerprint(ctx context.Context, target *engine
 	}
 
 	if len(missing) > 0 {
-		findings = append(findings, &engine.Finding{
+		findings = append(findings, &core.Finding{
 			ModuleID:    m.ID(),
 			Target:      target,
 			Type:        "missing_security_headers",
@@ -294,7 +294,7 @@ var wafSignatures = []struct {
 	{"长亭SafeLine", map[string]string{}, []string{"safeline"}},
 }
 
-func (m *FPEnhanceScanner) wafDetect(ctx context.Context, target *engine.Target, baseURL string) []*engine.Finding {
+func (m *FPEnhanceScanner) wafDetect(ctx context.Context, target *core.Target, baseURL string) []*core.Finding {
 	resp, body := m.sendRequest(ctx, baseURL)
 	if resp == nil {
 		return nil
@@ -303,7 +303,7 @@ func (m *FPEnhanceScanner) wafDetect(ctx context.Context, target *engine.Target,
 	xssURL := baseURL + "/?test=<script>alert(1)</script>"
 	wafResp, wafBody := m.sendRequest(ctx, xssURL)
 
-	var findings []*engine.Finding
+	var findings []*core.Finding
 
 	checkResp := resp
 	checkBody := body
@@ -335,7 +335,7 @@ func (m *FPEnhanceScanner) wafDetect(ctx context.Context, target *engine.Target,
 		}
 
 		if matched {
-			findings = append(findings, &engine.Finding{
+			findings = append(findings, &core.Finding{
 				ModuleID:    m.ID(),
 				Target:      target,
 				Type:        "waf_detected",
@@ -352,7 +352,7 @@ func (m *FPEnhanceScanner) wafDetect(ctx context.Context, target *engine.Target,
 	}
 
 	if wafResp != nil && (wafResp.StatusCode == 403 || wafResp.StatusCode == 406 || wafResp.StatusCode == 503) && len(findings) == 0 {
-		findings = append(findings, &engine.Finding{
+		findings = append(findings, &core.Finding{
 			ModuleID:    m.ID(),
 			Target:      target,
 			Type:        "waf_detected",
@@ -370,7 +370,7 @@ func (m *FPEnhanceScanner) wafDetect(ctx context.Context, target *engine.Target,
 	return findings
 }
 
-func (m *FPEnhanceScanner) jsFingerprint(ctx context.Context, target *engine.Target, baseURL string) []*engine.Finding {
+func (m *FPEnhanceScanner) jsFingerprint(ctx context.Context, target *core.Target, baseURL string) []*core.Finding {
 	_, body := m.sendRequest(ctx, baseURL)
 	if body == "" {
 		return nil
@@ -406,7 +406,7 @@ func (m *FPEnhanceScanner) jsFingerprint(ctx context.Context, target *engine.Tar
 	}
 
 	if len(detected) > 0 {
-		return []*engine.Finding{{
+		return []*core.Finding{{
 			ModuleID:    m.ID(),
 			Target:      target,
 			Type:        "js_fingerprint",
@@ -442,7 +442,7 @@ func (m *FPEnhanceScanner) sendRequest(ctx context.Context, rawURL string) (*htt
 	return resp, string(body)
 }
 
-func buildBaseURL(t *engine.Target) string {
+func buildBaseURL(t *core.Target) string {
 	if t.URL != "" {
 		return t.URL
 	}

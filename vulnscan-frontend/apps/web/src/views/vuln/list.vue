@@ -13,7 +13,6 @@ import {
   NStatistic,
   NGrid,
   NGridItem,
-  NDropdown,
   useMessage,
 } from 'naive-ui';
 import { useRouter } from 'vue-router';
@@ -27,6 +26,8 @@ import {
   reopenVuln,
   type Vulnerability,
 } from '#/api/vuln';
+import { sevLabels, sevColors } from '#/constants/severity';
+import { vulnStatusLabels as statusLabels, vulnStatusTypes as statusTypes } from '#/constants/status';
 
 defineOptions({ name: 'VulnList' });
 
@@ -56,22 +57,6 @@ const statusOptions = [
   { label: '已忽略', value: 'ignored' },
 ];
 
-const sevLabels: Record<string, string> = {
-  critical: '严重', high: '高危', medium: '中危', low: '低危', info: '信息',
-};
-const sevColors: Record<string, { bg: string; fg: string }> = {
-  critical: { bg: '#fff1f0', fg: '#cf1322' },
-  high: { bg: '#fff7e6', fg: '#d46b08' },
-  medium: { bg: '#fffbe6', fg: '#d4b106' },
-  low: { bg: '#f6ffed', fg: '#389e0d' },
-  info: { bg: '#f0f5ff', fg: '#1890ff' },
-};
-const statusLabels: Record<string, string> = {
-  open: '待修复', fixed: '已修复', ignored: '已忽略', reopened: '已重开',
-};
-const statusTypes: Record<string, string> = {
-  open: 'error', fixed: 'success', ignored: 'default', reopened: 'warning',
-};
 
 const columns = computed(() => [
   {

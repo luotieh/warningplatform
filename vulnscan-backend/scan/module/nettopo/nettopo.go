@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"vulnscan-backend/scan/engine"
+	"vulnscan-backend/scan/core"
 )
 
 type NetTopoScanner struct {
@@ -37,11 +37,11 @@ func (m *NetTopoScanner) ID() string       { return "nettopo" }
 func (m *NetTopoScanner) Name() string     { return "网络拓扑探测" }
 func (m *NetTopoScanner) Category() string { return "recon-deep" }
 
-func (m *NetTopoScanner) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
+func (m *NetTopoScanner) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {
 	start := time.Now()
-	result := &engine.ModuleResult{ModuleID: m.ID()}
+	result := &core.ModuleResult{ModuleID: m.ID()}
 
-	concurrency := engine.GetConfigInt(config, "concurrency", 5)
+	concurrency := core.GetConfigInt(config, "concurrency", 5)
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, concurrency)
@@ -49,7 +49,7 @@ func (m *NetTopoScanner) Run(ctx context.Context, targets []*engine.Target, conf
 	for _, t := range targets {
 		wg.Add(1)
 		sem <- struct{}{}
-		go func(target *engine.Target) {
+		go func(target *core.Target) {
 			defer wg.Done()
 			defer func() { <-sem }()
 
@@ -71,8 +71,8 @@ func (m *NetTopoScanner) Run(ctx context.Context, targets []*engine.Target, conf
 	return result, nil
 }
 
-func (m *NetTopoScanner) analyzeTarget(ctx context.Context, target *engine.Target) []*engine.Finding {
-	var findings []*engine.Finding
+func (m *NetTopoScanner) analyzeTarget(ctx context.Context, target *core.Target) []*core.Finding {
+	var findings []*core.Finding
 
 	host := target.Host
 	if host == "" {
@@ -91,7 +91,7 @@ func (m *NetTopoScanner) analyzeTarget(ctx context.Context, target *engine.Targe
 	return findings
 }
 
-func (m *NetTopoScanner) dnsResolve(ctx context.Context, target *engine.Target, host string) []*engine.Finding {
+func (m *NetTopoScanner) dnsResolve(ctx context.Context, target *core.Target, host string) []*core.Finding {
 	if net.ParseIP(host) != nil {
 		return nil
 	}
@@ -101,10 +101,10 @@ func (m *NetTopoScanner) dnsResolve(ctx context.Context, target *engine.Target, 
 		return nil
 	}
 
-	var findings []*engine.Finding
+	var findings []*core.Finding
 
 	if len(ips) > 1 {
-		findings = append(findings, &engine.Finding{
+		findings = append(findings, &core.Finding{
 			ModuleID:    m.ID(),
 			Target:      target,
 			Type:        "dns_multi_ip",
@@ -123,7 +123,7 @@ func (m *NetTopoScanner) dnsResolve(ctx context.Context, target *engine.Target, 
 
 	cnames, err := net.DefaultResolver.LookupCNAME(ctx, host)
 	if err == nil && cnames != "" && cnames != host+"." {
-		findings = append(findings, &engine.Finding{
+		findings = append(findings, &core.Finding{
 			ModuleID:   m.ID(),
 			Target:     target,
 			Type:       "dns_cname",
@@ -144,7 +144,7 @@ func (m *NetTopoScanner) dnsResolve(ctx context.Context, target *engine.Target, 
 		for _, ns := range nss {
 			nsNames = append(nsNames, ns.Host)
 		}
-		findings = append(findings, &engine.Finding{
+		findings = append(findings, &core.Finding{
 			ModuleID:    m.ID(),
 			Target:      target,
 			Type:        "dns_nameservers",
@@ -179,7 +179,7 @@ var cdnProviders = []struct {
 	{"七牛CDN", []string{"qiniudns"}, nil},
 }
 
-func (m *NetTopoScanner) detectCDN(ctx context.Context, target *engine.Target, host string) []*engine.Finding {
+func (m *NetTopoScanner) detectCDN(ctx context.Context, target *core.Target, host string) []*core.Finding {
 	if net.ParseIP(host) != nil {
 		return nil
 	}
@@ -190,7 +190,7 @@ func (m *NetTopoScanner) detectCDN(ctx context.Context, target *engine.Target, h
 	for _, cdn := range cdnProviders {
 		for _, pattern := range cdn.cname {
 			if strings.Contains(lowerCname, pattern) {
-				return []*engine.Finding{{
+				return []*core.Finding{{
 					ModuleID:    m.ID(),
 					Target:      target,
 					Type:        "cdn_detected",
@@ -221,7 +221,7 @@ func (m *NetTopoScanner) detectCDN(ctx context.Context, target *engine.Target, h
 			for header, expected := range cdn.headers {
 				val := resp.Header.Get(header)
 				if val != "" && (expected == "" || strings.Contains(strings.ToLower(val), strings.ToLower(expected))) {
-					return []*engine.Finding{{
+					return []*core.Finding{{
 						ModuleID:    m.ID(),
 						Target:      target,
 						Type:        "cdn_detected",
@@ -244,7 +244,7 @@ func (m *NetTopoScanner) detectCDN(ctx context.Context, target *engine.Target, h
 	return nil
 }
 
-func (m *NetTopoScanner) detectLoadBalancer(ctx context.Context, target *engine.Target, host string) []*engine.Finding {
+func (m *NetTopoScanner) detectLoadBalancer(ctx context.Context, target *core.Target, host string) []*core.Finding {
 	baseURL := "http://" + host
 	if target.Port == 443 || target.Port == 8443 {
 		baseURL = "https://" + host
@@ -269,7 +269,7 @@ func (m *NetTopoScanner) detectLoadBalancer(ctx context.Context, target *engine.
 		for s := range serverValues {
 			servers = append(servers, s)
 		}
-		return []*engine.Finding{{
+		return []*core.Finding{{
 			ModuleID:    m.ID(),
 			Target:      target,
 			Type:        "load_balancer_detected",
@@ -287,7 +287,7 @@ func (m *NetTopoScanner) detectLoadBalancer(ctx context.Context, target *engine.
 	return nil
 }
 
-func (m *NetTopoScanner) reverseIP(ctx context.Context, target *engine.Target, host string) []*engine.Finding {
+func (m *NetTopoScanner) reverseIP(ctx context.Context, target *core.Target, host string) []*core.Finding {
 	ip := target.IP
 	if ip == "" {
 		ips, err := net.DefaultResolver.LookupHost(ctx, host)
@@ -302,7 +302,7 @@ func (m *NetTopoScanner) reverseIP(ctx context.Context, target *engine.Target, h
 		return nil
 	}
 
-	return []*engine.Finding{{
+	return []*core.Finding{{
 		ModuleID:   m.ID(),
 		Target:     target,
 		Type:       "reverse_dns",

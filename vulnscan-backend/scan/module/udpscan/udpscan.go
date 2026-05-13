@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"vulnscan-backend/scan/engine"
+	"vulnscan-backend/scan/core"
 )
 
 type UDPScanner struct{}
@@ -21,15 +21,15 @@ func (m *UDPScanner) ID() string       { return "udp_scan" }
 func (m *UDPScanner) Name() string     { return "UDP 端口扫描" }
 func (m *UDPScanner) Category() string { return "host" }
 
-func (m *UDPScanner) Params() []engine.ModuleParam {
-	return []engine.ModuleParam{
+func (m *UDPScanner) Params() []core.ModuleParam {
+	return []core.ModuleParam{
 		{
 			Key:          "ports",
 			Name:         "端口范围",
 			Type:         "select",
 			DefaultValue: "default",
 			Description:  "扫描的UDP端口范围，也可输入自定义范围如 53,123,161",
-			Options: []engine.ParamOption{
+			Options: []core.ParamOption{
 				{Value: "default", Label: "常用UDP端口 (22个)"},
 				{Value: "full", Label: "全端口 (1-65535)"},
 			},
@@ -43,9 +43,9 @@ type udpProbe struct {
 	Match   string
 }
 
-func (m *UDPScanner) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
+func (m *UDPScanner) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {
 	start := time.Now()
-	result := &engine.ModuleResult{ModuleID: m.ID()}
+	result := &core.ModuleResult{ModuleID: m.ID()}
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	var scanned atomic.Int64
@@ -75,14 +75,14 @@ func (m *UDPScanner) Run(ctx context.Context, targets []*engine.Target, config m
 
 			wg.Add(1)
 			sem <- struct{}{}
-			go func(target *engine.Target, h string, p int) {
+			go func(target *core.Target, h string, p int) {
 				defer wg.Done()
 				defer func() { <-sem }()
 
 				scanned.Add(1)
 				probe := getProbe(p)
 				if m.probeUDP(h, p, probe, timeout) {
-					newTarget := &engine.Target{
+					newTarget := &core.Target{
 						Host:     target.Host,
 						IP:       target.IP,
 						Port:     p,
@@ -90,7 +90,7 @@ func (m *UDPScanner) Run(ctx context.Context, targets []*engine.Target, config m
 					}
 					mu.Lock()
 					result.Targets = append(result.Targets, newTarget)
-					result.Findings = append(result.Findings, &engine.Finding{
+					result.Findings = append(result.Findings, &core.Finding{
 						ModuleID:   m.ID(),
 						Target:     target,
 						Type:       "udp_port",

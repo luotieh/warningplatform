@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import type { RuleDataSummary } from '#/api/monitor';
+import type { RuleDataSummary } from '#/api/sitemonitor';
 
 import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
@@ -14,7 +14,7 @@ import {
   getRuleDataList,
   resetDefaultRuleData,
   syncAllRuleData,
-} from '#/api/monitor';
+} from '#/api/sitemonitor';
 
 defineOptions({ name: 'RuleData' });
 

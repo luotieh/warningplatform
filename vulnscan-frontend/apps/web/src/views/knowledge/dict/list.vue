@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import type { DataTableColumns } from 'naive-ui';
 
-import type { FileLibrary, WordLibrary } from '#/api/monitor';
+import type { FileLibrary, WordLibrary } from '#/api/sitemonitor';
 
 import { computed, h, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
@@ -53,7 +53,7 @@ import {
   getWordLibraryList,
   updateFileLibrary,
   updateWordLibrary,
-} from '#/api/monitor';
+} from '#/api/sitemonitor';
 
 import dayjs from 'dayjs';
 
@@ -391,6 +391,8 @@ onMounted(() => {
   fetchWordList();
   fetchFileList();
 });
+
+const headerExtraSlot = 'header-extra';
 </script>
 
 <template>
@@ -518,7 +520,7 @@ onMounted(() => {
     <!-- 扫描字典条目抽屉 -->
     <NDrawer v-model:show="showDrawer" :width="600">
       <NDrawerContent :title="`${currentDict?.name ?? ''} - 条目管理`">
-        <template #header-extra>
+        <template #[headerExtraSlot]>
           <NSpace :size="8">
             <NButton size="tiny" @click="openImport(currentDict?.id ?? '')">批量导入</NButton>
             <NPopconfirm @positive-click="handleClear">

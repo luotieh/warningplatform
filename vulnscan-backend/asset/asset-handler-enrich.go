@@ -34,13 +34,13 @@ func (h *EnrichHandler) session() *gorm.DB {
 func (h *EnrichHandler) AssetDetail(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
-		web.Resp(c, web.ParamsMissingRequired)
+		web.Err(c, web.ParamsMissingRequired).Send()
 		return
 	}
 
 	var asset model.Asset
 	if err := h.session().First(&asset, "id = ?", id).Error; err != nil {
-		web.Resp(c, web.NotFound)
+		web.Err(c, web.NotFound).Send()
 		return
 	}
 
@@ -200,12 +200,24 @@ func (h *EnrichHandler) AggregateFromScans(c *gin.Context) {
 
 func (h *EnrichHandler) AssetStats(c *gin.Context) {
 	scope := iamsdk.DataFilterScope(c, assetFieldMapping)
+	assetFamily := c.Query("asset_family")
+
+	assetQuery := h.session().Model(&model.Asset{}).Scopes(scope)
+	if assetFamily != "" {
+		assetQuery = assetQuery.Where("asset_family = ?", assetFamily)
+	}
 
 	var totalAssets int64
-	h.session().Model(&model.Asset{}).Scopes(scope).Count(&totalAssets)
+	assetQuery.Count(&totalAssets)
 
 	var activeAssets int64
-	h.session().Model(&model.Asset{}).Scopes(scope).Where("status = 1").Count(&activeAssets)
+	assetQuery.Where("status = 1").Count(&activeAssets)
+
+	var keyAssets int64
+	assetQuery.Where("is_key = true").Count(&keyAssets)
+
+	var riskHigh int64
+	assetQuery.Where("risk_score >= 70").Count(&riskHigh)
 
 	type typeStat struct {
 		Type  string `json:"type"`
@@ -240,6 +252,8 @@ func (h *EnrichHandler) AssetStats(c *gin.Context) {
 		"total":      totalAssets,
 		"active":     activeAssets,
 		"inactive":   totalAssets - activeAssets,
+		"key_assets": keyAssets,
+		"risk_high":  riskHigh,
 		"with_vulns": vulnAssets,
 		"by_type":    typeStats,
 		"by_group":   groupStats,
@@ -282,7 +296,7 @@ func (h *EnrichHandler) GroupList(c *gin.Context) {
 		result = append(result, groupWithCount{AssetGroup: g, AssetCount: countMap[g.ID]})
 	}
 
-	web.RespContent(c, web.Success, result)
+	web.OK(c).Data(result).Send()
 }
 
 func (h *EnrichHandler) GroupCreate(c *gin.Context) {
@@ -314,7 +328,7 @@ func (h *EnrichHandler) GroupCreate(c *gin.Context) {
 	}
 
 	if err := h.session().Create(&group).Error; err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
 
@@ -322,7 +336,7 @@ func (h *EnrichHandler) GroupCreate(c *gin.Context) {
 		h.executeDynamicGroupRule(&group)
 	}
 
-	web.RespContent(c, web.Success, group)
+	web.OK(c).Data(group).Send()
 }
 
 func (h *EnrichHandler) executeDynamicGroupRule(group *model.AssetGroup) {
@@ -332,7 +346,7 @@ func (h *EnrichHandler) executeDynamicGroupRule(group *model.AssetGroup) {
 
 	allowedFields := map[string]bool{
 		"type": true, "system_type": true, "security_protection_level": true,
-		"lifecycle_state": true, "data_source": true, "address": true,
+		"data_source": true, "address": true,
 		"domain": true, "service": true, "os": true,
 	}
 	if !allowedFields[group.RuleField] {
@@ -369,7 +383,7 @@ func (h *EnrichHandler) GroupRefresh(c *gin.Context) {
 	id := c.Param("id")
 	var group model.AssetGroup
 	if err := h.session().First(&group, "id = ?", id).Error; err != nil {
-		web.Resp(c, web.NotFound)
+		web.Err(c, web.NotFound).Send()
 		return
 	}
 
@@ -382,7 +396,7 @@ func (h *EnrichHandler) GroupRefresh(c *gin.Context) {
 
 	var count int64
 	h.session().Model(&model.Asset{}).Where("group_id = ?", id).Count(&count)
-	web.RespContent(c, web.Success, gin.H{"matched": count})
+	web.OK(c).Data(gin.H{"matched": count}).Send()
 }
 
 func (h *EnrichHandler) GroupUpdate(c *gin.Context) {
@@ -424,10 +438,10 @@ func (h *EnrichHandler) GroupUpdate(c *gin.Context) {
 	}
 
 	if err := h.session().Model(&model.AssetGroup{}).Where("id = ?", id).Updates(updates).Error; err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 func (h *EnrichHandler) GroupDelete(c *gin.Context) {
@@ -441,10 +455,10 @@ func (h *EnrichHandler) GroupDelete(c *gin.Context) {
 	}
 
 	if err := h.session().Where("id = ?", id).Delete(&model.AssetGroup{}).Error; err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 func (h *EnrichHandler) BatchAssignGroup(c *gin.Context) {
@@ -461,7 +475,7 @@ func (h *EnrichHandler) BatchAssignGroup(c *gin.Context) {
 		Update("group_id", req.GroupID)
 
 	if result.Error != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(result.Error).Send()
 		return
 	}
 
@@ -521,145 +535,6 @@ func isIP(s string) bool {
 	return strings.Count(s, ".") == 3
 }
 
-// ── 资产关联关系 ──
-
-func (h *EnrichHandler) RelationList(c *gin.Context) {
-	assetID := c.Param("id")
-	if assetID == "" {
-		web.Resp(c, web.ParamsMissingRequired)
-		return
-	}
-
-	var relations []model.AssetRelation
-	h.session().Where("source_id = ? OR target_id = ?", assetID, assetID).
-		Order("created_at DESC").Find(&relations)
-
-	type RelationVO struct {
-		model.AssetRelation
-		SourceName string `json:"source_name"`
-		TargetName string `json:"target_name"`
-		SourceAddr string `json:"source_address"`
-		TargetAddr string `json:"target_address"`
-	}
-	var ids []string
-	for _, r := range relations {
-		ids = append(ids, r.SourceID, r.TargetID)
-	}
-	nameMap := make(map[string]model.Asset)
-	if len(ids) > 0 {
-		var assets []model.Asset
-		h.session().Select("id, name, address").Where("id IN ?", ids).Find(&assets)
-		for _, a := range assets {
-			nameMap[a.ID] = a
-		}
-	}
-	result := make([]RelationVO, 0, len(relations))
-	for _, r := range relations {
-		vo := RelationVO{AssetRelation: r}
-		if s, ok := nameMap[r.SourceID]; ok {
-			vo.SourceName = s.Name
-			vo.SourceAddr = s.Address
-		}
-		if t, ok := nameMap[r.TargetID]; ok {
-			vo.TargetName = t.Name
-			vo.TargetAddr = t.Address
-		}
-		result = append(result, vo)
-	}
-
-	web.RespContent(c, web.Success, result)
-}
-
-func (h *EnrichHandler) RelationCreate(c *gin.Context) {
-	var req struct {
-		SourceID     string `json:"source_id" binding:"required"`
-		TargetID     string `json:"target_id" binding:"required"`
-		RelationType string `json:"relation_type" binding:"required"`
-		Description  string `json:"description"`
-	}
-	if !web.ValidationJson(c, &req) {
-		return
-	}
-
-	if req.SourceID == req.TargetID {
-		web.Resp(c, web.ParamsMissingRequired)
-		return
-	}
-
-	user, _ := iamsdk.GetCurrentUser(c)
-	rel := model.AssetRelation{
-		SourceID:     req.SourceID,
-		TargetID:     req.TargetID,
-		RelationType: req.RelationType,
-		Description:  req.Description,
-		CreatedBy:    user.UserID,
-	}
-
-	if err := h.session().Create(&rel).Error; err != nil {
-		web.Resp(c, web.InternalError)
-		return
-	}
-
-	web.RespContent(c, web.Success, rel)
-}
-
-func (h *EnrichHandler) RelationDelete(c *gin.Context) {
-	id := c.Param("relationId")
-	if id == "" {
-		web.Resp(c, web.ParamsMissingRequired)
-		return
-	}
-
-	idNum, err := strconv.ParseInt(id, 10, 64)
-	if err != nil {
-		web.Resp(c, web.ParamsMissingRequired)
-		return
-	}
-
-	if err := h.session().Where("id = ?", idNum).Delete(&model.AssetRelation{}).Error; err != nil {
-		web.Resp(c, web.InternalError)
-		return
-	}
-
-	web.Resp(c, web.Success)
-}
-
-func (h *EnrichHandler) ChildrenList(c *gin.Context) {
-	parentID := c.Param("id")
-	if parentID == "" {
-		web.Resp(c, web.ParamsMissingRequired)
-		return
-	}
-
-	var children []model.Asset
-	h.session().Where("parent_id = ?", parentID).Order("name").Find(&children)
-
-	web.RespContent(c, web.Success, children)
-}
-
-func (h *EnrichHandler) SetParent(c *gin.Context) {
-	id := c.Param("id")
-	var req struct {
-		ParentID string `json:"parent_id"`
-	}
-	if !web.ValidationJson(c, &req) {
-		return
-	}
-
-	if id == req.ParentID {
-		web.Resp(c, web.ParamsMissingRequired)
-		return
-	}
-
-	if err := h.session().Model(&model.Asset{}).Where("id = ?", id).
-		Update("parent_id", req.ParentID).Error; err != nil {
-		web.Resp(c, web.InternalError)
-		return
-	}
-
-	web.Resp(c, web.Success)
-}
-
 // ── 资产去重 ──
 
 func (h *EnrichHandler) Dedup(c *gin.Context) {
@@ -703,9 +578,6 @@ func (h *EnrichHandler) Dedup(c *gin.Context) {
 			if keep.OS == "" && a.OS != "" {
 				keep.OS = a.OS
 			}
-			if keep.SystemName == "" && a.SystemName != "" {
-				keep.SystemName = a.SystemName
-			}
 			if keep.DataNumber == "" && a.DataNumber != "" {
 				keep.DataNumber = a.DataNumber
 			}
@@ -725,7 +597,7 @@ func (h *EnrichHandler) Dedup(c *gin.Context) {
 
 		if err := tx.Model(&model.Asset{}).Where("id = ?", keep.ID).Updates(map[string]interface{}{
 			"service": keep.Service, "domain": keep.Domain, "ipv4": keep.IPv4,
-			"version": keep.Version, "os": keep.OS, "system_name": keep.SystemName,
+			"version": keep.Version, "os": keep.OS,
 			"vuln_count": keep.VulnCount, "risk_score": keep.RiskScore,
 		}).Error; err != nil {
 			tx.Rollback()
@@ -800,7 +672,6 @@ func (h *EnrichHandler) ImportFromCyberspace(c *gin.Context) {
 			Version:    item.Version,
 			OS:         item.OS,
 			Domain:     domain,
-			SystemName: item.Title,
 			Type:       assetType,
 			Status:     1,
 			DataSource: "external",
@@ -829,7 +700,7 @@ func (h *EnrichHandler) EnrichAsset(c *gin.Context) {
 	id := c.Param("id")
 	var asset model.Asset
 	if err := h.session().First(&asset, "id = ?", id).Error; err != nil {
-		web.Resp(c, web.NotFound)
+		web.Err(c, web.NotFound).Send()
 		return
 	}
 
@@ -990,7 +861,7 @@ func (h *EnrichHandler) RecalcRisk(c *gin.Context) {
 	id := c.Param("id")
 	var asset model.Asset
 	if err := h.session().First(&asset, "id = ?", id).Error; err != nil {
-		web.Resp(c, web.NotFound)
+		web.Err(c, web.NotFound).Send()
 		return
 	}
 
@@ -1069,7 +940,7 @@ func (h *EnrichHandler) RiskTrend(c *gin.Context) {
 	h.session().Where("asset_id = ? AND recorded_at >= ?", id, since).
 		Order("recorded_at ASC").Find(&history)
 
-	web.RespContent(c, web.Success, history)
+	web.OK(c).Data(history).Send()
 }
 
 func (h *EnrichHandler) RiskRanking(c *gin.Context) {
@@ -1097,7 +968,7 @@ func (h *EnrichHandler) RiskRanking(c *gin.Context) {
 		})
 	}
 
-	web.RespContent(c, web.Success, result)
+	web.OK(c).Data(result).Send()
 }
 
 func (h *EnrichHandler) calcRiskScore(asset *model.Asset) (float64, map[string]float64) {
@@ -1236,15 +1107,6 @@ func (h *EnrichHandler) ComplianceReport(c *gin.Context) {
 		Where("security_protection_level != ''").
 		Group("security_protection_level").Find(&levels)
 
-	type lifecycleDist struct {
-		State string `json:"state"`
-		Count int64  `json:"count"`
-	}
-	var states []lifecycleDist
-	h.session().Model(&model.Asset{}).Scopes(scope).
-		Select("lifecycle_state as state, COUNT(*) as count").
-		Group("lifecycle_state").Find(&states)
-
 	var highRisk int64
 	h.session().Model(&model.Asset{}).Scopes(scope).
 		Where("risk_score >= 70").Count(&highRisk)
@@ -1276,8 +1138,7 @@ func (h *EnrichHandler) ComplianceReport(c *gin.Context) {
 			"icp_coverage":         fmt.Sprintf("%.1f%%", safeDiv(withIcp, total)),
 		},
 		"distribution": gin.H{
-			"by_level":     levels,
-			"by_lifecycle": states,
+			"by_level": levels,
 		},
 		"risks": gin.H{
 			"high_risk_count": highRisk,

@@ -26,13 +26,8 @@ func (h *Handler) ListCPEMappings(c *gin.Context) {
 }
 
 func (h *Handler) AddCPEMapping(c *gin.Context) {
-	var req struct {
-		Product    string   `json:"product" binding:"required"`
-		Version    string   `json:"version"`
-		CPEMatches []string `json:"cpe_matches" binding:"required"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		web.Resp(c, web.ParamsMissingRequired)
+	req, ok := web.BindJSON[AddCPEMappingReq](c)
+	if !ok {
 		return
 	}
 
@@ -46,18 +41,14 @@ func (h *Handler) AddCPEMapping(c *gin.Context) {
 		CPEMatches: req.CPEMatches,
 	}
 	h.matcher.AddCPEMapping(mapping)
-	web.RespContent(c, web.Success, mapping)
+	web.OK(c).Data(mapping).Send()
 }
 
 func (h *Handler) UpdateCPEMapping(c *gin.Context) {
 	product := c.Param("product")
 
-	var req struct {
-		Version    *string  `json:"version"`
-		CPEMatches []string `json:"cpe_matches"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		web.Resp(c, web.ParamsMissingRequired)
+	req, ok := web.BindJSON[UpdateCPEMappingReq](c)
+	if !ok {
 		return
 	}
 
@@ -71,17 +62,17 @@ func (h *Handler) UpdateCPEMapping(c *gin.Context) {
 	})
 
 	if !updated {
-		web.Resp(c, web.NotFound)
+		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 func (h *Handler) DeleteCPEMapping(c *gin.Context) {
 	product := c.Param("product")
 	if !h.matcher.DeleteCPEMapping(product) {
-		web.Resp(c, web.NotFound)
+		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }

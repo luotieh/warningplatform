@@ -22,7 +22,7 @@ import {
   type NodeSummary,
 } from '#/api/cluster';
 
-import { shutdownAgent } from '#/api/monitor';
+import { shutdownAgent } from '#/api/sitemonitor';
 
 defineOptions({ name: 'ClusterNodes' });
 

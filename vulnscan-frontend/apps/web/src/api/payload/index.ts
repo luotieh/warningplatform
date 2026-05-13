@@ -1,4 +1,5 @@
 import { baseRequestClient, requestClient } from '#/api/request';
+import { normalizeListResponse, normalizePagedResponse } from '#/api/helpers';
 
 export interface VulnPayload {
   id: number;
@@ -52,9 +53,7 @@ export interface PatternListResult {
 
 export async function getPayloadList(params?: Record<string, any>): Promise<PayloadListResult> {
   const res = await baseRequestClient.get<any>('/payloads/list', { params });
-  const body = (res as Record<string, unknown>).data ?? res;
-  const typed = body as { data?: VulnPayload[]; count?: number };
-  return { items: typed.data ?? [], total: typed.count ?? 0 };
+  return normalizePagedResponse<VulnPayload>(res);
 }
 
 export function getPayloadDetail(id: number) {
@@ -79,9 +78,7 @@ export function batchCreatePayloads(payloads: Partial<VulnPayload>[]) {
 
 export async function getPatternList(params?: Record<string, any>): Promise<PatternListResult> {
   const res = await baseRequestClient.get<any>('/payloads/patterns', { params });
-  const body = (res as Record<string, unknown>).data ?? res;
-  const typed = body as { data?: VulnPayloadPattern[]; count?: number };
-  return { items: typed.data ?? [], total: typed.count ?? 0 };
+  return normalizePagedResponse<VulnPayloadPattern>(res);
 }
 
 export function getPatternDetail(id: number) {
@@ -106,9 +103,7 @@ export function batchCreatePatterns(patterns: Partial<VulnPayloadPattern>[]) {
 
 export async function getConfigList(params?: Record<string, any>) {
   const res = await baseRequestClient.get<any>('/payloads/configs', { params });
-  const body = (res as Record<string, unknown>).data ?? res;
-  const typed = body as { data?: VulnPayloadConfig[] };
-  return typed.data ?? [];
+  return normalizeListResponse<VulnPayloadConfig>(res);
 }
 
 export function getConfigDetail(id: number) {

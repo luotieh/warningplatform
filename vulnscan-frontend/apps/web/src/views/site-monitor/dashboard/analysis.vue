@@ -5,7 +5,7 @@ import type {
   DashboardStats,
   MonitorAgent,
   MonitorExecution,
-} from '#/api/monitor';
+} from '#/api/sitemonitor';
 
 import { computed, h, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
@@ -31,7 +31,7 @@ import {
   getDashboardStats,
   getExecutionList,
   getTaskExecutionStats,
-} from '#/api/monitor';
+} from '#/api/sitemonitor';
 import { useAutoRefresh } from '#/composables/useAutoRefresh';
 
 defineOptions({ name: 'MonitorDashboard' });

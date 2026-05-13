@@ -19,85 +19,81 @@ func NewHandlerTag(svc tc.ServiceTag) *HandlerTag {
 }
 
 func (h *HandlerTag) List(c *gin.Context) {
-	var req tc.TagListReq
-	if err := c.ShouldBindQuery(&req); err != nil {
-		web.Resp(c, web.ParamsMissingRequired)
+	req, ok := web.BindQuery[tc.TagListReq](c)
+	if !ok {
 		return
 	}
 	items, count, err := h.svc.List(req)
 	if err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.RespContentWithNum(c, web.Success, count, items)
+	web.OK(c).List(count, items).Send()
 }
 
 func (h *HandlerTag) GetByID(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 	item, err := h.svc.GetByID(id)
 	if err != nil {
-		web.Resp(c, web.NotFound)
+		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.RespContent(c, web.Success, item)
+	web.OK(c).Data(item).Send()
 }
 
 func (h *HandlerTag) Create(c *gin.Context) {
-	var tag model.Tag
-	if err := c.ShouldBindJSON(&tag); err != nil {
-		web.Resp(c, web.ParamsMissingRequired)
+	tag, ok := web.BindJSON[model.Tag](c)
+	if !ok {
 		return
 	}
 	if err := h.svc.Create(&tag); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.RespContent(c, web.Success, tag)
+	web.OK(c).Data(tag).Send()
 }
 
 func (h *HandlerTag) Update(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
-	var body map[string]interface{}
-	if err := c.ShouldBindJSON(&body); err != nil {
-		web.Resp(c, web.ParamsMissingRequired)
+	body, ok := web.BindJSON[map[string]interface{}](c)
+	if !ok {
 		return
 	}
 	if err := h.svc.Update(id, body); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 func (h *HandlerTag) Delete(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err := h.svc.Delete(id); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 func (h *HandlerTag) GetAssetTags(c *gin.Context) {
 	tags, err := h.svc.GetAssetTags(c.Param("asset_id"))
 	if err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.RespContent(c, web.Success, tags)
+	web.OK(c).Data(tags).Send()
 }
 
 func (h *HandlerTag) SetAssetTags(c *gin.Context) {
-	var req tc.AssetTagReq
-	if err := c.ShouldBindJSON(&req); err != nil {
-		web.Resp(c, web.ParamsMissingRequired)
+	req, ok := web.BindJSON[tc.AssetTagReq](c)
+	if !ok {
 		return
 	}
 	if err := h.svc.SetAssetTags(req.AssetID, req.TagIDs, "manual"); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 // ── ChangeLog Handler ──
@@ -111,24 +107,23 @@ func NewHandlerChangeLog(svc tc.ServiceChangeLog) *HandlerChangeLog {
 }
 
 func (h *HandlerChangeLog) List(c *gin.Context) {
-	var req tc.ChangeLogListReq
-	if err := c.ShouldBindQuery(&req); err != nil {
-		web.Resp(c, web.ParamsMissingRequired)
+	req, ok := web.BindQuery[tc.ChangeLogListReq](c)
+	if !ok {
 		return
 	}
 	items, count, err := h.svc.List(req)
 	if err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.RespContentWithNum(c, web.Success, count, items)
+	web.OK(c).List(count, items).Send()
 }
 
 func (h *HandlerChangeLog) GetByAssetID(c *gin.Context) {
 	items, err := h.svc.GetByAssetID(c.Param("asset_id"))
 	if err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.RespContent(c, web.Success, items)
+	web.OK(c).Data(items).Send()
 }

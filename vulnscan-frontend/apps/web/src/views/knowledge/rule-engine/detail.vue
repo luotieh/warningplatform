@@ -22,7 +22,7 @@ import {
 } from 'naive-ui';
 
 import { message } from '#/adapter/naive';
-import { getRuleData, importRuleData, putRuleData } from '#/api/monitor';
+import { getRuleData, importRuleData, putRuleData } from '#/api/sitemonitor';
 
 import RuleSectionEditor from './components/RuleSectionEditor.vue';
 import { MODULE_REGISTRY } from './registry';

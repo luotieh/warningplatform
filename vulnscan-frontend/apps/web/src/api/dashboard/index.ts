@@ -1,3 +1,4 @@
+import { normalizePagedResponse } from '#/api/helpers';
 import { baseRequestClient, requestClient } from '#/api/request';
 
 export interface SecurityPosture {
@@ -51,7 +52,5 @@ export function getRecentActivity() {
 
 export async function getRecentTasks(params?: Record<string, any>) {
   const res = await baseRequestClient.get<any>('/task/list', { params });
-  const body = (res as Record<string, unknown>).data ?? res;
-  const typed = body as { data?: any[]; count?: number };
-  return { items: typed.data ?? [], total: typed.count ?? 0 };
+  return normalizePagedResponse(res);
 }

@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"vulnscan-backend/scan/engine"
+	"vulnscan-backend/scan/core"
 
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/launcher"
@@ -48,9 +48,9 @@ func (m *ScreenshotModule) ID() string       { return "screenshot" }
 func (m *ScreenshotModule) Name() string     { return "Web 首页截图" }
 func (m *ScreenshotModule) Category() string { return "recon" }
 
-func (m *ScreenshotModule) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
+func (m *ScreenshotModule) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {
 	start := time.Now()
-	result := &engine.ModuleResult{ModuleID: m.ID()}
+	result := &core.ModuleResult{ModuleID: m.ID()}
 
 	browser := initBrowser()
 
@@ -67,7 +67,7 @@ func (m *ScreenshotModule) Run(ctx context.Context, targets []*engine.Target, co
 		for _, rawURL := range urls {
 			wg.Add(1)
 			sem <- struct{}{}
-			go func(target *engine.Target, u string) {
+			go func(target *core.Target, u string) {
 				defer wg.Done()
 				defer func() { <-sem }()
 
@@ -87,7 +87,7 @@ func (m *ScreenshotModule) Run(ctx context.Context, targets []*engine.Target, co
 				}
 
 				mu.Lock()
-				result.Findings = append(result.Findings, &engine.Finding{
+				result.Findings = append(result.Findings, &core.Finding{
 					ModuleID:   m.ID(),
 					Target:     target,
 					Type:       "web_page",
@@ -329,7 +329,7 @@ func detectQuickTech(resp *http.Response, body string) []string {
 	return techs
 }
 
-func (m *ScreenshotModule) buildURLs(t *engine.Target) []string {
+func (m *ScreenshotModule) buildURLs(t *core.Target) []string {
 	if t.URL != "" {
 		return []string{t.URL}
 	}

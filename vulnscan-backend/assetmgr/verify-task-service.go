@@ -31,7 +31,7 @@ func (s *serviceVerifyTask) ListTasks(req ac.VerifyTaskListReq) ([]ac.VerifyTask
 	var count int64
 
 	q := s.session().Table((&model.AssetVerifyTask{}).TableName() + " AS t").
-		Select("t.*, a.name AS asset_name, a.system_name, a.address, a.type AS asset_type, a.data_number").
+		Select("t.*, a.name AS asset_name, a.address, a.type AS asset_type, a.data_number").
 		Joins("LEFT JOIN " + (&model.Asset{}).TableName() + " AS a ON a.id = t.asset_id")
 	if req.AssetID != "" {
 		q = q.Where("t.asset_id = ?", req.AssetID)
@@ -49,7 +49,7 @@ func (s *serviceVerifyTask) ListTasks(req ac.VerifyTaskListReq) ([]ac.VerifyTask
 		q = q.Where("t.source_type = ?", req.SourceType)
 	}
 	if req.Keyword != "" {
-		q = q.Where("a.name LIKE ? OR a.system_name LIKE ? OR a.address LIKE ? OR a.data_number LIKE ?", "%"+req.Keyword+"%", "%"+req.Keyword+"%", "%"+req.Keyword+"%", "%"+req.Keyword+"%")
+		q = q.Where("a.name LIKE ? OR a.address LIKE ? OR a.data_number LIKE ?", "%"+req.Keyword+"%", "%"+req.Keyword+"%", "%"+req.Keyword+"%")
 	}
 
 	if err := q.Count(&count).Error; err != nil {
@@ -303,7 +303,7 @@ func (s *serviceVerifyTask) ListArchives(req ac.ArchiveListReq) ([]model.AssetAr
 		q = q.Where("batch_id = ?", req.BatchID)
 	}
 	if req.Keyword != "" {
-		q = q.Where("asset_name LIKE ? OR system_name LIKE ? OR address LIKE ?", "%"+req.Keyword+"%", "%"+req.Keyword+"%", "%"+req.Keyword+"%")
+		q = q.Where("asset_name LIKE ? OR address LIKE ?", "%"+req.Keyword+"%", "%"+req.Keyword+"%")
 	}
 	if err := q.Count(&count).Error; err != nil {
 		return nil, 0, err
@@ -386,7 +386,6 @@ func (s *serviceVerifyTask) createArchiveSnapshot(tx *gorm.DB, task model.AssetV
 		BatchID:    task.BatchID,
 		OrganizeID: asset.OrganizeID,
 		AssetName:  asset.Name,
-		SystemName: asset.SystemName,
 		Address:    asset.Address,
 		Status:     string(task.Status),
 		Snapshot: model.JSONMap{

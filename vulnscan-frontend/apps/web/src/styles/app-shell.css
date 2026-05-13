@@ -81,3 +81,28 @@ html.dark .bg-card,
 html.dark [class*='bg-card'] {
   background-color: hsl(var(--card)) !important;
 }
+
+/* 鍘诲綋鍓嶅３灞傛槑鏄剧殑鍒嗗壊绾? */
+html.dark section.flex.w-full.border-b.border-border.bg-background,
+html.dark header.top-0.flex.w-full.flex-\[0_0_auto\].items-center.border-b.border-border.bg-header {
+  border-bottom-color: transparent !important;
+}
+
+html.dark aside.fixed.left-0.top-0.h-full,
+html.dark aside.fixed.left-0.top-0.h-full.border-r.border-border.bg-sidebar,
+html.dark div.fixed.top-0.h-full.overflow-hidden.border-r.border-border.bg-sidebar,
+html.dark div.fixed.top-0.h-full.overflow-hidden.border-r.border-border.bg-sidebar.border-l {
+  border-right-color: transparent !important;
+}
+
+html.dark div.fixed.top-0.h-full.overflow-hidden.border-r.border-border.bg-sidebar.border-l {
+  border-left-color: transparent !important;
+}
+
+html.dark .vben-normal-menu__item,
+html.dark .vben-menu.is-rounded .vben-menu-item,
+html.dark .vben-menu.is-rounded .vben-sub-menu-title,
+html.dark .vben-menu.is-rounded .vben-menu-item-content {
+  border-color: transparent !important;
+  box-shadow: none !important;
+}

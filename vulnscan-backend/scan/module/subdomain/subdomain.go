@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"vulnscan-backend/dict"
-	"vulnscan-backend/scan/engine"
+	"vulnscan-backend/scan/core"
 )
 
 type SubdomainScanner struct {
@@ -43,9 +43,9 @@ type ScanStats struct {
 	StartTime time.Time
 }
 
-func (m *SubdomainScanner) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
+func (m *SubdomainScanner) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {
 	start := time.Now()
-	result := &engine.ModuleResult{ModuleID: m.ID()}
+	result := &core.ModuleResult{ModuleID: m.ID()}
 
 	concurrency := parseInt(config, "concurrency", 300)
 	timeout := parseDuration(config, "timeout", 3*time.Second)
@@ -139,13 +139,13 @@ func (m *SubdomainScanner) Run(ctx context.Context, targets []*engine.Target, co
 		ipGroups := aggregateByIP(allResults)
 
 		for domain, r := range allResults {
-			newTarget := &engine.Target{
+			newTarget := &core.Target{
 				Host:     domain,
 				IP:       r.ip,
 				Protocol: "tcp",
 			}
 
-			finding := &engine.Finding{
+			finding := &core.Finding{
 				ModuleID:         m.ID(),
 				Target:           newTarget,
 				Type:             "subdomain",
@@ -846,7 +846,7 @@ func (m *SubdomainScanner) getWordlist(config map[string]interface{}) []string {
 	return m.dictStore.GetSubdomains()
 }
 
-func extractDomain(t *engine.Target) string {
+func extractDomain(t *core.Target) string {
 	if t.Host != "" && net.ParseIP(t.Host) == nil {
 		return t.Host
 	}

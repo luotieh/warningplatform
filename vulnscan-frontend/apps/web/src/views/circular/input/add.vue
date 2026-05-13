@@ -3,13 +3,13 @@ import { computed, onMounted, ref } from 'vue';
 import { NButton, NCard, NForm, NFormItem, NInput, NSelect, NSpace, NSpin, useMessage } from 'naive-ui';
 import { useRoute, useRouter } from 'vue-router';
 
-import type { DynamicFormSubmissionDetail, DynamicFormTemplate } from '#/api/form';
+import type { DynamicFormSubmissionDetail, DynamicFormTemplate } from '#/api/formdesign';
 import {
   getDynamicFormSubmission,
   getDynamicFormSubmissions,
   getDynamicFormTemplates,
   normalizePagedResponse,
-} from '#/api/form';
+} from '#/api/formdesign';
 import {
   createInput,
   updateInput,

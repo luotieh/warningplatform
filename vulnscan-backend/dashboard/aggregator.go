@@ -208,6 +208,59 @@ func (a *Aggregator) getTaskTrend(ctx context.Context, days int) []DataPoint {
 	return points
 }
 
+func (a *Aggregator) GetTaskStatusDist(ctx context.Context) map[string]int {
+	var counts []struct {
+		Status string
+		Count  int
+	}
+	a.db.WithContext(ctx).
+		Model(&model.ScanTask{}).
+		Select("status, count(*) as count").
+		Group("status").
+		Find(&counts)
+
+	result := make(map[string]int, len(counts))
+	for _, c := range counts {
+		result[c.Status] = c.Count
+	}
+	return result
+}
+
+type Activity struct {
+	Type      string    `json:"type"`
+	Title     string    `json:"title"`
+	Detail    string    `json:"detail"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+func (a *Aggregator) GetRecentActivity(ctx context.Context) []Activity {
+	var activities []Activity
+
+	var recentTasks []model.ScanTask
+	a.db.WithContext(ctx).Order("created_at DESC").Limit(5).Find(&recentTasks)
+	for _, t := range recentTasks {
+		activities = append(activities, Activity{
+			Type:      "task",
+			Title:     t.Name,
+			Detail:    t.Status,
+			CreatedAt: t.CreatedAt,
+		})
+	}
+
+	var recentVulns []model.Vulnerability
+	a.db.WithContext(ctx).Order("created_at DESC").Limit(5).Find(&recentVulns)
+	for _, v := range recentVulns {
+		activities = append(activities, Activity{
+			Type:      "vuln",
+			Title:     v.Title,
+			Detail:    v.Severity,
+			CreatedAt: v.CreatedAt,
+		})
+	}
+
+	return activities
+}
+
 func calculateRiskScore(dist map[string]int) float64 {
 	weights := map[string]float64{
 		"critical": 10.0,

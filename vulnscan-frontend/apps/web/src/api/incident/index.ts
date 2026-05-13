@@ -1,4 +1,5 @@
 import { baseRequestClient, requestClient } from '#/api/request';
+import { normalizePagedResponse } from '#/api/helpers';
 
 // ─── Interfaces ───────────────────────────────────────────────
 
@@ -133,9 +134,7 @@ export interface CreateIncidentReq {
 
 export async function getIncidentList(params?: Record<string, any>) {
   const res = await baseRequestClient.get<any>('/incident/incidents', { params });
-  const body = (res as Record<string, unknown>).data ?? res;
-  const typed = body as { data?: SecurityIncident[]; count?: number };
-  return { items: typed.data ?? [], total: typed.count ?? 0 };
+  return normalizePagedResponse<SecurityIncident>(res);
 }
 
 export function createIncident(data: CreateIncidentReq) {
@@ -257,9 +256,7 @@ export function createComment(data: { incident_id: string; content: string; pare
 
 export async function getCommentList(params: { incident_id: string } & Record<string, any>) {
   const res = await baseRequestClient.get<any>('/incident/comments', { params });
-  const body = (res as Record<string, unknown>).data ?? res;
-  const typed = body as { data?: IncidentComment[]; count?: number };
-  return { items: typed.data ?? [], total: typed.count ?? 0 };
+  return normalizePagedResponse<IncidentComment>(res);
 }
 
 export function deleteComment(id: string) {
@@ -294,9 +291,7 @@ export function getAssetSummary(params?: Record<string, any>) {
 
 export async function getKnowledgeList(params?: Record<string, any>) {
   const res = await baseRequestClient.get<any>('/incident/knowledge', { params });
-  const body = (res as Record<string, unknown>).data ?? res;
-  const typed = body as { data?: KnowledgeArticle[]; count?: number };
-  return { items: typed.data ?? [], total: typed.count ?? 0 };
+  return normalizePagedResponse<KnowledgeArticle>(res);
 }
 
 export function createKnowledge(data: Partial<KnowledgeArticle>) {
@@ -327,7 +322,5 @@ export function archiveKnowledge(id: string) {
 
 export async function getOplogList(params: { incident_id: string } & Record<string, any>) {
   const res = await baseRequestClient.get<any>('/incident/oplogs', { params });
-  const body = (res as Record<string, unknown>).data ?? res;
-  const typed = body as { data?: OpLog[]; count?: number };
-  return { items: typed.data ?? [], total: typed.count ?? 0 };
+  return normalizePagedResponse<OpLog>(res);
 }

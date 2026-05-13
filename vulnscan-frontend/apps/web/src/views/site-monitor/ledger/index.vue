@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import type { DataTableColumns } from 'naive-ui';
 
-import type { MonitorExecution, MonitorTask } from '#/api/monitor';
+import type { MonitorExecution, MonitorTask } from '#/api/sitemonitor';
 
 import { computed, h, onMounted, reactive, ref } from 'vue';
 
@@ -43,7 +43,7 @@ import {
   getTaskList,
   runTask,
   updateDisposition,
-} from '#/api/monitor';
+} from '#/api/sitemonitor';
 
 import AvailabilityDetail from '../executions/components/AvailabilityDetail.vue';
 import BlacklinkDetail from '../executions/components/BlacklinkDetail.vue';

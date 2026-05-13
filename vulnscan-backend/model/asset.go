@@ -76,23 +76,24 @@ type Asset struct {
 
 	// ── 台账字段（从资产系统迁移）──
 	DataNumber              string `gorm:"type:varchar(70);index" json:"data_number"`
-	SystemName              string `gorm:"type:varchar(100);index" json:"system_name"`
 	SystemType              string `gorm:"type:varchar(50)" json:"system_type"`
+	AssetFamily             string `gorm:"type:varchar(50);index;default:''" json:"asset_family"`
+	AssetSubtype            string `gorm:"type:varchar(50);default:''" json:"asset_subtype"`
 	IsOnline                bool   `json:"is_online"`
 	IsKey                   bool   `json:"is_key"`
 	SecurityProtectionLevel string `gorm:"type:varchar(20)" json:"security_protection_level"`
 	FilingCertNumber        string `gorm:"type:varchar(100)" json:"filing_cert_number"`
 	IcpFilingNumber         string `gorm:"type:varchar(100)" json:"icp_filing_number"`
+	PublicSecurityFiling    string `gorm:"type:varchar(100)" json:"public_security_filing"`
 
 	// ── 组织关联 ──
 	OrganizeID        string `gorm:"type:varchar(64);index" json:"organize_id"`
 	ConstructionOrgID string `gorm:"type:varchar(64)" json:"construction_org_id"`
 	OperationOrgID    string `gorm:"type:varchar(64)" json:"operation_org_id"`
 
-	// ── 生命周期与审核 ──
-	LifecycleState LifecycleState `gorm:"type:varchar(30);default:discovered;index" json:"lifecycle_state"`
-	ReviewStatus   ReviewStatus   `gorm:"type:varchar(20)" json:"review_status"`
-	DataSource     DataSourceType `gorm:"type:varchar(20)" json:"data_source"`
+	// ── 审核与来源 ──
+	ReviewStatus ReviewStatus   `gorm:"type:varchar(20)" json:"review_status"`
+	DataSource   DataSourceType `gorm:"type:varchar(20)" json:"data_source"`
 
 	// ── 责任人 ──
 	ResponsibleUserID   string `gorm:"type:varchar(64)" json:"responsible_user_id"`
@@ -111,9 +112,6 @@ type Asset struct {
 	EventsCount   int `gorm:"default:0" json:"events_count"`
 	CircularCount int `gorm:"default:0" json:"circular_count"`
 
-	// ── 关联 ──
-	ParentID string `gorm:"type:varchar(36);index" json:"parent_id"`
-
 	// ── 扩展 ──
 	Tags   StringArray `gorm:"type:text" json:"tags"`
 	Extra  JSONMap     `gorm:"type:text" json:"extra"`
@@ -121,19 +119,6 @@ type Asset struct {
 }
 
 func (Asset) TableName() string { return "vs_asset" }
-
-// AssetRelation 资产依赖关系（非父子层级的关联，如 A 依赖 B 的数据库）
-type AssetRelation struct {
-	ID           int64     `gorm:"primaryKey;autoIncrement" json:"id"`
-	SourceID     string    `gorm:"type:varchar(36);not null;index" json:"source_id"`
-	TargetID     string    `gorm:"type:varchar(36);not null;index" json:"target_id"`
-	RelationType string    `gorm:"type:varchar(30);not null;index" json:"relation_type"`
-	Description  string    `gorm:"type:varchar(200)" json:"description"`
-	CreatedBy    string    `gorm:"type:varchar(64)" json:"created_by"`
-	CreatedAt    time.Time `json:"created_at"`
-}
-
-func (AssetRelation) TableName() string { return "vs_asset_relation" }
 
 // AssetGroup 资产分组
 type AssetGroup struct {
@@ -438,7 +423,6 @@ type AssetArchiveSnapshot struct {
 	BatchID    string    `gorm:"type:varchar(36);index" json:"batch_id"`
 	OrganizeID string    `gorm:"type:varchar(64);index" json:"organize_id"`
 	AssetName  string    `gorm:"type:varchar(200)" json:"asset_name"`
-	SystemName string    `gorm:"type:varchar(100)" json:"system_name"`
 	Address    string    `gorm:"type:varchar(500)" json:"address"`
 	Status     string    `gorm:"type:varchar(30);index" json:"status"`
 	Snapshot   JSONMap   `gorm:"type:text" json:"snapshot"`

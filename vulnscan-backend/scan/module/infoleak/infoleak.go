@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"vulnscan-backend/scan/engine"
+	"vulnscan-backend/scan/core"
 )
 
 type InfoLeakScanner struct {
@@ -64,9 +64,9 @@ type leakMatcher struct {
 	Value   string
 }
 
-func (m *InfoLeakScanner) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
+func (m *InfoLeakScanner) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {
 	start := time.Now()
-	result := &engine.ModuleResult{ModuleID: m.ID()}
+	result := &core.ModuleResult{ModuleID: m.ID()}
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 
@@ -82,7 +82,7 @@ func (m *InfoLeakScanner) Run(ctx context.Context, targets []*engine.Target, con
 		for _, check := range checks {
 			wg.Add(1)
 			sem <- struct{}{}
-			go func(target *engine.Target, base string, chk leakCheck) {
+			go func(target *core.Target, base string, chk leakCheck) {
 				defer wg.Done()
 				defer func() { <-sem }()
 
@@ -108,7 +108,7 @@ func (m *InfoLeakScanner) Run(ctx context.Context, targets []*engine.Target, con
 	return result, nil
 }
 
-func (m *InfoLeakScanner) testLeak(ctx context.Context, target *engine.Target, rawURL string, check leakCheck) *engine.Finding {
+func (m *InfoLeakScanner) testLeak(ctx context.Context, target *core.Target, rawURL string, check leakCheck) *core.Finding {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return nil
@@ -161,7 +161,7 @@ func (m *InfoLeakScanner) testLeak(ctx context.Context, target *engine.Target, r
 		}
 
 		if matched {
-			return &engine.Finding{
+			return &core.Finding{
 				ModuleID:    m.ID(),
 				Target:      target,
 				Type:        "info_leak",
@@ -260,7 +260,7 @@ func builtinChecks() []leakCheck {
 	}
 }
 
-func buildBaseURL(t *engine.Target) string {
+func buildBaseURL(t *core.Target) string {
 	if t.URL != "" {
 		return strings.TrimRight(t.URL, "/")
 	}

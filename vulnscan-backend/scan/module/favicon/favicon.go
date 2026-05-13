@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"vulnscan-backend/scan/engine"
+	"vulnscan-backend/scan/core"
 )
 
 type FaviconScanner struct {
@@ -47,9 +47,9 @@ var faviconPaths = []string{
 	"/assets/favicon.ico",
 }
 
-func (m *FaviconScanner) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
+func (m *FaviconScanner) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {
 	start := time.Now()
-	result := &engine.ModuleResult{ModuleID: m.ID()}
+	result := &core.ModuleResult{ModuleID: m.ID()}
 
 	var mu sync.Mutex
 	var wg sync.WaitGroup
@@ -63,7 +63,7 @@ func (m *FaviconScanner) Run(ctx context.Context, targets []*engine.Target, conf
 
 		wg.Add(1)
 		sem <- struct{}{}
-		go func(target *engine.Target, base string) {
+		go func(target *core.Target, base string) {
 			defer wg.Done()
 			defer func() { <-sem }()
 
@@ -85,7 +85,7 @@ func (m *FaviconScanner) Run(ctx context.Context, targets []*engine.Target, conf
 				fofaQuery := fmt.Sprintf("icon_hash=\"%d\"", mmh3Hash)
 
 				mu.Lock()
-				result.Findings = append(result.Findings, &engine.Finding{
+				result.Findings = append(result.Findings, &core.Finding{
 					ModuleID:   m.ID(),
 					Target:     target,
 					Type:       "favicon_hash",
@@ -228,7 +228,7 @@ func (h *mmh3Hasher) Reset()         { h.h = 0; h.buf = nil; h.len = 0 }
 func (h *mmh3Hasher) Size() int      { return 4 }
 func (h *mmh3Hasher) BlockSize() int { return 4 }
 
-func buildBaseURL(t *engine.Target) string {
+func buildBaseURL(t *core.Target) string {
 	if t.URL != "" {
 		return strings.TrimRight(t.URL, "/")
 	}

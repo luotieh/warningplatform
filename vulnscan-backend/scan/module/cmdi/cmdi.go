@@ -11,11 +11,13 @@ import (
 
 	"vulnscan-backend/model"
 	"vulnscan-backend/pkg/payload"
-	"vulnscan-backend/scan/engine"
+	"vulnscan-backend/scan/core"
+	"vulnscan-backend/scan/scanhttp"
+	"vulnscan-backend/scan/vulnkit"
 )
 
 type CMDiScanner struct {
-	base     *engine.VulnScanner
+	base     *vulnkit.VulnScanner
 	payloads *payload.Loader
 }
 
@@ -27,32 +29,32 @@ func (m *CMDiScanner) ID() string       { return "cmdi" }
 func (m *CMDiScanner) Name() string     { return "命令注入检测" }
 func (m *CMDiScanner) Category() string { return "vuln" }
 
-func (m *CMDiScanner) Params() []engine.ModuleParam {
-	return []engine.ModuleParam{engine.VulnVerificationParam()}
+func (m *CMDiScanner) Params() []core.ModuleParam {
+	return []core.ModuleParam{core.VulnVerificationParam()}
 }
 
-func (m *CMDiScanner) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
-	m.base = engine.NewVulnScanner(config, engine.WithRedirectPolicy(engine.RedirectNoFollow))
-	verifyLevel := engine.GetConfigValue(config, "verification_level", "both")
+func (m *CMDiScanner) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {
+	m.base = vulnkit.NewVulnScanner(config, scanhttp.WithRedirectPolicy(scanhttp.RedirectNoFollow))
+	verifyLevel := core.GetConfigValue(config, "verification_level", "both")
 
-	result := m.base.RunTargets(ctx, m.ID(), targets, func(ctx context.Context, target *engine.Target) []*engine.Finding {
+	result := m.base.RunTargets(ctx, m.ID(), targets, func(ctx context.Context, target *core.Target) []*core.Finding {
 		return m.testTarget(ctx, target, verifyLevel)
 	})
 
-	engine.LogModuleComplete(m.ID(), len(targets), len(result.Findings), result.Duration)
+	vulnkit.LogModuleComplete(m.ID(), len(targets), len(result.Findings), result.Duration)
 	return result, nil
 }
 
-func (m *CMDiScanner) testTarget(ctx context.Context, target *engine.Target, verifyLevel string) []*engine.Finding {
-	points := engine.ExtractInjectionPoints(target)
+func (m *CMDiScanner) testTarget(ctx context.Context, target *core.Target, verifyLevel string) []*core.Finding {
+	points := vulnkit.ExtractInjectionPoints(target)
 	if len(points) == 0 {
 		parsed, err := url.Parse(target.URL)
 		if err != nil || len(parsed.Query()) == 0 {
 			return nil
 		}
 		for param := range parsed.Query() {
-			points = append(points, engine.InjectionPoint{
-				Type: engine.InjectQuery,
+			points = append(points, vulnkit.InjectionPoint{
+				Type: vulnkit.InjectQuery,
 				Name: param,
 			})
 		}
@@ -62,19 +64,19 @@ func (m *CMDiScanner) testTarget(ctx context.Context, target *engine.Target, ver
 		return nil
 	}
 
-	var findings []*engine.Finding
+	var findings []*core.Finding
 	canary := genCanary()
 
 	for _, point := range points {
-		if engine.ShouldRunExploit(verifyLevel) {
+		if core.ShouldRunExploit(verifyLevel) {
 			if f := m.testTimeBased(ctx, target, point); f != nil {
-				f.VerificationLevel = engine.VerifyExploit
+				f.VerificationLevel = core.VerifyExploit
 				f.VerificationDetail = "time-delay-confirmed"
 				findings = append(findings, f)
 				continue
 			}
 			if f := m.testOutputBased(ctx, target, point, canary); f != nil {
-				f.VerificationLevel = engine.VerifyExploit
+				f.VerificationLevel = core.VerifyExploit
 				f.VerificationDetail = "command-output-confirmed"
 				findings = append(findings, f)
 			}
@@ -171,7 +173,7 @@ func defaultOutputPayloads(canary string) []cmdiPayloadEntry {
 	}
 }
 
-func (m *CMDiScanner) testTimeBased(ctx context.Context, target *engine.Target, point engine.InjectionPoint) *engine.Finding {
+func (m *CMDiScanner) testTimeBased(ctx context.Context, target *core.Target, point vulnkit.InjectionPoint) *core.Finding {
 	baseStart := time.Now()
 	m.base.FetchBody(ctx, target.URL)
 	baseLatency := time.Since(baseStart)
@@ -194,7 +196,7 @@ func (m *CMDiScanner) testTimeBased(ctx context.Context, target *engine.Target, 
 			confirmElapsed := time.Since(confirmStart)
 
 			if confirmElapsed >= 4*time.Second {
-				return &engine.Finding{
+				return &core.Finding{
 					ModuleID:    m.ID(),
 					Target:      target,
 					Type:        "cmdi_time",
@@ -218,7 +220,7 @@ func (m *CMDiScanner) testTimeBased(ctx context.Context, target *engine.Target, 
 	return nil
 }
 
-func (m *CMDiScanner) testOutputBased(ctx context.Context, target *engine.Target, point engine.InjectionPoint, canary string) *engine.Finding {
+func (m *CMDiScanner) testOutputBased(ctx context.Context, target *core.Target, point vulnkit.InjectionPoint, canary string) *core.Finding {
 	for _, p := range m.getOutputPayloads(canary) {
 		select {
 		case <-ctx.Done():
@@ -246,7 +248,7 @@ func (m *CMDiScanner) testOutputBased(ctx context.Context, target *engine.Target
 		}
 
 		if detected {
-			return &engine.Finding{
+			return &core.Finding{
 				ModuleID:    m.ID(),
 				Target:      target,
 				Type:        "cmdi_output",
@@ -254,7 +256,7 @@ func (m *CMDiScanner) testOutputBased(ctx context.Context, target *engine.Target
 				Description: fmt.Sprintf("%s参数 %s 使用 %s 变体成功执行命令: %s", point.Type, point.Name, p.variant, evidence),
 				Severity:    "critical",
 				Confidence:  90,
-				Evidence:    engine.Truncate(body, 500),
+				Evidence:    vulnkit.Truncate(body, 500),
 				Timestamp:   time.Now(),
 				Data: map[string]string{
 					"param":      point.Name,

@@ -23,14 +23,14 @@ import type {
   DynamicFormSubmission,
   DynamicFormSubmissionDetail,
   DynamicFormTemplate,
-} from '#/api/form';
+} from '#/api/formdesign';
 import {
   deleteDynamicFormSubmission,
   getDynamicFormSubmission,
   getDynamicFormSubmissions,
   getDynamicFormTemplates,
   normalizePagedResponse,
-} from '#/api/form';
+} from '#/api/formdesign';
 import DynamicFormRenderer from '#/components/dynamic-form/DynamicFormRenderer.vue';
 
 defineOptions({ name: 'FormSubmissions' });

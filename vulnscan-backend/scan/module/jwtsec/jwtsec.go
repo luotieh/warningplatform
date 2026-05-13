@@ -12,11 +12,12 @@ import (
 	"strings"
 	"time"
 
-	"vulnscan-backend/scan/engine"
+	"vulnscan-backend/scan/core"
+	"vulnscan-backend/scan/vulnkit"
 )
 
 type JWTSecScanner struct {
-	base *engine.VulnScanner
+	base *vulnkit.VulnScanner
 }
 
 func New() *JWTSecScanner {
@@ -27,19 +28,19 @@ func (m *JWTSecScanner) ID() string       { return "jwt_sec" }
 func (m *JWTSecScanner) Name() string     { return "JWT 安全检测" }
 func (m *JWTSecScanner) Category() string { return "vuln" }
 
-func (m *JWTSecScanner) Params() []engine.ModuleParam {
-	return []engine.ModuleParam{engine.VulnVerificationParam()}
+func (m *JWTSecScanner) Params() []core.ModuleParam {
+	return []core.ModuleParam{core.VulnVerificationParam()}
 }
 
-func (m *JWTSecScanner) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
-	m.base = engine.NewVulnScanner(config)
-	verifyLevel := engine.GetConfigValue(config, "verification_level", "both")
+func (m *JWTSecScanner) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {
+	m.base = vulnkit.NewVulnScanner(config)
+	verifyLevel := core.GetConfigValue(config, "verification_level", "both")
 
-	result := m.base.RunTargets(ctx, m.ID(), targets, func(ctx context.Context, target *engine.Target) []*engine.Finding {
+	result := m.base.RunTargets(ctx, m.ID(), targets, func(ctx context.Context, target *core.Target) []*core.Finding {
 		return m.testTarget(ctx, target, verifyLevel)
 	})
 
-	engine.LogModuleComplete(m.ID(), len(targets), len(result.Findings), result.Duration)
+	vulnkit.LogModuleComplete(m.ID(), len(targets), len(result.Findings), result.Duration)
 	return result, nil
 }
 
@@ -65,7 +66,7 @@ type jwtPayload struct {
 	Sub string      `json:"sub,omitempty"`
 }
 
-func (m *JWTSecScanner) testTarget(ctx context.Context, target *engine.Target, verifyLevel string) []*engine.Finding {
+func (m *JWTSecScanner) testTarget(ctx context.Context, target *core.Target, verifyLevel string) []*core.Finding {
 	resp, body := m.base.FetchFullResponse(ctx, target.URL)
 	if body == "" {
 		return nil
@@ -76,13 +77,13 @@ func (m *JWTSecScanner) testTarget(ctx context.Context, target *engine.Target, v
 		return nil
 	}
 
-	var findings []*engine.Finding
+	var findings []*core.Finding
 
 	for _, token := range tokens {
-		if engine.ShouldRunPrinciple(verifyLevel) {
+		if core.ShouldRunPrinciple(verifyLevel) {
 			findings = append(findings, m.analyzeTokenStructure(target, token)...)
 		}
-		if engine.ShouldRunExploit(verifyLevel) {
+		if core.ShouldRunExploit(verifyLevel) {
 			if f := m.testAlgNone(ctx, target, token); f != nil {
 				findings = append(findings, f)
 			}
@@ -144,7 +145,7 @@ func decodeJWTPart(part string) ([]byte, error) {
 	return base64.URLEncoding.DecodeString(part)
 }
 
-func (m *JWTSecScanner) analyzeTokenStructure(target *engine.Target, token string) []*engine.Finding {
+func (m *JWTSecScanner) analyzeTokenStructure(target *core.Target, token string) []*core.Finding {
 	parts := strings.SplitN(token, ".", 3)
 	if len(parts) < 3 {
 		return nil
@@ -172,10 +173,10 @@ func (m *JWTSecScanner) analyzeTokenStructure(target *engine.Target, token strin
 		return nil
 	}
 
-	var findings []*engine.Finding
+	var findings []*core.Finding
 
 	if strings.EqualFold(header.Alg, "none") || header.Alg == "" {
-		findings = append(findings, &engine.Finding{
+		findings = append(findings, &core.Finding{
 			ModuleID:           m.ID(),
 			Target:             target,
 			Type:               "jwt_alg_none",
@@ -184,19 +185,19 @@ func (m *JWTSecScanner) analyzeTokenStructure(target *engine.Target, token strin
 			Severity:           "critical",
 			Confidence:         85,
 			Evidence:           string(headerBytes),
-			VerificationLevel:  engine.VerifyPrinciple,
+			VerificationLevel:  core.VerifyPrinciple,
 			VerificationDetail: "alg-none-detected",
 			Timestamp:          time.Now(),
 			Data: map[string]string{
 				"alg":   header.Alg,
-				"token": engine.Truncate(token, 100),
+				"token": vulnkit.Truncate(token, 100),
 				"type":  "jwt-alg-none",
 			},
 		})
 	}
 
 	if payload.Exp.String() == "" || payload.Exp.String() == "0" {
-		findings = append(findings, &engine.Finding{
+		findings = append(findings, &core.Finding{
 			ModuleID:           m.ID(),
 			Target:             target,
 			Type:               "jwt_no_expiry",
@@ -205,11 +206,11 @@ func (m *JWTSecScanner) analyzeTokenStructure(target *engine.Target, token strin
 			Severity:           "medium",
 			Confidence:         80,
 			Evidence:           string(payloadBytes),
-			VerificationLevel:  engine.VerifyPrinciple,
+			VerificationLevel:  core.VerifyPrinciple,
 			VerificationDetail: "missing-expiration",
 			Timestamp:          time.Now(),
 			Data: map[string]string{
-				"token": engine.Truncate(token, 100),
+				"token": vulnkit.Truncate(token, 100),
 				"type":  "jwt-no-expiry",
 			},
 		})
@@ -219,7 +220,7 @@ func (m *JWTSecScanner) analyzeTokenStructure(target *engine.Target, token strin
 			expTime := time.Unix(expInt, 0)
 			duration := time.Until(expTime)
 			if duration > 30*24*time.Hour {
-				findings = append(findings, &engine.Finding{
+				findings = append(findings, &core.Finding{
 					ModuleID:           m.ID(),
 					Target:             target,
 					Type:               "jwt_long_expiry",
@@ -228,13 +229,13 @@ func (m *JWTSecScanner) analyzeTokenStructure(target *engine.Target, token strin
 					Severity:           "low",
 					Confidence:         75,
 					Evidence:           string(payloadBytes),
-					VerificationLevel:  engine.VerifyPrinciple,
+					VerificationLevel:  core.VerifyPrinciple,
 					VerificationDetail: "excessive-expiration",
 					Timestamp:          time.Now(),
 					Data: map[string]string{
 						"exp":      expTime.Format(time.RFC3339),
 						"duration": duration.String(),
-						"token":    engine.Truncate(token, 100),
+						"token":    vulnkit.Truncate(token, 100),
 						"type":     "jwt-long-expiry",
 					},
 				})
@@ -245,7 +246,7 @@ func (m *JWTSecScanner) analyzeTokenStructure(target *engine.Target, token strin
 	return findings
 }
 
-func (m *JWTSecScanner) testWeakSecret(target *engine.Target, token string) *engine.Finding {
+func (m *JWTSecScanner) testWeakSecret(target *core.Target, token string) *core.Finding {
 	parts := strings.SplitN(token, ".", 3)
 	if len(parts) < 3 {
 		return nil
@@ -273,7 +274,7 @@ func (m *JWTSecScanner) testWeakSecret(target *engine.Target, token string) *eng
 		expectedSig := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 
 		if expectedSig == parts[2] {
-			return &engine.Finding{
+			return &core.Finding{
 				ModuleID:           m.ID(),
 				Target:             target,
 				Type:               "jwt_weak_secret",
@@ -282,13 +283,13 @@ func (m *JWTSecScanner) testWeakSecret(target *engine.Target, token string) *eng
 				Severity:           "critical",
 				Confidence:         95,
 				Evidence:           fmt.Sprintf("Secret: %s, Algorithm: %s", secret, header.Alg),
-				VerificationLevel:  engine.VerifyExploit,
+				VerificationLevel:  core.VerifyExploit,
 				VerificationDetail: "weak-secret-cracked",
 				Timestamp:          time.Now(),
 				Data: map[string]string{
 					"secret": secret,
 					"alg":    header.Alg,
-					"token":  engine.Truncate(token, 100),
+					"token":  vulnkit.Truncate(token, 100),
 					"type":   "jwt-weak-secret",
 				},
 			}
@@ -298,7 +299,7 @@ func (m *JWTSecScanner) testWeakSecret(target *engine.Target, token string) *eng
 	return nil
 }
 
-func (m *JWTSecScanner) testAlgNone(ctx context.Context, target *engine.Target, token string) *engine.Finding {
+func (m *JWTSecScanner) testAlgNone(ctx context.Context, target *core.Target, token string) *core.Finding {
 	parts := strings.SplitN(token, ".", 3)
 	if len(parts) < 3 {
 		return nil
@@ -321,8 +322,8 @@ func (m *JWTSecScanner) testAlgNone(ctx context.Context, target *engine.Target, 
 			continue
 		}
 
-		if isSuccessResponse(forgedResp) && isSuccessResponse(originalResp) && engine.Similarity(originalResp, forgedResp) > 0.7 {
-			return &engine.Finding{
+		if isSuccessResponse(forgedResp) && isSuccessResponse(originalResp) && vulnkit.Similarity(originalResp, forgedResp) > 0.7 {
+			return &core.Finding{
 				ModuleID:           m.ID(),
 				Target:             target,
 				Type:               "jwt_alg_none_bypass",
@@ -330,12 +331,12 @@ func (m *JWTSecScanner) testAlgNone(ctx context.Context, target *engine.Target, 
 				Description:        "服务端接受了alg:none的JWT token，签名验证被完全绕过",
 				Severity:           "critical",
 				Confidence:         90,
-				Evidence:           engine.Truncate(forgedResp, 500),
-				VerificationLevel:  engine.VerifyExploit,
+				Evidence:           vulnkit.Truncate(forgedResp, 500),
+				VerificationLevel:  core.VerifyExploit,
 				VerificationDetail: "alg-none-bypass-confirmed",
 				Timestamp:          time.Now(),
 				Data: map[string]string{
-					"forged_token": engine.Truncate(forgedToken, 200),
+					"forged_token": vulnkit.Truncate(forgedToken, 200),
 					"type":         "jwt-alg-none-bypass",
 				},
 			}
@@ -345,7 +346,7 @@ func (m *JWTSecScanner) testAlgNone(ctx context.Context, target *engine.Target, 
 	return nil
 }
 
-func (m *JWTSecScanner) testEmptySignature(ctx context.Context, target *engine.Target, token string) *engine.Finding {
+func (m *JWTSecScanner) testEmptySignature(ctx context.Context, target *core.Target, token string) *core.Finding {
 	parts := strings.SplitN(token, ".", 3)
 	if len(parts) < 3 || parts[2] == "" {
 		return nil
@@ -360,8 +361,8 @@ func (m *JWTSecScanner) testEmptySignature(ctx context.Context, target *engine.T
 		return nil
 	}
 
-	if isSuccessResponse(emptyResp) && isSuccessResponse(originalResp) && engine.Similarity(originalResp, emptyResp) > 0.7 {
-		return &engine.Finding{
+	if isSuccessResponse(emptyResp) && isSuccessResponse(originalResp) && vulnkit.Similarity(originalResp, emptyResp) > 0.7 {
+		return &core.Finding{
 			ModuleID:           m.ID(),
 			Target:             target,
 			Type:               "jwt_empty_sig",
@@ -369,8 +370,8 @@ func (m *JWTSecScanner) testEmptySignature(ctx context.Context, target *engine.T
 			Description:        "服务端接受了空签名的JWT token，签名验证存在缺陷",
 			Severity:           "critical",
 			Confidence:         88,
-			Evidence:           engine.Truncate(emptyResp, 500),
-			VerificationLevel:  engine.VerifyExploit,
+			Evidence:           vulnkit.Truncate(emptyResp, 500),
+			VerificationLevel:  core.VerifyExploit,
 			VerificationDetail: "empty-signature-accepted",
 			Timestamp:          time.Now(),
 			Data: map[string]string{

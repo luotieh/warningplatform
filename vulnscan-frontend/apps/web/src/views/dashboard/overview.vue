@@ -36,6 +36,7 @@ import {
   getDashboardStats as getIncidentStats,
   type DashboardStats as IncidentDashboardStats,
 } from '#/api/incident';
+import { sevLabels, sevColors } from '#/constants/severity';
 
 defineOptions({ name: 'DashboardOverview' });
 
@@ -67,20 +68,10 @@ const { renderEcharts: renderSeverityPie } = useEcharts(severityPieRef);
 const { renderEcharts: renderTopAssets } = useEcharts(topAssetsRef);
 
 const severityOrder = ['critical', 'high', 'medium', 'low', 'info'];
-const severityColors: Record<string, string> = {
-  critical: '#d03050',
-  high: '#f59e0b',
-  info: '#2080f0',
-  low: '#18a058',
-  medium: '#f0a020',
-};
-const severityLabels: Record<string, string> = {
-  critical: '严重',
-  high: '高危',
-  info: '信息',
-  low: '低危',
-  medium: '中危',
-};
+const severityColors: Record<string, string> = Object.fromEntries(
+  Object.entries(sevColors).map(([k, v]) => [k, v.fg]),
+);
+const severityLabels: Record<string, string> = sevLabels;
 const taskStatusMap: Record<string, { label: string; type: 'default' | 'error' | 'info' | 'success' | 'warning' }> = {
   cancelled: { label: '已取消', type: 'default' },
   completed: { label: '已完成', type: 'success' },
@@ -116,7 +107,7 @@ const primaryStats = computed(() => [
     color: '#2080f0',
     icon: 'lucide:server',
     label: '资产总数',
-    route: '/asset/overview',
+    route: '/asset/ledger',
     sub: '纳入风险统计的资产',
     value: posture.value?.total_assets ?? 0,
   },

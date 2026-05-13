@@ -1,4 +1,5 @@
 import { baseRequestClient, requestClient } from '#/api/request';
+import { normalizePagedResponse } from '#/api/helpers';
 
 // ─── 通报状态枚举 ───
 
@@ -251,9 +252,7 @@ export interface TransferStatusResp {
 
 export async function getTemplateList(params?: Record<string, any>) {
   const res = await baseRequestClient.get<any>('/circular/templates', { params });
-  const body = (res as Record<string, unknown>).data ?? res;
-  const typed = body as { data?: CircularTemplate[]; count?: number };
-  return { items: typed.data ?? [], total: typed.count ?? 0 };
+  return normalizePagedResponse<CircularTemplate>(res);
 }
 
 export function createTemplate(data: Partial<CircularTemplate>) {
@@ -272,9 +271,7 @@ export function deleteTemplate(id: string) {
 
 export async function getInputList(params?: Record<string, any>) {
   const res = await baseRequestClient.get<any>('/circular/inputs', { params });
-  const body = (res as Record<string, unknown>).data ?? res;
-  const typed = body as { data?: CircularItem[]; count?: number };
-  return { items: typed.data ?? [], total: typed.count ?? 0 };
+  return normalizePagedResponse<CircularItem>(res);
 }
 
 export function createInput(data: Record<string, any>) {
@@ -321,9 +318,7 @@ export function thirdPartyImport(data: Record<string, any>) {
 
 export async function getVerifyList(params?: Record<string, any>) {
   const res = await baseRequestClient.get<any>('/circular/verifications', { params });
-  const body = (res as Record<string, unknown>).data ?? res;
-  const typed = body as { data?: CircularItem[]; count?: number };
-  return { items: typed.data ?? [], total: typed.count ?? 0 };
+  return normalizePagedResponse<CircularItem>(res);
 }
 
 export function verifyCircular(data: { circular_ids: string[]; result: string }) {
@@ -334,9 +329,7 @@ export function verifyCircular(data: { circular_ids: string[]; result: string })
 
 export async function getDistributeList(params?: Record<string, any>) {
   const res = await baseRequestClient.get<any>('/circular/distributions', { params });
-  const body = (res as Record<string, unknown>).data ?? res;
-  const typed = body as { data?: CircularItem[]; count?: number };
-  return { items: typed.data ?? [], total: typed.count ?? 0 };
+  return normalizePagedResponse<CircularItem>(res);
 }
 
 export function distributeCircular(data: {
@@ -354,9 +347,7 @@ export function distributeCircular(data: {
 
 export async function getDisposalList(params?: Record<string, any>) {
   const res = await baseRequestClient.get<any>('/circular/disposals', { params });
-  const body = (res as Record<string, unknown>).data ?? res;
-  const typed = body as { data?: CircularItem[]; count?: number };
-  return { items: typed.data ?? [], total: typed.count ?? 0 };
+  return normalizePagedResponse<CircularItem>(res);
 }
 
 export function disposeCircular(id: string, data: {
@@ -381,9 +372,7 @@ export function redistributeCircular(data: {
 
 export async function getReviewList(params?: Record<string, any>) {
   const res = await baseRequestClient.get<any>('/circular/reviews', { params });
-  const body = (res as Record<string, unknown>).data ?? res;
-  const typed = body as { data?: CircularItem[]; count?: number };
-  return { items: typed.data ?? [], total: typed.count ?? 0 };
+  return normalizePagedResponse<CircularItem>(res);
 }
 
 export function reviewCircular(id: string, data: {
@@ -398,9 +387,7 @@ export function reviewCircular(id: string, data: {
 
 export async function getLedgerList(params?: Record<string, any>) {
   const res = await baseRequestClient.get<any>('/circular/ledgers', { params });
-  const body = (res as Record<string, unknown>).data ?? res;
-  const typed = body as { data?: CircularItem[]; count?: number };
-  return { items: typed.data ?? [], total: typed.count ?? 0 };
+  return normalizePagedResponse<CircularItem>(res);
 }
 
 export function getLedgerDetail(id: string) {

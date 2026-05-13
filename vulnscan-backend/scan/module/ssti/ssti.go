@@ -10,11 +10,12 @@ import (
 
 	"vulnscan-backend/model"
 	"vulnscan-backend/pkg/payload"
-	"vulnscan-backend/scan/engine"
+	"vulnscan-backend/scan/core"
+	"vulnscan-backend/scan/vulnkit"
 )
 
 type SSTIScanner struct {
-	base     *engine.VulnScanner
+	base     *vulnkit.VulnScanner
 	payloads *payload.Loader
 }
 
@@ -26,8 +27,8 @@ func (m *SSTIScanner) ID() string       { return "ssti" }
 func (m *SSTIScanner) Name() string     { return "模板注入检测" }
 func (m *SSTIScanner) Category() string { return "vuln" }
 
-func (m *SSTIScanner) Params() []engine.ModuleParam {
-	return []engine.ModuleParam{engine.VulnVerificationParam()}
+func (m *SSTIScanner) Params() []core.ModuleParam {
+	return []core.ModuleParam{core.VulnVerificationParam()}
 }
 
 type sstiProbe struct {
@@ -182,28 +183,28 @@ func defaultExploitProbes() []sstiExploit {
 	}
 }
 
-func (m *SSTIScanner) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
-	m.base = engine.NewVulnScanner(config)
-	verifyLevel := engine.GetConfigValue(config, "verification_level", "both")
+func (m *SSTIScanner) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {
+	m.base = vulnkit.NewVulnScanner(config)
+	verifyLevel := core.GetConfigValue(config, "verification_level", "both")
 
-	result := m.base.RunTargets(ctx, m.ID(), targets, func(ctx context.Context, target *engine.Target) []*engine.Finding {
+	result := m.base.RunTargets(ctx, m.ID(), targets, func(ctx context.Context, target *core.Target) []*core.Finding {
 		return m.testTarget(ctx, target, verifyLevel)
 	})
 
-	engine.LogModuleComplete(m.ID(), len(targets), len(result.Findings), result.Duration)
+	vulnkit.LogModuleComplete(m.ID(), len(targets), len(result.Findings), result.Duration)
 	return result, nil
 }
 
-func (m *SSTIScanner) testTarget(ctx context.Context, target *engine.Target, verifyLevel string) []*engine.Finding {
-	points := engine.ExtractInjectionPoints(target)
+func (m *SSTIScanner) testTarget(ctx context.Context, target *core.Target, verifyLevel string) []*core.Finding {
+	points := vulnkit.ExtractInjectionPoints(target)
 	if len(points) == 0 {
 		parsed, err := url.Parse(target.URL)
 		if err != nil || len(parsed.Query()) == 0 {
 			return nil
 		}
 		for param := range parsed.Query() {
-			points = append(points, engine.InjectionPoint{
-				Type: engine.InjectQuery,
+			points = append(points, vulnkit.InjectionPoint{
+				Type: vulnkit.InjectQuery,
 				Name: param,
 			})
 		}
@@ -213,11 +214,11 @@ func (m *SSTIScanner) testTarget(ctx context.Context, target *engine.Target, ver
 		return nil
 	}
 
-	var findings []*engine.Finding
+	var findings []*core.Finding
 	baseBody := m.base.FetchBody(ctx, target.URL)
 
 	for _, point := range points {
-		if engine.ShouldRunPrinciple(verifyLevel) {
+		if core.ShouldRunPrinciple(verifyLevel) {
 			if f := m.testMathExpression(ctx, target, point, baseBody); f != nil {
 				findings = append(findings, f)
 				continue
@@ -228,7 +229,7 @@ func (m *SSTIScanner) testTarget(ctx context.Context, target *engine.Target, ver
 			}
 		}
 
-		if engine.ShouldRunExploit(verifyLevel) {
+		if core.ShouldRunExploit(verifyLevel) {
 			if f := m.testExploit(ctx, target, point, baseBody); f != nil {
 				findings = append(findings, f)
 			}
@@ -238,7 +239,7 @@ func (m *SSTIScanner) testTarget(ctx context.Context, target *engine.Target, ver
 	return findings
 }
 
-func (m *SSTIScanner) testMathExpression(ctx context.Context, target *engine.Target, point engine.InjectionPoint, baseBody string) *engine.Finding {
+func (m *SSTIScanner) testMathExpression(ctx context.Context, target *core.Target, point vulnkit.InjectionPoint, baseBody string) *core.Finding {
 	for _, probe := range m.getMathProbes() {
 		select {
 		case <-ctx.Done():
@@ -252,7 +253,7 @@ func (m *SSTIScanner) testMathExpression(ctx context.Context, target *engine.Tar
 		}
 
 		if strings.Contains(body, probe.expect) && !strings.Contains(baseBody, probe.expect) {
-			return &engine.Finding{
+			return &core.Finding{
 				ModuleID:           m.ID(),
 				Target:             target,
 				Type:               "ssti",
@@ -260,8 +261,8 @@ func (m *SSTIScanner) testMathExpression(ctx context.Context, target *engine.Tar
 				Description:        fmt.Sprintf("%s参数 %s 注入 %s 后响应包含预期计算结果 %s，疑似 %s 引擎", point.Type, point.Name, probe.payload, probe.expect, probe.engine),
 				Severity:           "high",
 				Confidence:         80,
-				Evidence:           engine.Truncate(body, 500),
-				VerificationLevel:  engine.VerifyPrinciple,
+				Evidence:           vulnkit.Truncate(body, 500),
+				VerificationLevel:  core.VerifyPrinciple,
 				VerificationDetail: "math-expression-reflected",
 				Timestamp:          time.Now(),
 				Data: map[string]string{
@@ -278,7 +279,7 @@ func (m *SSTIScanner) testMathExpression(ctx context.Context, target *engine.Tar
 	return nil
 }
 
-func (m *SSTIScanner) testErrorBased(ctx context.Context, target *engine.Target, point engine.InjectionPoint) *engine.Finding {
+func (m *SSTIScanner) testErrorBased(ctx context.Context, target *core.Target, point vulnkit.InjectionPoint) *core.Finding {
 	errorPayloads := []string{"{{", "${", "<%", "#{", "{%"}
 
 	for _, payload := range errorPayloads {
@@ -295,7 +296,7 @@ func (m *SSTIScanner) testErrorBased(ctx context.Context, target *engine.Target,
 
 		for _, pattern := range engineErrorPatterns {
 			if pattern.MatchString(body) {
-				return &engine.Finding{
+				return &core.Finding{
 					ModuleID:           m.ID(),
 					Target:             target,
 					Type:               "ssti_error",
@@ -303,8 +304,8 @@ func (m *SSTIScanner) testErrorBased(ctx context.Context, target *engine.Target,
 					Description:        fmt.Sprintf("%s参数 %s 注入 %s 后触发模板引擎错误", point.Type, point.Name, payload),
 					Severity:           "medium",
 					Confidence:         70,
-					Evidence:           engine.Truncate(body, 500),
-					VerificationLevel:  engine.VerifyPrinciple,
+					Evidence:           vulnkit.Truncate(body, 500),
+					VerificationLevel:  core.VerifyPrinciple,
 					VerificationDetail: "engine-error-detected",
 					Timestamp:          time.Now(),
 					Data: map[string]string{
@@ -321,7 +322,7 @@ func (m *SSTIScanner) testErrorBased(ctx context.Context, target *engine.Target,
 	return nil
 }
 
-func (m *SSTIScanner) testExploit(ctx context.Context, target *engine.Target, point engine.InjectionPoint, baseBody string) *engine.Finding {
+func (m *SSTIScanner) testExploit(ctx context.Context, target *core.Target, point vulnkit.InjectionPoint, baseBody string) *core.Finding {
 	for _, probe := range m.getExploitProbes() {
 		select {
 		case <-ctx.Done():
@@ -335,7 +336,7 @@ func (m *SSTIScanner) testExploit(ctx context.Context, target *engine.Target, po
 		}
 
 		if probe.detect(body) && !probe.detect(baseBody) {
-			return &engine.Finding{
+			return &core.Finding{
 				ModuleID:           m.ID(),
 				Target:             target,
 				Type:               "ssti_exploit",
@@ -343,8 +344,8 @@ func (m *SSTIScanner) testExploit(ctx context.Context, target *engine.Target, po
 				Description:        fmt.Sprintf("%s参数 %s 通过 %s 引擎成功提取敏感信息", point.Type, point.Name, probe.engine),
 				Severity:           "critical",
 				Confidence:         90,
-				Evidence:           engine.Truncate(body, 500),
-				VerificationLevel:  engine.VerifyExploit,
+				Evidence:           vulnkit.Truncate(body, 500),
+				VerificationLevel:  core.VerifyExploit,
 				VerificationDetail: probe.detail,
 				Timestamp:          time.Now(),
 				Data: map[string]string{

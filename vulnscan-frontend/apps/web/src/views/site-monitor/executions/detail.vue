@@ -20,7 +20,7 @@ import {
 } from 'naive-ui';
 
 import { message } from '#/adapter/naive';
-import { getExecutionDetail } from '#/api/monitor';
+import { getExecutionDetail } from '#/api/sitemonitor';
 import { createIncident, type CreateIncidentReq } from '#/api/incident';
 
 import AvailabilityDetail from './components/AvailabilityDetail.vue';

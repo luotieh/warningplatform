@@ -1,3 +1,4 @@
+import { normalizePagedResponse } from '#/api/helpers';
 import { baseRequestClient, requestClient } from '#/api/request';
 
 export interface Dictionary {
@@ -22,9 +23,7 @@ export interface DictionaryEntry {
 
 export async function getDictList(params?: Record<string, any>) {
   const res = await baseRequestClient.get<any>('/dict/list', { params });
-  const body = (res as Record<string, unknown>).data ?? res;
-  const typed = body as { data?: Dictionary[]; count?: number };
-  return { items: typed.data ?? [], total: typed.count ?? 0 };
+  return normalizePagedResponse<Dictionary>(res);
 }
 
 export function getDictDetail(id: string) {
@@ -45,9 +44,7 @@ export function deleteDict(id: string) {
 
 export async function getDictEntries(id: string, params?: Record<string, any>) {
   const res = await baseRequestClient.get<any>(`/dict/${id}/entries`, { params });
-  const body = (res as Record<string, unknown>).data ?? res;
-  const typed = body as { data?: DictionaryEntry[]; count?: number };
-  return { items: typed.data ?? [], total: typed.count ?? 0 };
+  return normalizePagedResponse<DictionaryEntry>(res);
 }
 
 export function addDictEntry(id: string, data: Partial<DictionaryEntry>) {

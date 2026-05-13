@@ -1,4 +1,5 @@
 import { baseRequestClient, requestClient } from '#/api/request';
+import { normalizePagedResponse } from '#/api/helpers';
 
 export interface PocTemplate {
   id: string;
@@ -25,9 +26,7 @@ export interface PocTemplate {
 
 export async function getPocList(params?: Record<string, any>) {
   const res = await baseRequestClient.get<any>('/poc/list', { params });
-  const body = (res as Record<string, unknown>).data ?? res;
-  const typed = body as { data?: PocTemplate[]; count?: number };
-  return { items: typed.data ?? [], total: typed.count ?? 0 };
+  return normalizePagedResponse<PocTemplate>(res);
 }
 
 export function getPocDetail(id: string) {

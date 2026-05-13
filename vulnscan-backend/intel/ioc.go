@@ -35,22 +35,12 @@ func (h *Handler) ListIOC(c *gin.Context) {
 	tx.Count(&count)
 	tx.Order("created_at DESC").Limit(200).Find(&items)
 
-	web.RespContentWithNum(c, web.Success, count, items)
+	web.OK(c).List(count, items).Send()
 }
 
 func (h *Handler) CreateIOC(c *gin.Context) {
-	var req struct {
-		Type        string   `json:"type" binding:"required"`
-		Value       string   `json:"value" binding:"required"`
-		ThreatType  string   `json:"threat_type"`
-		Severity    string   `json:"severity"`
-		Source      string   `json:"source"`
-		Description string   `json:"description"`
-		Tags        []string `json:"tags"`
-		ExpiresAt   *string  `json:"expires_at"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		web.Resp(c, web.ParamsMissingRequired)
+	req, ok := web.BindJSON[CreateIOCReq](c)
+	if !ok {
 		return
 	}
 
@@ -73,25 +63,19 @@ func (h *Handler) CreateIOC(c *gin.Context) {
 	}
 
 	if err := h.db.Create(&ioc).Error; err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.RespContent(c, web.Success, ioc)
+	web.OK(c).Data(ioc).Send()
 }
 
 func (h *Handler) BatchImportIOC(c *gin.Context) {
-	var req struct {
-		Items []struct {
-			Type        string `json:"type"`
-			Value       string `json:"value"`
-			ThreatType  string `json:"threat_type"`
-			Severity    string `json:"severity"`
-			Source      string `json:"source"`
-			Description string `json:"description"`
-		} `json:"items"`
+	req, ok := web.BindJSON[BatchImportIOCReq](c)
+	if !ok {
+		return
 	}
-	if err := c.ShouldBindJSON(&req); err != nil || len(req.Items) == 0 {
-		web.Resp(c, web.ParamsMissingRequired)
+	if len(req.Items) == 0 {
+		web.Err(c, web.ParamsMissingRequired).Send()
 		return
 	}
 
@@ -114,12 +98,12 @@ func (h *Handler) BatchImportIOC(c *gin.Context) {
 	}
 
 	if len(iocs) == 0 {
-		web.Resp(c, web.ParamsMissingRequired)
+		web.Err(c, web.ParamsMissingRequired).Send()
 		return
 	}
 
 	if err := h.db.CreateInBatches(iocs, 100).Error; err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
 	web.OK(c).Data(gin.H{"imported": len(iocs)}).Send()
@@ -128,26 +112,27 @@ func (h *Handler) BatchImportIOC(c *gin.Context) {
 func (h *Handler) DeleteIOC(c *gin.Context) {
 	id := c.Param("id")
 	h.db.Where("id = ?", id).Delete(&model.IOCIndicator{})
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 func (h *Handler) ToggleIOC(c *gin.Context) {
 	id := c.Param("id")
 	var ioc model.IOCIndicator
 	if err := h.db.Where("id = ?", id).First(&ioc).Error; err != nil {
-		web.Resp(c, web.NotFound)
+		web.Err(c, web.NotFound).Send()
 		return
 	}
 	h.db.Model(&ioc).Update("enabled", !ioc.Enabled)
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 func (h *Handler) CheckIOC(c *gin.Context) {
-	var req struct {
-		Values []string `json:"values" binding:"required"`
+	req, ok := web.BindJSON[CheckIOCReq](c)
+	if !ok {
+		return
 	}
-	if err := c.ShouldBindJSON(&req); err != nil || len(req.Values) == 0 {
-		web.Resp(c, web.ParamsMissingRequired)
+	if len(req.Values) == 0 {
+		web.Err(c, web.ParamsMissingRequired).Send()
 		return
 	}
 

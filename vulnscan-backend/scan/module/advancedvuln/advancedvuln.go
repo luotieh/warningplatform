@@ -6,31 +6,32 @@ import (
 	"sync"
 
 	"vulnscan-backend/pkg/payload"
-	"vulnscan-backend/scan/engine"
+	"vulnscan-backend/scan/core"
+	"vulnscan-backend/scan/vulnkit"
 )
 
 type AdvancedVulnScanner struct {
-	clickjacking  *engine.ClickjackingScannerModule
-	crlf          *engine.CRLFScannerModule
-	hostHeader    *engine.HostHeaderScannerModule
-	xssStored     *engine.XSSStoredScannerModule
-	sensitiveData *engine.SensitiveDataScannerModule
-	sessionFix    *engine.SessionFixationScannerModule
-	httpSmuggling *engine.HTTPSmugglingScannerModule
-	xmlrpc        *engine.XMLRPCScannerModule
+	clickjacking  *vulnkit.ClickjackingScannerModule
+	crlf          *vulnkit.CRLFScannerModule
+	hostHeader    *vulnkit.HostHeaderScannerModule
+	xssStored     *vulnkit.XSSStoredScannerModule
+	sensitiveData *vulnkit.SensitiveDataScannerModule
+	sessionFix    *vulnkit.SessionFixationScannerModule
+	httpSmuggling *vulnkit.HTTPSmugglingScannerModule
+	xmlrpc        *vulnkit.XMLRPCScannerModule
 	payloads      *payload.Loader
 }
 
 func New(loader *payload.Loader) *AdvancedVulnScanner {
 	return &AdvancedVulnScanner{
-		clickjacking:  engine.NewClickjackingScannerModule(nil),
-		crlf:          engine.NewCRLFScannerModule(nil, loader),
-		hostHeader:    engine.NewHostHeaderScannerModule(nil, loader),
-		xssStored:     engine.NewXSSStoredScannerModule(nil),
-		sensitiveData: engine.NewSensitiveDataScannerModule(nil),
-		sessionFix:    engine.NewSessionFixationScannerModule(nil),
-		httpSmuggling: engine.NewHTTPSmugglingScannerModule(nil),
-		xmlrpc:        engine.NewXMLRPCScannerModule(nil),
+		clickjacking:  vulnkit.NewClickjackingScannerModule(nil),
+		crlf:          vulnkit.NewCRLFScannerModule(nil, loader),
+		hostHeader:    vulnkit.NewHostHeaderScannerModule(nil, loader),
+		xssStored:     vulnkit.NewXSSStoredScannerModule(nil),
+		sensitiveData: vulnkit.NewSensitiveDataScannerModule(nil),
+		sessionFix:    vulnkit.NewSessionFixationScannerModule(nil),
+		httpSmuggling: vulnkit.NewHTTPSmugglingScannerModule(nil),
+		xmlrpc:        vulnkit.NewXMLRPCScannerModule(nil),
 		payloads:      loader,
 	}
 }
@@ -39,14 +40,14 @@ func (m *AdvancedVulnScanner) ID() string       { return "advanced_vuln" }
 func (m *AdvancedVulnScanner) Name() string     { return "高级漏洞检测" }
 func (m *AdvancedVulnScanner) Category() string { return "vuln" }
 
-func (m *AdvancedVulnScanner) Params() []engine.ModuleParam {
+func (m *AdvancedVulnScanner) Params() []core.ModuleParam {
 	return nil
 }
 
-func (m *AdvancedVulnScanner) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
-	result := &engine.ModuleResult{ModuleID: m.ID()}
+func (m *AdvancedVulnScanner) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {
+	result := &core.ModuleResult{ModuleID: m.ID()}
 
-	modules := []engine.ScanModule{
+	modules := []core.ScanModule{
 		m.clickjacking,
 		m.crlf,
 		m.hostHeader,
@@ -65,7 +66,7 @@ func (m *AdvancedVulnScanner) Run(ctx context.Context, targets []*engine.Target,
 	for _, mod := range modules {
 		wg.Add(1)
 		sem <- struct{}{}
-		go func(m engine.ScanModule) {
+		go func(m core.ScanModule) {
 			defer wg.Done()
 			defer func() { <-sem }()
 

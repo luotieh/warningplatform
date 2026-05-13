@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"vulnscan-backend/scan/engine"
+	"vulnscan-backend/scan/core"
 )
 
 type CyberSpaceModule struct {
@@ -38,9 +38,9 @@ func (m *CyberSpaceModule) ID() string       { return "cyberspace" }
 func (m *CyberSpaceModule) Name() string     { return "网络空间测绘" }
 func (m *CyberSpaceModule) Category() string { return "recon" }
 
-func (m *CyberSpaceModule) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
+func (m *CyberSpaceModule) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {
 	start := time.Now()
-	result := &engine.ModuleResult{ModuleID: m.ID()}
+	result := &core.ModuleResult{ModuleID: m.ID()}
 
 	if len(m.providers) == 0 {
 		slog.Warn("[!] 无可用测绘平台，请配置 API Key")
@@ -114,7 +114,7 @@ func (m *CyberSpaceModule) Run(ctx context.Context, targets []*engine.Target, co
 	wg.Wait()
 
 	for _, a := range allAssets {
-		finding := &engine.Finding{
+		finding := &core.Finding{
 			ModuleID:   m.ID(),
 			Type:       "cyber_asset",
 			Severity:   "info",

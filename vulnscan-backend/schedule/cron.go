@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"vulnscan-backend/model"
-	"vulnscan-backend/scheduler"
+	"vulnscan-backend/scanrunner"
 
 	"code.yt-security.com/public/core/v2/generate/qulid"
 	"gorm.io/gorm"
@@ -15,13 +15,13 @@ import (
 
 type CronRunner struct {
 	db        *gorm.DB
-	scheduler *scheduler.Scheduler
+	scheduler *scanrunner.Scheduler
 	mu        sync.Mutex
 	stopCh    chan struct{}
 	ticker    *time.Ticker
 }
 
-func NewCronRunner(db *gorm.DB, sched *scheduler.Scheduler) *CronRunner {
+func NewCronRunner(db *gorm.DB, sched *scanrunner.Scheduler) *CronRunner {
 	return &CronRunner{
 		db:        db,
 		scheduler: sched,

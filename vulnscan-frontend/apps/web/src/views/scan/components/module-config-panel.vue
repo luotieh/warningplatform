@@ -5,7 +5,7 @@ import {
   NForm, NFormItem, NInputNumber, NSwitch, NSelect, NInput,
   NTag, NSpace, NButton, NEmpty, NSpin
 } from 'naive-ui';
-import { getModuleConfigs, type ModuleConfigInfo, type ModuleParam } from '#/api/pipeline';
+import { getModuleConfigs, type ModuleConfigInfo } from '#/api/pipeline';
 
 const props = defineProps<{
   show: boolean;
@@ -46,10 +46,11 @@ async function loadConfigs() {
     modules.value = await getModuleConfigs();
     const initial: Record<string, Record<string, any>> = {};
     for (const m of modules.value) {
-      initial[m.id] = {};
+      const entry: Record<string, any> = {};
       for (const p of m.params) {
-        initial[m.id][p.key] = props.moduleConfigs?.[m.id]?.[p.key] ?? p.default_value;
+        entry[p.key] = props.moduleConfigs?.[m.id]?.[p.key] ?? p.default_value;
       }
+      initial[m.id] = entry;
     }
     configValues.value = initial;
   } finally {
@@ -79,8 +80,10 @@ function handleSave() {
 
 function resetAll() {
   for (const m of modules.value) {
+    const entry = configValues.value[m.id];
+    if (!entry) continue;
     for (const p of m.params) {
-      configValues.value[m.id][p.key] = p.default_value;
+      entry[p.key] = p.default_value;
     }
   }
 }
@@ -92,12 +95,14 @@ watch(() => props.show, (val) => {
 function onShow(val: boolean) {
   emit('update:show', val);
 }
+
+const headerExtraSlot = 'header-extra';
 </script>
 
 <template>
   <NDrawer :show="show" :width="520" @update:show="onShow">
     <NDrawerContent title="模块参数配置" :native-scrollbar="false">
-      <template #header-extra>
+      <template #[headerExtraSlot]>
         <NSpace>
           <NButton size="small" quaternary @click="resetAll">重置默认</NButton>
           <NButton size="small" type="primary" @click="handleSave">保存配置</NButton>
@@ -146,7 +151,7 @@ function onShow(val: boolean) {
                   >
                     <template v-if="param.type === 'number'">
                       <NInputNumber
-                        v-model:value="configValues[mod.id][param.key]"
+                        v-model:value="(configValues[mod.id] as Record<string, any>)[param.key]"
                         :min="param.min"
                         :max="param.max"
                         style="width: 100%"
@@ -154,18 +159,18 @@ function onShow(val: boolean) {
                     </template>
 
                     <template v-else-if="param.type === 'boolean'">
-                      <NSwitch v-model:value="configValues[mod.id][param.key]" />
+                      <NSwitch v-model:value="(configValues[mod.id] as Record<string, any>)[param.key]" />
                     </template>
 
                     <template v-else-if="param.type === 'select' && param.options">
                       <NSelect
-                        v-model:value="configValues[mod.id][param.key]"
+                        v-model:value="(configValues[mod.id] as Record<string, any>)[param.key]"
                         :options="param.options.map(o => ({ label: o.label, value: o.value }))"
                       />
                     </template>
 
                     <template v-else>
-                      <NInput v-model:value="configValues[mod.id][param.key]" />
+                      <NInput v-model:value="(configValues[mod.id] as Record<string, any>)[param.key]" />
                     </template>
 
                     <template #feedback>

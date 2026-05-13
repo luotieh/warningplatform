@@ -12,11 +12,13 @@ import (
 
 	"vulnscan-backend/model"
 	"vulnscan-backend/pkg/payload"
-	"vulnscan-backend/scan/engine"
+	"vulnscan-backend/scan/core"
+	"vulnscan-backend/scan/scanhttp"
+	"vulnscan-backend/scan/vulnkit"
 )
 
 type SSRFScanner struct {
-	base         *engine.VulnScanner
+	base         *vulnkit.VulnScanner
 	payloads     *payload.Loader
 	callbackBase string
 }
@@ -32,8 +34,8 @@ func (m *SSRFScanner) ID() string       { return "ssrf" }
 func (m *SSRFScanner) Name() string     { return "SSRF 检测" }
 func (m *SSRFScanner) Category() string { return "vuln" }
 
-func (m *SSRFScanner) Params() []engine.ModuleParam {
-	return []engine.ModuleParam{engine.VulnVerificationParam()}
+func (m *SSRFScanner) Params() []core.ModuleParam {
+	return []core.ModuleParam{core.VulnVerificationParam()}
 }
 
 type ssrfPayload struct {
@@ -126,13 +128,13 @@ var bypassTechniques = []struct {
 	}},
 }
 
-func (m *SSRFScanner) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
-	m.base = engine.NewVulnScanner(config, engine.WithRedirectPolicy(engine.RedirectNoFollow))
+func (m *SSRFScanner) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {
+	m.base = vulnkit.NewVulnScanner(config, scanhttp.WithRedirectPolicy(scanhttp.RedirectNoFollow))
 
-	enableBypass := engine.GetConfigBool(config, "enable_bypass", true)
-	verifyLevel := engine.GetConfigValue(config, "verification_level", "both")
+	enableBypass := core.GetConfigBool(config, "enable_bypass", true)
+	verifyLevel := core.GetConfigValue(config, "verification_level", "both")
 
-	result := m.base.RunTargets(ctx, m.ID(), targets, func(ctx context.Context, target *engine.Target) []*engine.Finding {
+	result := m.base.RunTargets(ctx, m.ID(), targets, func(ctx context.Context, target *core.Target) []*core.Finding {
 		baseURL := buildBaseURL(target)
 		if baseURL == "" {
 			return nil
@@ -145,12 +147,12 @@ func (m *SSRFScanner) Run(ctx context.Context, targets []*engine.Target, config 
 		return findings
 	})
 
-	engine.LogModuleComplete(m.ID(), len(targets), len(result.Findings), result.Duration)
+	vulnkit.LogModuleComplete(m.ID(), len(targets), len(result.Findings), result.Duration)
 	return result, nil
 }
 
-func (m *SSRFScanner) testSSRF(ctx context.Context, target *engine.Target, baseURL string, params []string, enableBypass bool, verifyLevel string) []*engine.Finding {
-	var findings []*engine.Finding
+func (m *SSRFScanner) testSSRF(ctx context.Context, target *core.Target, baseURL string, params []string, enableBypass bool, verifyLevel string) []*core.Finding {
+	var findings []*core.Finding
 
 	parsed, err := url.Parse(baseURL)
 	if err != nil {
@@ -216,7 +218,7 @@ func (m *SSRFScanner) testSSRF(ctx context.Context, target *engine.Target, baseU
 	return findings
 }
 
-func (m *SSRFScanner) analyzeResponse(resp *http.Response, body, param, target, bypass, payload, testURL, token, verifyLevel string, engineTarget *engine.Target) *engine.Finding {
+func (m *SSRFScanner) analyzeResponse(resp *http.Response, body, param, target, bypass, payload, testURL, token, verifyLevel string, engineTarget *core.Target) *core.Finding {
 	indicators := []struct {
 		pattern    string
 		confidence int
@@ -235,10 +237,10 @@ func (m *SSRFScanner) analyzeResponse(resp *http.Response, body, param, target, 
 		{"internal server", 50, "internal server error (possible SSRF)"},
 	}
 
-	if engine.ShouldRunExploit(verifyLevel) {
+	if core.ShouldRunExploit(verifyLevel) {
 		for _, ind := range indicators {
 			if strings.Contains(strings.ToLower(body), strings.ToLower(ind.pattern)) {
-				return &engine.Finding{
+				return &core.Finding{
 					ModuleID:           "ssrf",
 					Target:             engineTarget,
 					Type:               "ssrf",
@@ -246,7 +248,7 @@ func (m *SSRFScanner) analyzeResponse(resp *http.Response, body, param, target, 
 					Severity:           severityByTarget(target),
 					Confidence:         ind.confidence,
 					Evidence:           fmt.Sprintf("Pattern '%s' found: %s", ind.pattern, ind.detail),
-					VerificationLevel:  engine.VerifyExploit,
+					VerificationLevel:  core.VerifyExploit,
 					VerificationDetail: "internal-data-leaked",
 					Timestamp:          time.Now(),
 					Data: map[string]string{
@@ -263,12 +265,12 @@ func (m *SSRFScanner) analyzeResponse(resp *http.Response, body, param, target, 
 		}
 	}
 
-	if engine.ShouldRunPrinciple(verifyLevel) && resp.StatusCode == 200 {
+	if core.ShouldRunPrinciple(verifyLevel) && resp.StatusCode == 200 {
 		normalReq, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, removeParam(testURL, param), nil)
 		if normalReq != nil {
 			normalResp, normalBody, _ := m.base.Client.FetchFull(normalReq)
 			if normalResp != nil && (normalResp.StatusCode != 200 || significantLengthDiff(body, normalBody)) {
-				return &engine.Finding{
+				return &core.Finding{
 					ModuleID:           "ssrf",
 					Target:             engineTarget,
 					Type:               "ssrf_potential",
@@ -276,7 +278,7 @@ func (m *SSRFScanner) analyzeResponse(resp *http.Response, body, param, target, 
 					Severity:           "medium",
 					Confidence:         50,
 					Evidence:           fmt.Sprintf("Response differs: normal=%d/%d payload=%d/%d", normalResp.StatusCode, len(normalBody), resp.StatusCode, len(body)),
-					VerificationLevel:  engine.VerifyPrinciple,
+					VerificationLevel:  core.VerifyPrinciple,
 					VerificationDetail: "response-diff",
 					Timestamp:          time.Now(),
 					Data: map[string]string{
@@ -382,7 +384,7 @@ func generateToken() string {
 	return hex.EncodeToString(b)
 }
 
-func buildBaseURL(t *engine.Target) string {
+func buildBaseURL(t *core.Target) string {
 	if t.URL != "" {
 		return t.URL
 	}

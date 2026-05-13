@@ -2,14 +2,16 @@
 import { h, onMounted, reactive, ref } from 'vue';
 import {
   NButton, NCard, NColorPicker, NDataTable, NForm, NFormItem, NInput,
-  NModal, NPopconfirm, NSelect, NSpace, NTag, useMessage,
+  NModal, NPopconfirm, NSelect, NSpace, NTag,
 } from 'naive-ui';
 import type { Tag } from '#/api/assetmgr';
 import { createTag, deleteTag, getTagList, updateTag } from '#/api/assetmgr';
+import { message } from '#/adapter/naive';
+import { useErrorHandler } from '#/composables/useErrorHandler';
 
 defineOptions({ name: 'AssetTag' });
 
-const message = useMessage();
+const { handleError } = useErrorHandler();
 const loading = ref(false);
 const data = ref<Tag[]>([]);
 const showModal = ref(false);
@@ -61,7 +63,7 @@ async function fetchList() {
     const body = (res as any)?.data ?? res;
     data.value = body?.data ?? body?.items ?? [];
     pagination.itemCount = body?.count ?? 0;
-  } catch { message.error('获取标签列表失败'); }
+  } catch (e) { handleError(e, '获取标签列表失败'); }
   finally { loading.value = false; }
 }
 
@@ -89,12 +91,12 @@ async function onSave() {
     }
     showModal.value = false;
     fetchList();
-  } catch { message.error('操作失败'); }
+  } catch (e) { handleError(e, '操作失败'); }
 }
 
 async function onDelete(id: number) {
   try { await deleteTag(id); message.success('删除成功'); fetchList(); }
-  catch { message.error('删除失败'); }
+  catch (e) { handleError(e, '删除失败'); }
 }
 
 onMounted(fetchList);

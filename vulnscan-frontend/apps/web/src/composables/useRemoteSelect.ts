@@ -45,8 +45,8 @@ export function useRemoteSelect(opts: UseRemoteSelectOptions) {
       options.value = reset ? items : [...options.value, ...items];
       hasMore.value = options.value.length < total;
       page.value++;
-    } catch {
-      /* ignore */
+    } catch (e) {
+      console.warn('[RemoteSelect] fetch failed', e);
     } finally {
       loading.value = false;
     }

@@ -11,11 +11,12 @@ import (
 
 	"vulnscan-backend/model"
 	"vulnscan-backend/pkg/payload"
-	"vulnscan-backend/scan/engine"
+	"vulnscan-backend/scan/core"
+	"vulnscan-backend/scan/vulnkit"
 )
 
 type NoSQLiScanner struct {
-	base     *engine.VulnScanner
+	base     *vulnkit.VulnScanner
 	payloads *payload.Loader
 }
 
@@ -27,8 +28,8 @@ func (m *NoSQLiScanner) ID() string       { return "nosqli" }
 func (m *NoSQLiScanner) Name() string     { return "NoSQL 注入检测" }
 func (m *NoSQLiScanner) Category() string { return "vuln" }
 
-func (m *NoSQLiScanner) Params() []engine.ModuleParam {
-	return []engine.ModuleParam{engine.VulnVerificationParam()}
+func (m *NoSQLiScanner) Params() []core.ModuleParam {
+	return []core.ModuleParam{core.VulnVerificationParam()}
 }
 
 var mongoErrorPatterns = []*regexp.Regexp{
@@ -67,20 +68,20 @@ func defaultOperatorPayloads() []string {
 	}
 }
 
-func (m *NoSQLiScanner) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
-	m.base = engine.NewVulnScanner(config)
-	verifyLevel := engine.GetConfigValue(config, "verification_level", "both")
+func (m *NoSQLiScanner) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {
+	m.base = vulnkit.NewVulnScanner(config)
+	verifyLevel := core.GetConfigValue(config, "verification_level", "both")
 
-	result := m.base.RunTargets(ctx, m.ID(), targets, func(ctx context.Context, target *engine.Target) []*engine.Finding {
+	result := m.base.RunTargets(ctx, m.ID(), targets, func(ctx context.Context, target *core.Target) []*core.Finding {
 		return m.testTarget(ctx, target, verifyLevel)
 	})
 
-	engine.LogModuleComplete(m.ID(), len(targets), len(result.Findings), result.Duration)
+	vulnkit.LogModuleComplete(m.ID(), len(targets), len(result.Findings), result.Duration)
 	return result, nil
 }
 
-func (m *NoSQLiScanner) testTarget(ctx context.Context, target *engine.Target, verifyLevel string) []*engine.Finding {
-	var findings []*engine.Finding
+func (m *NoSQLiScanner) testTarget(ctx context.Context, target *core.Target, verifyLevel string) []*core.Finding {
+	var findings []*core.Finding
 
 	parsed, err := url.Parse(target.URL)
 	if err != nil {
@@ -90,21 +91,21 @@ func (m *NoSQLiScanner) testTarget(ctx context.Context, target *engine.Target, v
 	params := parsed.Query()
 
 	if len(params) > 0 {
-		if engine.ShouldRunPrinciple(verifyLevel) {
+		if core.ShouldRunPrinciple(verifyLevel) {
 			findings = append(findings, m.testQueryParamErrorBased(ctx, target, parsed, params)...)
 		}
-		if engine.ShouldRunExploit(verifyLevel) {
+		if core.ShouldRunExploit(verifyLevel) {
 			findings = append(findings, m.testQueryParamBooleanBlind(ctx, target, parsed, params)...)
 		}
 	}
 
-	if engine.ShouldRunPrinciple(verifyLevel) {
+	if core.ShouldRunPrinciple(verifyLevel) {
 		if f := m.testJSONOperatorInjection(ctx, target); f != nil {
 			findings = append(findings, f)
 		}
 	}
 
-	if engine.ShouldRunExploit(verifyLevel) {
+	if core.ShouldRunExploit(verifyLevel) {
 		if f := m.testJSONAuthBypass(ctx, target); f != nil {
 			findings = append(findings, f)
 		}
@@ -113,8 +114,8 @@ func (m *NoSQLiScanner) testTarget(ctx context.Context, target *engine.Target, v
 	return findings
 }
 
-func (m *NoSQLiScanner) testQueryParamErrorBased(ctx context.Context, target *engine.Target, u *url.URL, params url.Values) []*engine.Finding {
-	var findings []*engine.Finding
+func (m *NoSQLiScanner) testQueryParamErrorBased(ctx context.Context, target *core.Target, u *url.URL, params url.Values) []*core.Finding {
+	var findings []*core.Finding
 
 	for param := range params {
 		for _, suffix := range m.getOperatorPayloads() {
@@ -139,7 +140,7 @@ func (m *NoSQLiScanner) testQueryParamErrorBased(ctx context.Context, target *en
 
 			for _, pattern := range mongoErrorPatterns {
 				if pattern.MatchString(body) {
-					findings = append(findings, &engine.Finding{
+					findings = append(findings, &core.Finding{
 						ModuleID:           m.ID(),
 						Target:             target,
 						Type:               "nosqli_error",
@@ -147,8 +148,8 @@ func (m *NoSQLiScanner) testQueryParamErrorBased(ctx context.Context, target *en
 						Description:        fmt.Sprintf("参数 %s 注入 %s 触发NoSQL数据库错误", param, suffix),
 						Severity:           "high",
 						Confidence:         75,
-						Evidence:           engine.Truncate(body, 500),
-						VerificationLevel:  engine.VerifyPrinciple,
+						Evidence:           vulnkit.Truncate(body, 500),
+						VerificationLevel:  core.VerifyPrinciple,
 						VerificationDetail: "nosql-error-detected",
 						Timestamp:          time.Now(),
 						Data: map[string]string{
@@ -166,8 +167,8 @@ func (m *NoSQLiScanner) testQueryParamErrorBased(ctx context.Context, target *en
 	return findings
 }
 
-func (m *NoSQLiScanner) testQueryParamBooleanBlind(ctx context.Context, target *engine.Target, u *url.URL, params url.Values) []*engine.Finding {
-	var findings []*engine.Finding
+func (m *NoSQLiScanner) testQueryParamBooleanBlind(ctx context.Context, target *core.Target, u *url.URL, params url.Values) []*core.Finding {
+	var findings []*core.Finding
 	baseBody := m.base.FetchBody(ctx, target.URL)
 
 	for param := range params {
@@ -200,12 +201,12 @@ func (m *NoSQLiScanner) testQueryParamBooleanBlind(ctx context.Context, target *
 			continue
 		}
 
-		trueSimilar := engine.Similarity(baseBody, trueBody) > 0.7
-		falseDifferent := engine.Similarity(baseBody, falseBody) < 0.5
-		tfDifferent := engine.Similarity(trueBody, falseBody) < 0.5
+		trueSimilar := vulnkit.Similarity(baseBody, trueBody) > 0.7
+		falseDifferent := vulnkit.Similarity(baseBody, falseBody) < 0.5
+		tfDifferent := vulnkit.Similarity(trueBody, falseBody) < 0.5
 
 		if trueSimilar && falseDifferent && tfDifferent {
-			findings = append(findings, &engine.Finding{
+			findings = append(findings, &core.Finding{
 				ModuleID:           m.ID(),
 				Target:             target,
 				Type:               "nosqli_boolean",
@@ -213,7 +214,7 @@ func (m *NoSQLiScanner) testQueryParamBooleanBlind(ctx context.Context, target *
 				Description:        fmt.Sprintf("参数 %s 使用 $ne/$eq 运算符注入导致响应显著差异", param),
 				Severity:           "high",
 				Confidence:         80,
-				VerificationLevel:  engine.VerifyExploit,
+				VerificationLevel:  core.VerifyExploit,
 				VerificationDetail: "boolean-response-diff",
 				Timestamp:          time.Now(),
 				Data: map[string]string{
@@ -227,7 +228,7 @@ func (m *NoSQLiScanner) testQueryParamBooleanBlind(ctx context.Context, target *
 	return findings
 }
 
-func (m *NoSQLiScanner) testJSONOperatorInjection(ctx context.Context, target *engine.Target) *engine.Finding {
+func (m *NoSQLiScanner) testJSONOperatorInjection(ctx context.Context, target *core.Target) *core.Finding {
 	payloads := []string{
 		`{"username":{"$gt":""},"password":{"$gt":""}}`,
 		`{"username":{"$ne":""},"password":{"$ne":""}}`,
@@ -267,7 +268,7 @@ func (m *NoSQLiScanner) testJSONOperatorInjection(ctx context.Context, target *e
 
 		for _, pattern := range mongoErrorPatterns {
 			if pattern.MatchString(body) {
-				return &engine.Finding{
+				return &core.Finding{
 					ModuleID:           m.ID(),
 					Target:             target,
 					Type:               "nosqli_operator",
@@ -275,8 +276,8 @@ func (m *NoSQLiScanner) testJSONOperatorInjection(ctx context.Context, target *e
 					Description:        "JSON请求体中注入MongoDB运算符触发数据库错误",
 					Severity:           "high",
 					Confidence:         75,
-					Evidence:           engine.Truncate(body, 500),
-					VerificationLevel:  engine.VerifyPrinciple,
+					Evidence:           vulnkit.Truncate(body, 500),
+					VerificationLevel:  core.VerifyPrinciple,
 					VerificationDetail: "operator-error-detected",
 					Timestamp:          time.Now(),
 					Data: map[string]string{
@@ -292,7 +293,7 @@ func (m *NoSQLiScanner) testJSONOperatorInjection(ctx context.Context, target *e
 	return nil
 }
 
-func (m *NoSQLiScanner) testJSONAuthBypass(ctx context.Context, target *engine.Target) *engine.Finding {
+func (m *NoSQLiScanner) testJSONAuthBypass(ctx context.Context, target *core.Target) *core.Finding {
 	normalPayload := `{"username":"admin","password":"wrong_password_12345"}`
 	normalBody, _ := m.base.SendJSON(ctx, target.URL, normalPayload)
 
@@ -314,7 +315,7 @@ func (m *NoSQLiScanner) testJSONAuthBypass(ctx context.Context, target *engine.T
 	normalHasError := strings.Contains(strings.ToLower(normalBody), "error") || strings.Contains(strings.ToLower(normalBody), "invalid") || strings.Contains(strings.ToLower(normalBody), "fail")
 
 	if bypassHasToken && normalHasError && float64(diff)/float64(max(normalLen, 1)) > 0.3 {
-		return &engine.Finding{
+		return &core.Finding{
 			ModuleID:           m.ID(),
 			Target:             target,
 			Type:               "nosqli_auth_bypass",
@@ -322,8 +323,8 @@ func (m *NoSQLiScanner) testJSONAuthBypass(ctx context.Context, target *engine.T
 			Description:        "通过MongoDB $ne运算符绕过认证，获取到token/session",
 			Severity:           "critical",
 			Confidence:         88,
-			Evidence:           engine.Truncate(bypassBody, 500),
-			VerificationLevel:  engine.VerifyExploit,
+			Evidence:           vulnkit.Truncate(bypassBody, 500),
+			VerificationLevel:  core.VerifyExploit,
 			VerificationDetail: "auth-bypass-confirmed",
 			Timestamp:          time.Now(),
 			Data: map[string]string{

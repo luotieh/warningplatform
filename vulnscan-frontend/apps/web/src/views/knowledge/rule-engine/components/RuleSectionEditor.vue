@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import type { DataTableColumns, DataTableRowKey } from 'naive-ui';
 
-import type { FieldDef } from '#/api/monitor';
+import type { FieldDef } from '#/api/sitemonitor';
 
 import { computed, h, ref, watch } from 'vue';
 

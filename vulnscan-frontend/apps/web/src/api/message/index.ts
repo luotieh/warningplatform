@@ -1,4 +1,5 @@
 import { baseRequestClient, requestClient } from '#/api/request';
+import { normalizePagedResponse } from '#/api/helpers';
 
 // ========== 公告 ==========
 export interface AnnouncementItem {
@@ -46,9 +47,7 @@ export interface AnnouncementCreateReq {
 
 export async function getAnnouncementList(params?: AnnouncementQuery) {
   const res = await baseRequestClient.get<{ data: AnnouncementItem[]; count: number }>('/messages/announcements', { params });
-  const body = (res as Record<string, unknown>).data ?? res;
-  const typed = body as { data?: AnnouncementItem[]; count?: number };
-  return { items: typed.data ?? [], total: typed.count ?? 0 };
+  return normalizePagedResponse<AnnouncementItem>(res);
 }
 export function getAnnouncementDetail(id: string) { return requestClient.get<AnnouncementItem>(`/messages/announcements/${id}`); }
 export function createAnnouncement(data: AnnouncementCreateReq) { return requestClient.post('/messages/announcements', data); }
@@ -60,9 +59,7 @@ export function markAnnouncementRead(id: string) { return requestClient.post(`/m
 export function ackAnnouncement(id: string) { return requestClient.post(`/messages/announcements/${id}/ack`); }
 export async function getPublishedAnnouncements(params?: AnnouncementQuery) {
   const res = await baseRequestClient.get<{ data: AnnouncementItem[]; count: number }>('/messages/announcements/published', { params });
-  const body = (res as Record<string, unknown>).data ?? res;
-  const typed = body as { data?: AnnouncementItem[]; count?: number };
-  return { items: typed.data ?? [], total: typed.count ?? 0 };
+  return normalizePagedResponse<AnnouncementItem>(res);
 }
 
 // ========== 渠道 ==========
@@ -107,14 +104,7 @@ export interface ChannelUpdateReq {
 
 export async function getChannelList(_params?: any) {
   const res = await baseRequestClient.get<any>('/messages/channels');
-  const body = res.data ?? res;
-  // 后端 List 返回直接是数组（不分页）
-  const list: ChannelItem[] = Array.isArray(body?.data)
-    ? body.data
-    : Array.isArray(body)
-      ? body
-      : [];
-  return { items: list, total: list.length };
+  return normalizePagedResponse<ChannelItem>(res);
 }
 
 export function getChannelDetail(name: string) {
@@ -148,8 +138,7 @@ export function getChannelHealth() {
 // ========== 模板 ==========
 export async function getTemplateList(params?: any) {
   const res = await baseRequestClient.get<any>('/messages/templates', { params });
-  const body = res.data ?? res;
-  return { items: body.data ?? [], total: body.count ?? 0 };
+  return normalizePagedResponse(res);
 }
 export function getTemplateDetail(id: string) { return requestClient.get<any>(`/messages/templates/${id}`); }
 export function createTemplate(data: any) { return requestClient.post('/messages/templates', data); }
@@ -165,11 +154,10 @@ export function previewTemplate(id: string, data?: { variables?: Record<string, 
 // ========== 通知（SDK /me/* + /notifications/* 路由） ==========
 export async function getNotificationList(params?: any) {
   const res = await baseRequestClient.get<any>('/me/notifications', { params });
-  const body = res.data ?? res;
-  const data = body.data;
-  const list = Array.isArray(data) ? data : (data?.items ?? data?.list ?? []);
-  const unread = data?.unread_count ?? data?.total ?? body.count ?? 0;
-  return { items: list, total: list.length, unread_count: unread };
+  const body = (res as Record<string, unknown>).data ?? res;
+  const paged = normalizePagedResponse(res);
+  const unread = (body as any)?.unread_count ?? paged.total;
+  return { items: paged.items, total: paged.total, unread_count: unread };
 }
 export function getNotificationDetail(id: string) { return requestClient.get<any>(`/me/notifications/${id}`); }
 export function deleteNotification(id: string) { return requestClient.delete(`/notifications/${id}`).catch(() => {}); }
@@ -265,8 +253,7 @@ export function batchSendMessage(data: SendMessageReq[]) {
 // ========== 发送记录 ==========
 export async function getRecordList(params?: any) {
   const res = await baseRequestClient.get<any>('/messages/records', { params });
-  const body = res.data ?? res;
-  return { items: body.data ?? [], total: body.count ?? 0 };
+  return normalizePagedResponse(res);
 }
 export function getRecordDetail(id: string) { return requestClient.get<any>(`/messages/records/${id}`); }
 export function retryRecord(id: string) { return requestClient.post(`/messages/records/${id}/retry`); }
@@ -300,8 +287,7 @@ export interface DLQQueryParams {
 
 export async function getDLQList(params?: DLQQueryParams) {
   const res = await baseRequestClient.get<any>('/messages/dlq', { params });
-  const body = res.data ?? res;
-  return { items: (body.data ?? []) as DLQItem[], total: body.count ?? 0 };
+  return normalizePagedResponse<DLQItem>(res);
 }
 
 export function getDLQDetail(id: number) {
@@ -360,9 +346,7 @@ export interface TodoStats {
 
 export async function getTodoList(params?: TodoQuery) {
   const res = await baseRequestClient.get<any>('/messages/todos', { params });
-  const body = (res as Record<string, unknown>).data ?? res;
-  const typed = body as { data?: TodoItem[]; count?: number };
-  return { items: typed.data ?? [], total: typed.count ?? 0 };
+  return normalizePagedResponse<TodoItem>(res);
 }
 
 export function getTodoDetail(id: number) {

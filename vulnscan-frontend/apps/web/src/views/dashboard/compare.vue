@@ -10,6 +10,7 @@ import { EchartsUI, useEcharts } from '@vben/plugins/echarts';
 import type { EchartsUIType } from '@vben/plugins/echarts';
 import { compareTasks, type CompareResult, type VulnDiff } from '#/api/report';
 import { getRecentTasks } from '#/api/dashboard';
+import { sevLabels, sevColors } from '#/constants/severity';
 
 defineOptions({ name: 'DashboardCompare' });
 
@@ -23,12 +24,9 @@ const tasks = ref<any[]>([]);
 const diffPieRef = ref<EchartsUIType>();
 const { renderEcharts: renderDiffPie } = useEcharts(diffPieRef);
 
-const sevColors: Record<string, string> = {
-  critical: '#e53e3e', high: '#dd6b20', medium: '#d69e2e', low: '#38a169', info: '#4299e1',
-};
-const sevLabels: Record<string, string> = {
-  critical: '严重', high: '高危', medium: '中危', low: '低危', info: '信息',
-};
+const sevColorFlat: Record<string, string> = Object.fromEntries(
+  Object.entries(sevColors).map(([k, v]) => [k, v.fg]),
+);
 
 onMounted(async () => {
   try {
@@ -86,7 +84,7 @@ const diffColumns: DataTableColumns<VulnDiff> = [
   { title: '漏洞标题', key: 'title', width: 250, ellipsis: { tooltip: true } },
   {
     title: '严重级别', key: 'severity', width: 100,
-    render: (row) => h(NTag, { size: 'small', style: { background: (sevColors[row.severity] ?? '#999') + '22', color: sevColors[row.severity] ?? '#999', border: 'none' } }, () => sevLabels[row.severity] || row.severity),
+    render: (row) => h(NTag, { size: 'small', style: { background: (sevColorFlat[row.severity] ?? '#999') + '22', color: sevColorFlat[row.severity] ?? '#999', border: 'none' } }, () => sevLabels[row.severity] || row.severity),
   },
   { title: '目标', key: 'target', width: 200, ellipsis: { tooltip: true } },
   {
@@ -103,9 +101,12 @@ const diffColumns: DataTableColumns<VulnDiff> = [
   },
   {
     title: '原等级', key: 'old_severity', width: 100,
-    render: (row) => row.old_severity
-      ? h(NTag, { size: 'tiny', style: { background: (sevColors[row.old_severity] ?? '#999') + '22', color: sevColors[row.old_severity] ?? '#999', border: 'none' } }, () => sevLabels[row.old_severity] || row.old_severity)
-      : '-',
+    render: (row) => {
+      const sev = row.old_severity;
+      return sev
+        ? h(NTag, { size: 'tiny', style: { background: (sevColorFlat[sev] ?? '#999') + '22', color: sevColorFlat[sev] ?? '#999', border: 'none' } }, () => sevLabels[sev] || sev)
+        : '-';
+    },
   },
 ];
 

@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"vulnscan-backend/dict"
-	"vulnscan-backend/scan/engine"
+	"vulnscan-backend/scan/core"
 )
 
 type BruteForcer struct {
@@ -65,9 +65,9 @@ func (m *BruteForcer) ID() string       { return "brute_force" }
 func (m *BruteForcer) Name() string     { return "密码爆破" }
 func (m *BruteForcer) Category() string { return "vuln" }
 
-func (m *BruteForcer) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
+func (m *BruteForcer) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {
 	start := time.Now()
-	result := &engine.ModuleResult{ModuleID: m.ID()}
+	result := &core.ModuleResult{ModuleID: m.ID()}
 	var mu sync.Mutex
 
 	maxWorkers := m.maxWorkers
@@ -129,7 +129,7 @@ func (m *BruteForcer) Run(ctx context.Context, targets []*engine.Target, config 
 
 					wg.Add(1)
 					sem <- struct{}{}
-					go func(checker ProtocolChecker, target *engine.Target, h string, port int, user, pass string) {
+					go func(checker ProtocolChecker, target *core.Target, h string, port int, user, pass string) {
 						defer wg.Done()
 						defer func() { <-sem }()
 
@@ -159,7 +159,7 @@ func (m *BruteForcer) Run(ctx context.Context, targets []*engine.Target, config 
 							data["banner"] = truncate(banner, 200)
 						}
 
-						finding := &engine.Finding{
+						finding := &core.Finding{
 							ModuleID:         m.ID(),
 							Target:           target,
 							Type:             "weak_password",
@@ -198,7 +198,7 @@ func (m *BruteForcer) Run(ctx context.Context, targets []*engine.Target, config 
 	return result, nil
 }
 
-func (m *BruteForcer) matchCheckers(t *engine.Target) []ProtocolChecker {
+func (m *BruteForcer) matchCheckers(t *core.Target) []ProtocolChecker {
 	var matched []ProtocolChecker
 	svc := strings.ToLower(t.Protocol)
 	if extra, ok := t.Extra["service"]; ok {

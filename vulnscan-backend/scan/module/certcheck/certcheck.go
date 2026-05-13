@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"vulnscan-backend/scan/engine"
+	"vulnscan-backend/scan/core"
 )
 
 type CertChecker struct{}
@@ -23,9 +23,9 @@ func (m *CertChecker) ID() string       { return "cert_check" }
 func (m *CertChecker) Name() string     { return "TLS/SSL 证书检测" }
 func (m *CertChecker) Category() string { return "vuln" }
 
-func (m *CertChecker) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
+func (m *CertChecker) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {
 	start := time.Now()
-	result := &engine.ModuleResult{ModuleID: m.ID()}
+	result := &core.ModuleResult{ModuleID: m.ID()}
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 
@@ -38,7 +38,7 @@ func (m *CertChecker) Run(ctx context.Context, targets []*engine.Target, config 
 
 		wg.Add(1)
 		sem <- struct{}{}
-		go func(target *engine.Target) {
+		go func(target *core.Target) {
 			defer wg.Done()
 			defer func() { <-sem }()
 
@@ -63,7 +63,7 @@ func (m *CertChecker) Run(ctx context.Context, targets []*engine.Target, config 
 	return result, nil
 }
 
-func (m *CertChecker) checkTarget(ctx context.Context, target *engine.Target) []*engine.Finding {
+func (m *CertChecker) checkTarget(ctx context.Context, target *core.Target) []*core.Finding {
 	host := target.Host
 	if target.IP != "" {
 		host = target.IP
@@ -74,7 +74,7 @@ func (m *CertChecker) checkTarget(ctx context.Context, target *engine.Target) []
 	}
 	addr := net.JoinHostPort(host, strconv.Itoa(port))
 
-	var findings []*engine.Finding
+	var findings []*core.Finding
 
 	dialer := &net.Dialer{Timeout: 10 * time.Second}
 
@@ -89,7 +89,7 @@ func (m *CertChecker) checkTarget(ctx context.Context, target *engine.Target) []
 		}
 		conn.Close()
 
-		findings = append(findings, &engine.Finding{
+		findings = append(findings, &core.Finding{
 			ModuleID:    m.ID(),
 			Target:      target,
 			Type:        "weak_tls",
@@ -120,7 +120,7 @@ func (m *CertChecker) checkTarget(ctx context.Context, target *engine.Target) []
 	cert := state.PeerCertificates[0]
 
 	if time.Now().After(cert.NotAfter) {
-		findings = append(findings, &engine.Finding{
+		findings = append(findings, &core.Finding{
 			ModuleID:    m.ID(),
 			Target:      target,
 			Type:        "cert_expired",
@@ -139,7 +139,7 @@ func (m *CertChecker) checkTarget(ctx context.Context, target *engine.Target) []
 
 	daysUntilExpiry := int(time.Until(cert.NotAfter).Hours() / 24)
 	if daysUntilExpiry > 0 && daysUntilExpiry <= 30 {
-		findings = append(findings, &engine.Finding{
+		findings = append(findings, &core.Finding{
 			ModuleID:    m.ID(),
 			Target:      target,
 			Type:        "cert_expiring_soon",
@@ -158,7 +158,7 @@ func (m *CertChecker) checkTarget(ctx context.Context, target *engine.Target) []
 	}
 
 	if cert.IsCA {
-		findings = append(findings, &engine.Finding{
+		findings = append(findings, &core.Finding{
 			ModuleID:    m.ID(),
 			Target:      target,
 			Type:        "self_signed_cert",
@@ -177,7 +177,7 @@ func (m *CertChecker) checkTarget(ctx context.Context, target *engine.Target) []
 	if cert.PublicKeyAlgorithm == x509.RSA {
 		if key := cert.PublicKey; key != nil {
 			if keySize := certKeySize(cert); keySize > 0 && keySize < 2048 {
-				findings = append(findings, &engine.Finding{
+				findings = append(findings, &core.Finding{
 					ModuleID:    m.ID(),
 					Target:      target,
 					Type:        "weak_key",
@@ -196,7 +196,7 @@ func (m *CertChecker) checkTarget(ctx context.Context, target *engine.Target) []
 	}
 
 	if cert.SignatureAlgorithm == x509.SHA1WithRSA || cert.SignatureAlgorithm == x509.MD5WithRSA {
-		findings = append(findings, &engine.Finding{
+		findings = append(findings, &core.Finding{
 			ModuleID:    m.ID(),
 			Target:      target,
 			Type:        "weak_signature",
@@ -232,7 +232,7 @@ func weakTLSVersions() []tlsVersion {
 	}
 }
 
-func isTLSTarget(t *engine.Target) bool {
+func isTLSTarget(t *core.Target) bool {
 	if t.URL != "" && strings.HasPrefix(t.URL, "https") {
 		return true
 	}
@@ -252,7 +252,7 @@ func certKeySize(cert *x509.Certificate) int {
 	}
 }
 
-func checkWeakCiphers(state tls.ConnectionState, target *engine.Target, moduleID string) *engine.Finding {
+func checkWeakCiphers(state tls.ConnectionState, target *core.Target, moduleID string) *core.Finding {
 	weakCiphers := map[uint16]string{
 		tls.TLS_RSA_WITH_RC4_128_SHA:      "RC4-SHA",
 		tls.TLS_RSA_WITH_3DES_EDE_CBC_SHA: "3DES-CBC-SHA",
@@ -260,7 +260,7 @@ func checkWeakCiphers(state tls.ConnectionState, target *engine.Target, moduleID
 	}
 
 	if name, ok := weakCiphers[state.CipherSuite]; ok {
-		return &engine.Finding{
+		return &core.Finding{
 			ModuleID:    moduleID,
 			Target:      target,
 			Type:        "weak_cipher",

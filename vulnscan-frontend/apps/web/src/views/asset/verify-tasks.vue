@@ -187,9 +187,8 @@ const columns: DataTableColumns<AssetVerifyTask> = [
     key: 'asset_name',
     minWidth: 220,
     ellipsis: { tooltip: true },
-    render: (row) => renderMuted(row.asset_name || row.system_name || row.address),
+    render: (row) => renderMuted(row.asset_name || row.address),
   },
-  { title: '系统名称', key: 'system_name', minWidth: 180, ellipsis: { tooltip: true }, render: (row) => renderMuted(row.system_name) },
   { title: '访问地址', key: 'address', minWidth: 220, ellipsis: { tooltip: true }, render: (row) => renderMuted(row.address) },
   {
     title: '资产所属单位',
@@ -241,8 +240,7 @@ const columns: DataTableColumns<AssetVerifyTask> = [
 
 const assetColumns: DataTableColumns<Asset> = [
   { type: 'selection', width: 44 },
-  { title: '资产名称', key: 'name', minWidth: 180, ellipsis: { tooltip: true }, render: (row) => renderMuted(row.name || row.system_name || row.address) },
-  { title: '系统名称', key: 'system_name', minWidth: 170, ellipsis: { tooltip: true }, render: (row) => renderMuted(row.system_name) },
+  { title: '系统名称', key: 'name', minWidth: 180, ellipsis: { tooltip: true }, render: (row) => renderMuted(row.name || row.address) },
   { title: '访问地址', key: 'address', minWidth: 220, ellipsis: { tooltip: true }, render: (row) => renderMuted(row.address) },
   {
     title: '资产所属单位',
@@ -402,7 +400,7 @@ function getActionText(type = pendingAction.value) {
 
 function getActiveTaskTitle() {
   const task = activeTask.value;
-  return task?.asset_name || task?.system_name || task?.address || '该资产';
+  return task?.asset_name || task?.address || '该资产';
 }
 
 async function submitSimpleAction() {
@@ -470,7 +468,7 @@ onMounted(() => {
 
       <NForm inline label-placement="left" :show-feedback="false" class="asset-toolbar">
         <NFormItem label="关键词">
-          <NInput v-model:value="searchForm.keyword" clearable placeholder="资产名称 / 系统名称 / 访问地址" @keyup.enter="fetchList" />
+          <NInput v-model:value="searchForm.keyword" clearable placeholder="系统名称 / 访问地址" @keyup.enter="fetchList" />
         </NFormItem>
         <NFormItem label="状态">
           <NSelect v-model:value="searchForm.status" clearable :options="statusOptions" placeholder="全部状态" />
@@ -513,7 +511,7 @@ onMounted(() => {
               <NInput
                 v-model:value="assetSearchForm.keyword"
                 clearable
-                placeholder="资产名称 / 系统名称 / 访问地址"
+                placeholder="系统名称 / 访问地址"
                 @keyup.enter="fetchAssets"
               />
               <NTreeSelect
@@ -541,7 +539,7 @@ onMounted(() => {
             <div class="selection-tip">
               已选择 {{ selectedAssetIds.length }} 个资产
               <template v-if="selectedAssets.length > 0">
-                ：{{ selectedAssets.map((item) => item.name || item.system_name || item.address).join('、') }}
+                ：{{ selectedAssets.map((item) => item.name || item.address).join('、') }}
               </template>
             </div>
           </div>

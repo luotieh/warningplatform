@@ -1,3 +1,4 @@
+import { normalizePagedResponse } from '#/api/helpers';
 import { baseRequestClient, requestClient } from '#/api/request';
 
 export interface TemplateParam {
@@ -39,9 +40,7 @@ export interface ScanTemplate {
 
 export async function getTemplateList(params?: Record<string, any>) {
   const res = await baseRequestClient.get<any>('/template/list', { params });
-  const body = (res as Record<string, unknown>).data ?? res;
-  const typed = body as { data?: ScanTemplate[]; count?: number };
-  return { items: typed.data ?? [], total: typed.count ?? 0 };
+  return normalizePagedResponse<ScanTemplate>(res);
 }
 
 export function getTemplateDetail(id: string) {

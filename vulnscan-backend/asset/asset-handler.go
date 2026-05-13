@@ -33,36 +33,35 @@ func firstNonEmpty(values ...string) string {
 }
 
 func (h *HandlerAsset) List(c *gin.Context) {
-	var query assetContract.AssetQuery
-	if err := c.ShouldBindQuery(&query); err != nil {
-		web.Resp(c, web.ParamsMissingRequired)
+	query, ok := web.BindQuery[assetContract.AssetQuery](c)
+	if !ok {
 		return
 	}
 
 	scope := iamsdk.DataFilterScope(c, assetFieldMapping)
 	items, count, err := h.svc.List(query, scope)
 	if err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
 
-	web.RespContentWithNum(c, web.Success, count, items)
+	web.OK(c).List(count, items).Send()
 }
 
 func (h *HandlerAsset) GetByID(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
-		web.Resp(c, web.ParamsMissingRequired)
+		web.Err(c, web.ParamsMissingRequired).Send()
 		return
 	}
 
 	item, err := h.svc.GetByID(id)
 	if err != nil {
-		web.Resp(c, web.NotFound)
+		web.Err(c, web.NotFound).Send()
 		return
 	}
 
-	web.RespContent(c, web.Success, item)
+	web.OK(c).Data(item).Send()
 }
 
 func (h *HandlerAsset) Create(c *gin.Context) {
@@ -93,13 +92,15 @@ func (h *HandlerAsset) Create(c *gin.Context) {
 		Version:                 req.Version,
 		OS:                      req.OS,
 		DataNumber:              req.DataNumber,
-		SystemName:              req.SystemName,
 		SystemType:              req.SystemType,
+		AssetFamily:             req.AssetFamily,
+		AssetSubtype:            req.AssetSubtype,
 		IsOnline:                req.IsOnline,
 		IsKey:                   req.IsKey,
 		SecurityProtectionLevel: req.SecurityProtectionLevel,
 		FilingCertNumber:        req.FilingCertNumber,
 		IcpFilingNumber:         req.IcpFilingNumber,
+		PublicSecurityFiling:    req.PublicSecurityFiling,
 		ConstructionOrgID:       req.ConstructionOrgID,
 		OperationOrgID:          req.OperationOrgID,
 		DataSource:              model.DataSourceType(req.DataSource),
@@ -107,15 +108,14 @@ func (h *HandlerAsset) Create(c *gin.Context) {
 		ResponsibleUserName:     req.ResponsibleUserName,
 		Extra:                   req.Extra,
 		Remark:                  req.Remark,
-		LifecycleState:          "discovered",
 	}
 
 	if err := h.svc.Create(&item); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
 
-	web.RespContent(c, web.Success, item)
+	web.OK(c).Data(item).Send()
 }
 
 type updateAssetReq struct {
@@ -137,13 +137,15 @@ type updateAssetReq struct {
 	Version                 *string        `json:"version"`
 	OS                      *string        `json:"os"`
 	DataNumber              *string        `json:"data_number"`
-	SystemName              *string        `json:"system_name"`
 	SystemType              *string        `json:"system_type"`
+	AssetFamily             *string        `json:"asset_family"`
+	AssetSubtype            *string        `json:"asset_subtype"`
 	IsOnline                *bool          `json:"is_online"`
 	IsKey                   *bool          `json:"is_key"`
 	SecurityProtectionLevel *string        `json:"security_protection_level"`
 	FilingCertNumber        *string        `json:"filing_cert_number"`
 	IcpFilingNumber         *string        `json:"icp_filing_number"`
+	PublicSecurityFiling    *string        `json:"public_security_filing"`
 	ConstructionOrgID       *string        `json:"construction_org_id"`
 	OperationOrgID          *string        `json:"operation_org_id"`
 	DataSource              *string        `json:"data_source"`
@@ -156,7 +158,7 @@ type updateAssetReq struct {
 func (h *HandlerAsset) Update(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
-		web.Resp(c, web.ParamsMissingRequired)
+		web.Err(c, web.ParamsMissingRequired).Send()
 		return
 	}
 
@@ -217,11 +219,14 @@ func (h *HandlerAsset) Update(c *gin.Context) {
 	if req.DataNumber != nil {
 		updates["data_number"] = *req.DataNumber
 	}
-	if req.SystemName != nil {
-		updates["system_name"] = *req.SystemName
-	}
 	if req.SystemType != nil {
 		updates["system_type"] = *req.SystemType
+	}
+	if req.AssetFamily != nil {
+		updates["asset_family"] = *req.AssetFamily
+	}
+	if req.AssetSubtype != nil {
+		updates["asset_subtype"] = *req.AssetSubtype
 	}
 	if req.IsOnline != nil {
 		updates["is_online"] = *req.IsOnline
@@ -237,6 +242,9 @@ func (h *HandlerAsset) Update(c *gin.Context) {
 	}
 	if req.IcpFilingNumber != nil {
 		updates["icp_filing_number"] = *req.IcpFilingNumber
+	}
+	if req.PublicSecurityFiling != nil {
+		updates["public_security_filing"] = *req.PublicSecurityFiling
 	}
 	if req.ConstructionOrgID != nil {
 		updates["construction_org_id"] = *req.ConstructionOrgID
@@ -261,7 +269,7 @@ func (h *HandlerAsset) Update(c *gin.Context) {
 	}
 
 	if len(updates) == 0 {
-		web.Resp(c, web.ParamsMissingRequired)
+		web.Err(c, web.ParamsMissingRequired).Send()
 		return
 	}
 
@@ -269,26 +277,26 @@ func (h *HandlerAsset) Update(c *gin.Context) {
 	updates["updated_by"] = user.UserID
 
 	if err := h.svc.Update(id, updates); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
 
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 func (h *HandlerAsset) Delete(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
-		web.Resp(c, web.ParamsMissingRequired)
+		web.Err(c, web.ParamsMissingRequired).Send()
 		return
 	}
 
 	if err := h.svc.Delete(id); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
 
-	web.Resp(c, web.Success)
+	web.OK(c).Send()
 }
 
 func (h *HandlerAsset) BatchUpdate(c *gin.Context) {
@@ -299,8 +307,8 @@ func (h *HandlerAsset) BatchUpdate(c *gin.Context) {
 
 	allowedFields := map[string]bool{
 		"group_id": true, "organize_id": true, "status": true, "system_type": true,
-		"security_protection_level": true, "lifecycle_state": true,
-		"data_source": true, "responsible_user_name": true,
+		"security_protection_level": true,
+		"data_source":               true, "responsible_user_name": true,
 		"responsible_user_id": true, "is_key": true, "is_online": true,
 		"construction_org_id": true, "operation_org_id": true, "remark": true,
 	}
@@ -311,29 +319,28 @@ func (h *HandlerAsset) BatchUpdate(c *gin.Context) {
 		}
 	}
 	if len(sanitized) == 0 {
-		web.Resp(c, web.ParamsMissingRequired)
+		web.Err(c, web.ParamsMissingRequired).Send()
 		return
 	}
 
 	affected, err := h.svc.BatchUpdate(req.IDs, sanitized)
 	if err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
 
-	web.RespContent(c, web.Success, gin.H{"affected": affected})
+	web.OK(c).Data(gin.H{"affected": affected}).Send()
 }
 
 func (h *HandlerAsset) Export(c *gin.Context) {
-	var query assetContract.AssetQuery
-	_ = c.ShouldBindQuery(&query)
+	query, _ := web.BindQuery[assetContract.AssetQuery](c)
 	query.Page = 1
 	query.PageSize = 10000
 
 	scope := iamsdk.DataFilterScope(c, assetFieldMapping)
 	items, _, err := h.svc.List(query, scope)
 	if err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 		return
 	}
 
@@ -343,7 +350,7 @@ func (h *HandlerAsset) Export(c *gin.Context) {
 	} else if format == "xlsx" {
 		h.exportXLSX(c, items)
 	} else {
-		web.Resp(c, web.ParamsMissingRequired)
+		web.Err(c, web.ParamsMissingRequired).Send()
 	}
 }
 
@@ -362,8 +369,9 @@ func (h *HandlerAsset) exportCSV(c *gin.Context, items []model.Asset) {
 	}
 	_ = writer.Write(header)
 	orgMap := h.constructionOrgMap(items)
+	organizeMap := h.organizeNameMap(items)
 	for _, a := range items {
-		_ = writer.Write(assetExportRow(a, columns, orgMap))
+		_ = writer.Write(assetExportRow(a, columns, orgMap, organizeMap))
 	}
 }
 
@@ -376,8 +384,9 @@ func (h *HandlerAsset) exportXLSX(c *gin.Context, items []model.Asset) {
 	columns := assetExportColumns()
 	writeGroupedAssetHeader(f, sheet, columns)
 	orgMap := h.constructionOrgMap(items)
+	organizeMap := h.organizeNameMap(items)
 	for r, item := range items {
-		row := assetExportRow(item, columns, orgMap)
+		row := assetExportRow(item, columns, orgMap, organizeMap)
 		for cidx, value := range row {
 			cell, _ := excelize.CoordinatesToCellName(cidx+1, r+3)
 			f.SetCellValue(sheet, cell, value)
@@ -396,7 +405,7 @@ func (h *HandlerAsset) exportXLSX(c *gin.Context, items []model.Asset) {
 	c.Header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 	c.Header("Content-Disposition", "attachment; filename=assets.xlsx")
 	if err := f.Write(c.Writer); err != nil {
-		web.Resp(c, web.InternalError)
+		web.Fail(c).Err(err).Send()
 	}
 }
 
@@ -412,15 +421,15 @@ func assetExportColumns() []assetImportColumn {
 	return columns
 }
 
-func assetExportRow(asset model.Asset, columns []assetImportColumn, orgMap map[string]model.ConstructionOrg) []string {
+func assetExportRow(asset model.Asset, columns []assetImportColumn, orgMap map[string]model.ConstructionOrg, organizeMap map[string]string) []string {
 	row := make([]string, 0, len(columns))
 	for _, col := range columns {
-		row = append(row, assetExportValue(asset, col.Field, orgMap))
+		row = append(row, assetExportValue(asset, col.Field, orgMap, organizeMap))
 	}
 	return row
 }
 
-func assetExportValue(asset model.Asset, field string, orgMap map[string]model.ConstructionOrg) string {
+func assetExportValue(asset model.Asset, field string, orgMap map[string]model.ConstructionOrg, organizeMap map[string]string) string {
 	switch field {
 	case "name":
 		return asset.Name
@@ -428,8 +437,6 @@ func assetExportValue(asset model.Asset, field string, orgMap map[string]model.C
 		return asset.Address
 	case "type":
 		return asset.Type
-	case "system_name":
-		return asset.SystemName
 	case "system_type":
 		return asset.SystemType
 	case "data_number":
@@ -465,7 +472,14 @@ func assetExportValue(asset model.Asset, field string, orgMap map[string]model.C
 		return asset.FilingCertNumber
 	case "icp_filing_number":
 		return asset.IcpFilingNumber
+	case "public_security_filing":
+		return asset.PublicSecurityFiling
 	case "organize_id":
+		return asset.OrganizeID
+	case "organize_name":
+		if name, ok := organizeMap[asset.OrganizeID]; ok {
+			return name
+		}
 		return asset.OrganizeID
 	case "construction_org":
 		return constructionOrgExportValue(orgMap, asset.ConstructionOrgID, "name")
@@ -493,8 +507,6 @@ func assetExportValue(asset model.Asset, field string, orgMap map[string]model.C
 		return constructionOrgExportValue(orgMap, asset.OperationOrgID, "security_filing")
 	case "data_source":
 		return string(asset.DataSource)
-	case "lifecycle_state":
-		return string(asset.LifecycleState)
 	case "responsible_user_name":
 		return asset.ResponsibleUserName
 	case "tags":
@@ -594,6 +606,31 @@ func (h *HandlerAsset) constructionOrgMap(items []model.Asset) map[string]model.
 	_ = svc.session().Where("id IN ?", ids).Find(&orgs).Error
 	for _, org := range orgs {
 		result[org.ID] = org
+	}
+	return result
+}
+
+func (h *HandlerAsset) organizeNameMap(items []model.Asset) map[string]string {
+	ids := make([]string, 0)
+	seen := map[string]bool{}
+	for _, item := range items {
+		if item.OrganizeID != "" && !seen[item.OrganizeID] {
+			seen[item.OrganizeID] = true
+			ids = append(ids, item.OrganizeID)
+		}
+	}
+	result := map[string]string{}
+	if len(ids) == 0 {
+		return result
+	}
+	svc, ok := h.svc.(*serviceAsset)
+	if !ok {
+		return result
+	}
+	var orgs []model.Organize
+	_ = svc.session().Select("id, name").Where("id IN ?", ids).Find(&orgs).Error
+	for _, org := range orgs {
+		result[org.ID] = org.Name
 	}
 	return result
 }

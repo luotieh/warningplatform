@@ -16,7 +16,7 @@ import (
 
 	"github.com/gocolly/colly/v2"
 
-	"vulnscan-backend/scan/engine"
+	"vulnscan-backend/scan/core"
 )
 
 type WebCrawler struct{}
@@ -58,9 +58,9 @@ type InputInfo struct {
 	Value string
 }
 
-func (m *WebCrawler) Run(ctx context.Context, targets []*engine.Target, config map[string]interface{}) (*engine.ModuleResult, error) {
+func (m *WebCrawler) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {
 	start := time.Now()
-	result := &engine.ModuleResult{ModuleID: m.ID()}
+	result := &core.ModuleResult{ModuleID: m.ID()}
 
 	maxDepth := parseInt(config, "max_depth", 3)
 	maxPages := parseInt(config, "max_pages", 200)
@@ -81,7 +81,7 @@ func (m *WebCrawler) Run(ctx context.Context, targets []*engine.Target, config m
 
 		mu.Lock()
 		for _, u := range cr.URLs {
-			result.Findings = append(result.Findings, &engine.Finding{
+			result.Findings = append(result.Findings, &core.Finding{
 				ModuleID:         m.ID(),
 				Target:           t,
 				Type:             "url",
@@ -120,7 +120,7 @@ func (m *WebCrawler) Run(ctx context.Context, targets []*engine.Target, config m
 				data["request_body"] = strings.Join(pairs, "&")
 			}
 
-			result.Findings = append(result.Findings, &engine.Finding{
+			result.Findings = append(result.Findings, &core.Finding{
 				ModuleID:         m.ID(),
 				Target:           t,
 				Type:             "form",
@@ -134,7 +134,7 @@ func (m *WebCrawler) Run(ctx context.Context, targets []*engine.Target, config m
 		}
 
 		for _, js := range cr.Scripts {
-			result.Findings = append(result.Findings, &engine.Finding{
+			result.Findings = append(result.Findings, &core.Finding{
 				ModuleID:         m.ID(),
 				Target:           t,
 				Type:             "script",
@@ -148,7 +148,7 @@ func (m *WebCrawler) Run(ctx context.Context, targets []*engine.Target, config m
 		}
 
 		for _, email := range cr.Emails {
-			result.Findings = append(result.Findings, &engine.Finding{
+			result.Findings = append(result.Findings, &core.Finding{
 				ModuleID:         m.ID(),
 				Target:           t,
 				Type:             "email",
@@ -166,7 +166,7 @@ func (m *WebCrawler) Run(ctx context.Context, targets []*engine.Target, config m
 			if titleDisplay == "" {
 				titleDisplay = page.URL
 			}
-			result.Findings = append(result.Findings, &engine.Finding{
+			result.Findings = append(result.Findings, &core.Finding{
 				ModuleID:         m.ID(),
 				Target:           t,
 				Type:             "web_page",
@@ -437,7 +437,7 @@ var httpPorts = map[int]bool{
 	5173: true, 4200: true, 9000: true, 7001: true, 7002: true,
 }
 
-func buildBaseURL(t *engine.Target) string {
+func buildBaseURL(t *core.Target) string {
 	if t.URL != "" {
 		return strings.TrimRight(t.URL, "/")
 	}
@@ -507,9 +507,9 @@ func parseBool(config map[string]interface{}, key string, def bool) bool {
 	return def
 }
 
-func deriveVulnTargets(origin *engine.Target, cr *CrawlResult) []*engine.Target {
+func deriveVulnTargets(origin *core.Target, cr *CrawlResult) []*core.Target {
 	seen := make(map[string]struct{})
-	var targets []*engine.Target
+	var targets []*core.Target
 
 	for _, u := range cr.URLs {
 		parsed, err := url.Parse(u)
@@ -522,7 +522,7 @@ func deriveVulnTargets(origin *engine.Target, cr *CrawlResult) []*engine.Target 
 		}
 		seen[key] = struct{}{}
 
-		targets = append(targets, &engine.Target{
+		targets = append(targets, &core.Target{
 			Host:     parsed.Hostname(),
 			Port:     origin.Port,
 			Protocol: origin.Protocol,
@@ -556,7 +556,7 @@ func deriveVulnTargets(origin *engine.Target, cr *CrawlResult) []*engine.Target 
 			}
 		}
 
-		targets = append(targets, &engine.Target{
+		targets = append(targets, &core.Target{
 			Host:     parsed.Hostname(),
 			Port:     origin.Port,
 			Protocol: origin.Protocol,
