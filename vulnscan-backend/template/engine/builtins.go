@@ -2,9 +2,107 @@ package engine
 
 func BuiltinTemplates() []*ScanTemplate {
 	return []*ScanTemplate{
+		quickTemplate(),
+		reconTemplate(),
+		vulnTemplate(),
+		vulnFullTemplate(),
+		fullTemplate(),
 		webFullScanTemplate(),
 		hostSecurityTemplate(),
 		emergencyTemplate(),
+	}
+}
+
+func quickTemplate() *ScanTemplate {
+	return &ScanTemplate{
+		ID:          "quick",
+		Name:        "快速扫描",
+		Description: "ICMP存活检测+端口扫描+服务识别+Web爬虫",
+		Version:     "1.0.0",
+		Author:      "system",
+		Tags:        []string{"quick", "fast"},
+		Stages: []TemplateStage{
+			{Name: "discover", Modules: []string{"icmp_ping", "port_scan"}, Parallel: true},
+			{Name: "probe", Modules: []string{"service_probe", "web_crawl"}, Parallel: true, DependsOn: []string{"discover"}},
+		},
+	}
+}
+
+func reconTemplate() *ScanTemplate {
+	return &ScanTemplate{
+		ID:          "recon",
+		Name:        "信息收集",
+		Description: "全面信息收集：子域名、DNS、指纹、WAF、JS分析、证书、API发现",
+		Version:     "1.0.0",
+		Author:      "system",
+		Tags:        []string{"recon", "discovery"},
+		Stages: []TemplateStage{
+			{Name: "discover", Modules: []string{"icmp_ping", "port_scan", "syn_scan", "udp_scan"}, Parallel: true},
+			{Name: "probe", Modules: []string{"service_probe", "subdomain_brute", "web_crawl"}, Parallel: true, DependsOn: []string{"discover"}},
+			{Name: "recon-fast", Modules: []string{"tech_detect", "waf_detect", "favicon", "cert_check", "dns_all", "ip_attr", "real_ip"}, Parallel: true, DependsOn: []string{"probe"}},
+			{Name: "recon-deep", Modules: []string{"js_analyze", "web_fingerprint", "api_disc", "info_leak", "company_recon", "email_collect", "screenshot"}, Parallel: true, DependsOn: []string{"probe"}},
+		},
+	}
+}
+
+func vulnTemplate() *ScanTemplate {
+	return &ScanTemplate{
+		ID:          "vuln",
+		Name:        "漏洞扫描",
+		Description: "仅执行漏洞检测模块：SQLi、XSS、弱口令、SSRF等",
+		Version:     "1.0.0",
+		Author:      "system",
+		Tags:        []string{"vuln", "attack"},
+		Stages: []TemplateStage{
+			{Name: "vuln", Modules: []string{
+				"sqli", "xss", "weak_pass", "brute_force",
+				"ssrf", "cmdi", "lfi", "ssti", "xxe", "nosqli",
+				"jwt_sec", "advanced_vuln", "unauth",
+			}, Parallel: true},
+		},
+	}
+}
+
+// PLACEHOLDER_REMAINING_TEMPLATES
+
+func vulnFullTemplate() *ScanTemplate {
+	return &ScanTemplate{
+		ID:          "vuln-full",
+		Name:        "完整漏洞扫描",
+		Description: "全部漏洞检测模块，包含API安全",
+		Version:     "1.0.0",
+		Author:      "system",
+		Tags:        []string{"vuln", "full"},
+		Stages: []TemplateStage{
+			{Name: "vuln", Modules: []string{
+				"sqli", "xss", "weak_pass", "brute_force",
+				"ssrf", "cmdi", "lfi", "ssti", "xxe", "nosqli",
+				"jwt_sec", "apisec", "advanced_vuln", "unauth",
+			}, Parallel: true},
+		},
+	}
+}
+
+func fullTemplate() *ScanTemplate {
+	return &ScanTemplate{
+		ID:          "full",
+		Name:        "全量扫描",
+		Description: "信息收集+目录扫描+漏洞扫描+nuclei模板完整流程",
+		Version:     "1.0.0",
+		Author:      "system",
+		Tags:        []string{"full", "recommended"},
+		Stages: []TemplateStage{
+			{Name: "discover", Modules: []string{"icmp_ping", "port_scan", "syn_scan", "udp_scan"}, Parallel: true},
+			{Name: "host", Modules: []string{"service_probe"}, DependsOn: []string{"discover"}},
+			{Name: "recon-fast", Modules: []string{"tech_detect", "waf_detect", "favicon", "cert_check", "dns_all", "ip_attr", "real_ip"}, Parallel: true, DependsOn: []string{"host"}},
+			{Name: "recon-deep", Modules: []string{"subdomain_brute", "web_crawl", "js_analyze", "web_fingerprint", "api_disc", "info_leak", "company_recon", "email_collect", "screenshot"}, Parallel: true, DependsOn: []string{"host"}},
+			{Name: "vuln", Modules: []string{
+				"sqli", "xss", "weak_pass", "brute_force",
+				"ssrf", "cmdi", "lfi", "ssti", "xxe", "nosqli",
+				"jwt_sec", "apisec", "advanced_vuln", "unauth",
+			}, Parallel: true, DependsOn: []string{"recon-fast", "recon-deep"}, Condition: &StageCondition{PrevStageMinTargets: 1}},
+			{Name: "enhance", Modules: []string{"fpenhance", "nettopo", "nuclei-poc", "dir_scan"}, Parallel: true, DependsOn: []string{"recon-deep"}},
+		},
 	}
 }
 
@@ -15,7 +113,7 @@ func webFullScanTemplate() *ScanTemplate {
 		Description: "对Web应用进行全面安全检测，包含端口、指纹、漏洞、信息泄露等",
 		Version:     "1.0.0",
 		Author:      "system",
-		Tags:        []string{"web", "full", "recommended"},
+		Tags:        []string{"web", "full"},
 		Params: []TemplateParam{
 			{Name: "ports", Type: "string", Default: "top100", Description: "扫描端口范围"},
 			{Name: "concurrency", Type: "int", Default: 500, Description: "端口扫描并发数"},
@@ -26,17 +124,11 @@ func webFullScanTemplate() *ScanTemplate {
 			{Name: "端口发现", Module: "port_scan", Config: map[string]interface{}{
 				"ports": "{{.ports}}", "concurrency": "{{.concurrency}}",
 			}},
-			{Name: "服务识别", Module: "service_probe", Parallel: true, Config: nil},
-			{Name: "Web指纹", Module: "web_fingerprint", Parallel: true, Config: nil},
-			{Name: "目录扫描", Module: "dir_scan", Config: nil},
-			{Name: "信息泄露", Module: "info_leak", Parallel: true, Config: nil},
-			{Name: "SQL注入", Module: "sqli", Condition: &StageCondition{
-				Expression: "{{.scan_sqli}}",
-			}, Config: nil},
-			{Name: "XSS检测", Module: "xss", Condition: &StageCondition{
-				Expression: "{{.scan_xss}}",
-			}, Config: nil},
-			{Name: "证书检测", Module: "cert_check", Config: nil},
+			{Name: "服务识别", Modules: []string{"service_probe", "web_fingerprint"}, Parallel: true, DependsOn: []string{"端口发现"}},
+			{Name: "信息收集", Modules: []string{"dir_scan", "info_leak"}, Parallel: true, DependsOn: []string{"服务识别"}},
+			{Name: "SQL注入", Module: "sqli", Condition: &StageCondition{Expression: "{{.scan_sqli}}"}, DependsOn: []string{"信息收集"}},
+			{Name: "XSS检测", Module: "xss", Condition: &StageCondition{Expression: "{{.scan_xss}}"}, DependsOn: []string{"信息收集"}},
+			{Name: "证书检测", Module: "cert_check", DependsOn: []string{"端口发现"}},
 		},
 	}
 }
@@ -53,12 +145,10 @@ func hostSecurityTemplate() *ScanTemplate {
 			{Name: "ports", Type: "string", Default: "top1000", Description: "扫描端口范围"},
 		},
 		Stages: []TemplateStage{
-			{Name: "端口发现", Module: "port_scan", Config: map[string]interface{}{
-				"ports": "{{.ports}}",
-			}},
-			{Name: "服务识别", Module: "service_probe", Config: nil},
-			{Name: "弱口令", Module: "weak_pass", Config: nil},
-			{Name: "证书检测", Module: "cert_check", Config: nil},
+			{Name: "端口发现", Module: "port_scan", Config: map[string]interface{}{"ports": "{{.ports}}"}},
+			{Name: "服务识别", Module: "service_probe", DependsOn: []string{"端口发现"}},
+			{Name: "弱口令", Module: "weak_pass", DependsOn: []string{"服务识别"}},
+			{Name: "证书检测", Module: "cert_check", DependsOn: []string{"端口发现"}},
 		},
 	}
 }
@@ -75,13 +165,8 @@ func emergencyTemplate() *ScanTemplate {
 			{Name: "ports", Type: "string", Default: "21,22,80,443,3306,3389,6379,8080,8443,9200", Description: "快速端口列表"},
 		},
 		Stages: []TemplateStage{
-			{Name: "端口发现", Module: "port_scan", Config: map[string]interface{}{
-				"ports":       "{{.ports}}",
-				"concurrency": 1000,
-			}},
-			{Name: "服务+指纹", Module: "service_probe", Parallel: true, Config: nil},
-			{Name: "弱口令", Module: "weak_pass", Parallel: true, Config: nil},
-			{Name: "信息泄露", Module: "info_leak", Parallel: true, Config: nil},
+			{Name: "端口发现", Module: "port_scan", Config: map[string]interface{}{"ports": "{{.ports}}", "concurrency": 1000}},
+			{Name: "服务+弱口令", Modules: []string{"service_probe", "weak_pass", "info_leak"}, Parallel: true, DependsOn: []string{"端口发现"}},
 		},
 	}
 }

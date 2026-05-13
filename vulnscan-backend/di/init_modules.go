@@ -55,7 +55,7 @@ func (h *Handlers) initScheduler(authGroup *gin.RouterGroup, backends *[]authori
 	reportAPI := scanrunner.NewReportAPI(session)
 	reportAPI.RegisterRoutes(authGroup)
 
-	pipelineAPI := scanrunner.NewPipelineAPI(session, h.payloadLoader)
+	pipelineAPI := scanrunner.NewPipelineAPI(session)
 	pipelineAPI.RegisterRoutes(authGroup)
 
 	slog.Info("[+] Scheduler + Report + Pipeline API 已注册")
@@ -74,6 +74,7 @@ func (h *Handlers) initCronScheduler(authGroup *gin.RouterGroup, backends *[]aut
 	*backends = append(*backends, schedRoutes.RoutesWithGroup(authGroup)...)
 
 	h.cronRunner = schedule.NewCronRunner(session, h.sched)
+	schedHandler.SetCronRunner(h.cronRunner)
 	h.cronRunner.Start(context.Background())
 
 	slog.Info("[+] 定时调度 API + Cron Runner 已注册")

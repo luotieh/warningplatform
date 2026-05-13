@@ -8,7 +8,6 @@ import (
 	"vulnscan-backend/model"
 	"vulnscan-backend/template/engine"
 
-	"code.yt-security.com/public/core/v2/generate/qulid"
 	"gorm.io/gorm"
 )
 
@@ -129,13 +128,20 @@ func (h *Handlers) seedBuiltinTemplates(session *gorm.DB) {
 	builtins := engine.BuiltinTemplates()
 	for _, bt := range builtins {
 		var count int64
-		session.Model(&model.ScanTemplate{}).Where("code = ?", bt.ID).Count(&count)
+		session.Model(&model.ScanTemplate{}).Where("id = ? OR code = ?", bt.ID, bt.ID).Count(&count)
 		if count > 0 {
+			content, _ := json.Marshal(bt)
+			session.Model(&model.ScanTemplate{}).Where("id = ? OR code = ?", bt.ID, bt.ID).
+				Updates(map[string]interface{}{
+					"content": string(content),
+					"version": bt.Version,
+					"name":    bt.Name,
+				})
 			continue
 		}
 		content, _ := json.Marshal(bt)
 		item := model.ScanTemplate{
-			ID:          qulid.GenerateID(),
+			ID:          bt.ID,
 			Name:        bt.Name,
 			Code:        bt.ID,
 			Category:    "builtin",

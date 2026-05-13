@@ -86,16 +86,21 @@ func (cr *CronRunner) executeSchedule(s model.ScanSchedule) {
 	taskID := qulid.GenerateID()
 	now := time.Now()
 
+	templateID := s.TemplateID
+	if templateID == "" {
+		templateID = "full"
+	}
+
 	task := model.ScanTask{
 		ID:           taskID,
 		Name:         s.Name + " (定时)",
-		TemplateID:   s.TemplateID,
+		TemplateID:   templateID,
 		TemplateName: s.TemplateName,
-		Type:         "full",
 		Targets:      s.Targets,
-		Config:       s.Config,
+		Parameters:   s.Config,
 		Priority:     3,
-		Status:       model.TaskStatusPending,
+		Status:       model.TaskStatusQueued,
+		TotalTargets: len(s.Targets),
 		ScheduleID:   s.ID,
 		CreatedBy:    s.CreatedBy,
 		OrganizeID:   s.OrganizeID,
@@ -103,16 +108,12 @@ func (cr *CronRunner) executeSchedule(s model.ScanSchedule) {
 		UpdatedAt:    now,
 	}
 
-	if s.Config != nil {
-		if p, ok := s.Config["profile"].(string); ok && p != "" {
-			task.Type = p
-		}
-	}
-
 	if err := cr.db.Create(&task).Error; err != nil {
 		slog.Error("[Cron] 创建定时任务失败", "schedule", s.ID, "error", err)
 		return
 	}
+
+	cr.scheduler.Enqueue(&task)
 
 	nextRun := calcNextRun(s)
 	cr.db.Model(&model.ScanSchedule{}).Where("id = ?", s.ID).Updates(map[string]any{
@@ -124,6 +125,51 @@ func (cr *CronRunner) executeSchedule(s model.ScanSchedule) {
 	})
 
 	slog.Info("[Cron] 定时任务已触发", "schedule", s.Name, "task_id", taskID, "next_run", nextRun)
+}
+
+func (cr *CronRunner) RunNow(id string) (string, error) {
+	var item model.ScanSchedule
+	if err := cr.db.Where("id = ?", id).First(&item).Error; err != nil {
+		return "", err
+	}
+
+	taskID := qulid.GenerateID()
+	now := time.Now()
+
+	templateID := item.TemplateID
+	if templateID == "" {
+		templateID = "full"
+	}
+
+	task := model.ScanTask{
+		ID:           taskID,
+		Name:         item.Name + " (手动触发)",
+		TemplateID:   templateID,
+		TemplateName: item.TemplateName,
+		Targets:      item.Targets,
+		Parameters:   item.Config,
+		Priority:     5,
+		Status:       model.TaskStatusQueued,
+		TotalTargets: len(item.Targets),
+		ScheduleID:   item.ID,
+		CreatedBy:    item.CreatedBy,
+		OrganizeID:   item.OrganizeID,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+
+	if err := cr.db.Create(&task).Error; err != nil {
+		return "", err
+	}
+
+	cr.scheduler.Enqueue(&task)
+
+	cr.db.Model(&model.ScanSchedule{}).Where("id = ?", id).Updates(map[string]any{
+		"last_task_id": taskID,
+		"run_count":    gorm.Expr("run_count + 1"),
+	})
+
+	return taskID, nil
 }
 
 func calcNextRun(s model.ScanSchedule) *time.Time {

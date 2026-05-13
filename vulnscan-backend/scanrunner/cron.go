@@ -14,7 +14,6 @@ import (
 	"vulnscan-backend/model"
 )
 
-// CronScheduler periodically checks ScanSchedule entries and creates ScanTask instances.
 type CronScheduler struct {
 	db        *gorm.DB
 	scheduler *Scheduler
@@ -59,7 +58,7 @@ func (cs *CronScheduler) Stop() {
 }
 
 func (cs *CronScheduler) check(ctx context.Context) {
-	var schedules []ScanSchedule
+	var schedules []model.ScanSchedule
 	err := cs.db.WithContext(ctx).
 		Where("enabled = ? AND (next_run_at IS NULL OR next_run_at <= ?)", true, time.Now()).
 		Find(&schedules).Error
@@ -73,25 +72,19 @@ func (cs *CronScheduler) check(ctx context.Context) {
 	}
 }
 
-func (cs *CronScheduler) triggerSchedule(ctx context.Context, schedule *ScanSchedule) {
-	config := model.JSONMap{
-		"profile": schedule.Profile,
-	}
-	if len(schedule.Modules) > 0 {
-		mods := make([]interface{}, len(schedule.Modules))
-		for i, m := range schedule.Modules {
-			mods[i] = m
-		}
-		config["modules"] = mods
+func (cs *CronScheduler) triggerSchedule(ctx context.Context, schedule *model.ScanSchedule) {
+	templateID := schedule.TemplateID
+	if templateID == "" {
+		templateID = "full"
 	}
 
 	task := model.ScanTask{
 		ID:           qulid.GenerateID(),
 		Name:         schedule.Name + " (定时)",
-		Type:         schedule.Profile,
+		TemplateID:   templateID,
+		TemplateName: schedule.TemplateName,
 		Targets:      schedule.Targets,
-		Config:       config,
-		Parameters:   schedule.Parameters,
+		Parameters:   schedule.Config,
 		Priority:     5,
 		Status:       model.TaskStatusQueued,
 		TotalTargets: len(schedule.Targets),
@@ -125,9 +118,6 @@ func (cs *CronScheduler) triggerSchedule(ctx context.Context, schedule *ScanSche
 	)
 }
 
-// computeNextRun parses a simplified cron expression and returns the next run time.
-// Supports: "every Nh" (every N hours), "every Nm" (every N minutes), "every Nd" (every N days)
-// Or standard: "HH:MM" for daily at specific time.
 func computeNextRun(expr string, from time.Time) *time.Time {
 	expr = strings.TrimSpace(strings.ToLower(expr))
 

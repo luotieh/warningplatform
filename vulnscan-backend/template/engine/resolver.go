@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 )
 
 var varPattern = regexp.MustCompile(`\{\{\.(\w+)\}\}`)
@@ -18,11 +19,12 @@ func Instantiate(tmpl *ScanTemplate, params map[string]interface{}) (*TemplateIn
 	for _, s := range tmpl.Stages {
 		resolved := ResolvedStage{
 			Name:      s.Name,
-			ModuleID:  s.Module,
+			ModuleIDs: s.GetModuleIDs(),
 			Parallel:  s.Parallel,
 			Condition: s.Condition,
 			Config:    resolveConfig(s.Config, merged),
 			DependsOn: s.DependsOn,
+			Timeout:   parseDuration(s.Timeout, merged),
 		}
 		stages = append(stages, resolved)
 	}
@@ -32,6 +34,15 @@ func Instantiate(tmpl *ScanTemplate, params map[string]interface{}) (*TemplateIn
 		Params:     merged,
 		Stages:     stages,
 	}, nil
+}
+
+func parseDuration(s string, params map[string]interface{}) time.Duration {
+	if s == "" {
+		return 0
+	}
+	resolved := resolveString(s, params)
+	d, _ := time.ParseDuration(resolved)
+	return d
 }
 
 func mergeParams(defs []TemplateParam, input map[string]interface{}) (map[string]interface{}, error) {

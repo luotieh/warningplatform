@@ -9,32 +9,36 @@ import (
 	"gorm.io/gorm"
 
 	"vulnscan-backend/model"
+	"vulnscan-backend/template/engine"
 )
 
 type Scheduler struct {
-	db          *gorm.DB
-	queue       *TaskQueue
-	runners     map[string]*Runner
-	mu          sync.Mutex
-	maxParallel int
-	stopCh      chan struct{}
-	wakeup      chan struct{}
-	wg          sync.WaitGroup
-	eventBus    *EventBus
+	db           *gorm.DB
+	queue        *TaskQueue
+	runners      map[string]*Runner
+	mu           sync.Mutex
+	maxParallel  int
+	stopCh       chan struct{}
+	wakeup       chan struct{}
+	wg           sync.WaitGroup
+	eventBus     *EventBus
+	planResolver *PlanResolver
 }
 
 func New(db *gorm.DB, maxParallel int) *Scheduler {
 	if maxParallel <= 0 {
 		maxParallel = 5
 	}
+	factory := NewModuleFactory(db)
 	return &Scheduler{
-		db:          db,
-		queue:       NewTaskQueue(),
-		runners:     make(map[string]*Runner),
-		maxParallel: maxParallel,
-		stopCh:      make(chan struct{}),
-		wakeup:      make(chan struct{}, 1),
-		eventBus:    NewEventBus(),
+		db:           db,
+		queue:        NewTaskQueue(),
+		runners:      make(map[string]*Runner),
+		maxParallel:  maxParallel,
+		stopCh:       make(chan struct{}),
+		wakeup:       make(chan struct{}, 1),
+		eventBus:     NewEventBus(),
+		planResolver: NewPlanResolver(factory),
 	}
 }
 
@@ -134,8 +138,19 @@ func (s *Scheduler) drain(ctx context.Context) {
 }
 
 func (s *Scheduler) startTask(ctx context.Context, task model.ScanTask) {
+	tmplInstance, err := s.resolveTemplate(task)
+	if err != nil {
+		slog.Error("[Scheduler] 模板解析失败", "task", task.ID, "template", task.TemplateID, "error", err)
+		s.db.Model(&model.ScanTask{}).Where("id = ?", task.ID).
+			Updates(map[string]interface{}{
+				"status":    model.TaskStatusFailed,
+				"error_msg": "模板解析失败: " + err.Error(),
+			})
+		return
+	}
+
 	now := time.Now()
-	err := s.db.Model(&model.ScanTask{}).
+	err = s.db.Model(&model.ScanTask{}).
 		Where("id = ? AND status = ?", task.ID, model.TaskStatusQueued).
 		Updates(map[string]interface{}{
 			"status":     model.TaskStatusRunning,
@@ -146,7 +161,7 @@ func (s *Scheduler) startTask(ctx context.Context, task model.ScanTask) {
 		return
 	}
 
-	runner := NewRunner(s.db, task, s.eventBus)
+	runner := NewRunner(s.db, task, s.eventBus, tmplInstance, s.planResolver)
 	runCtx, cancel := context.WithCancel(ctx)
 	runner.cancelFn = cancel
 
@@ -171,9 +186,29 @@ func (s *Scheduler) startTask(ctx context.Context, task model.ScanTask) {
 	slog.Info("[Scheduler] 任务已启动",
 		"task_id", task.ID,
 		"name", task.Name,
+		"template", task.TemplateID,
 		"priority", task.Priority,
 		"targets", len(task.Targets),
 	)
+}
+
+func (s *Scheduler) resolveTemplate(task model.ScanTask) (*engine.TemplateInstance, error) {
+	var tmplRecord model.ScanTemplate
+	if err := s.db.Where("id = ? OR code = ?", task.TemplateID, task.TemplateID).First(&tmplRecord).Error; err != nil {
+		return nil, err
+	}
+
+	tmpl, err := engine.ParseTemplate([]byte(tmplRecord.Content))
+	if err != nil {
+		return nil, err
+	}
+
+	params := make(map[string]interface{})
+	for k, v := range task.Parameters {
+		params[k] = v
+	}
+
+	return engine.Instantiate(tmpl, params)
 }
 
 // recoverFromDB loads queued tasks into in-memory queue at startup.

@@ -10,11 +10,16 @@ import (
 )
 
 type Handler struct {
-	svc *ServiceSchedule
+	svc  *ServiceSchedule
+	cron *CronRunner
 }
 
 func NewHandler(svc *ServiceSchedule) *Handler {
 	return &Handler{svc: svc}
+}
+
+func (h *Handler) SetCronRunner(cr *CronRunner) {
+	h.cron = cr
 }
 
 type scheduleQuery struct {
@@ -98,7 +103,11 @@ func (h *Handler) Toggle(c *gin.Context) {
 
 func (h *Handler) RunNow(c *gin.Context) {
 	id := c.Param("id")
-	taskID, err := h.svc.RunNow(id)
+	if h.cron == nil {
+		web.Fail(c).Msg("调度器未就绪").Send()
+		return
+	}
+	taskID, err := h.cron.RunNow(id)
 	if err != nil {
 		web.Err(c, web.NotFound).Send()
 		return

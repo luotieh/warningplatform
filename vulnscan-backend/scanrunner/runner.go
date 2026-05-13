@@ -13,6 +13,7 @@ import (
 	"vulnscan-backend/model"
 	"vulnscan-backend/scan/core"
 	"vulnscan-backend/scan/orchestrate"
+	"vulnscan-backend/template/engine"
 )
 
 const defaultModuleTimeout = 2 * time.Minute
@@ -84,27 +85,34 @@ type Runner struct {
 	strategy    *orchestrate.StrategyEngine
 
 	eventBridge *EventBridge
+
+	templateInstance *engine.TemplateInstance
+	planResolver     *PlanResolver
 }
 
-func NewRunner(db *gorm.DB, task model.ScanTask, eventBus *EventBus, opts ...RunnerOption) *Runner {
+func NewRunner(db *gorm.DB, task model.ScanTask, eventBus *EventBus,
+	tmplInstance *engine.TemplateInstance, planResolver *PlanResolver,
+	opts ...RunnerOption) *Runner {
 	r := &Runner{
-		db:            db,
-		task:          task,
-		eventBus:      eventBus,
-		moduleTimeout: ResolveProfileTimeout(task),
-		progress:      NewProgressTracker(db, task.ID, len(task.Targets)),
-		persistedKeys: make(map[string]struct{}),
-		targetHealth:  make(map[string]*TargetHealth),
-		logCh:         make(chan model.ScanLog, 512),
-		logDone:       make(chan struct{}),
-		adaptive:      orchestrate.NewAdaptiveController(2, 50),
-		circuit:       orchestrate.NewCircuitBreaker(5, 30*time.Second),
-		dedup:         orchestrate.NewFindingDeduplicator(false),
-		prioritizer:   orchestrate.NewModulePrioritizer(),
-		stream:        orchestrate.NewFindingStream(1024),
-		enricher:      orchestrate.NewTargetEnricher(),
-		checkpoint:    NewCheckpointManager(db),
-		strategy:      orchestrate.NewStrategyEngine(),
+		db:               db,
+		task:             task,
+		eventBus:         eventBus,
+		moduleTimeout:    2 * time.Minute,
+		progress:         NewProgressTracker(db, task.ID, len(task.Targets)),
+		persistedKeys:    make(map[string]struct{}),
+		targetHealth:     make(map[string]*TargetHealth),
+		logCh:            make(chan model.ScanLog, 512),
+		logDone:          make(chan struct{}),
+		adaptive:         orchestrate.NewAdaptiveController(2, 50),
+		circuit:          orchestrate.NewCircuitBreaker(5, 30*time.Second),
+		dedup:            orchestrate.NewFindingDeduplicator(false),
+		prioritizer:      orchestrate.NewModulePrioritizer(),
+		stream:           orchestrate.NewFindingStream(1024),
+		enricher:         orchestrate.NewTargetEnricher(),
+		checkpoint:       NewCheckpointManager(db),
+		strategy:         orchestrate.NewStrategyEngine(),
+		templateInstance: tmplInstance,
+		planResolver:     planResolver,
 	}
 	for _, opt := range opts {
 		opt(r)
@@ -204,29 +212,33 @@ func (r *Runner) Execute(ctx context.Context) {
 	slog.Info("[Runner] 开始执行任务", "task_id", r.task.ID, "targets", len(r.task.Targets))
 
 	targets := buildTargets(r.task)
-	modules := ResolveModules(r.db, r.task)
 	config := buildConfig(r.task)
 
-	stages := BuildStages(modules)
-
-	totalModules := 0
-	for _, s := range stages {
-		totalModules += len(s.modules)
+	stages, err := r.planResolver.Resolve(r.templateInstance)
+	if err != nil {
+		r.writeLog("error", "模板解析失败: "+err.Error(), "", "")
+		r.progress.FinishTask(model.TaskStatusFailed, "模板解析失败: "+err.Error())
+		return
 	}
 
+	r.moduleTimeout = DefaultTimeout(stages)
+
+	totalModules := TotalModules(stages)
 	r.progress.SetStages(len(stages))
 	r.progress.SetModulesTotal(totalModules)
 
-	moduleIDs := make([]string, 0, len(modules))
-	for _, m := range modules {
-		moduleIDs = append(moduleIDs, m.ID())
-	}
+	moduleIDs := StageModuleIDs(stages)
 	r.writeLog("info",
-		fmt.Sprintf("任务启动：%d 个目标, %d 个模块 (%v), %d 个阶段, 超时 %s",
-			len(targets), totalModules, moduleIDs, len(stages), r.moduleTimeout),
+		fmt.Sprintf("任务启动：%d 个目标, %d 个模块 (%v), %d 个阶段",
+			len(targets), totalModules, moduleIDs, len(stages)),
 		"", "")
 
 	currentTargets := targets
+
+	stageCtx := &StageContext{
+		CompletedStages: make(map[string]StageResult),
+		Params:          r.templateInstance.Params,
+	}
 
 	cb := StageCallbacks{
 		OnModuleDone: func(stage string) {
@@ -242,12 +254,33 @@ func (r *Runner) Execute(ctx context.Context) {
 		},
 	}
 
+	engineOpts := EngineOpts{
+		Adaptive:    r.adaptive,
+		Circuit:     r.circuit,
+		Dedup:       r.dedup,
+		Prioritizer: r.prioritizer,
+		Stream:      r.stream,
+		Checkpoint:  r.checkpoint,
+		Strategy:    r.strategy,
+		TaskID:      r.task.ID,
+	}
+
 	for i, stage := range stages {
 		select {
 		case <-ctx.Done():
 			r.progress.FinishTask(model.TaskStatusCancelled, "任务被取消")
 			return
 		default:
+		}
+
+		if !ShouldRun(stage, stageCtx) {
+			r.writeLog("info", fmt.Sprintf("阶段 [%s] 条件不满足，跳过", stage.name), stage.name, "")
+			if cb.OnModuleDone != nil {
+				for range stage.modules {
+					cb.OnModuleDone(stage.name)
+				}
+			}
+			continue
 		}
 
 		r.progress.SetCurrentStage(stage.name)
@@ -262,19 +295,20 @@ func (r *Runner) Execute(ctx context.Context) {
 			fmt.Sprintf("阶段 [%s] 开始，包含 %d 个模块: %v", stage.name, len(stage.modules), moduleNames),
 			stage.name, "")
 
+		stageConfig := mergeConfig(config, stage.config)
+		timeout := r.moduleTimeout
+		if stage.timeout > 0 {
+			timeout = stage.timeout
+		}
+
 		stageFindings, stageTargets := ExecuteStageWithOpts(
-			ctx, r.task.ID, stage, currentTargets, config, r.moduleTimeout, cb,
-			EngineOpts{
-				Adaptive:    r.adaptive,
-				Circuit:     r.circuit,
-				Dedup:       r.dedup,
-				Prioritizer: r.prioritizer,
-				Stream:      r.stream,
-				Checkpoint:  r.checkpoint,
-				Strategy:    r.strategy,
-				TaskID:      r.task.ID,
-			},
+			ctx, r.task.ID, stage, currentTargets, stageConfig, timeout, cb, engineOpts,
 		)
+
+		stageCtx.CompletedStages[stage.name] = StageResult{
+			Findings: stageFindings,
+			Targets:  stageTargets,
+		}
 
 		if len(stageTargets) > 0 {
 			currentTargets = r.enricher.EnrichTargets(currentTargets, stageTargets)
@@ -284,9 +318,6 @@ func (r *Runner) Execute(ctx context.Context) {
 			products := extractDetectedProducts(stageFindings, config)
 			if len(products) > 0 {
 				config["detected_products"] = products
-				slog.Info("[Runner] 指纹识别结果注入配置",
-					"task", r.task.ID, "stage", stage.name,
-					"products", len(products))
 				r.writeLog("info",
 					fmt.Sprintf("检测到 %d 个产品/技术: %v", len(products), products),
 					stage.name, "")
@@ -295,9 +326,6 @@ func (r *Runner) Execute(ctx context.Context) {
 			wafs := extractDetectedWAFs(stageFindings)
 			if len(wafs) > 0 {
 				config["detected_wafs"] = wafs
-				slog.Info("[Runner] WAF检测结果注入配置",
-					"task", r.task.ID, "stage", stage.name,
-					"wafs", wafs)
 				r.writeLog("info",
 					fmt.Sprintf("检测到 %d 个WAF: %v", len(wafs), wafs),
 					stage.name, "")
@@ -306,7 +334,6 @@ func (r *Runner) Execute(ctx context.Context) {
 
 		r.progress.SetScanned(len(targets))
 		r.progress.IncrementStageDone()
-
 		r.progress.SyncToDB(stage.name)
 		r.publishEvent(NewStageEvent(r.task.ID, stage.name, "completed"))
 		r.publishEvent(NewProgressEvent(r.task.ID, *r.progress.Get()))

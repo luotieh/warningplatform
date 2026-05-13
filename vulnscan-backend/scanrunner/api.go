@@ -35,7 +35,7 @@ func (a *API) RoutesWithGroup(group *gin.RouterGroup) []authorize.BackendItem {
 				{Name: "取消扫描", Path: "cancel/:id", Method: "POST", Handler: a.Cancel, Enabled: true},
 				{Name: "扫描进度", Path: "progress/:id", Method: "GET", Handler: a.Progress, Enabled: true},
 				{Name: "调度器状态", Path: "status", Method: "GET", Handler: a.Status, Enabled: true},
-				{Name: "扫描策略列表", Path: "profiles", Method: "GET", Handler: a.ListProfiles, Enabled: true},
+				{Name: "扫描模板列表", Path: "templates", Method: "GET", Handler: a.ListTemplates, Enabled: true},
 				{Name: "扫描事件流", Path: "events/:id", Method: "GET", Handler: a.Events, Enabled: true},
 			},
 		},
@@ -45,8 +45,7 @@ func (a *API) RoutesWithGroup(group *gin.RouterGroup) []authorize.BackendItem {
 type LaunchRequest struct {
 	Name       string                 `json:"name" binding:"required"`
 	Targets    []string               `json:"targets" binding:"required,min=1"`
-	Profile    string                 `json:"profile"`
-	Modules    []string               `json:"modules"`
+	TemplateID string                 `json:"template_id" binding:"required"`
 	Parameters map[string]interface{} `json:"parameters"`
 	Priority   int                    `json:"priority"`
 	ScheduleID string                 `json:"schedule_id"`
@@ -58,25 +57,15 @@ func (a *API) Launch(c *gin.Context) {
 		return
 	}
 
-	profile := req.Profile
-	if profile == "" {
-		profile = "full"
+	var tmpl model.ScanTemplate
+	if err := a.db.Where("(id = ? OR code = ?) AND enabled = ?", req.TemplateID, req.TemplateID, true).First(&tmpl).Error; err != nil {
+		web.Fail(c).Msg("模板不存在或已禁用").Send()
+		return
 	}
 
 	priority := req.Priority
 	if priority <= 0 {
 		priority = 5
-	}
-
-	config := model.JSONMap{
-		"profile": profile,
-	}
-	if len(req.Modules) > 0 {
-		mods := make([]interface{}, len(req.Modules))
-		for i, m := range req.Modules {
-			mods[i] = m
-		}
-		config["modules"] = mods
 	}
 
 	params := model.JSONMap{}
@@ -87,10 +76,9 @@ func (a *API) Launch(c *gin.Context) {
 	task := model.ScanTask{
 		ID:           qulid.GenerateID(),
 		Name:         req.Name,
-		Type:         profile,
-		Profile:      profile,
+		TemplateID:   tmpl.ID,
+		TemplateName: tmpl.Name,
 		Targets:      req.Targets,
-		Config:       config,
 		Parameters:   params,
 		Priority:     priority,
 		Status:       model.TaskStatusQueued,
@@ -122,6 +110,7 @@ func (a *API) Launch(c *gin.Context) {
 		web.OK(c).Data(map[string]interface{}{
 			"task_id":    task.ID,
 			"name":       task.Name,
+			"template":   tmpl.Name,
 			"status":     task.Status,
 			"sub_count":  len(subTasks),
 			"split_mode": true,
@@ -137,9 +126,10 @@ func (a *API) Launch(c *gin.Context) {
 	a.scheduler.Enqueue(&task)
 
 	web.OK(c).Data(map[string]interface{}{
-		"task_id": task.ID,
-		"name":    task.Name,
-		"status":  task.Status,
+		"task_id":  task.ID,
+		"name":     task.Name,
+		"template": tmpl.Name,
+		"status":   task.Status,
 	}).Send()
 }
 
@@ -215,35 +205,33 @@ func (a *API) Status(c *gin.Context) {
 	}).Send()
 }
 
-func (a *API) ListProfiles(c *gin.Context) {
-	profiles := []map[string]interface{}{
-		{"id": "quick", "name": "快速扫描", "description": "ICMP存活+端口扫描+服务识别+Web爬虫", "modules": 4},
-		{"id": "recon", "name": "信息收集", "description": "全面信息收集(子域名/DNS/Web爬虫/指纹/WAF/JS分析/证书/API发现)", "modules": 14},
-		{"id": "vuln", "name": "漏洞扫描", "description": "仅执行漏洞检测模块(SQLi/XSS/弱口令/SSRF)", "modules": 4},
-		{"id": "full", "name": "全面扫描", "description": "信息收集+目录扫描+漏洞扫描+nuclei模板完整流程", "modules": 19},
+func (a *API) ListTemplates(c *gin.Context) {
+	var templates []model.ScanTemplate
+	a.db.Where("enabled = ?", true).Order("builtin DESC, usage_count DESC").Find(&templates)
+
+	type tmplItem struct {
+		ID          string   `json:"id"`
+		Name        string   `json:"name"`
+		Description string   `json:"description"`
+		Category    string   `json:"category"`
+		Tags        []string `json:"tags"`
+		Builtin     bool     `json:"builtin"`
 	}
 
-	web.OK(c).Data(profiles).Send()
-}
+	var result []tmplItem
+	for _, t := range templates {
+		result = append(result, tmplItem{
+			ID:          t.ID,
+			Name:        t.Name,
+			Description: t.Description,
+			Category:    t.Category,
+			Tags:        t.Tags,
+			Builtin:     t.Builtin,
+		})
+	}
 
-type ScanSchedule struct {
-	ID         string            `gorm:"primarykey;type:varchar(36)" json:"id"`
-	Name       string            `gorm:"type:varchar(200);not null" json:"name"`
-	CronExpr   string            `gorm:"type:varchar(100);not null" json:"cron_expr"`
-	Profile    string            `gorm:"type:varchar(50)" json:"profile"`
-	Targets    model.StringArray `gorm:"type:text" json:"targets"`
-	Modules    model.StringArray `gorm:"type:text" json:"modules"`
-	Parameters model.JSONMap     `gorm:"type:text" json:"parameters"`
-	Enabled    bool              `gorm:"default:true" json:"enabled"`
-	LastRunAt  *time.Time        `json:"last_run_at"`
-	NextRunAt  *time.Time        `json:"next_run_at"`
-	CreatedBy  string            `gorm:"type:varchar(64)" json:"created_by"`
-	OrganizeID string            `gorm:"type:varchar(64);index" json:"organize_id"`
-	CreatedAt  time.Time         `json:"created_at"`
-	UpdatedAt  time.Time         `json:"updated_at"`
+	web.OK(c).Data(result).Send()
 }
-
-func (ScanSchedule) TableName() string { return "vs_scan_schedule" }
 
 func (a *API) Events(c *gin.Context) {
 	taskID := c.Param("id")

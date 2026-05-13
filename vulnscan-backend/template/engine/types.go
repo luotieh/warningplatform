@@ -26,11 +26,23 @@ type TemplateParam struct {
 
 type TemplateStage struct {
 	Name      string                 `yaml:"name" json:"name"`
-	Module    string                 `yaml:"module" json:"module"`
+	Module    string                 `yaml:"module,omitempty" json:"module,omitempty"`
+	Modules   []string               `yaml:"modules,omitempty" json:"modules,omitempty"`
 	Parallel  bool                   `yaml:"parallel" json:"parallel"`
 	Condition *StageCondition        `yaml:"condition,omitempty" json:"condition,omitempty"`
 	Config    map[string]interface{} `yaml:"config" json:"config"`
 	DependsOn []string               `yaml:"depends_on,omitempty" json:"depends_on,omitempty"`
+	Timeout   string                 `yaml:"timeout,omitempty" json:"timeout,omitempty"`
+}
+
+func (s TemplateStage) GetModuleIDs() []string {
+	if len(s.Modules) > 0 {
+		return s.Modules
+	}
+	if s.Module != "" {
+		return []string{s.Module}
+	}
+	return nil
 }
 
 type StageCondition struct {
@@ -47,9 +59,10 @@ type TemplateInstance struct {
 
 type ResolvedStage struct {
 	Name      string
-	ModuleID  string
+	ModuleIDs []string
 	Parallel  bool
 	Condition *StageCondition
 	Config    map[string]interface{}
 	DependsOn []string
+	Timeout   time.Duration
 }

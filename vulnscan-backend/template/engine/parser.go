@@ -29,7 +29,7 @@ func ParseTemplate(data []byte) (*ScanTemplate, error) {
 		if stage.Name == "" {
 			return nil, fmt.Errorf("阶段 %d 缺少名称", i)
 		}
-		if stage.Module == "" {
+		if stage.Module == "" && len(stage.Modules) == 0 {
 			return nil, fmt.Errorf("阶段 '%s' 缺少模块ID", stage.Name)
 		}
 	}
