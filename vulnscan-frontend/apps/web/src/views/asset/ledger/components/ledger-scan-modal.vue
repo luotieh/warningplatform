@@ -3,7 +3,7 @@ import { NButton, NForm, NFormItem, NInput, NModal, NSelect, NSpace, NTag } from
 
 import type { Asset } from '#/api/asset';
 
-import type { ScanExecutorOption } from '../../scan/scan-executor';
+import type { ScanExecutorOption } from '../../../scan/scan-executor';
 import type { LedgerOption, LedgerScanForm } from '../types';
 
 defineOptions({ name: 'LedgerScanModal' });

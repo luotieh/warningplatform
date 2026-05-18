@@ -61,7 +61,7 @@ import {
   EMPTY_VERIFY_FORM,
   VERIFY_SOURCE_OPTIONS,
 } from '../constants';
-import { appendExecutorNodeParams, useScanExecutorNodes } from '../../scan/scan-executor';
+import { appendExecutorNodeParams, useScanExecutorNodes } from '../../../scan/scan-executor';
 import { assetTarget, buildScanTaskName, resolveScanTemplate as resolveScanTemplateForAssets } from '../scan-utils';
 import type {
   LedgerConstructionForm,
