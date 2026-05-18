@@ -33,6 +33,7 @@ const routes: RouteRecordRaw[] = [
         component: () => import('#/views/circular/input/add.vue'),
         meta: {
           hideInMenu: true,
+          hideInTab: true,
           title: '新建通报',
           activePath: '/circular/input',
         },

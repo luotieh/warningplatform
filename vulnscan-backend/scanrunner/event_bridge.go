@@ -10,6 +10,7 @@ import (
 
 	"gorm.io/gorm"
 
+	circularscope "vulnscan-backend/circular/scope"
 	transferContract "vulnscan-backend/circular/transfer/transfer-contract"
 	coreContract "vulnscan-backend/incident/core/core-contract"
 	"vulnscan-backend/model"
@@ -161,7 +162,7 @@ func (eb *EventBridge) OnIncidentReviewPassed(ctx context.Context, incident mode
 		},
 	}
 
-	circularCode, err := eb.transferSvc.ReceiveIncident(ctx, req, "system")
+	circularCode, err := eb.transferSvc.ReceiveIncident(ctx, req, circularscope.SystemActor(), incident.OrganizeID)
 	if err != nil {
 		slog.Warn("[EventBridge] 事件流转通报失败",
 			"incident_no", incident.IncidentNo, "error", err)

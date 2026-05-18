@@ -20,6 +20,20 @@ var supportedAssetFamilies = []string{
 	"other",
 }
 
+// assetFamilyLabelAliases 导入模板常用中文标签（与 systemdict asset_family 默认项一致）。
+var assetFamilyLabelAliases = map[string]string{
+	"IP资产": "ip",
+	"域名网站": "domain_site",
+	"业务系统": "business_system",
+	"硬件设备": "hardware",
+	"软件资产": "software",
+	"APP":  "app",
+	"小程序":  "mini_program",
+	"公众号":  "official_account",
+	"公共邮箱": "public_mailbox",
+	"其他":   "other",
+}
+
 var assetFamilyAliases = map[string]string{
 	"ip":               "ip",
 	"domain":           "domain_site",
@@ -42,7 +56,14 @@ var assetFamilyAliases = map[string]string{
 }
 
 func canonicalAssetFamily(value string) string {
-	normalized := strings.TrimSpace(strings.ToLower(value))
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return ""
+	}
+	if canonical, ok := assetFamilyLabelAliases[trimmed]; ok {
+		return canonical
+	}
+	normalized := strings.ToLower(trimmed)
 	if normalized == "" {
 		return ""
 	}

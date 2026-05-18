@@ -2,10 +2,10 @@ package verify
 
 import (
 	inputContract "vulnscan-backend/circular/input/input-contract"
+	"vulnscan-backend/circular/scope"
 	verifyContract "vulnscan-backend/circular/verify/verify-contract"
 
 	"code.yt-security.com/public/core/v2/web"
-	iamsdk "code.yt-security.com/public/sdk"
 	"github.com/gin-gonic/gin"
 )
 
@@ -35,8 +35,7 @@ func (h *HandlerVerify) Verify(c *gin.Context) {
 	if !ok {
 		return
 	}
-	user, _ := iamsdk.GetCurrentUser(c)
-	if err := h.svc.Verify(c.Request.Context(), req, user.UserID); err != nil {
+	if err := h.svc.Verify(c.Request.Context(), req, scope.ActorFromContext(c)); err != nil {
 		web.Fail(c).Err(err).Send()
 		return
 	}

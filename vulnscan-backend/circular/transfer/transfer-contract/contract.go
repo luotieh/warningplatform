@@ -1,6 +1,9 @@
 package transferContract
 
-import "context"
+import (
+	"context"
+	"vulnscan-backend/circular/scope"
+)
 
 type TransferAssetInfo struct {
 	AssetName    string `json:"asset_name"`
@@ -55,7 +58,7 @@ type TransferStatusResp struct {
 }
 
 type ServiceTransfer interface {
-	ReceiveIncident(ctx context.Context, req TransferIncidentReq, createdBy string) (string, error)
-	ReceiveIncidentBatch(ctx context.Context, req TransferIncidentBatchReq, createdBy string) ([]TransferResultItem, error)
+	ReceiveIncident(ctx context.Context, req TransferIncidentReq, actor scope.Actor, ownerOrganize string) (string, error)
+	ReceiveIncidentBatch(ctx context.Context, req TransferIncidentBatchReq, actor scope.Actor, ownerOrganize string) ([]TransferResultItem, error)
 	GetTransferStatus(ctx context.Context, incidentNo string) (*TransferStatusResp, error)
 }

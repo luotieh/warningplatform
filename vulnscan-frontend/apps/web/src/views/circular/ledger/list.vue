@@ -3,6 +3,7 @@ import { h, onMounted, ref, computed } from 'vue';
 import { NButton, NCard, NDataTable, NInput, NSelect, NSpace, NTag } from 'naive-ui';
 import { useRouter } from 'vue-router';
 import { getLedgerList, type CircularItem, CircularStatusLabels, CircularStatusTypes } from '#/api/circular';
+import { formatCircularTime } from '../utils';
 
 defineOptions({ name: 'CircularLedgerList' });
 
@@ -21,7 +22,12 @@ const columns = computed(() => [
   { title: '标题', key: 'title', minWidth: 200, render: (row: CircularItem) => h('a', { style: 'color:#2080f0;cursor:pointer', onClick: () => router.push(`/circular/ledger/${row.id}`) }, row.title) },
   { title: '状态', key: 'status', width: 100, render: (row: CircularItem) => h(NTag, { size: 'small', type: (CircularStatusTypes[row.status]||'default') as any, bordered: false }, () => CircularStatusLabels[row.status] ?? row.status) },
   { title: '所属组织', key: 'organize', width: 140 },
-  { title: '创建时间', key: 'created_at', width: 170 },
+  {
+    title: '创建时间',
+    key: 'created_at',
+    width: 172,
+    render: (row: CircularItem) => h('span', { style: 'white-space:nowrap;font-size:13px' }, formatCircularTime(row.created_at)),
+  },
   { title: '操作', key: 'actions', width: 80, fixed: 'right' as const, render: (row: CircularItem) => h(NButton, { size: 'tiny', type: 'info', text: true, onClick: () => router.push(`/circular/ledger/${row.id}`) }, () => '详情') },
 ]);
 

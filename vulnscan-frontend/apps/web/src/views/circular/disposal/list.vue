@@ -4,7 +4,16 @@ import dayjs from 'dayjs';
 import { NButton, NCard, NDataTable, NSpace, NTag, NModal, NForm, NFormItem, NInput, NDatePicker, useMessage } from 'naive-ui';
 import OrganizeTreeSelect from '#/components/organize/OrganizeTreeSelect.vue';
 import { useRouter } from 'vue-router';
-import { getDisposalList, redistributeCircular, type CircularItem, CircularStatusLabels, CircularStatusTypes } from '#/api/circular';
+import {
+  getDisposalList,
+  redistributeCircular,
+  getInputDetail,
+  type CircularItem,
+  CircularStatusLabels,
+  CircularStatusTypes,
+} from '#/api/circular';
+import { useCircularOrganizeMaps } from '../composables/use-circular-organize';
+import { extractCircularUnitHint, formatCircularTime } from '../utils';
 
 defineOptions({ name: 'CircularDisposalList' });
 
@@ -17,17 +26,41 @@ const page = ref(1);
 const pageSize = ref(20);
 const showRedist = ref(false);
 const redistForm = ref({ circular_id: '', target_organize: null as string | null, processing_deadline: null as number | null });
+const { ensureLoaded, resolveOrganizeId } = useCircularOrganizeMaps();
 
 const columns = computed(() => [
   { title: '通报编号', key: 'code', width: 160 },
   { title: '标题', key: 'title', minWidth: 200 },
   { title: '状态', key: 'status', width: 100, render: (row: CircularItem) => h(NTag, { size: 'small', type: (CircularStatusTypes[row.status]||'default') as any, bordered: false }, () => CircularStatusLabels[row.status] ?? row.status) },
-  { title: '处置期限', key: 'processing_deadline', width: 170 },
+  {
+    title: '处置期限',
+    key: 'processing_deadline',
+    width: 172,
+    render: (row: CircularItem) => h('span', { style: 'white-space:nowrap;font-size:13px' }, formatCircularTime(row.processing_deadline)),
+  },
   { title: '操作', key: 'actions', width: 150, fixed: 'right' as const, render: (row: CircularItem) => h(NSpace, { size: 4 }, () => [
     h(NButton, { size: 'tiny', type: 'primary', onClick: () => router.push(`/circular/disposal/${row.id}`) }, () => '处置'),
-    h(NButton, { size: 'tiny', onClick: () => { redistForm.value.circular_id = row.id; showRedist.value = true; } }, () => '转派'),
+    h(NButton, { size: 'tiny', onClick: () => openRedistModal(row) }, () => '转派'),
   ]) },
 ]);
+
+async function openRedistModal(row: CircularItem) {
+  redistForm.value = { circular_id: row.id, target_organize: null, processing_deadline: null };
+  await ensureLoaded();
+  let source: Pick<CircularItem, 'circular_data' | 'disposal_organize'> = row;
+  if (!row.circular_data?.length) {
+    try {
+      source = await getInputDetail(row.id);
+    } catch {
+      /* ignore */
+    }
+  }
+  const resolved = resolveOrganizeId(extractCircularUnitHint(source));
+  if (resolved) {
+    redistForm.value.target_organize = resolved;
+  }
+  showRedist.value = true;
+}
 
 async function fetchData() {
   loading.value = true;

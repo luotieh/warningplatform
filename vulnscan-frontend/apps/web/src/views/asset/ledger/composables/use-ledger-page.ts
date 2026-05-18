@@ -776,6 +776,9 @@ export function useLedgerPage() {
     buildQueryParams,
     getCheckedRowKeys: () => checkedRowKeys.value,
     getSelectedAssets: () => selectedAssets.value,
+    clearSelection: () => {
+      checkedRowKeys.value = [];
+    },
     reload,
   });
 
@@ -789,7 +792,7 @@ export function useLedgerPage() {
     if (key === 'monitor') return void sideActions.sendToMonitor();
     if (key === 'verify') return openVerifyModal();
     if (key === 'edit') return batchEdit.openBatchEditModal();
-    if (key === 'delete') return void sideActions.handleBatchDelete();
+    if (key === 'delete') return sideActions.confirmBatchDelete();
   }
 
   function updateImportFile(options: { file: UploadFileInfo }) {
@@ -965,6 +968,9 @@ export function useLedgerPage() {
     handleDelete,
     exportCurrentAssets: sideActions.exportCurrentAssets,
     handleBatchAction,
+    handleBatchDelete: sideActions.handleBatchDelete,
+    confirmBatchDelete: sideActions.confirmBatchDelete,
+    batchDeleting: sideActions.batchDeleting,
     updateImportFile,
     downloadImportTemplateFile,
     submitImport,

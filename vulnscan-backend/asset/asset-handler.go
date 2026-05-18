@@ -378,6 +378,21 @@ func (h *HandlerAsset) BatchUpdate(c *gin.Context) {
 	web.OK(c).Data(gin.H{"affected": affected}).Send()
 }
 
+func (h *HandlerAsset) BatchDelete(c *gin.Context) {
+	req, ok := web.BindJSON[assetContract.BatchDeleteReq](c)
+	if !ok {
+		return
+	}
+
+	affected, err := h.svc.BatchDelete(req.IDs)
+	if err != nil {
+		web.Fail(c).Err(err).Send()
+		return
+	}
+
+	web.OK(c).Data(gin.H{"affected": affected}).Send()
+}
+
 func (h *HandlerAsset) Export(c *gin.Context) {
 	query, _ := web.BindQuery[assetContract.AssetQuery](c)
 	query.Page = 1
@@ -456,14 +471,9 @@ func (h *HandlerAsset) exportXLSX(c *gin.Context, items []model.Asset) {
 }
 
 func assetExportColumns() []assetImportColumn {
-	columns := make([]assetImportColumn, 0, len(assetLedgerColumns)+4)
+	columns := make([]assetImportColumn, 0, len(assetLedgerColumns)+len(assetImportExportStatColumns))
 	columns = append(columns, assetLedgerColumnsVisible()...)
-	columns = append(columns,
-		assetImportColumn{Field: "risk_score", Group: "导出统计信息", Title: "风险分"},
-		assetImportColumn{Field: "vuln_count", Group: "导出统计信息", Title: "漏洞数"},
-		assetImportColumn{Field: "status", Group: "导出统计信息", Title: "状态"},
-		assetImportColumn{Field: "created_at", Group: "导出统计信息", Title: "创建时间"},
-	)
+	columns = append(columns, assetImportExportStatColumns...)
 	return columns
 }
 

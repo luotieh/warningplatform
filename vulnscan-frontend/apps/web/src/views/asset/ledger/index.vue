@@ -34,6 +34,7 @@ const {
   submittingVerify,
   sendingToMonitor,
   exporting,
+  batchDeleting,
   rows,
   checkedRowKeys,
   assetFamilyOptions,
@@ -118,6 +119,8 @@ const {
   handleDelete,
   exportCurrentAssets,
   handleBatchAction,
+  handleBatchDelete,
+  confirmBatchDelete,
   updateImportFile,
   downloadImportTemplateFile,
   submitImport,
@@ -189,12 +192,14 @@ onActivated(async () => {
       />
 
       <LedgerBatchToolbar
-        v-if="checkedRowKeys.length > 0"
-        :selected-count="checkedRowKeys.length"
+        v-if="(checkedRowKeys?.length ?? 0) > 0"
+        :selected-count="checkedRowKeys?.length ?? 0"
+        :deleting="batchDeleting"
         @edit="openBatchEditModal"
         @monitor="sendToMonitor"
         @scan="openBatchScanModal"
         @verify="openVerifyModal"
+        @delete="handleBatchDelete"
       />
 
       <div class="ledger-page__table-shell">
@@ -282,7 +287,7 @@ onActivated(async () => {
     <LedgerBatchEditModal
       :show="showBatchEditModal"
       :loading="batchUpdating"
-      :selected-count="checkedRowKeys.length"
+      :selected-count="checkedRowKeys?.length ?? 0"
       :form="batchEditForm"
       :field-options="batchEditFieldOptions"
       :source-options="sourceOptions"
@@ -318,7 +323,7 @@ onActivated(async () => {
       :form="verifyForm"
       :source-options="verifySourceOptions"
       :org-tree-options="orgTreeOptions"
-      :selected-count="checkedRowKeys.length"
+      :selected-count="checkedRowKeys?.length ?? 0"
       @close="showVerifyModal = false"
       @submit="submitVerifyTask"
       @update:show="(value) => (showVerifyModal = value)"

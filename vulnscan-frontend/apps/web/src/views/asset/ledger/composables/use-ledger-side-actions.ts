@@ -1,7 +1,8 @@
 import { ref } from 'vue';
 import { useMessage } from 'naive-ui';
 
-import { deleteAsset, exportAssets, type Asset } from '#/api/asset';
+import { batchDeleteAssets, exportAssets, type Asset } from '#/api/asset';
+import { getRequestErrorMessage } from '#/api/helpers';
 import { createTasksFromAssets } from '#/api/sitemonitor';
 
 import { downloadBlob } from '../file-utils';
@@ -16,11 +17,13 @@ export function useLedgerSideActions(options: {
   buildQueryParams: () => Record<string, any>;
   getCheckedRowKeys: () => string[];
   getSelectedAssets: () => Asset[];
+  clearSelection: () => void;
   reload: () => Promise<void>;
 }) {
   const message = useMessage();
   const sendingToMonitor = ref(false);
   const exporting = ref(false);
+  const batchDeleting = ref(false);
   const showMonitorResult = ref(false);
   const monitorResult = ref<any>(null);
 
@@ -30,11 +33,31 @@ export function useLedgerSideActions(options: {
       message.warning('请先选择资产');
       return;
     }
-    for (const id of ids) {
-      await deleteAsset(id);
+    batchDeleting.value = true;
+    try {
+      const res = await batchDeleteAssets(ids);
+      const affected = (res as { affected?: number })?.affected ?? ids.length;
+      message.success(`已删除 ${affected} 条资产`);
+      options.clearSelection();
+      await options.reload();
+    } catch (error: unknown) {
+      message.error(getRequestErrorMessage(error, '批量删除失败'));
+    } finally {
+      batchDeleting.value = false;
     }
-    message.success('批量删除完成');
-    await options.reload();
+  }
+
+  function confirmBatchDelete() {
+    const ids = options.getCheckedRowKeys();
+    if (ids.length === 0) {
+      message.warning('请先选择资产');
+      return;
+    }
+    const ok = window.confirm(
+      `确认删除已选的 ${ids.length} 条资产？删除后不可恢复。`,
+    );
+    if (!ok) return;
+    void handleBatchDelete();
   }
 
   async function sendToMonitor() {
@@ -65,9 +88,11 @@ export function useLedgerSideActions(options: {
   return {
     sendingToMonitor,
     exporting,
+    batchDeleting,
     showMonitorResult,
     monitorResult,
     handleBatchDelete,
+    confirmBatchDelete,
     sendToMonitor,
     exportCurrentAssets,
   };

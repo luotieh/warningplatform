@@ -2,6 +2,7 @@ package inputContract
 
 import (
 	"context"
+	"vulnscan-backend/circular/scope"
 	"vulnscan-backend/model"
 
 	"github.com/gin-gonic/gin"
@@ -72,14 +73,14 @@ type InputDetailResp struct {
 }
 
 type ServiceInput interface {
-	Add(ctx context.Context, req InputAddReq, createdBy string) (string, error)
+	Add(ctx context.Context, req InputAddReq, actor scope.Actor) (string, error)
 	List(c *gin.Context, req ListQuery) (int64, []ListResp, error)
 	Detail(ctx context.Context, id string) (*InputDetailResp, error)
 	Delete(ctx context.Context, id string) error
-	Edit(ctx context.Context, id string, req InputEditReq, updatedBy string) error
+	Edit(ctx context.Context, id string, req InputEditReq, actor scope.Actor) error
 	Export(ctx context.Context, codes []string) error
-	Import(ctx context.Context, file *multipart.FileHeader, createdBy string) (int, error)
+	Import(ctx context.Context, file *multipart.FileHeader, actor scope.Actor) (int, error)
 	CommonTemplateDownload(c *gin.Context)
-	Submit(ctx context.Context, id string, userId string) error
-	ThirdPartyImport(ctx context.Context, req InputAddReq, createdBy string) error
+	Submit(ctx context.Context, id string, actor scope.Actor) error
+	ThirdPartyImport(ctx context.Context, req InputAddReq, actor scope.Actor, ownerOrganize string) error
 }

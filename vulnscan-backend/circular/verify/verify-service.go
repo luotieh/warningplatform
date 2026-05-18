@@ -49,7 +49,7 @@ func (s *serviceVerify) List(c *gin.Context, req inputContract.ListQuery) (int64
 	return count, items, nil
 }
 
-func (s *serviceVerify) Verify(ctx context.Context, req verifyContract.VerifyReq, updatedBy string) error {
+func (s *serviceVerify) Verify(ctx context.Context, req verifyContract.VerifyReq, actor scope.Actor) error {
 	if len(req.CircularIds) == 0 {
 		return fmt.Errorf("没有需要核验的通报")
 	}
@@ -78,7 +78,7 @@ func (s *serviceVerify) Verify(ctx context.Context, req verifyContract.VerifyReq
 			}
 
 			if err := session.Model(&model.Circular{}).Where("id = ?", circular.Id).
-				Updates(map[string]interface{}{"status": newStatus, "updated_by": updatedBy}).Error; err != nil {
+				Updates(map[string]interface{}{"status": newStatus, "updated_by": actor.ID}).Error; err != nil {
 				return err
 			}
 
@@ -91,7 +91,7 @@ func (s *serviceVerify) Verify(ctx context.Context, req verifyContract.VerifyReq
 				opType = model.CircularOpVerifyReject
 				opResult = "核验驳回"
 			}
-			opLog := model.BuildCircularOperationLog(circular.Code, opType, updatedBy, opResult, "", map[string]interface{}{
+			opLog := model.BuildCircularOperationLog(circular.Code, opType, actor.ID, actor.Name, opResult, "", map[string]interface{}{
 				"title": circular.Title, "result": req.Result,
 			})
 			if err := session.Create(&opLog).Error; err != nil {

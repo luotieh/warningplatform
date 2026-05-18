@@ -187,6 +187,7 @@ export interface CircularOplog {
   circular_id: string;
   operation_type: CircularOperationType;
   operator: string;
+  operator_name?: string;
   operation_time: string;
   operation_result: string;
   target_organize?: string;

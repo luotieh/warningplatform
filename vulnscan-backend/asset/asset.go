@@ -42,6 +42,7 @@ func (m *Asset) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
 				{Name: "批量导入", Path: "import", Method: "POST", Handler: m.handler.ImportAssets, Enabled: true},
 				{Name: "导入模板", Path: "import/template", Method: "GET", Handler: m.handler.DownloadTemplate, Enabled: true},
 				{Name: "批量编辑", Path: "batch-update", Method: "POST", Handler: m.handler.BatchUpdate, Enabled: true},
+				{Name: "批量删除", Path: "batch-delete", Method: "POST", Handler: m.handler.BatchDelete, Enabled: true},
 				{Name: "批量导出", Path: "export", Method: "GET", Handler: m.handler.Export, Enabled: true},
 				{Name: "更新资产", Path: ":id", Method: "PUT", Handler: m.handler.Update, Enabled: true},
 				{Name: "删除资产", Path: ":id", Method: "DELETE", Handler: m.handler.Delete, Enabled: true},

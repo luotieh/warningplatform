@@ -1,6 +1,7 @@
 package transfer
 
 import (
+	"vulnscan-backend/circular/scope"
 	transferContract "vulnscan-backend/circular/transfer/transfer-contract"
 
 	"code.yt-security.com/public/core/v2/web"
@@ -22,7 +23,7 @@ func (h *HandlerTransfer) ReceiveIncident(c *gin.Context) {
 		return
 	}
 	user, _ := iamsdk.GetCurrentUser(c)
-	code, err := h.svc.ReceiveIncident(c.Request.Context(), req, user.UserID)
+	code, err := h.svc.ReceiveIncident(c.Request.Context(), req, scope.ActorFromContext(c), user.OrganizeID)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
@@ -36,7 +37,7 @@ func (h *HandlerTransfer) ReceiveIncidentBatch(c *gin.Context) {
 		return
 	}
 	user, _ := iamsdk.GetCurrentUser(c)
-	results, err := h.svc.ReceiveIncidentBatch(c.Request.Context(), req, user.UserID)
+	results, err := h.svc.ReceiveIncidentBatch(c.Request.Context(), req, scope.ActorFromContext(c), user.OrganizeID)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return

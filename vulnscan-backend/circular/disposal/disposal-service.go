@@ -54,7 +54,7 @@ func (s *serviceDisposal) List(c *gin.Context, req inputContract.ListQuery) (int
 	return count, items, nil
 }
 
-func (s *serviceDisposal) Dispose(c *gin.Context, id string, updatedBy string, req disposalContract.DisposalCondition) error {
+func (s *serviceDisposal) Dispose(c *gin.Context, id string, actor scope.Actor, req disposalContract.DisposalCondition) error {
 	sess, err := s.session()
 	if err != nil {
 		return err
@@ -99,7 +99,7 @@ func (s *serviceDisposal) Dispose(c *gin.Context, id string, updatedBy string, r
 			DisposalQuestion: req.DisposalQuestion, DisposalResult: req.DisposalResult,
 		}
 		disposal.Id = qulid.GenerateID()
-		disposal.CreatedBy = updatedBy
+		disposal.CreatedBy = actor.ID
 		disposal.CreatedAt = now
 		if err := session.Create(&disposal).Error; err != nil {
 			return err
@@ -137,14 +137,14 @@ func (s *serviceDisposal) Dispose(c *gin.Context, id string, updatedBy string, r
 			}
 		}
 
-		opLog := model.BuildCircularOperationLog(id, model.CircularOpDisposal, updatedBy, "处置完成", currentOrganize, map[string]interface{}{
+		opLog := model.BuildCircularOperationLog(id, model.CircularOpDisposal, actor.ID, actor.Name, "处置完成", currentOrganize, map[string]interface{}{
 			"disposal_result": req.DisposalResult, "disposal_question": req.DisposalQuestion, "new_status": string(newOrgStatus),
 		})
 		return session.Create(&opLog).Error
 	})
 }
 
-func (s *serviceDisposal) Redistribute(c *gin.Context, req distributeContract.RedistributeReq, updatedBy string) error {
+func (s *serviceDisposal) Redistribute(c *gin.Context, req distributeContract.RedistributeReq, actor scope.Actor) error {
 	sess, err := s.session()
 	if err != nil {
 		return err
@@ -185,7 +185,7 @@ func (s *serviceDisposal) Redistribute(c *gin.Context, req distributeContract.Re
 		}
 		dist.Id = distributionId
 		dist.CreatedAt = now
-		dist.CreatedBy = updatedBy
+		dist.CreatedBy = actor.ID
 		if err := session.Create(&dist).Error; err != nil {
 			return err
 		}
@@ -224,7 +224,7 @@ func (s *serviceDisposal) Redistribute(c *gin.Context, req distributeContract.Re
 			return err
 		}
 
-		opLog := model.BuildCircularOperationLog(circular.Code, model.CircularOpRedistribute, updatedBy, "转派成功", req.TargetOrganize, map[string]interface{}{
+		opLog := model.BuildCircularOperationLog(circular.Code, model.CircularOpRedistribute, actor.ID, actor.Name, "转派成功", req.TargetOrganize, map[string]interface{}{
 			"current_organize": currentOrganize, "target_organize": req.TargetOrganize, "depth": newDepth,
 		})
 		return session.Create(&opLog).Error

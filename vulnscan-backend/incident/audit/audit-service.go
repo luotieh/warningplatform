@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"vulnscan-backend/circular/scope"
 	"vulnscan-backend/model"
 
 	transferContract "vulnscan-backend/circular/transfer/transfer-contract"
@@ -181,7 +182,7 @@ func (s *serviceAudit) transferToCircular(ctx context.Context, sess *gorm.DB, in
 		}
 	}
 
-	circularCode, err := s.transferSvc.ReceiveIncident(ctx, req, "system")
+	circularCode, err := s.transferSvc.ReceiveIncident(ctx, req, scope.SystemActor(), incident.OrganizeID)
 	if err != nil {
 		slog.Error("流转到通报模块失败", "incident_no", incident.IncidentNo, "error", err)
 		return

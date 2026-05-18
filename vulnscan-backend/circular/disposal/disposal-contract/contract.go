@@ -1,6 +1,7 @@
 package disposalContract
 
 import (
+	"vulnscan-backend/circular/scope"
 	"vulnscan-backend/model"
 
 	distributeContract "vulnscan-backend/circular/distribute/distribute-contract"
@@ -17,6 +18,6 @@ type DisposalCondition struct {
 
 type ServiceDisposal interface {
 	List(c *gin.Context, req inputContract.ListQuery) (int64, []inputContract.ListResp, error)
-	Dispose(c *gin.Context, id string, userId string, req DisposalCondition) error
-	Redistribute(c *gin.Context, req distributeContract.RedistributeReq, userId string) error
+	Dispose(c *gin.Context, id string, actor scope.Actor, req DisposalCondition) error
+	Redistribute(c *gin.Context, req distributeContract.RedistributeReq, actor scope.Actor) error
 }

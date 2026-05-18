@@ -2,6 +2,7 @@ package verifyContract
 
 import (
 	"context"
+	"vulnscan-backend/circular/scope"
 
 	inputContract "vulnscan-backend/circular/input/input-contract"
 
@@ -15,5 +16,5 @@ type VerifyReq struct {
 
 type ServiceVerify interface {
 	List(c *gin.Context, req inputContract.ListQuery) (int64, []inputContract.ListResp, error)
-	Verify(ctx context.Context, req VerifyReq, userId string) error
+	Verify(ctx context.Context, req VerifyReq, actor scope.Actor) error
 }

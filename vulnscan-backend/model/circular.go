@@ -103,7 +103,8 @@ type CircularOperationLog struct {
 	ReadOnlyModel
 	CircularId      string                `json:"circular_id" gorm:"type:varchar(70);index;comment:关联通报标识"`
 	OperationType   CircularOperationType `json:"operation_type" gorm:"type:varchar(70);index;comment:操作类型"`
-	Operator        string                `json:"operator" gorm:"type:varchar(70);comment:操作人"`
+	Operator        string                `json:"operator" gorm:"type:varchar(70);comment:操作人ID"`
+	OperatorName    string                `json:"operator_name" gorm:"type:varchar(100);comment:操作人名称"`
 	OperationTime   time.Time             `json:"operation_time" gorm:"type:timestamp;comment:操作时间"`
 	OperationResult string                `json:"operation_result" gorm:"type:varchar(70);comment:操作结果"`
 	TargetOrganize  string                `json:"target_organize" gorm:"type:varchar(255);comment:目标组织"`
@@ -112,11 +113,26 @@ type CircularOperationLog struct {
 
 func (*CircularOperationLog) TableName() string { return "circular_operation_logs" }
 
-func BuildCircularOperationLog(circularId string, opType CircularOperationType, operator string, result string, targetOrganize string, detail map[string]interface{}) CircularOperationLog {
+func BuildCircularOperationLog(
+	circularId string,
+	opType CircularOperationType,
+	operatorID, operatorName, result, targetOrganize string,
+	detail map[string]interface{},
+) CircularOperationLog {
 	detailStr := ""
 	if detail != nil {
 		bs, _ := json.Marshal(detail)
 		detailStr = string(bs)
+	}
+	if operatorName == "" {
+		switch operatorID {
+		case "system":
+			operatorName = "系统"
+		case "":
+			operatorName = "-"
+		default:
+			operatorName = operatorID
+		}
 	}
 	now := time.Now()
 	return CircularOperationLog{
@@ -126,7 +142,8 @@ func BuildCircularOperationLog(circularId string, opType CircularOperationType, 
 		},
 		CircularId:      circularId,
 		OperationType:   opType,
-		Operator:        operator,
+		Operator:        operatorID,
+		OperatorName:    operatorName,
 		OperationTime:   now,
 		OperationResult: result,
 		TargetOrganize:  targetOrganize,

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+	"vulnscan-backend/circular/scope"
 	"vulnscan-backend/model"
 
 	transferContract "vulnscan-backend/circular/transfer/transfer-contract"
@@ -28,7 +29,7 @@ func (s *serviceTransfer) session() *gorm.DB {
 	return sess
 }
 
-func (s *serviceTransfer) ReceiveIncident(ctx context.Context, req transferContract.TransferIncidentReq, createdBy string) (string, error) {
+func (s *serviceTransfer) ReceiveIncident(ctx context.Context, req transferContract.TransferIncidentReq, actor scope.Actor, ownerOrganize string) (string, error) {
 	if req.IncidentNo == "" {
 		return "", fmt.Errorf("隐患编号不能为空")
 	}
@@ -49,13 +50,18 @@ func (s *serviceTransfer) ReceiveIncident(ctx context.Context, req transferContr
 	now := time.Now()
 	circularCode := qulid.GenerateID()
 
+	unitOrganize := ""
+	if req.AssetInfo != nil {
+		unitOrganize = req.AssetInfo.Unit
+	}
 	circular := model.Circular{
 		Code: circularCode, Title: req.Name, CustomCode: req.IncidentNo,
-		Source: model.CircularSourceSuperiorTransfer, Organize: "yt-networks-security",
+		Source:           model.CircularSourceSuperiorTransfer,
+		Organize:         scope.ResolveOrganize(unitOrganize, ownerOrganize),
 		CircularTemplate: defaultTemplate.ID, CircularData: circularData, Status: model.CircularToBeVerified,
 	}
 	circular.Id = circularCode
-	circular.CreatedBy = createdBy
+	circular.CreatedBy = actor.ID
 	circular.CreatedAt = now
 	circular.UpdatedAt = now
 
@@ -75,7 +81,7 @@ func (s *serviceTransfer) ReceiveIncident(ctx context.Context, req transferContr
 			return err
 		}
 
-		opLog := model.BuildCircularOperationLog(circularCode, model.CircularOpThirdPartyImport, createdBy, "安全事件流转成功", "", map[string]interface{}{
+		opLog := model.BuildCircularOperationLog(circularCode, model.CircularOpThirdPartyImport, actor.ID, actor.Name, "安全事件流转成功", "", map[string]interface{}{
 			"incident_no": req.IncidentNo, "incident_name": req.Name, "source_system": req.SourceSystem,
 		})
 		return session.Create(&opLog).Error
@@ -87,14 +93,14 @@ func (s *serviceTransfer) ReceiveIncident(ctx context.Context, req transferContr
 	return circularCode, nil
 }
 
-func (s *serviceTransfer) ReceiveIncidentBatch(ctx context.Context, req transferContract.TransferIncidentBatchReq, createdBy string) ([]transferContract.TransferResultItem, error) {
+func (s *serviceTransfer) ReceiveIncidentBatch(ctx context.Context, req transferContract.TransferIncidentBatchReq, actor scope.Actor, ownerOrganize string) ([]transferContract.TransferResultItem, error) {
 	if len(req.Incidents) == 0 {
 		return nil, fmt.Errorf("流转数据不能为空")
 	}
 
 	results := make([]transferContract.TransferResultItem, 0, len(req.Incidents))
 	for _, incident := range req.Incidents {
-		circularCode, err := s.ReceiveIncident(ctx, incident, createdBy)
+		circularCode, err := s.ReceiveIncident(ctx, incident, actor, ownerOrganize)
 		item := transferContract.TransferResultItem{
 			IncidentNo: incident.IncidentNo, Success: err == nil, CircularCode: circularCode,
 		}

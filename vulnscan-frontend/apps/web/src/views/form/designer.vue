@@ -1,9 +1,20 @@
 <script setup lang="ts">
-import { computed, h, nextTick, onMounted, reactive, ref } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import {
+  computed,
+  h,
+  nextTick,
+  onActivated,
+  onBeforeUnmount,
+  onDeactivated,
+  onMounted,
+  reactive,
+  ref,
+} from 'vue';
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
 
 import type { DataTableColumns } from 'naive-ui';
 import {
+  NAlert,
   NButton,
   NCard,
   NDataTable,
@@ -31,6 +42,7 @@ import {
   saveDynamicFormDraft,
   updateDynamicFormTemplate,
 } from '#/api/formdesign';
+import { getRequestErrorMessage } from '#/api/helpers';
 import FormPreview from '#/components/dynamic-form/FormPreview.vue';
 
 defineOptions({ name: 'FormDesigner' });
@@ -55,8 +67,22 @@ const changeLog = ref('');
 
 const businessOptions = [
   { label: '资产', value: 'asset' },
-  { label: '事件', value: 'incident' },
+  { label: '通报 / 事件', value: 'incident' },
+  { label: '通报（历史标识）', value: 'circular' },
+  { label: '通用', value: 'general' },
 ];
+
+const objectTypeOptions = [
+  { label: '不限制', value: '' },
+  { label: '通报录入 (input)', value: 'input' },
+  { label: '资产台账', value: 'asset' },
+];
+
+const isCircularInputTemplate = computed(
+  () =>
+    ['circular', 'incident', 'general', '通用'].includes(metaForm.business) &&
+    (!metaForm.object_type || metaForm.object_type === 'input'),
+);
 
 const fieldTypeOptions = [
   { label: '单行文本', value: 'input' },
@@ -136,8 +162,8 @@ async function fetchDetail() {
     await fetchVersions();
     await nextTick();
     loadDesignerFromJson();
-  } catch {
-    message.error('加载表单模板失败');
+  } catch (e: unknown) {
+    message.error(getRequestErrorMessage(e, '加载表单模板失败'));
   } finally {
     loading.value = false;
   }
@@ -251,15 +277,21 @@ async function saveTemplateMeta() {
   });
 }
 
+function requireTemplate(action: string): boolean {
+  if (template.value) return true;
+  message.warning(`模板未加载，无法${action}`);
+  return false;
+}
+
 async function ensureDraft() {
-  if (!template.value) return;
+  if (!requireTemplate('创建草稿')) return;
   const draft = await createDynamicFormDraft(template.value.id);
   message.success(`已创建v${draft.version} 草稿`);
   await fetchDetail();
 }
 
 async function saveDraft() {
-  if (!template.value) return;
+  if (!requireTemplate('保存草稿')) return;
   const payload = collectDraftPayload();
   if (jsonError.value) {
     message.warning('请先修正 JSON 格式');
@@ -271,15 +303,15 @@ async function saveDraft() {
     await saveDynamicFormDraft(template.value.id, payload);
     message.success('草稿已保存，不影响已发布版本');
     await fetchDetail();
-  } catch {
-    message.error('保存草稿失败');
+  } catch (e: unknown) {
+    message.error(getRequestErrorMessage(e, '保存草稿失败'));
   } finally {
     saving.value = false;
   }
 }
 
 async function publishDraft() {
-  if (!template.value) return;
+  if (!requireTemplate('发布版本')) return;
   const payload = collectDraftPayload();
   if (jsonError.value) {
     message.warning('请先修正 JSON 格式');
@@ -292,8 +324,8 @@ async function publishDraft() {
     message.success(`已发布v${version.version}`);
     changeLog.value = '';
     await fetchDetail();
-  } catch {
-    message.error('发布版本失败');
+  } catch (e: unknown) {
+    message.error(getRequestErrorMessage(e, '发布版本失败'));
   } finally {
     publishing.value = false;
   }
@@ -353,7 +385,30 @@ const versionColumns: DataTableColumns<DynamicFormTemplateVersion> = [
   },
 ];
 
-onMounted(fetchDetail);
+function setDesignerPageActive(active: boolean) {
+  document.documentElement.classList.toggle('form-designer-active', active);
+}
+
+onMounted(() => {
+  setDesignerPageActive(true);
+  void fetchDetail();
+});
+
+onActivated(() => {
+  setDesignerPageActive(true);
+});
+
+onDeactivated(() => {
+  setDesignerPageActive(false);
+});
+
+onBeforeUnmount(() => {
+  setDesignerPageActive(false);
+});
+
+onBeforeRouteLeave(() => {
+  setDesignerPageActive(false);
+});
 </script>
 
 <template>
@@ -390,8 +445,34 @@ onMounted(fetchDetail);
             </NFormItem>
           </div>
           <NFormItem label="对象类型">
-            <NInput v-model:value="metaForm.object_type" placeholder="可选" />
+            <NSelect
+              v-model:value="metaForm.object_type"
+              :options="objectTypeOptions"
+              clearable
+              filterable
+              tag
+              placeholder="通报录入建议选 input"
+            />
           </NFormItem>
+          <NAlert
+            v-if="isCircularInputTemplate"
+            type="info"
+            :bordered="false"
+            class="template-link-hint"
+            title="与事件转通报的关联"
+          >
+            事件审核通过后，系统按「业务归属 ∈ 通报/事件/通用」且「对象类型 = input 或空」查找
+            <strong>已启用 + 默认模板</strong>，将模板 ID 写入通报的
+            <code>circular_template</code>，并预填隐患字段。请发布版本并保持「默认模板」开启。
+          </NAlert>
+          <NAlert
+            v-else-if="metaForm.business === 'asset'"
+            type="default"
+            :bordered="false"
+            class="template-link-hint"
+          >
+            资产类模板用于资产台账扩展字段，不会参与事件转通报。
+          </NAlert>
           <div class="switch-row">
             <span>默认模板</span>
             <NSwitch v-model:value="metaForm.is_default" />
@@ -455,7 +536,7 @@ onMounted(fetchDetail);
                 <fc-designer
                   ref="designerRef"
                   :config="designerConfig"
-                  height="calc(100vh - 238px)"
+                  height="100%"
                   @save="onDesignerSave"
                 />
               </div>
@@ -507,10 +588,12 @@ onMounted(fetchDetail);
   --designer-text: var(--n-text-color, hsl(var(--foreground, 210 6% 21%)));
   --designer-text-2: var(--n-text-color-2, hsl(var(--muted-foreground, 240 3.8% 46.1%)));
 
-  min-height: calc(100vh - 90px);
+  box-sizing: border-box;
+  height: 100%;
+  min-height: 0;
   padding: 12px 14px 16px;
   color: var(--designer-text);
-  background: var(--designer-bg);
+  background: transparent;
   isolation: isolate;
 }
 
@@ -522,11 +605,24 @@ onMounted(fetchDetail);
   --designer-text-2: #b6c0cf;
 }
 
+.template-link-hint {
+  margin-bottom: 12px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.template-link-hint code {
+  padding: 0 4px;
+  font-size: 11px;
+  border-radius: 4px;
+  background: var(--n-action-color);
+}
+
 .designer-shell {
   display: grid;
   grid-template-columns: 340px minmax(0, 1fr);
   gap: 12px;
-  min-height: calc(100vh - 122px);
+  min-height: min(720px, calc(100vh - 160px));
 }
 
 .designer-side,
@@ -670,7 +766,10 @@ onMounted(fetchDetail);
 }
 
 .visual-designer {
-  min-height: calc(100vh - 238px);
+  display: flex;
+  flex-direction: column;
+  min-height: 560px;
+  height: min(720px, calc(100vh - 220px));
   overflow: hidden;
   color: var(--designer-text);
   background: var(--designer-bg);
@@ -679,6 +778,9 @@ onMounted(fetchDetail);
 }
 
 .visual-designer :deep(._fc-designer) {
+  flex: 1;
+  min-height: 0;
+  height: 100% !important;
   color: var(--designer-text);
   background: var(--designer-surface);
   border-color: var(--designer-border);
@@ -703,11 +805,6 @@ onMounted(fetchDetail);
   --el-text-color-primary: var(--designer-text);
   --el-text-color-regular: var(--designer-text-2);
   --el-text-color-secondary: var(--designer-muted);
-}
-
-:global(.dark) .form-designer-page {
-  --n-border-color: rgba(148, 163, 184, 0.16);
-  --n-divider-color: rgba(148, 163, 184, 0.16);
 }
 
 .visual-designer :deep(._fc-l),
@@ -774,22 +871,21 @@ onMounted(fetchDetail);
   color: var(--designer-muted);
 }
 
-.visual-designer :deep(._fc-l-item),
-.visual-designer :deep(._fc-m .form-create ._fc-l-item) {
+/* 仅左侧组件库条目，勿用全局 _fc-l-item（会压窄画布内输入框） */
+.visual-designer :deep(._fc-l ._fc-l-item) {
   color: var(--designer-text-2);
   background: var(--designer-soft);
   border-color: var(--designer-border);
   border-radius: 6px;
 }
 
-:global(.dark) .visual-designer :deep(._fc-l-item),
-:global(.dark) .visual-designer :deep(._fc-m .form-create ._fc-l-item) {
+:global(.dark) .visual-designer :deep(._fc-l ._fc-l-item) {
   color: #c5cfdd;
   background: #202733;
   border: 1px solid rgba(148, 163, 184, 0.14);
 }
 
-.visual-designer :deep(._fc-l-item:hover),
+.visual-designer :deep(._fc-l ._fc-l-item:hover),
 .visual-designer :deep(._fc-l-menu-item.active),
 .visual-designer :deep(._fc-tree-node.active),
 .visual-designer :deep(._fc-tree-node.active .icon-more),
@@ -800,11 +896,11 @@ onMounted(fetchDetail);
   color: var(--designer-accent);
 }
 
-.visual-designer :deep(._fc-l-item:hover) {
+.visual-designer :deep(._fc-l ._fc-l-item:hover) {
   background: rgba(22, 119, 255, 0.12);
 }
 
-:global(.dark) .visual-designer :deep(._fc-l-item:hover) {
+:global(.dark) .visual-designer :deep(._fc-l ._fc-l-item:hover) {
   color: #eef6ff;
   background: rgba(76, 157, 255, 0.16);
   border-color: rgba(76, 157, 255, 0.38);

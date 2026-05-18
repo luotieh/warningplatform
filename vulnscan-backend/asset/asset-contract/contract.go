@@ -65,12 +65,17 @@ type BatchUpdateReq struct {
 	Updates map[string]any `json:"updates" binding:"required,min=1"`
 }
 
+type BatchDeleteReq struct {
+	IDs []string `json:"ids" binding:"required,min=1"`
+}
+
 type ServiceAsset interface {
 	List(query AssetQuery, scopes ...func(*gorm.DB) *gorm.DB) ([]model.Asset, int64, error)
 	GetByID(id string) (*model.Asset, error)
 	Create(item *model.Asset) error
 	Update(id string, updates map[string]any) error
 	Delete(id string) error
+	BatchDelete(ids []string) (int64, error)
 	BatchImport(items []*model.Asset) (int, error)
 	BatchUpdate(ids []string, updates map[string]any) (int64, error)
 	ListByIDs(ids []string) ([]model.Asset, error)

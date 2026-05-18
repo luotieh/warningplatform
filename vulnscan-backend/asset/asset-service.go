@@ -183,6 +183,14 @@ func (s *serviceAsset) Delete(id string) error {
 	return s.session().Where("id = ?", id).Delete(&model.Asset{}).Error
 }
 
+func (s *serviceAsset) BatchDelete(ids []string) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	result := s.session().Where("id IN ?", ids).Delete(&model.Asset{})
+	return result.RowsAffected, result.Error
+}
+
 func (s *serviceAsset) BatchImport(items []*model.Asset) (int, error) {
 	result := s.session().CreateInBatches(items, 100)
 	if result.Error == nil && result.RowsAffected > 0 {

@@ -10,5 +10,5 @@ func GetOrganize(c *gin.Context) string {
 	if user.OrganizeID != "" {
 		return user.OrganizeID
 	}
-	return "yt-networks-security"
+	return DefaultOrganizeID()
 }

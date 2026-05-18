@@ -40,7 +40,9 @@ const templates = ref<DynamicFormTemplate[]>([]);
 
 const businessOptions = [
   { label: '资产', value: 'asset' },
-  { label: '通报', value: 'incident' },
+  { label: '通报 / 事件', value: 'incident' },
+  { label: '通报（历史）', value: 'circular' },
+  { label: '通用', value: 'general' },
 ];
 
 const searchForm = reactive({

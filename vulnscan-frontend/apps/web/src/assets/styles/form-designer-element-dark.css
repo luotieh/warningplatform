@@ -1,0 +1,29 @@
+/*
+ * Element Plus 深色变量：仅在表单设计页激活时挂到 html，避免污染全局壳层。
+ * 由 designer.vue 在挂载/卸载时切换 html.form-designer-active。
+ */
+html.dark.form-designer-active {
+  color-scheme: dark;
+
+  --el-bg-color: #141414;
+  --el-bg-color-page: #0a0a0a;
+  --el-bg-color-overlay: #1d1e1f;
+  --el-text-color-primary: #e5eaf3;
+  --el-text-color-regular: #cfd3dc;
+  --el-text-color-secondary: #a3a6ad;
+  --el-text-color-placeholder: #8d9095;
+  --el-text-color-disabled: #6c6e72;
+  --el-border-color: #4c4d4f;
+  --el-border-color-light: #414243;
+  --el-border-color-lighter: #363637;
+  --el-border-color-extra-light: #2b2b2c;
+  --el-fill-color: #303030;
+  --el-fill-color-light: #262727;
+  --el-fill-color-lighter: #1d1d1d;
+  --el-fill-color-blank: #141414;
+  --el-fill-color-dark: #39393a;
+  --el-mask-color: rgba(0, 0, 0, 0.5);
+  --el-disabled-bg-color: #262727;
+  --el-disabled-text-color: #6c6e72;
+  --el-disabled-border-color: #414243;
+}

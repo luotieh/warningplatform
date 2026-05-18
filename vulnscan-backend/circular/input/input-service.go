@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 	"vulnscan-backend/circular/paging"
-	"vulnscan-backend/circular/scope"
+	circularScope "vulnscan-backend/circular/scope"
 	"vulnscan-backend/model"
 
 	inputContract "vulnscan-backend/circular/input/input-contract"
@@ -33,7 +33,7 @@ func (s *serviceInput) session() *gorm.DB {
 	return sess
 }
 
-func (s *serviceInput) Add(ctx context.Context, req inputContract.InputAddReq, createdBy string) (string, error) {
+func (s *serviceInput) Add(ctx context.Context, req inputContract.InputAddReq, actor circularScope.Actor) (string, error) {
 	if req.Title == "" {
 		return "", fmt.Errorf("通报标题不能为空")
 	}
@@ -52,7 +52,7 @@ func (s *serviceInput) Add(ctx context.Context, req inputContract.InputAddReq, c
 		CircularTemplate:   req.CircularTemplate,
 	}
 	circular.Id = id
-	circular.CreatedBy = createdBy
+	circular.CreatedBy = actor.ID
 	circular.CreatedAt = now
 	circular.UpdatedAt = now
 
@@ -60,7 +60,7 @@ func (s *serviceInput) Add(ctx context.Context, req inputContract.InputAddReq, c
 		if err := session.Create(&circular).Error; err != nil {
 			return err
 		}
-		opLog := model.BuildCircularOperationLog(id, model.CircularOpInput, createdBy, "录入成功", "", map[string]interface{}{
+		opLog := model.BuildCircularOperationLog(id, model.CircularOpInput, actor.ID, actor.Name, "录入成功", "", map[string]interface{}{
 			"title":  req.Title,
 			"source": string(model.CircularSourceManualInput),
 		})
@@ -74,7 +74,7 @@ func (s *serviceInput) Add(ctx context.Context, req inputContract.InputAddReq, c
 
 func (s *serviceInput) List(c *gin.Context, req inputContract.ListQuery) (int64, []inputContract.ListResp, error) {
 	var items []inputContract.ListResp
-	org := scope.GetOrganize(c)
+	org := circularScope.GetOrganize(c)
 
 	sess := s.session()
 	tx := sess.WithContext(c).Model(&model.Circular{}).Where("status != ? AND organize = ?", model.CircularCompleted, org)
@@ -163,7 +163,7 @@ func (s *serviceInput) Delete(ctx context.Context, id string) error {
 	})
 }
 
-func (s *serviceInput) Edit(ctx context.Context, id string, req inputContract.InputEditReq, updatedBy string) error {
+func (s *serviceInput) Edit(ctx context.Context, id string, req inputContract.InputEditReq, actor circularScope.Actor) error {
 	if id == "" {
 		return fmt.Errorf("id不能为空")
 	}
@@ -190,13 +190,13 @@ func (s *serviceInput) Edit(ctx context.Context, id string, req inputContract.In
 	}
 
 	if len(updates) > 0 {
-		updates["updated_by"] = updatedBy
+		updates["updated_by"] = actor.ID
 		return sess.WithContext(ctx).Model(&model.Circular{}).Where("id = ?", id).Updates(updates).Error
 	}
 	return nil
 }
 
-func (s *serviceInput) Submit(ctx context.Context, id string, updatedBy string) error {
+func (s *serviceInput) Submit(ctx context.Context, id string, actor circularScope.Actor) error {
 	if id == "" {
 		return fmt.Errorf("id不能为空")
 	}
@@ -214,19 +214,19 @@ func (s *serviceInput) Submit(ctx context.Context, id string, updatedBy string) 
 	return sess.WithContext(ctx).Transaction(func(session *gorm.DB) error {
 		if err := session.Model(&model.Circular{}).Where("id = ?", id).Updates(map[string]interface{}{
 			"status":     model.CircularToBeVerified,
-			"updated_by": updatedBy,
+			"updated_by": actor.ID,
 		}).Error; err != nil {
 			return err
 		}
 
-		opLog := model.BuildCircularOperationLog(circular.Code, model.CircularOpSubmit, updatedBy, "提交核验", "", map[string]interface{}{
+		opLog := model.BuildCircularOperationLog(circular.Code, model.CircularOpSubmit, actor.ID, actor.Name, "提交核验", "", map[string]interface{}{
 			"title": circular.Title,
 		})
 		return session.Create(&opLog).Error
 	})
 }
 
-func (s *serviceInput) ThirdPartyImport(ctx context.Context, req inputContract.InputAddReq, createdBy string) error {
+func (s *serviceInput) ThirdPartyImport(ctx context.Context, req inputContract.InputAddReq, actor circularScope.Actor, ownerOrganize string) error {
 	if req.Title == "" {
 		return fmt.Errorf("通报标题不能为空")
 	}
@@ -238,13 +238,13 @@ func (s *serviceInput) ThirdPartyImport(ctx context.Context, req inputContract.I
 		Code:             id,
 		Title:            req.Title,
 		Source:           model.CircularSourceThirdPartyImport,
-		Organize:         "yt-networks-security",
+		Organize:         circularScope.ResolveOrganize(req.Organize, ownerOrganize),
 		CircularData:     req.CircularData,
 		Status:           model.CircularToBeVerified,
 		CircularTemplate: req.CircularTemplate,
 	}
 	circular.Id = id
-	circular.CreatedBy = createdBy
+	circular.CreatedBy = actor.ID
 	circular.CreatedAt = now
 	circular.UpdatedAt = now
 
@@ -252,7 +252,7 @@ func (s *serviceInput) ThirdPartyImport(ctx context.Context, req inputContract.I
 		if err := session.Create(&circular).Error; err != nil {
 			return err
 		}
-		opLog := model.BuildCircularOperationLog(id, model.CircularOpThirdPartyImport, createdBy, "第三方导入成功", "", map[string]interface{}{
+		opLog := model.BuildCircularOperationLog(id, model.CircularOpThirdPartyImport, actor.ID, actor.Name, "第三方导入成功", "", map[string]interface{}{
 			"title":  req.Title,
 			"source": string(model.CircularSourceThirdPartyImport),
 		})
@@ -325,7 +325,7 @@ func (s *serviceInput) Export(ctx context.Context, codes []string) error {
 	return f.SaveAs(tempFile)
 }
 
-func (s *serviceInput) Import(ctx context.Context, file *multipart.FileHeader, createdBy string) (int, error) {
+func (s *serviceInput) Import(ctx context.Context, file *multipart.FileHeader, actor circularScope.Actor) (int, error) {
 	open, err := file.Open()
 	if err != nil {
 		return 0, err
@@ -374,7 +374,7 @@ func (s *serviceInput) Import(ctx context.Context, file *multipart.FileHeader, c
 			Status:           model.CircularToBeSubmit,
 		}
 		item.Id = noticeCode
-		item.CreatedBy = createdBy
+		item.CreatedBy = actor.ID
 		item.CreatedAt = now
 		item.UpdatedAt = now
 
@@ -382,7 +382,7 @@ func (s *serviceInput) Import(ctx context.Context, file *multipart.FileHeader, c
 			if err := session.Create(&item).Error; err != nil {
 				return err
 			}
-			opLog := model.BuildCircularOperationLog(noticeCode, model.CircularOpImport, createdBy, "导入成功", "", map[string]interface{}{
+			opLog := model.BuildCircularOperationLog(noticeCode, model.CircularOpImport, actor.ID, actor.Name, "导入成功", "", map[string]interface{}{
 				"title":  "默认模板文件导入",
 				"source": string(model.CircularSourceTemplateImport),
 			})

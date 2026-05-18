@@ -16,7 +16,7 @@ import FcDesigner from '@form-create/designer';
 import '@form-create/designer/src/style/index.css';
 import ElementPlus from 'element-plus';
 import 'element-plus/dist/index.css';
-import 'element-plus/theme-chalk/dark/css-vars.css';
+import '#/assets/styles/form-designer-element-dark.css';
 import '#/assets/styles/app-theme.css';
 /* 最后加载壳层（参考 iam-frontend：iam-global 紧跟 naive；此处压过 Element / form-create） */
 import './styles/app-shell.css';

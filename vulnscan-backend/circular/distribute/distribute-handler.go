@@ -3,9 +3,9 @@ package distribute
 import (
 	distributeContract "vulnscan-backend/circular/distribute/distribute-contract"
 	inputContract "vulnscan-backend/circular/input/input-contract"
+	"vulnscan-backend/circular/scope"
 
 	"code.yt-security.com/public/core/v2/web"
-	iamsdk "code.yt-security.com/public/sdk"
 	"github.com/gin-gonic/gin"
 )
 
@@ -35,8 +35,7 @@ func (h *HandlerDistribute) Distribute(c *gin.Context) {
 	if !ok {
 		return
 	}
-	user, _ := iamsdk.GetCurrentUser(c)
-	if err := h.svc.Distribute(c, req, user.UserID); err != nil {
+	if err := h.svc.Distribute(c, req, scope.ActorFromContext(c)); err != nil {
 		web.Fail(c).Err(err).Send()
 		return
 	}

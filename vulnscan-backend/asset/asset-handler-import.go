@@ -200,10 +200,7 @@ func (h *HandlerAsset) ImportAssets(c *gin.Context) {
 			item.Name = item.Address
 		}
 
-		item.AssetFamily = resolver.resolveDictValue("asset_family", getCell(row, headerMap, "asset_family"))
-		if item.AssetFamily == "" {
-			item.AssetFamily = "ip"
-		}
+		rawFamily := getCell(row, headerMap, "asset_family")
 		item.DataNumber = getCell(row, headerMap, "data_number")
 		item.Domain = getCell(row, headerMap, "domain")
 		item.IPv4 = getCell(row, headerMap, "ipv4")
@@ -264,6 +261,13 @@ func (h *HandlerAsset) ImportAssets(c *gin.Context) {
 			return
 		}
 		normalizeAssetAddressFields(item)
+		item.AssetFamily = resolver.resolveDictValue("asset_family", rawFamily)
+		if canonical := canonicalAssetFamily(item.AssetFamily); canonical != "" {
+			item.AssetFamily = canonical
+		} else if canonical := canonicalAssetFamily(rawFamily); canonical != "" {
+			item.AssetFamily = canonical
+		}
+		normalizeAssetFamily(item)
 
 		items = append(items, item)
 	}
@@ -365,50 +369,6 @@ func looksLikeGroupedAssetHeader(groupRow, fieldRow []string) bool {
 	return groupCount > 0 && (hasName || hasAddress)
 }
 
-func buildGroupedHeaderMap(groupRow, fieldRow []string) map[string]int {
-	m := buildHeaderMap(fieldRow)
-	groupAliases := map[string]map[string]string{
-		"系统建设单位基本情况": {
-			"建设单位名称":  "construction_org",
-			"单位名称":    "construction_org",
-			"名称":      "construction_org",
-			"所在地":     "construction_org_location",
-			"详细地址":    "construction_org_address",
-			"负责人及职务":  "construction_org_charge_person",
-			"负责人":     "construction_org_charge_person",
-			"联系电话":    "construction_org_charge_phone",
-			"公网安备备案号": "construction_org_security_filing",
-		},
-		"系统运维单位基本情况": {
-			"运维单位名称":  "operation_org",
-			"单位名称":    "operation_org",
-			"名称":      "operation_org",
-			"所在地":     "operation_org_location",
-			"详细地址":    "operation_org_address",
-			"负责人及职务":  "operation_org_charge_person",
-			"负责人":     "operation_org_charge_person",
-			"联系电话":    "operation_org_charge_phone",
-			"公网安备备案号": "operation_org_security_filing",
-		},
-	}
-
-	currentGroup := ""
-	for i, title := range fieldRow {
-		if i < len(groupRow) {
-			if group := normalizeHeader(groupRow[i]); group != "" {
-				currentGroup = group
-			}
-		}
-		fieldTitle := normalizeHeader(title)
-		if aliases := groupAliases[currentGroup]; aliases != nil {
-			if field, ok := aliases[fieldTitle]; ok {
-				m[field] = i
-			}
-		}
-	}
-	return m
-}
-
 func writeGroupedAssetHeader(f *excelize.File, sheet string, columns []assetImportColumn) {
 	groupStyle, _ := f.NewStyle(&excelize.Style{
 		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center"},
@@ -450,75 +410,6 @@ func writeGroupedAssetHeader(f *excelize.File, sheet string, columns []assetImpo
 func lastColumnName(count int) string {
 	name, _ := excelize.ColumnNumberToName(count)
 	return name
-}
-
-func buildHeaderMap(headers []string) map[string]int {
-	m := make(map[string]int, len(headers))
-	nameAliases := map[string]string{
-		"资产名称(必填)": "name", "资产名称": "name", "名称": "name", "name": "name", "系统名称": "name", "system_name": "name",
-		"地址(必填)": "address", "地址": "address", "address": "address", "ip": "address",
-		"资产类型": "type", "type": "type",
-		"系统类型": "system_type", "system_type": "system_type",
-		"数据编号": "data_number", "data_number": "data_number", "编号": "data_number",
-		"域名": "domain", "domain": "domain",
-		"ipv4": "ipv4", "ipv6": "ipv6",
-		"url": "url", "网址": "url",
-		"端口": "port", "port": "port",
-		"协议": "protocol", "protocol": "protocol",
-		"服务": "service", "service": "service",
-		"版本": "version", "version": "version",
-		"操作系统": "os", "os": "os",
-		"是否联网": "is_online", "is_online": "is_online",
-		"关键信息基础设施": "is_key", "是否关键资产": "is_key", "是否是关键信息基础设施": "is_key", "is_key": "is_key",
-		"保护等级": "security_protection_level", "安全保护等级": "security_protection_level", "security_protection_level": "security_protection_level", "等保等级": "security_protection_level",
-		"等保证号": "filing_cert_number", "等保备案证明编号": "filing_cert_number",
-		"备案证明编号": "filing_cert_number", "filing_cert_number": "filing_cert_number",
-		"单位省市区": "unit_location_code", "unit_location_code": "unit_location_code",
-		"icp备案号": "icp_filing_number", "icp_filing_number": "icp_filing_number", "icp备案": "icp_filing_number",
-		"公网安备案号": "public_security_filing", "public_security_filing": "public_security_filing", "公网安备": "public_security_filing",
-		"资产所属单位id": "organize_id", "所属单位id": "organize_id", "organize_id": "organize_id",
-		"单位名称": "organize_name", "organize_name": "organize_name",
-		"建设单位": "construction_org", "建设单位名称": "construction_org", "建设单位id": "construction_org", "construction_org_id": "construction_org", "construction_org": "construction_org",
-		"建设单位所在地": "construction_org_location", "construction_org_location": "construction_org_location",
-		"建设单位详细地址": "construction_org_address", "construction_org_address": "construction_org_address",
-		"建设单位负责人及职务": "construction_org_charge_person", "建设单位负责人": "construction_org_charge_person", "construction_org_charge_person": "construction_org_charge_person",
-		"建设单位联系电话": "construction_org_charge_phone", "construction_org_charge_phone": "construction_org_charge_phone",
-		"建设单位公网安备备案号": "construction_org_security_filing", "construction_org_security_filing": "construction_org_security_filing",
-		"运维单位": "operation_org", "运维单位名称": "operation_org", "运维单位id": "operation_org", "operation_org_id": "operation_org", "operation_org": "operation_org",
-		"运维单位所在地": "operation_org_location", "operation_org_location": "operation_org_location",
-		"运维单位详细地址": "operation_org_address", "operation_org_address": "operation_org_address",
-		"运维单位负责人及职务": "operation_org_charge_person", "运维单位负责人": "operation_org_charge_person", "operation_org_charge_person": "operation_org_charge_person",
-		"运维单位联系电话": "operation_org_charge_phone", "operation_org_charge_phone": "operation_org_charge_phone",
-		"运维单位公网安备备案号": "operation_org_security_filing", "operation_org_security_filing": "operation_org_security_filing",
-		"数据来源": "data_source", "data_source": "data_source",
-		"责任人": "responsible_user_name", "responsible_user_name": "responsible_user_name",
-		"标签": "tags", "tags": "tags",
-		"单位类型": "unit_type", "unit_type": "unit_type",
-		"行业分类": "industry_category", "industry_category": "industry_category",
-		"通报机制成员单位": "is_notification_member", "is_notification_member": "is_notification_member",
-		"统一社会信用代码": "unified_social_credit_code", "unified_social_credit_code": "unified_social_credit_code",
-		"上级单位名称": "parent_organize_name", "上级单位": "parent_organize_name", "parent_organize_name": "parent_organize_name",
-		"单位地址": "unit_address", "unit_address": "unit_address",
-		"单位详细地址": "unit_address", "unit_detail_address": "unit_address",
-		"分管领导姓名": "leader_name", "网络安全分管领导": "leader_name", "leader_name": "leader_name",
-		"分管领导职务/职称": "leader_title", "leader_title": "leader_title",
-		"责任部门名称": "responsible_department_name", "网络安全责任部门": "responsible_department_name", "responsible_department_name": "responsible_department_name",
-		"责任部门负责人姓名": "department_leader_name", "department_leader_name": "department_leader_name",
-		"负责人职务/职称": "department_leader_title", "department_leader_title": "department_leader_title",
-		"负责人电话": "department_leader_phone", "department_leader_phone": "department_leader_phone",
-		"联系人姓名": "contact_name", "contact_name": "contact_name",
-		"联系人职务/职称": "contact_title", "contact_title": "contact_title",
-		"联系人电话": "contact_phone", "contact_phone": "contact_phone",
-		"备注": "remark", "remark": "remark",
-	}
-
-	for i, h := range headers {
-		key := normalizeHeader(h)
-		if field, ok := nameAliases[key]; ok {
-			m[field] = i
-		}
-	}
-	return m
 }
 
 func getCell(row []string, headerMap map[string]int, field string) string {

@@ -3,18 +3,24 @@ import { computed, ref, watch } from 'vue';
 
 import { NEmpty } from 'naive-ui';
 
-import { normalizeFormOptions, normalizeRuntimeFormRule } from '#/api/formdesign';
+import {
+  normalizeFormOptions,
+  normalizeRuntimeFormRule,
+  parseFormSchema,
+} from '#/api/formdesign';
 
 defineOptions({ name: 'DynamicFormRenderer' });
 
 const props = withDefaults(defineProps<{
   disabled?: boolean;
+  layout?: 'horizontal' | 'vertical';
   modelValue?: Record<string, any>;
   options?: Record<string, any>;
   readonly?: boolean;
-  schema?: Record<string, any> | any[];
+  schema?: Record<string, any> | any[] | string;
 }>(), {
   disabled: false,
+  layout: 'horizontal',
   modelValue: () => ({}),
   options: () => ({}),
   readonly: false,
@@ -40,11 +46,13 @@ function isSameRecord(
   return JSON.stringify(left ?? {}) === JSON.stringify(right ?? {});
 }
 
-const rule = computed(() => normalizeRuntimeFormRule(props.schema as Record<string, any>));
+const parsedSchema = computed(() => parseFormSchema(props.schema));
+const rule = computed(() => normalizeRuntimeFormRule(parsedSchema.value));
 const option = computed(() => ({
-  ...normalizeFormOptions(props.schema as Record<string, any>, props.options),
+  ...normalizeFormOptions(parsedSchema.value, props.options, props.layout),
   disabled: props.disabled || props.readonly,
 }));
+const formKey = computed(() => JSON.stringify({ rule: rule.value, option: option.value }));
 
 watch(
   () => props.modelValue,
@@ -86,9 +94,10 @@ defineExpose({ getFormData, validate });
 </script>
 
 <template>
-  <div class="dynamic-form-renderer">
+  <div class="dynamic-form-renderer" :class="`dynamic-form-renderer--${layout}`">
     <form-create
       v-if="rule.length"
+      :key="formKey"
       v-model:api="api"
       v-model="formData"
       :option="option"
@@ -100,10 +109,53 @@ defineExpose({ getFormData, validate });
 
 <style scoped>
 .dynamic-form-renderer {
+  width: 100%;
   min-width: 0;
 }
 
 .dynamic-form-renderer :deep(.fc-form) {
+  width: 100%;
   color: var(--n-text-color);
+}
+
+.dynamic-form-renderer :deep(.n-form) {
+  width: 100%;
+}
+
+.dynamic-form-renderer :deep(.n-form-item) {
+  width: 100%;
+  margin-bottom: 16px;
+}
+
+.dynamic-form-renderer--vertical :deep(.n-form-item) {
+  margin-bottom: 14px;
+}
+
+.dynamic-form-renderer :deep(.n-form-item-label) {
+  font-weight: 500;
+  padding-bottom: 4px;
+}
+
+.dynamic-form-renderer :deep(.n-form-item-blank) {
+  width: 100%;
+  max-width: 100%;
+}
+
+.dynamic-form-renderer :deep(.n-input),
+.dynamic-form-renderer :deep(.n-input-number),
+.dynamic-form-renderer :deep(.n-select),
+.dynamic-form-renderer :deep(.n-date-picker),
+.dynamic-form-renderer :deep(.n-cascader) {
+  width: 100%;
+}
+
+.dynamic-form-renderer :deep(.n-row) {
+  width: 100%;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+.dynamic-form-renderer :deep(.n-col) {
+  max-width: 100%;
 }
 </style>

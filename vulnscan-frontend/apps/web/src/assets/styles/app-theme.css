@@ -50,29 +50,28 @@
   color: #8996a8 !important;
 }
 
-.dark .form-designer-page .visual-designer ._fc-l-item,
-.dark .form-designer-page .visual-designer ._fc-m .form-create ._fc-l-item {
+.dark .form-designer-page .visual-designer ._fc-l ._fc-l-item {
   color: #c5cfdd !important;
   background: #202733 !important;
   border: 1px solid rgba(148, 163, 184, 0.16) !important;
   border-radius: 6px !important;
 }
 
-.dark .form-designer-page .visual-designer ._fc-l-item i,
-.dark .form-designer-page .visual-designer ._fc-l-item ._fc-l-icon,
-.dark .form-designer-page .visual-designer ._fc-l-item ._fc-l-name {
+.dark .form-designer-page .visual-designer ._fc-l ._fc-l-item i,
+.dark .form-designer-page .visual-designer ._fc-l ._fc-l-item ._fc-l-icon,
+.dark .form-designer-page .visual-designer ._fc-l ._fc-l-item ._fc-l-name {
   color: #c5cfdd !important;
 }
 
-.dark .form-designer-page .visual-designer ._fc-l-item:hover {
+.dark .form-designer-page .visual-designer ._fc-l ._fc-l-item:hover {
   color: #eef6ff !important;
   background: rgba(76, 157, 255, 0.16) !important;
   border-color: rgba(76, 157, 255, 0.38) !important;
 }
 
-.dark .form-designer-page .visual-designer ._fc-l-item:hover i,
-.dark .form-designer-page .visual-designer ._fc-l-item:hover ._fc-l-icon,
-.dark .form-designer-page .visual-designer ._fc-l-item:hover ._fc-l-name,
+.dark .form-designer-page .visual-designer ._fc-l ._fc-l-item:hover i,
+.dark .form-designer-page .visual-designer ._fc-l ._fc-l-item:hover ._fc-l-icon,
+.dark .form-designer-page .visual-designer ._fc-l ._fc-l-item:hover ._fc-l-name,
 .dark .form-designer-page .visual-designer ._fc-l-menu-item.active,
 .dark .form-designer-page .visual-designer ._fc-tree-node.active,
 .dark .form-designer-page .visual-designer ._fc-tree-node.active .icon-more,
@@ -151,4 +150,65 @@
   color: #c5cfdd !important;
   background: #1a2029 !important;
   border-color: rgba(148, 163, 184, 0.16) !important;
+}
+
+/* 中间画布：表单项全宽、文字可读（勿套用左侧 _fc-l-item 样式） */
+.form-designer-page .visual-designer ._fc-m .el-form-item,
+.form-designer-page .visual-designer ._fc-m .el-form-item__content {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.form-designer-page .visual-designer ._fc-m .el-col {
+  min-width: 0;
+}
+
+.form-designer-page .visual-designer ._fc-m .el-row {
+  width: 100%;
+}
+
+.form-designer-page .visual-designer ._fc-m .el-input,
+.form-designer-page .visual-designer ._fc-m .el-select,
+.form-designer-page .visual-designer ._fc-m .el-input-number,
+.form-designer-page .visual-designer ._fc-m .el-date-editor {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+.form-designer-page .visual-designer ._fc-m .el-input__wrapper {
+  box-sizing: border-box;
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+.form-designer-page .visual-designer ._fc-m ._fd-drag-tool,
+.form-designer-page .visual-designer ._fc-m ._fd-drag-box {
+  width: 100%;
+  max-width: 100%;
+  min-width: 160px;
+}
+
+.dark .form-designer-page .visual-designer ._fc-m .el-form-item__label {
+  color: #d7dfeb !important;
+}
+
+.dark .form-designer-page .visual-designer ._fc-m .el-input__inner,
+.dark .form-designer-page .visual-designer ._fc-m .el-textarea__inner,
+.dark .form-designer-page .visual-designer ._fc-m .el-input__wrapper {
+  color: #e8edf5 !important;
+}
+
+.dark .form-designer-page .visual-designer ._fc-m .el-input__inner::placeholder,
+.dark .form-designer-page .visual-designer ._fc-m .el-textarea__inner::placeholder {
+  color: #8b97a8 !important;
+}
+
+/* 设计页内 Naive 组件不受 Element 变量影响 */
+.form-designer-page .designer-side :deep(.n-input),
+.form-designer-page .designer-side :deep(.n-base-selection),
+.form-designer-page .designer-side :deep(.n-button),
+.form-designer-page .designer-toolbar :deep(.n-button) {
+  --n-bezier: cubic-bezier(0.4, 0, 0.2, 1);
 }

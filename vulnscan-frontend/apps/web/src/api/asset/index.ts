@@ -156,6 +156,10 @@ export function batchUpdateAssets(ids: string[], updates: Record<string, any>) {
   return requestClient.post('/asset/batch-update', { ids, updates });
 }
 
+export function batchDeleteAssets(ids: string[]) {
+  return requestClient.post<{ affected: number }>('/asset/batch-delete', { ids });
+}
+
 export function importAssets(file: File) {
   const formData = new FormData();
   formData.append('file', file);

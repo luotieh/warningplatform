@@ -51,7 +51,7 @@ func (s *serviceDistribute) List(c *gin.Context, req inputContract.ListQuery) (i
 	return count, items, nil
 }
 
-func (s *serviceDistribute) Distribute(c *gin.Context, req distributeContract.DistributeReq, updatedBy string) error {
+func (s *serviceDistribute) Distribute(c *gin.Context, req distributeContract.DistributeReq, actor scope.Actor) error {
 	sess := s.session()
 
 	var circular model.Circular
@@ -81,7 +81,7 @@ func (s *serviceDistribute) Distribute(c *gin.Context, req distributeContract.Di
 			"processing_deadline": req.ProcessingDeadline,
 			"status":              model.CircularInProgress,
 			"updated_at":          now,
-			"updated_by":          updatedBy,
+			"updated_by":          actor.ID,
 		}
 		if req.DisposalTemplate != "" {
 			updateData["disposal_template"] = req.DisposalTemplate
@@ -104,7 +104,7 @@ func (s *serviceDistribute) Distribute(c *gin.Context, req distributeContract.Di
 		}
 		distribution.Id = distributionId
 		distribution.CreatedAt = now
-		distribution.CreatedBy = updatedBy
+		distribution.CreatedBy = actor.ID
 		if err := session.Create(&distribution).Error; err != nil {
 			return err
 		}
@@ -128,7 +128,7 @@ func (s *serviceDistribute) Distribute(c *gin.Context, req distributeContract.Di
 			return err
 		}
 
-		opLog := model.BuildCircularOperationLog(circular.Code, model.CircularOpDistribute, updatedBy, "派发成功", req.TargetOrganize, map[string]interface{}{
+		opLog := model.BuildCircularOperationLog(circular.Code, model.CircularOpDistribute, actor.ID, actor.Name, "派发成功", req.TargetOrganize, map[string]interface{}{
 			"target_organize":     req.TargetOrganize,
 			"processing_deadline": req.ProcessingDeadline,
 			"requirements":        req.Requirements,

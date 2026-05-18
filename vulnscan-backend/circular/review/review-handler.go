@@ -3,9 +3,9 @@ package review
 import (
 	inputContract "vulnscan-backend/circular/input/input-contract"
 	reviewContract "vulnscan-backend/circular/review/review-contract"
+	"vulnscan-backend/circular/scope"
 
 	"code.yt-security.com/public/core/v2/web"
-	iamsdk "code.yt-security.com/public/sdk"
 	"github.com/gin-gonic/gin"
 )
 
@@ -39,8 +39,7 @@ func (h *HandlerReview) Review(c *gin.Context) {
 	if !ok {
 		return
 	}
-	user, _ := iamsdk.GetCurrentUser(c)
-	if err := h.svc.Review(c, uri.Id, user.UserID, req); err != nil {
+	if err := h.svc.Review(c, uri.Id, scope.ActorFromContext(c), req); err != nil {
 		web.Fail(c).Err(err).Send()
 		return
 	}

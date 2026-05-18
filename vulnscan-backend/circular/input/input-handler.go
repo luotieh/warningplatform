@@ -2,6 +2,7 @@ package input
 
 import (
 	inputContract "vulnscan-backend/circular/input/input-contract"
+	"vulnscan-backend/circular/scope"
 
 	"code.yt-security.com/public/core/v2/web"
 	iamsdk "code.yt-security.com/public/sdk"
@@ -21,8 +22,7 @@ func (h *HandlerInput) Add(c *gin.Context) {
 	if !ok {
 		return
 	}
-	user, _ := iamsdk.GetCurrentUser(c)
-	id, err := h.svc.Add(c.Request.Context(), req, user.UserID)
+	id, err := h.svc.Add(c.Request.Context(), req, scope.ActorFromContext(c))
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
@@ -65,8 +65,7 @@ func (h *HandlerInput) Edit(c *gin.Context) {
 	if !ok {
 		return
 	}
-	user, _ := iamsdk.GetCurrentUser(c)
-	if err := h.svc.Edit(c.Request.Context(), uri.Id, req, user.UserID); err != nil {
+	if err := h.svc.Edit(c.Request.Context(), uri.Id, req, scope.ActorFromContext(c)); err != nil {
 		web.Fail(c).Err(err).Send()
 		return
 	}
@@ -90,8 +89,7 @@ func (h *HandlerInput) Submit(c *gin.Context) {
 	if !ok {
 		return
 	}
-	user, _ := iamsdk.GetCurrentUser(c)
-	if err := h.svc.Submit(c.Request.Context(), uri.Id, user.UserID); err != nil {
+	if err := h.svc.Submit(c.Request.Context(), uri.Id, scope.ActorFromContext(c)); err != nil {
 		web.Fail(c).Err(err).Send()
 		return
 	}
@@ -118,8 +116,7 @@ func (h *HandlerInput) Import(c *gin.Context) {
 		web.Fail(c).Msg("请上传文件").Send()
 		return
 	}
-	user, _ := iamsdk.GetCurrentUser(c)
-	count, err := h.svc.Import(c.Request.Context(), file, user.UserID)
+	count, err := h.svc.Import(c.Request.Context(), file, scope.ActorFromContext(c))
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
@@ -137,7 +134,7 @@ func (h *HandlerInput) ThirdPartyImport(c *gin.Context) {
 		return
 	}
 	user, _ := iamsdk.GetCurrentUser(c)
-	if err := h.svc.ThirdPartyImport(c.Request.Context(), req, user.UserID); err != nil {
+	if err := h.svc.ThirdPartyImport(c.Request.Context(), req, scope.ActorFromContext(c), user.OrganizeID); err != nil {
 		web.Fail(c).Err(err).Send()
 		return
 	}

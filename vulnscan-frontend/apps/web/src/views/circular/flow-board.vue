@@ -10,8 +10,11 @@ import {
   getVerifyList, verifyCircular,
   getDistributeList, distributeCircular,
   getReviewList, reviewCircular,
+  getInputDetail,
   type CircularItem, CircularStatusLabels, CircularStatusTypes,
 } from '#/api/circular';
+import { useCircularOrganizeMaps } from './composables/use-circular-organize';
+import { extractCircularUnitHint, formatCircularTime } from './utils';
 
 const props = defineProps<{
   mode: 'verify' | 'distribute' | 'review';
@@ -45,6 +48,9 @@ const verifyResult = ref('pass');
 const distForm = ref({ target_organize: null as string | null, requirements: '' });
 const processingDeadlineTs = ref<number | null>(null);
 const reviewForm = ref({ review: 'approve' as string, instructions: '' });
+const currentRow = ref<CircularItem | null>(null);
+const distributeUnitHint = ref('');
+const { ensureLoaded, resolveOrganizeId } = useCircularOrganizeMaps();
 
 const columns = computed(() => [
   { title: '通报编号', key: 'code', width: 160, ellipsis: { tooltip: true } },
@@ -54,12 +60,48 @@ const columns = computed(() => [
     render: (row: CircularItem) => h(NTag, { size: 'small', type: (CircularStatusTypes[row.status] || 'default') as any, bordered: false }, () => CircularStatusLabels[row.status] ?? row.status),
   },
   { title: '所属组织', key: 'organize', width: 140, ellipsis: { tooltip: true } },
-  { title: '创建时间', key: 'created_at', width: 170 },
+  {
+    title: '创建时间',
+    key: 'created_at',
+    width: 172,
+    render: (row: CircularItem) => h('span', { style: 'white-space:nowrap;font-size:13px' }, formatCircularTime(row.created_at)),
+  },
   {
     title: '操作', key: 'actions', width: 100, fixed: 'right' as const,
-    render: (row: CircularItem) => h(NButton, { size: 'tiny', type: 'primary', onClick: () => { currentId.value = row.id; selectedIds.value = [row.id]; showModal.value = true; } }, () => actionLabels[props.mode]),
+    render: (row: CircularItem) => h(NButton, { size: 'tiny', type: 'primary', onClick: () => openActionModal(row) }, () => actionLabels[props.mode]),
   },
 ]);
+
+async function openActionModal(row: CircularItem) {
+  currentId.value = row.id;
+  selectedIds.value = [row.id];
+  currentRow.value = row;
+
+  if (props.mode === 'distribute') {
+    distForm.value = { target_organize: null, requirements: '' };
+    processingDeadlineTs.value = null;
+    await ensureLoaded();
+    let source: Pick<CircularItem, 'circular_data' | 'disposal_organize'> = row;
+    if (!row.circular_data?.length) {
+      try {
+        const detail = await getInputDetail(row.id);
+        source = detail;
+      } catch {
+        /* keep row */
+      }
+    }
+    const unitHint = extractCircularUnitHint(source);
+    distributeUnitHint.value = unitHint;
+    const resolved = resolveOrganizeId(unitHint);
+    if (resolved) {
+      distForm.value.target_organize = resolved;
+    }
+  } else {
+    distributeUnitHint.value = '';
+  }
+
+  showModal.value = true;
+}
 
 function fetchData() {
   loading.value = true;
@@ -144,6 +186,12 @@ onMounted(fetchData);
       <NForm label-placement="left" label-width="88">
         <NFormItem label="目标单位" required>
           <OrganizeTreeSelect v-model="distForm.target_organize" />
+          <div
+            v-if="distributeUnitHint"
+            style="margin-top: 6px; font-size: 12px; color: var(--n-text-color-3)"
+          >
+            已根据表单「隶属单位」预填，可修改
+          </div>
         </NFormItem>
         <NFormItem label="处置期限">
           <NDatePicker
