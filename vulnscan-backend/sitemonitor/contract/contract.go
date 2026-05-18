@@ -211,7 +211,7 @@ type ServiceMonitor interface {
 	UpdateWordLibrary(ctx context.Context, id string, req WordLibraryUpdateReq) error
 	DeleteWordLibrary(ctx context.Context, id string) error
 	GetWordLibrary(ctx context.Context, id string) (*WordLibraryDetail, error)
-	ListWordLibraries(ctx context.Context, req WordLibraryListReq) (int64, []model.MonitorWordLibrary, error)
+	ListWordLibraries(ctx context.Context, req WordLibraryListReq, scopes ...func(*gorm.DB) *gorm.DB) (int64, []model.MonitorWordLibrary, error)
 
 	CreateWordCategory(ctx context.Context, cat *model.MonitorWordCategory) error
 	UpdateWordCategory(ctx context.Context, id string, req WordCategoryUpdateReq) error
@@ -226,7 +226,7 @@ type ServiceMonitor interface {
 	UpdateFileLibrary(ctx context.Context, id string, req FileLibraryUpdateReq) error
 	DeleteFileLibrary(ctx context.Context, id string) error
 	GetFileLibrary(ctx context.Context, id string) (*FileLibraryDetail, error)
-	ListFileLibraries(ctx context.Context, req FileLibraryListReq) (int64, []model.MonitorFileLibrary, error)
+	ListFileLibraries(ctx context.Context, req FileLibraryListReq, scopes ...func(*gorm.DB) *gorm.DB) (int64, []model.MonitorFileLibrary, error)
 
 	BatchCreateFileEntries(ctx context.Context, entries []model.MonitorFileEntry) error
 	DeleteFileEntries(ctx context.Context, ids []int64) error
@@ -241,14 +241,14 @@ type ServiceMonitor interface {
 	UpdateTask(ctx context.Context, id string, req TaskUpdateReq) error
 	DeleteTask(ctx context.Context, id string) error
 	GetTask(ctx context.Context, id string) (*model.MonitorTask, error)
-	ListTasks(ctx context.Context, req TaskListReq) (int64, []model.MonitorTask, error)
+	ListTasks(ctx context.Context, req TaskListReq, scopes ...func(*gorm.DB) *gorm.DB) (int64, []model.MonitorTask, error)
 	RunTask(ctx context.Context, id string, dimensions []string) ([]string, error)
 	BatchToggleEnabled(ctx context.Context, ids []string) error
 	BatchUpdateConfigs(ctx context.Context, req BatchUpdateConfigsReq) error
 	BatchSyncNames(ctx context.Context, ids []string) (int, error)
 	BatchDeleteTasks(ctx context.Context, ids []string) error
 
-	ListExecutions(ctx context.Context, req ExecutionListReq) (int64, []model.MonitorExecution, error)
+	ListExecutions(ctx context.Context, req ExecutionListReq, scopes ...func(*gorm.DB) *gorm.DB) (int64, []model.MonitorExecution, error)
 	GetExecutionDetail(ctx context.Context, id string) (*ExecutionDetail, error)
 	GetEvidenceAsset(ctx context.Context, executionID, assetType string) ([]byte, string, error)
 	DeleteExecution(ctx context.Context, id string) error
@@ -259,7 +259,7 @@ type ServiceMonitor interface {
 	GetTaskExecutionStats(ctx context.Context) (map[string]map[string]*TaskDimStat, error)
 	GetTaskTrend(ctx context.Context, taskID string, hours int) (*TaskTrendResp, error)
 
-	ListAgents(ctx context.Context) ([]model.MonitorAgent, error)
+	ListAgents(ctx context.Context, scopes ...func(*gorm.DB) *gorm.DB) ([]model.MonitorAgent, error)
 	SyncAgentRules(ctx context.Context, agentUUID string) (map[string]any, error)
 	ShutdownAgent(ctx context.Context, agentUUID string) (map[string]any, error)
 

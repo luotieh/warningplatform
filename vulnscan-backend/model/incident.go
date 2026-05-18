@@ -17,6 +17,7 @@ type SecurityIncident struct {
 	Level           int            `gorm:"default:1;comment:事件等级" json:"level"`
 	Source          int            `gorm:"default:1;comment:数据来源" json:"source"`
 	Status          int            `gorm:"default:1;comment:事件状态" json:"status"`
+	OrganizeID      string         `gorm:"type:varchar(64);index;comment:所属组织" json:"organize_id"`
 	ReportTime      time.Time      `gorm:"type:timestamp;comment:上报时间" json:"report_time"`
 	AiPreStatus     int            `gorm:"default:0;comment:AI预审状态" json:"ai_pre_status"`
 	AiOpinion       string         `gorm:"type:text;comment:AI预审意见" json:"ai_opinion"`

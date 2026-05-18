@@ -13,14 +13,16 @@ import (
 type Executor struct {
 	masterURL   string
 	token       string
+	secret      string
 	pageService *monitoragent.PageService
 	analysis    *monitoragent.AnalysisEngine
 }
 
-func NewExecutor(masterURL, token string) *Executor {
+func NewExecutor(masterURL, token, secret string) *Executor {
 	return &Executor{
 		masterURL: masterURL,
 		token:     token,
+		secret:    secret,
 	}
 }
 
@@ -28,7 +30,7 @@ func (e *Executor) Type() string { return "monitor" }
 
 func (e *Executor) Init(ctx context.Context) error {
 	e.pageService = monitoragent.NewPageService()
-	fetcher := &clientRuleFetcher{client: agent.NewClient(e.masterURL, e.token)}
+	fetcher := &clientRuleFetcher{client: agent.NewClient(e.masterURL, e.token, e.secret)}
 	e.analysis = monitoragent.NewAnalysisEngine(fetcher)
 	e.analysis.RefreshRules(ctx)
 	return nil
@@ -51,9 +53,21 @@ func (e *Executor) Execute(ctx context.Context, payload json.RawMessage) *agent.
 
 	slog.Info("monitor exec", "execution_id", msg.ExecutionID, "dimension", msg.Dimension, "url", msg.URL)
 
-	snap, err := e.pageService.FetchPage(ctx, msg.URL)
 	result.FinishedAt = time.Now().UTC().Format(time.RFC3339)
 
+	if msg.Dimension == "sensitive_file" {
+		result.Status = "success"
+		analyzed, aErr := e.analysis.Analyze(ctx, msg.Dimension, "", msg.URL, &msg)
+		if aErr != nil {
+			result.Status = "failed"
+			result.Error = aErr.Error()
+		} else {
+			result.Result = analyzed
+		}
+		return result
+	}
+
+	snap, err := e.pageService.FetchPage(ctx, msg.URL)
 	if err != nil {
 		result.Status = "failed"
 		result.Error = err.Error()

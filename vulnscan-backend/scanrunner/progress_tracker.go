@@ -147,7 +147,7 @@ func (pt *ProgressTracker) Get() *TaskProgress {
 			p.OpenPorts++
 		}
 
-		if isReconFinding(f) {
+		if model.InferFindingCategory(f.ModuleID, f.Type) == model.FindingCategoryRecon {
 			continue
 		}
 		switch f.Severity {

@@ -7,7 +7,6 @@ import (
 	"vulnscan-backend/circular/ledger"
 	"vulnscan-backend/circular/oplog"
 	"vulnscan-backend/circular/review"
-	"vulnscan-backend/circular/template"
 	"vulnscan-backend/circular/transfer"
 	"vulnscan-backend/circular/verify"
 
@@ -15,7 +14,6 @@ import (
 )
 
 var WireSet = wire.NewSet(
-	template.WireSet,
 	input.WireSet,
 	distribute.WireSet,
 	verify.WireSet,

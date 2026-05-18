@@ -6,6 +6,7 @@ import (
 	"vulnscan-backend/model"
 
 	"code.yt-security.com/public/core/v2/web"
+	iamsdk "code.yt-security.com/public/sdk"
 	"github.com/gin-gonic/gin"
 )
 
@@ -132,7 +133,8 @@ func (h *HandlerMonitor) UpdateAlertConfig(c *gin.Context) {
 // ══ Agent ══
 
 func (h *HandlerMonitor) ListAgents(c *gin.Context) {
-	agents, err := h.svc.ListAgents(c.Request.Context())
+	scope := iamsdk.DataFilterScope(c, monitorFieldMapping)
+	agents, err := h.svc.ListAgents(c.Request.Context(), scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return

@@ -50,7 +50,8 @@ export default defineConfig(async () => {
         ],
       },
       server: {
-        host: false,
+        /** 固定 IPv4，避免用 localhost 打开页面时浏览器优先连 ::1 导致 TCP 建连多等 ~200–400ms */
+        host: '127.0.0.1',
         proxy: {
           '/api': {
             changeOrigin: true,

@@ -10,6 +10,8 @@ import (
 	"vulnscan-backend/cluster"
 	"vulnscan-backend/compliance"
 	"vulnscan-backend/dashboard"
+	"vulnscan-backend/exclusion"
+	"vulnscan-backend/fprule"
 	"vulnscan-backend/incident"
 	"vulnscan-backend/notify"
 	"vulnscan-backend/organize"
@@ -46,10 +48,12 @@ func InitializeHandlers() *Handlers {
 		notify.WireSet,
 		compliance.WireSet,
 		report.WireSet,
+		exclusion.WireSet,
+		fprule.WireSet,
 
 		wire.Struct(new(Handlers), "Config", "Web", "DB", "Cache", "Product", "IAM",
 			"Asset", "Task", "Vuln", "Cluster", "Tagging", "Organize", "AssetMgr", "SiteMonitor", "Circular", "Incident",
-			"Dashboard", "Notify", "Compliance", "Report"),
+			"Dashboard", "Notify", "Compliance", "Report", "Exclusion", "FPRule"),
 	)
 	return nil
 }

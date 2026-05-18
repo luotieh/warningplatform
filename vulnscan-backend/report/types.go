@@ -12,27 +12,42 @@ type ReportConfig struct {
 }
 
 type ReportData struct {
-	Title           string             `json:"title"`
-	GeneratedAt     time.Time          `json:"generated_at"`
-	GeneratedBy     string             `json:"generated_by"`
-	Summary         ReportSummary      `json:"summary"`
-	Vulnerabilities []VulnItem         `json:"vulnerabilities"`
-	Assets          []AssetItem        `json:"assets"`
-	Compliance      *ComplianceSection `json:"compliance,omitempty"`
-	Charts          []ChartData        `json:"charts,omitempty"`
+	Title             string             `json:"title"`
+	GeneratedAt       time.Time          `json:"generated_at"`
+	GeneratedBy       string             `json:"generated_by"`
+	Task              *ReportTaskMeta    `json:"task,omitempty"`
+	Summary           ReportSummary      `json:"summary"`
+	Vulnerabilities   []VulnItem         `json:"vulnerabilities"`
+	DiscoveryFindings []DiscoveryItem    `json:"discovery_findings"`
+	DiscoveryGroups   []DiscoveryGroup   `json:"discovery_groups,omitempty"`
+	Assets            []AssetItem        `json:"assets"`
+	Compliance        *ComplianceSection `json:"compliance,omitempty"`
+	Charts            []ChartData        `json:"charts,omitempty"`
+}
+
+type ReportTaskMeta struct {
+	ID         string     `json:"id"`
+	Name       string     `json:"name"`
+	Status     string     `json:"status"`
+	Targets    []string   `json:"targets,omitempty"`
+	StartedAt  *time.Time `json:"started_at,omitempty"`
+	FinishedAt *time.Time `json:"finished_at,omitempty"`
 }
 
 type ReportSummary struct {
-	TotalAssets     int     `json:"total_assets"`
-	TotalVulns      int     `json:"total_vulns"`
-	CriticalCount   int     `json:"critical_count"`
-	HighCount       int     `json:"high_count"`
-	MediumCount     int     `json:"medium_count"`
-	LowCount        int     `json:"low_count"`
-	InfoCount       int     `json:"info_count"`
-	RiskScore       float64 `json:"risk_score"`
-	ComplianceScore float64 `json:"compliance_score"`
-	ScanDuration    string  `json:"scan_duration"`
+	TotalAssets        int     `json:"total_assets"`
+	TotalFindings      int     `json:"total_findings"`
+	TotalVulns         int     `json:"total_vulns"`
+	DiscoveryCount     int     `json:"discovery_count"`
+	TotalDiscoveryType int     `json:"total_discovery_types"`
+	CriticalCount      int     `json:"critical_count"`
+	HighCount          int     `json:"high_count"`
+	MediumCount        int     `json:"medium_count"`
+	LowCount           int     `json:"low_count"`
+	InfoCount          int     `json:"info_count"`
+	RiskScore          float64 `json:"risk_score"`
+	ComplianceScore    float64 `json:"compliance_score"`
+	ScanDuration       string  `json:"scan_duration"`
 }
 
 type VulnItem struct {
@@ -47,6 +62,30 @@ type VulnItem struct {
 	Remediation string `json:"remediation"`
 }
 
+type DiscoveryItem struct {
+	ID          string    `json:"id"`
+	Category    string    `json:"category"`
+	Type        string    `json:"type"`
+	TypeLabel   string    `json:"type_label"`
+	Title       string    `json:"title"`
+	Target      string    `json:"target"`
+	Port        int       `json:"port"`
+	Protocol    string    `json:"protocol"`
+	Severity    string    `json:"severity"`
+	Confidence  int       `json:"confidence"`
+	ModuleID    string    `json:"module_id"`
+	Description string    `json:"description"`
+	Evidence    string    `json:"evidence"`
+	Summary     string    `json:"summary"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+type DiscoveryGroup struct {
+	Type  string `json:"type"`
+	Label string `json:"label"`
+	Count int    `json:"count"`
+}
+
 type AssetItem struct {
 	Host         string   `json:"host"`
 	IP           string   `json:"ip"`
@@ -54,6 +93,7 @@ type AssetItem struct {
 	Services     []string `json:"services"`
 	Fingerprints []string `json:"fingerprints"`
 	VulnCount    int      `json:"vuln_count"`
+	FindingCount int      `json:"finding_count"`
 }
 
 type ComplianceSection struct {
@@ -71,6 +111,8 @@ type ChartData struct {
 }
 
 const (
+	FormatWord     = "word"
+	FormatPDF      = "pdf"
 	FormatMarkdown = "markdown"
 	FormatJSON     = "json"
 	FormatCSV      = "csv"

@@ -21,7 +21,7 @@ func New() *PortScanner { return &PortScanner{} }
 
 func (m *PortScanner) ID() string       { return "port_scan" }
 func (m *PortScanner) Name() string     { return "端口扫描" }
-func (m *PortScanner) Category() string { return "host" }
+func (m *PortScanner) Category() string { return "discover" }
 
 func (m *PortScanner) Params() []core.ModuleParam {
 	return []core.ModuleParam{

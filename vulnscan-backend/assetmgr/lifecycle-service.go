@@ -21,11 +21,11 @@ func (s *serviceLifecycle) session() *gorm.DB {
 	return sess
 }
 
-func (s *serviceLifecycle) ListTransitions(req ac.LifecycleListReq) ([]model.AssetLifecycle, int64, error) {
+func (s *serviceLifecycle) ListTransitions(req ac.LifecycleListReq, scopes ...func(*gorm.DB) *gorm.DB) ([]model.AssetLifecycle, int64, error) {
 	var items []model.AssetLifecycle
 	var count int64
 
-	q := s.session().Model(&model.AssetLifecycle{})
+	q := s.session().Model(&model.AssetLifecycle{}).Scopes(scopes...)
 	if req.AssetID != "" {
 		q = q.Where("asset_id = ?", req.AssetID)
 	}

@@ -5,6 +5,7 @@ import (
 	tc "vulnscan-backend/tagging/tagging-contract"
 
 	"code.yt-security.com/public/core/v2/db"
+	"gorm.io/gorm"
 )
 
 type serviceChangeLog struct {
@@ -15,12 +16,12 @@ func NewServiceChangeLog(database *db.DB) *serviceChangeLog {
 	return &serviceChangeLog{db: database}
 }
 
-func (s *serviceChangeLog) List(req tc.ChangeLogListReq) ([]model.AssetChangeLog, int64, error) {
+func (s *serviceChangeLog) List(req tc.ChangeLogListReq, scopes ...func(*gorm.DB) *gorm.DB) ([]model.AssetChangeLog, int64, error) {
 	sess, _ := s.db.GetDBSession()
 	var list []model.AssetChangeLog
 	var count int64
 
-	q := sess.Model(&model.AssetChangeLog{})
+	q := sess.Model(&model.AssetChangeLog{}).Scopes(scopes...)
 	if req.AssetID != "" {
 		q = q.Where("asset_id = ?", req.AssetID)
 	}

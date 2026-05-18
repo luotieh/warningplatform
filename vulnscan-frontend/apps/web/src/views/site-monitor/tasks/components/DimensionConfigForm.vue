@@ -79,14 +79,14 @@ const cycleTypeOptions = [
         >
           <span class="text-muted-foreground">周　期：</span>
           <NInputNumber
-            :value="getField(dim.key, 'cycle_minutes', 5)"
+            :value="getField(dim.key, 'cycle_minutes', 1)"
             :min="1"
             :max="1440"
             size="small"
             style="width: 100px"
             @update:value="
               (v: null | number) =>
-                setField(dim.key, 'cycle_minutes', v ?? 5)
+                setField(dim.key, 'cycle_minutes', v ?? 1)
             "
           />
           <span class="text-muted-foreground">分钟/次</span>

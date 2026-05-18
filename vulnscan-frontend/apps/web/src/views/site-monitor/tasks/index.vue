@@ -382,7 +382,7 @@ const highFreqPresets = [
 ];
 
 const dimScheduleDefaults: Record<string, string> = {
-  availability: '0 */5 * * * *',
+  availability: '0 */1 * * * *',
   blacklink: '0 0 */6 * * *',
   domain_hijack: '0 0 */6 * * *',
   sensitive_file: '0 0 0 * * *',
@@ -397,7 +397,7 @@ const createForm = reactive({
   dim_sensitive_file: true,
   dim_sensitive_word: true,
   dim_tamper: true,
-  cron_availability: '0 */5 * * * *',
+  cron_availability: '0 */1 * * * *',
   cron_blacklink: '0 0 */6 * * *',
   cron_domain_hijack: '0 0 */6 * * *',
   cron_sensitive_file: '0 0 0 * * *',
@@ -409,7 +409,7 @@ const createForm = reactive({
   custom_cron_sensitive_file: '',
   custom_cron_sensitive_word: '',
   custom_cron_tamper: '',
-  schedule_cron: '0 */5 * * * *',
+  schedule_cron: '0 */1 * * * *',
   schedule_enabled: true,
   target_domain: '',
   target_homepage: '',
@@ -423,7 +423,7 @@ function resetCreateForm() {
   createForm.target_domain = '';
   createForm.target_ips = '';
   createForm.schedule_enabled = true;
-  createForm.schedule_cron = '0 */5 * * * *';
+  createForm.schedule_cron = '0 */1 * * * *';
   for (const d of dimensions) {
     (createForm as any)[`dim_${d.key}`] = true;
     (createForm as any)[`cron_${d.key}`] = dimScheduleDefaults[d.key] || '0 */30 * * * *';
@@ -522,7 +522,7 @@ const drawerTask = reactive({
   dimCrons: {} as Record<string, string>,
   customCrons: {} as Record<string, string>,
   id: '',
-  schedule_cron: '0 */5 * * * *',
+  schedule_cron: '0 */1 * * * *',
   schedule_enabled: true,
   target_domain: '',
   target_homepage: '',
@@ -537,7 +537,7 @@ function openDrawer(row: MonitorTask) {
   drawerTask.target_domain = row.target_domain;
   drawerTask.target_ips = row.target_ips;
   drawerTask.schedule_enabled = (row as any).schedule_enabled ?? true;
-  drawerTask.schedule_cron = (row as any).schedule_cron || '0 */5 * * * *';
+  drawerTask.schedule_cron = (row as any).schedule_cron || '0 */1 * * * *';
   drawerTask.configs = {};
   drawerTask.dimCrons = {};
   drawerTask.customCrons = {};

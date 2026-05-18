@@ -67,25 +67,16 @@ export const HazardLevelColors: Record<HazardLevel, { bg: string; fg: string }> 
 
 // ─── 模板类型枚举 ───
 
-export type CircularTemplateType = 'input' | 'disposal';
-
-export const TemplateTypeLabels: Record<CircularTemplateType, string> = {
-  input: '录入模板',
-  disposal: '处置模板',
-};
-
-// ─── 数据来源枚举 ───
-
 export type CircularDataSource =
-  | 'template_import'
   | 'manual_input'
   | 'third_party_import'
+  | 'template_import'
   | 'superior_transfer';
 
 export const DataSourceLabels: Record<CircularDataSource, string> = {
-  template_import: '模板导入',
-  manual_input: '手工录入',
+  manual_input: '手动录入',
   third_party_import: '第三方导入',
+  template_import: '模板导入',
   superior_transfer: '上级流转',
 };
 
@@ -203,19 +194,6 @@ export interface CircularOplog {
   created_at: string;
 }
 
-export interface CircularTemplate {
-  id: string;
-  template_name: string;
-  template_description?: string;
-  template_data?: string;
-  template_history_last_id?: string;
-  type: CircularTemplateType;
-  default_flag: boolean;
-  created_at: string;
-  updated_at: string;
-  created_by?: string;
-}
-
 export interface CircularDetailResp {
   id: string;
   code: string;
@@ -246,25 +224,6 @@ export interface TransferStatusResp {
   circular_code: string;
   status: string;
   transfer_time: string;
-}
-
-// ─── 模板 API ───
-
-export async function getTemplateList(params?: Record<string, any>) {
-  const res = await baseRequestClient.get<any>('/circular/templates', { params });
-  return normalizePagedResponse<CircularTemplate>(res);
-}
-
-export function createTemplate(data: Partial<CircularTemplate>) {
-  return requestClient.post('/circular/templates', data);
-}
-
-export function updateTemplate(id: string, data: Partial<CircularTemplate>) {
-  return requestClient.put(`/circular/templates/${id}`, data);
-}
-
-export function deleteTemplate(id: string) {
-  return requestClient.delete(`/circular/templates/${id}`);
 }
 
 // ─── 录入 API ───

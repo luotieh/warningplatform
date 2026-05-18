@@ -96,8 +96,8 @@ func (s *serviceMonitor) GetWordLibrary(ctx context.Context, id string) (*contra
 	return detail, nil
 }
 
-func (s *serviceMonitor) ListWordLibraries(ctx context.Context, req contract.WordLibraryListReq) (int64, []model.MonitorWordLibrary, error) {
-	query := s.session().WithContext(ctx).Model(&model.MonitorWordLibrary{})
+func (s *serviceMonitor) ListWordLibraries(ctx context.Context, req contract.WordLibraryListReq, scopes ...func(*gorm.DB) *gorm.DB) (int64, []model.MonitorWordLibrary, error) {
+	query := s.session().WithContext(ctx).Model(&model.MonitorWordLibrary{}).Scopes(scopes...)
 	if req.Name != "" {
 		query = query.Where("name LIKE ?", "%"+req.Name+"%")
 	}
@@ -287,8 +287,8 @@ func (s *serviceMonitor) GetFileLibrary(ctx context.Context, id string) (*contra
 	return &contract.FileLibraryDetail{MonitorFileLibrary: lib, TotalFiles: totalFiles}, nil
 }
 
-func (s *serviceMonitor) ListFileLibraries(ctx context.Context, req contract.FileLibraryListReq) (int64, []model.MonitorFileLibrary, error) {
-	query := s.session().WithContext(ctx).Model(&model.MonitorFileLibrary{})
+func (s *serviceMonitor) ListFileLibraries(ctx context.Context, req contract.FileLibraryListReq, scopes ...func(*gorm.DB) *gorm.DB) (int64, []model.MonitorFileLibrary, error) {
+	query := s.session().WithContext(ctx).Model(&model.MonitorFileLibrary{}).Scopes(scopes...)
 	if req.Name != "" {
 		query = query.Where("name LIKE ?", "%"+req.Name+"%")
 	}

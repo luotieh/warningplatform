@@ -1,9 +1,11 @@
 package distribute
 
 import (
-	"context"
+	"encoding/json"
 	"fmt"
 	"time"
+	"vulnscan-backend/circular/paging"
+	"vulnscan-backend/circular/scope"
 	"vulnscan-backend/model"
 
 	distributeContract "vulnscan-backend/circular/distribute/distribute-contract"
@@ -28,18 +30,19 @@ func (s *serviceDistribute) session() *gorm.DB {
 	return sess
 }
 
-func (s *serviceDistribute) List(ctx context.Context, req inputContract.ListQuery) (int64, []inputContract.ListResp, error) {
+func (s *serviceDistribute) List(c *gin.Context, req inputContract.ListQuery) (int64, []inputContract.ListResp, error) {
 	var items []inputContract.ListResp
+	org := scope.GetOrganize(c)
 
 	sess := s.session()
-	tx := sess.WithContext(ctx).Model(&model.Circular{}).Where("status = ?", model.CircularToBeDistributed)
+	tx := sess.WithContext(c).Model(&model.Circular{}).Where("status = ? AND organize = ?", model.CircularToBeDistributed, org)
 
 	var count int64
 	if err := tx.Count(&count).Error; err != nil {
 		return 0, nil, err
 	}
 
-	page, size := normalizePage(req.Page, req.Size)
+	page, size := paging.Normalize(req.Page, req.Size)
 	offset := (page - 1) * size
 	if err := tx.Offset(offset).Limit(size).Order("created_at DESC").Find(&items).Error; err != nil {
 		return 0, nil, err
@@ -56,15 +59,18 @@ func (s *serviceDistribute) Distribute(c *gin.Context, req distributeContract.Di
 		return fmt.Errorf("通报不存在")
 	}
 
-	if circular.Status != model.CircularToBeDistributed {
-		return fmt.Errorf("通报状态错误，当前状态不允许派发")
+	if _, err := model.CircularSM.Apply(circular.Status, model.CircularEvtDistribute); err != nil {
+		return err
 	}
 
-	var tmp model.CircularTemplate
+	var tmp model.DynamicFormTemplate
+	var tmpSchemaStr string
 	if req.DisposalTemplate != "" {
 		if err := sess.Where("id = ?", req.DisposalTemplate).First(&tmp).Error; err != nil {
 			return fmt.Errorf("处置模板不存在")
 		}
+		schemaBytes, _ := json.Marshal(tmp.Schema)
+		tmpSchemaStr = string(schemaBytes)
 	}
 
 	now := time.Now()
@@ -79,8 +85,8 @@ func (s *serviceDistribute) Distribute(c *gin.Context, req distributeContract.Di
 		}
 		if req.DisposalTemplate != "" {
 			updateData["disposal_template"] = req.DisposalTemplate
-			updateData["disposal_data"] = tmp.TemplateData
-			updateData["disposal_template_history_id"] = tmp.TemplateHistoryLastId
+			updateData["disposal_data"] = tmpSchemaStr
+			updateData["disposal_template_history_id"] = tmp.CurrentVersionID
 		}
 		if err := session.Model(&model.Circular{}).Where("id = ?", req.CircularId).Updates(updateData).Error; err != nil {
 			return err
@@ -94,7 +100,7 @@ func (s *serviceDistribute) Distribute(c *gin.Context, req distributeContract.Di
 			ProcessingDeadline: req.ProcessingDeadline,
 			Requirements:       req.Requirements,
 			Depth:              0,
-			DisposalData:       tmp.TemplateData,
+			DisposalData:       tmpSchemaStr,
 		}
 		distribution.Id = distributionId
 		distribution.CreatedAt = now
@@ -130,14 +136,4 @@ func (s *serviceDistribute) Distribute(c *gin.Context, req distributeContract.Di
 		})
 		return session.Create(&opLog).Error
 	})
-}
-
-func normalizePage(page, size int) (int, int) {
-	if page <= 0 {
-		page = 1
-	}
-	if size <= 0 || size > 100 {
-		size = 20
-	}
-	return page, size
 }

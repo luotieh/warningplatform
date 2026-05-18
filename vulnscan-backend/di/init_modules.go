@@ -14,10 +14,9 @@ import (
 	fedClient "vulnscan-backend/federation/client"
 	"vulnscan-backend/federation/server"
 	"vulnscan-backend/intel"
-	kdict "vulnscan-backend/knowledge/dict"
+	"vulnscan-backend/knowledge/datalib"
 	kfp "vulnscan-backend/knowledge/fingerprint"
 	"vulnscan-backend/knowledge/nuclei"
-	payloadmgr "vulnscan-backend/knowledge/payload"
 	"vulnscan-backend/knowledge/poc"
 	"vulnscan-backend/model"
 	"vulnscan-backend/nodeapi"
@@ -58,6 +57,11 @@ func (h *Handlers) initScheduler(authGroup *gin.RouterGroup, backends *[]authori
 	pipelineAPI := scanrunner.NewPipelineAPI(session)
 	pipelineAPI.RegisterRoutes(authGroup)
 
+	h.Asset.BindScanRunner(session, h.sched)
+	if h.Vuln != nil {
+		h.Vuln.BindScanRunner(session, h.sched)
+	}
+
 	slog.Info("[+] Scheduler + Report + Pipeline API 已注册")
 }
 
@@ -87,6 +91,8 @@ func (h *Handlers) initKnowledgeAPIs(authGroup *gin.RouterGroup, backends *[]aut
 		return
 	}
 
+	_ = session.AutoMigrate(&model.DataLibrary{}, &model.DataLibraryEntry{})
+
 	h.payloadLoader = payload.NewLoader(session)
 	if err := h.payloadLoader.LoadAll(); err != nil {
 		slog.Warn("[Knowledge] 加载 payload 失败，将使用空加载器", "error", err)
@@ -105,17 +111,12 @@ func (h *Handlers) initKnowledgeAPIs(authGroup *gin.RouterGroup, backends *[]aut
 	fpRoutes := kfp.NewFingerprintFull(fpHandler, webFpHandler)
 	*backends = append(*backends, fpRoutes.RoutesWithGroup(authGroup)...)
 
-	dictSvc := kdict.NewServiceDict(h.DB)
-	dictHandler := kdict.NewHandlerDict(dictSvc)
-	dictRoutes := kdict.NewDict(dictHandler)
-	*backends = append(*backends, dictRoutes.RoutesWithGroup(authGroup)...)
+	dlSvc := datalib.NewServiceDataLib(h.DB)
+	dlHandler := datalib.NewHandlerDataLib(dlSvc, h.payloadLoader)
+	dlRoutes := datalib.NewDataLib(dlHandler)
+	*backends = append(*backends, dlRoutes.RoutesWithGroup(authGroup)...)
 
-	payloadSvc := payloadmgr.NewService(session)
-	payloadHandler := payloadmgr.NewHandler(payloadSvc, h.payloadLoader)
-	payloadRoutes := payloadmgr.NewRoutes(payloadHandler)
-	*backends = append(*backends, payloadRoutes.RegisterRoutes(authGroup)...)
-
-	slog.Info("[+] POC + Fingerprint + Dict + Payload 知识库 API 已注册")
+	slog.Info("[+] POC + Fingerprint + DataLib 知识库 API 已注册")
 }
 
 func (h *Handlers) initTemplateAPI(authGroup *gin.RouterGroup, backends *[]authorize.BackendItem) {
@@ -166,6 +167,9 @@ func (h *Handlers) initASMAPI(authGroup *gin.RouterGroup, backends *[]authorize.
 		collectors = append(collectors, asm.NewCyberspaceCollector(cyberConfigs))
 	}
 	collectors = append(collectors, asm.NewPortExposureCollector(session))
+	collectors = append(collectors, asm.NewSubdomainBruteCollector(nil, 0, 0))
+	collectors = append(collectors, asm.NewPortScanCollector(nil, 0, 0))
+	collectors = append(collectors, asm.NewServiceFingerprintCollector(0))
 
 	svc := asm.NewServiceASM(h.DB)
 	handler := asm.NewHandler(svc, collectors...)
@@ -206,7 +210,7 @@ func (h *Handlers) initUnifiedNodes(authGroup *gin.RouterGroup) {
 	if err != nil {
 		return
 	}
-	cluster.RegisterUnifiedNodeRoutes(authGroup, session)
+	cluster.RegisterUnifiedNodeRoutes(authGroup, session, h.sched)
 }
 
 func (h *Handlers) initFederationManageAPI(authGroup *gin.RouterGroup) {
@@ -308,8 +312,12 @@ func (h *Handlers) initNodeAPI(engine *gin.Engine) {
 
 	monitorHandler := nodeapi.NewDBMonitorResultHandler(session)
 	scanHandler := nodeapi.NewDBScanResultHandler(session)
-	api := nodeapi.New(h.DB, monitorHandler, scanHandler)
+	opts := nodeapi.OptionsFromEnv()
+	api := nodeapi.New(h.DB, monitorHandler, scanHandler, opts)
 	api.RegisterRoutes(engine, h.Config.IAM.PathPrefix)
 
+	if opts.RequireAgentSecret {
+		slog.Warn("[+] Node API 已启用 VULNSCAN_NODEAPI_REQUIRE_AGENT_SECRET：所有节点必须在库中配置 agent_secret_hash，否则将返回 403")
+	}
 	slog.Info("[+] Node API 已注册", "prefix", h.Config.IAM.PathPrefix+"/node-api")
 }

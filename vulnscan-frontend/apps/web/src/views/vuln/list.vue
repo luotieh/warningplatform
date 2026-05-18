@@ -24,6 +24,7 @@ import {
   markFixed,
   markIgnored,
   reopenVuln,
+  retestVuln,
   type Vulnerability,
 } from '#/api/vuln';
 import { sevLabels, sevColors } from '#/constants/severity';
@@ -94,9 +95,10 @@ const columns = computed(() => [
   { title: '模块', key: 'module_id', width: 110, ellipsis: { tooltip: true } },
   { title: '发现时间', key: 'first_seen_at', width: 150 },
   {
-    title: '操作', key: 'actions', width: 120, fixed: 'right' as const,
+    title: '操作', key: 'actions', width: 160, fixed: 'right' as const,
     render: (row: Vulnerability) => h(NSpace, { size: 4 }, () => {
       const items: any[] = [];
+      items.push(h(NButton, { size: 'tiny', type: 'warning', secondary: true, onClick: () => handleRetest(row.id) }, () => '回测'));
       if (row.status === 'open' || row.status === 'reopened') {
         items.push(h(NButton, { size: 'tiny', type: 'success', secondary: true, onClick: () => handleMarkFixed(row.id) }, () => '修复'));
         items.push(h(NButton, { size: 'tiny', secondary: true, onClick: () => handleMarkIgnored(row.id) }, () => '忽略'));
@@ -173,6 +175,18 @@ async function handleReopen(id: string) {
     await fetchData();
   } catch (e: any) {
     message.error(e?.message || '操作失败');
+  }
+}
+
+async function handleRetest(id: string) {
+  try {
+    const res = await retestVuln(id);
+    message.success(res?.task_id ? `回测任务已提交（${res.task_id}）` : '回测任务已提交');
+    if (res?.task_id) {
+      router.push(`/scan/task/${res.task_id}`);
+    }
+  } catch (e: any) {
+    message.error(e?.message || '回测失败');
   }
 }
 

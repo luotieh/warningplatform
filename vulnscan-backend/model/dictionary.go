@@ -1,18 +1,18 @@
 package model
 
 const (
-	DictTypeSubdomain = "subdomain"
-	DictTypeDirpath   = "dirpath"
-	DictTypeUsername  = "username"
-	DictTypePassword  = "password"
-	DictTypeUserAgent = "useragent"
-	DictTypeCustom    = "custom"
+	DictTypeSubdomain = DataLibTypeSubdomain
+	DictTypeDirpath   = DataLibTypeDirpath
+	DictTypeUsername  = DataLibTypeUsername
+	DictTypePassword  = DataLibTypePassword
+	DictTypeUserAgent = DataLibTypeUserAgent
+	DictTypeCustom    = DataLibTypeCustom
 
-	DictStatusActive   = "active"
-	DictStatusDisabled = "disabled"
+	DictStatusActive   = DataLibStatusActive
+	DictStatusDisabled = DataLibStatusDisabled
 )
 
-// Dictionary 字典集
+// Dictionary 旧字典模型（迁移用，新代码使用 DataLibrary）
 type Dictionary struct {
 	BaseModel
 	Name        string `gorm:"type:varchar(128);not null;uniqueIndex" json:"name"`
@@ -25,7 +25,7 @@ type Dictionary struct {
 
 func (Dictionary) TableName() string { return "vs_dictionary" }
 
-// DictionaryEntry 字典条目
+// DictionaryEntry 旧字典条目（迁移用，新代码使用 DataLibraryEntry）
 type DictionaryEntry struct {
 	ID           string `gorm:"primarykey;type:varchar(36)" json:"id"`
 	DictionaryID string `gorm:"type:varchar(36);not null;index:idx_dict_entry" json:"dictionary_id"`

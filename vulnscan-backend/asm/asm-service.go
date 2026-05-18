@@ -96,10 +96,36 @@ func (s *ServiceASM) GetPreviousAssets(projectID string) []model.ASMDiscoveredAs
 
 func (s *ServiceASM) SaveDiscoveryResults(projectID string, newAssets []model.ASMDiscoveredAsset, changes []model.ASMChange) {
 	tx := s.session().Begin()
-	tx.Where("project_id = ?", projectID).Delete(&model.ASMDiscoveredAsset{})
+
+	var now time.Time
 	if len(newAssets) > 0 {
-		tx.CreateInBatches(newAssets, 100)
+		now = newAssets[0].LastSeen
+	} else {
+		now = time.Now()
 	}
+
+	for i := range newAssets {
+		var existing model.ASMDiscoveredAsset
+		err := tx.Where("project_id = ? AND type = ? AND value = ?",
+			projectID, newAssets[i].Type, newAssets[i].Value).First(&existing).Error
+		if err == nil {
+			tx.Model(&existing).Updates(map[string]any{
+				"source":     newAssets[i].Source,
+				"attributes": mergeAttributes(existing.Attributes, newAssets[i].Attributes),
+				"risk_score": newAssets[i].RiskScore,
+				"status":     "active",
+				"last_seen":  newAssets[i].LastSeen,
+			})
+		} else {
+			tx.Create(&newAssets[i])
+		}
+	}
+
+	// Mark assets not seen this run as inactive
+	tx.Model(&model.ASMDiscoveredAsset{}).
+		Where("project_id = ? AND last_seen < ?", projectID, now).
+		Update("status", "inactive")
+
 	if len(changes) > 0 {
 		tx.CreateInBatches(changes, 100)
 	}
@@ -107,12 +133,73 @@ func (s *ServiceASM) SaveDiscoveryResults(projectID string, newAssets []model.AS
 	s.session().Model(&model.ASMSeed{}).Where("project_id = ?", projectID).Update("last_run_at", time.Now())
 }
 
-func (s *ServiceASM) ListDiscoveredAssets(projectID string) ([]model.ASMDiscoveredAsset, int64) {
+func mergeAttributes(old, incoming model.JSONMap) model.JSONMap {
+	merged := make(model.JSONMap, len(old)+len(incoming))
+	for k, v := range old {
+		merged[k] = v
+	}
+	for k, v := range incoming {
+		merged[k] = v
+	}
+	return merged
+}
+
+type AssetListQuery struct {
+	Index   int    `form:"index"`
+	Size    int    `form:"size" binding:"lte=100"`
+	Keyword string `form:"keyword"`
+	Type    string `form:"type"`
+	Status  string `form:"status"`
+	MinRisk int    `form:"min_risk"`
+	MaxRisk int    `form:"max_risk"`
+	Source  string `form:"source"`
+}
+
+func (s *ServiceASM) ListDiscoveredAssets(projectID string, query AssetListQuery) ([]model.ASMDiscoveredAsset, int64) {
+	var assets []model.ASMDiscoveredAsset
+	var count int64
+	tx := s.session().Model(&model.ASMDiscoveredAsset{}).Where("project_id = ?", projectID)
+
+	if query.Keyword != "" {
+		tx = tx.Where("value LIKE ?", "%"+query.Keyword+"%")
+	}
+	if query.Type != "" {
+		tx = tx.Where("type = ?", query.Type)
+	}
+	if query.Status != "" {
+		tx = tx.Where("status = ?", query.Status)
+	}
+	if query.MinRisk > 0 {
+		tx = tx.Where("risk_score >= ?", query.MinRisk)
+	}
+	if query.MaxRisk > 0 {
+		tx = tx.Where("risk_score <= ?", query.MaxRisk)
+	}
+	if query.Source != "" {
+		tx = tx.Where("source LIKE ?", "%"+query.Source+"%")
+	}
+
+	tx.Count(&count)
+
+	page := query.Index
+	if page <= 0 {
+		page = 1
+	}
+	size := query.Size
+	if size <= 0 || size > 100 {
+		size = 20
+	}
+
+	tx.Offset((page - 1) * size).Limit(size).Order("risk_score DESC, last_seen DESC").Find(&assets)
+	return assets, count
+}
+
+func (s *ServiceASM) GetAllAssets(projectID string) ([]model.ASMDiscoveredAsset, int64) {
 	var assets []model.ASMDiscoveredAsset
 	var count int64
 	q := s.session().Model(&model.ASMDiscoveredAsset{}).Where("project_id = ?", projectID)
 	q.Count(&count)
-	q.Order("risk_score DESC, last_seen DESC").Find(&assets)
+	q.Order("risk_score DESC").Find(&assets)
 	return assets, count
 }
 

@@ -17,6 +17,20 @@ func NewHandlerCluster(svc clusterContract.ServiceCluster) *HandlerCluster {
 	return &HandlerCluster{svc: svc}
 }
 
+func (h *HandlerCluster) IssueScanNodeCredentials(c *gin.Context) {
+	req, ok := web.BindJSON[clusterContract.NodeEnrollmentIssueRequest](c)
+	if !ok {
+		return
+	}
+
+	out, err := h.svc.IssueScanNodeCredentials(c.Request.Context(), &req)
+	if err != nil {
+		web.Fail(c).Err(err).Send()
+		return
+	}
+	web.OK(c).Data(out).Send()
+}
+
 func (h *HandlerCluster) ListWorkers(c *gin.Context) {
 	query, ok := web.BindQuery[clusterContract.WorkerQuery](c)
 	if !ok {
@@ -46,6 +60,15 @@ func (h *HandlerCluster) GetWorker(c *gin.Context) {
 	}
 
 	web.OK(c).Data(node).Send()
+}
+
+func (h *HandlerCluster) NodeKnowledgeManifest(c *gin.Context) {
+	data, err := h.svc.KnowledgeManifest(c.Request.Context())
+	if err != nil {
+		web.Fail(c).Err(err).Send()
+		return
+	}
+	web.OK(c).Data(data).Send()
 }
 
 func (h *HandlerCluster) CheckStale(c *gin.Context) {

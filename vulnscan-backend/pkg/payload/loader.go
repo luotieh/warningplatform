@@ -40,37 +40,61 @@ func (l *Loader) LoadAll() error {
 		return nil
 	}
 
-	var payloads []model.VulnPayload
-	if err := l.db.Where("enabled = ?", true).Order("sort_order ASC").Find(&payloads).Error; err != nil {
+	type entryWithCategory struct {
+		model.DataLibraryEntry
+		Category string
+	}
+
+	var payloadEntries []entryWithCategory
+	if err := l.db.Table("vs_data_library_entry e").
+		Select("e.*, lib.category").
+		Joins("JOIN vs_data_library lib ON e.library_id = lib.id").
+		Where("lib.type = ? AND lib.status = ? AND e.enabled = ?", model.DataLibTypePayload, model.DataLibStatusActive, true).
+		Order("e.priority ASC").
+		Find(&payloadEntries).Error; err != nil {
 		return err
 	}
 
 	payloadsByCategory := make(map[string][]model.VulnPayload)
-	for _, p := range payloads {
-		payloadsByCategory[p.Category] = append(payloadsByCategory[p.Category], p)
+	for _, e := range payloadEntries {
+		p := entryToPayload(e.DataLibraryEntry, e.Category)
+		payloadsByCategory[e.Category] = append(payloadsByCategory[e.Category], p)
 	}
 
-	var patterns []model.VulnPayloadPattern
-	if err := l.db.Where("enabled = ?", true).Find(&patterns).Error; err != nil {
+	var patternEntries []entryWithCategory
+	if err := l.db.Table("vs_data_library_entry e").
+		Select("e.*, lib.category").
+		Joins("JOIN vs_data_library lib ON e.library_id = lib.id").
+		Where("lib.type = ? AND lib.status = ? AND e.enabled = ?", model.DataLibTypePattern, model.DataLibStatusActive, true).
+		Find(&patternEntries).Error; err != nil {
 		return err
 	}
 
 	patternsByCategory := make(map[string][]model.VulnPayloadPattern)
-	for _, p := range patterns {
-		patternsByCategory[p.Category] = append(patternsByCategory[p.Category], p)
+	for _, e := range patternEntries {
+		p := entryToPattern(e.DataLibraryEntry, e.Category)
+		patternsByCategory[e.Category] = append(patternsByCategory[e.Category], p)
 	}
 
-	var configs []model.VulnPayloadConfig
-	if err := l.db.Where("enabled = ?", true).Find(&configs).Error; err != nil {
+	var configEntries []entryWithCategory
+	if err := l.db.Table("vs_data_library_entry e").
+		Select("e.*, lib.category").
+		Joins("JOIN vs_data_library lib ON e.library_id = lib.id").
+		Where("lib.type = ? AND lib.status = ? AND e.enabled = ?", model.DataLibTypeConfig, model.DataLibStatusActive, true).
+		Find(&configEntries).Error; err != nil {
 		return err
 	}
 
 	configsByCategory := make(map[string]map[string]string)
-	for _, c := range configs {
-		if _, ok := configsByCategory[c.Category]; !ok {
-			configsByCategory[c.Category] = make(map[string]string)
+	for _, e := range configEntries {
+		configKey := getMetaString(e.Metadata, "config_key")
+		if configKey == "" {
+			continue
 		}
-		configsByCategory[c.Category][c.ConfigKey] = c.ConfigVal
+		if _, ok := configsByCategory[e.Category]; !ok {
+			configsByCategory[e.Category] = make(map[string]string)
+		}
+		configsByCategory[e.Category][configKey] = e.Value
 	}
 
 	l.payloadsByCategory = payloadsByCategory
@@ -80,12 +104,52 @@ func (l *Loader) LoadAll() error {
 
 	slog.Info("[Payload-Loader] payload 加载完成",
 		"categories", len(payloadsByCategory),
-		"payloads", len(payloads),
-		"patterns", len(patterns),
-		"configs", len(configs),
+		"payloads", len(payloadEntries),
+		"patterns", len(patternEntries),
+		"configs", len(configEntries),
 	)
 
 	return nil
+}
+
+func entryToPayload(e model.DataLibraryEntry, category string) model.VulnPayload {
+	return model.VulnPayload{
+		Category:    category,
+		Name:        e.Name,
+		Value:       e.Value,
+		Type:        e.Type,
+		Databases:   getMetaString(e.Metadata, "databases"),
+		Expect:      getMetaString(e.Metadata, "expect"),
+		Context:     getMetaString(e.Metadata, "context"),
+		Tags:        e.Tags,
+		Severity:    getMetaString(e.Metadata, "severity"),
+		Description: getMetaString(e.Metadata, "description"),
+		Enabled:     e.Enabled,
+		SortOrder:   e.Priority,
+	}
+}
+
+func entryToPattern(e model.DataLibraryEntry, category string) model.VulnPayloadPattern {
+	return model.VulnPayloadPattern{
+		Category:    category,
+		Name:        e.Name,
+		Pattern:     e.Value,
+		Description: getMetaString(e.Metadata, "description"),
+		Severity:    getMetaString(e.Metadata, "severity"),
+		Enabled:     e.Enabled,
+	}
+}
+
+func getMetaString(meta model.JSONMap, key string) string {
+	if meta == nil {
+		return ""
+	}
+	if v, ok := meta[key]; ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
 }
 
 func (l *Loader) Reload() error {

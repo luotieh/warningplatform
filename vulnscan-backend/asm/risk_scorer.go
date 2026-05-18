@@ -1,5 +1,10 @@
 package asm
 
+import (
+	"strings"
+	"time"
+)
+
 type RiskScorer struct {
 	baseScore     int
 	typeWeights   map[string]int
@@ -52,6 +57,21 @@ func (s *RiskScorer) Calculate(asset DiscoveredAsset) int {
 		if _, ok := asset.Attributes["internal"]; ok {
 			score -= 10
 		}
+	}
+
+	// Multi-source confirmation bonus
+	if strings.Contains(asset.Source, ",") {
+		score += 10
+	}
+
+	// Exposure duration factor
+	if !asset.FirstSeen.IsZero() {
+		days := int(time.Since(asset.FirstSeen).Hours() / 24)
+		bonus := days / 30 * 5
+		if bonus > 15 {
+			bonus = 15
+		}
+		score += bonus
 	}
 
 	if score < 0 {

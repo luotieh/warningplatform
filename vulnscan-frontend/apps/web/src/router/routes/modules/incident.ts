@@ -5,7 +5,7 @@ import { BasicLayout } from '#/layouts';
 const routes: RouteRecordRaw[] = [
   {
     component: BasicLayout,
-    meta: { icon: 'lucide:shield-alert', order: 6, title: '安全事件' },
+    meta: { icon: 'lucide:shield-alert', order: 5, title: '安全事件' },
     name: 'Incident',
     path: '/incident',
     redirect: '/incident/dashboard',
@@ -46,11 +46,8 @@ const routes: RouteRecordRaw[] = [
       {
         name: 'IncidentReports',
         path: 'reports',
-        component: () => import('#/views/incident/reports/index.vue'),
-        meta: {
-          icon: 'lucide:file-bar-chart',
-          title: '报告中心',
-        },
+        redirect: '/reports/incident',
+        meta: { hideInMenu: true, title: '报告中心' },
       },
     ],
   },

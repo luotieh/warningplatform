@@ -118,6 +118,7 @@ func (m *CertChecker) checkTarget(ctx context.Context, target *core.Target) []*c
 	}
 
 	cert := state.PeerCertificates[0]
+	daysUntilExpiry := int(time.Until(cert.NotAfter).Hours() / 24)
 
 	if time.Now().After(cert.NotAfter) {
 		findings = append(findings, &core.Finding{
@@ -132,12 +133,14 @@ func (m *CertChecker) checkTarget(ctx context.Context, target *core.Target) []*c
 			Data: map[string]string{
 				"common_name": cert.Subject.CommonName,
 				"expired_at":  cert.NotAfter.Format(time.RFC3339),
+				"expires_at":  cert.NotAfter.Format(time.RFC3339),
+				"not_before":  cert.NotBefore.Format(time.RFC3339),
+				"not_after":   cert.NotAfter.Format(time.RFC3339),
 				"issuer":      cert.Issuer.CommonName,
 			},
 		})
 	}
 
-	daysUntilExpiry := int(time.Until(cert.NotAfter).Hours() / 24)
 	if daysUntilExpiry > 0 && daysUntilExpiry <= 30 {
 		findings = append(findings, &core.Finding{
 			ModuleID:    m.ID(),
@@ -151,6 +154,8 @@ func (m *CertChecker) checkTarget(ctx context.Context, target *core.Target) []*c
 			Data: map[string]string{
 				"common_name": cert.Subject.CommonName,
 				"expires_at":  cert.NotAfter.Format(time.RFC3339),
+				"not_before":  cert.NotBefore.Format(time.RFC3339),
+				"not_after":   cert.NotAfter.Format(time.RFC3339),
 				"days_until":  strconv.Itoa(daysUntilExpiry),
 				"issuer":      cert.Issuer.CommonName,
 			},
@@ -213,6 +218,41 @@ func (m *CertChecker) checkTarget(ctx context.Context, target *core.Target) []*c
 
 	if f := checkWeakCiphers(state, target, m.ID()); f != nil {
 		findings = append(findings, f)
+	}
+
+	// 未过期证书：产出基线 cert_info，便于资产富化/报表统一消费（RFC3339 时间字段）。
+	if !time.Now().After(cert.NotAfter) {
+		daysOut := daysUntilExpiry
+		if daysOut < 0 {
+			daysOut = 0
+		}
+		data := map[string]string{
+			"common_name": cert.Subject.CommonName,
+			"issuer":      cert.Issuer.CommonName,
+			"not_before":  cert.NotBefore.Format(time.RFC3339),
+			"not_after":   cert.NotAfter.Format(time.RFC3339),
+			"expires_at":  cert.NotAfter.Format(time.RFC3339),
+			"days_until":  strconv.Itoa(daysOut),
+		}
+		if len(cert.DNSNames) > 0 {
+			data["dns_names"] = strings.Join(cert.DNSNames, ",")
+		}
+		if cert.Issuer.String() == cert.Subject.String() {
+			data["is_self_signed"] = "true"
+		} else {
+			data["is_self_signed"] = "false"
+		}
+		findings = append(findings, &core.Finding{
+			ModuleID:    m.ID(),
+			Target:      target,
+			Type:        "cert_info",
+			Title:       fmt.Sprintf("TLS 证书: %s (至 %s)", cert.Subject.CommonName, cert.NotAfter.Format("2006-01-02")),
+			Description: fmt.Sprintf("证书 CN=%s，颁发者=%s，剩余约 %d 天", cert.Subject.CommonName, cert.Issuer.CommonName, daysUntilExpiry),
+			Severity:    "info",
+			Confidence:  100,
+			Timestamp:   time.Now(),
+			Data:        data,
+		})
 	}
 
 	return findings

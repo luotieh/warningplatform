@@ -311,3 +311,73 @@ export interface TaskExecutionStat {
   pending_count?: number;
   valid_count?: number;
 }
+
+export interface MonitorReportRequest {
+  start_date: string;
+  end_date: string;
+  task_ids: string[];
+  format?: 'html' | 'json';
+}
+
+export interface MonitorReportDimensionStat {
+  Total?: number;
+  Issues?: number;
+  IssueRate?: number;
+}
+
+export interface MonitorTaskReportItem {
+  TaskName?: string;
+  URL?: string;
+  Executions?: number;
+  Issues?: number;
+  IssueRate?: number;
+  LastRun?: string;
+  DimResults?: Record<string, string>;
+}
+
+export interface MonitorReportSLAStats {
+  AvailabilityRate?: number;
+  AvgResponseMS?: number;
+  P95ResponseMS?: number;
+  UptimeHours?: number;
+  DowntimeMinutes?: number;
+  MeetsSLA?: boolean;
+  SLATarget?: number;
+}
+
+export interface MonitorReportComplianceItem {
+  Category?: string;
+  Name?: string;
+  Status?: string;
+  Description?: string;
+  Suggestion?: string;
+}
+
+export interface MonitorReportComplianceResult {
+  Level?: string;
+  Score?: number;
+  Items?: MonitorReportComplianceItem[];
+  PassCount?: number;
+  WarnCount?: number;
+  FailCount?: number;
+}
+
+export interface MonitorReportData {
+  Title?: string;
+  GeneratedAt?: string;
+  Period?: string;
+  StartDate?: string;
+  EndDate?: string;
+  Summary?: {
+    TotalTasks?: number;
+    EnabledTasks?: number;
+    TotalExecutions?: number;
+    IssueCount?: number;
+    IssueRate?: number;
+    OnlineAgents?: number;
+    DimStats?: Record<string, MonitorReportDimensionStat>;
+  };
+  TaskReports?: MonitorTaskReportItem[];
+  SLAStats?: MonitorReportSLAStats;
+  Compliance?: MonitorReportComplianceResult;
+}

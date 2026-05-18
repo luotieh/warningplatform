@@ -72,6 +72,25 @@ func (vm *VersionManager) Current(dataType string) int64 {
 	return vm.current[dataType]
 }
 
+// LatestVersionFromDB reads the aggregate sync cursor for a data type from cm_sync_version
+// (authoritative for federation / node knowledge sync responses).
+func (vm *VersionManager) LatestVersionFromDB(dataType string) int64 {
+	var row model.SyncVersion
+	if err := vm.db.Where("data_type = ?", dataType).First(&row).Error; err != nil {
+		return 0
+	}
+	return row.CurrentVersion
+}
+
+// AllVersionsFromDB returns sync cursors from cm_sync_version (DB-authoritative).
+func (vm *VersionManager) AllVersionsFromDB() map[string]int64 {
+	out := make(map[string]int64)
+	for _, dt := range []string{model.SyncDataTypePoc, model.SyncDataTypeFingerprint, model.SyncDataTypeRule} {
+		out[dt] = vm.LatestVersionFromDB(dt)
+	}
+	return out
+}
+
 // AllVersions returns all current versions.
 func (vm *VersionManager) AllVersions() map[string]int64 {
 	vm.mu.Lock()
@@ -124,7 +143,7 @@ func (vm *VersionManager) GetPocDelta(sinceVersion int64, limit int) (*SyncRespo
 
 	return &SyncResponse{
 		Items:         items,
-		LatestVersion: vm.Current(model.SyncDataTypePoc),
+		LatestVersion: vm.LatestVersionFromDB(model.SyncDataTypePoc),
 		HasMore:       hasMore,
 		ServerTime:    time.Now(),
 	}, nil
@@ -166,7 +185,7 @@ func (vm *VersionManager) GetFingerprintDelta(sinceVersion int64, limit int) (*S
 
 	return &SyncResponse{
 		Items:         items,
-		LatestVersion: vm.Current(model.SyncDataTypeFingerprint),
+		LatestVersion: vm.LatestVersionFromDB(model.SyncDataTypeFingerprint),
 		HasMore:       hasMore,
 		ServerTime:    time.Now(),
 	}, nil
@@ -208,7 +227,7 @@ func (vm *VersionManager) GetRuleDelta(sinceVersion int64, limit int) (*SyncResp
 
 	return &SyncResponse{
 		Items:         items,
-		LatestVersion: vm.Current(model.SyncDataTypeRule),
+		LatestVersion: vm.LatestVersionFromDB(model.SyncDataTypeRule),
 		HasMore:       hasMore,
 		ServerTime:    time.Now(),
 	}, nil

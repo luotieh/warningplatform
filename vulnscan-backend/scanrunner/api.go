@@ -2,12 +2,12 @@ package scanrunner
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"time"
 
-	"code.yt-security.com/public/core/v2/generate/qulid"
 	"code.yt-security.com/public/core/v2/web"
 	"code.yt-security.com/public/sdk/authorize"
 	"github.com/gin-gonic/gin"
@@ -33,9 +33,11 @@ func (a *API) RoutesWithGroup(group *gin.RouterGroup) []authorize.BackendItem {
 			Children: []authorize.Route{
 				{Name: "启动扫描", Path: "launch", Method: "POST", Handler: a.Launch, Enabled: true},
 				{Name: "取消扫描", Path: "cancel/:id", Method: "POST", Handler: a.Cancel, Enabled: true},
+				{Name: "重新运行", Path: "rerun/:id", Method: "POST", Handler: a.Rerun, Enabled: true},
 				{Name: "扫描进度", Path: "progress/:id", Method: "GET", Handler: a.Progress, Enabled: true},
 				{Name: "调度器状态", Path: "status", Method: "GET", Handler: a.Status, Enabled: true},
 				{Name: "扫描模板列表", Path: "templates", Method: "GET", Handler: a.ListTemplates, Enabled: true},
+				{Name: "扫描引擎预设", Path: "engine-presets", Method: "GET", Handler: a.ListEnginePresets, Enabled: true},
 				{Name: "扫描事件流", Path: "events/:id", Method: "GET", Handler: a.Events, Enabled: true},
 			},
 		},
@@ -57,80 +59,74 @@ func (a *API) Launch(c *gin.Context) {
 		return
 	}
 
-	var tmpl model.ScanTemplate
-	if err := a.db.Where("(id = ? OR code = ?) AND enabled = ?", req.TemplateID, req.TemplateID, true).First(&tmpl).Error; err != nil {
+	res, err := LaunchScan(a.db, a.scheduler, LaunchScanParams{
+		Name:       req.Name,
+		Targets:    req.Targets,
+		TemplateID: req.TemplateID,
+		Parameters: req.Parameters,
+		Priority:   req.Priority,
+		ScheduleID: req.ScheduleID,
+	})
+	if errors.Is(err, ErrTemplateNotFound) {
 		web.Fail(c).Msg("模板不存在或已禁用").Send()
 		return
 	}
-
-	priority := req.Priority
-	if priority <= 0 {
-		priority = 5
+	if err != nil {
+		slog.Error("[API] 创建扫描任务失败", "error", err)
+		web.Err(c, definition.ScanCreateFailed).Send()
+		return
 	}
 
-	params := model.JSONMap{}
-	for k, v := range req.Parameters {
-		params[k] = v
-	}
-
-	task := model.ScanTask{
-		ID:           qulid.GenerateID(),
-		Name:         req.Name,
-		TemplateID:   tmpl.ID,
-		TemplateName: tmpl.Name,
-		Targets:      req.Targets,
-		Parameters:   params,
-		Priority:     priority,
-		Status:       model.TaskStatusQueued,
-		TotalTargets: len(req.Targets),
-		ScheduleID:   req.ScheduleID,
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
-	}
-
-	splitter := NewTaskSplitter(a.db)
-	if splitter.ShouldSplit(req.Targets) {
-		task.Status = "splitting"
-		if err := a.db.Create(&task).Error; err != nil {
-			web.Err(c, definition.ScanCreateFailed).Send()
-			return
-		}
-
-		subTasks, err := splitter.Split(task)
-		if err != nil {
-			slog.Error("[API] 任务拆分失败", "error", err)
-			web.Err(c, definition.ScanCreateFailed).Send()
-			return
-		}
-
-		for i := range subTasks {
-			a.scheduler.Enqueue(&subTasks[i])
-		}
-
+	task := res.Task
+	if res.SplitMode {
 		web.OK(c).Data(map[string]interface{}{
 			"task_id":    task.ID,
 			"name":       task.Name,
-			"template":   tmpl.Name,
+			"template":   task.TemplateName,
 			"status":     task.Status,
-			"sub_count":  len(subTasks),
+			"sub_count":  res.SubCount,
 			"split_mode": true,
 		}).Send()
 		return
 	}
 
-	if err := a.db.Create(&task).Error; err != nil {
-		web.Err(c, definition.ScanCreateFailed).Send()
-		return
-	}
-
-	a.scheduler.Enqueue(&task)
-
 	web.OK(c).Data(map[string]interface{}{
 		"task_id":  task.ID,
 		"name":     task.Name,
-		"template": tmpl.Name,
+		"template": task.TemplateName,
 		"status":   task.Status,
 	}).Send()
+}
+
+func (a *API) Rerun(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		web.Err(c, web.ParamsMissingRequired).Send()
+		return
+	}
+
+	res, err := RerunScan(a.db, a.scheduler, id)
+	if errors.Is(err, ErrTemplateNotFound) {
+		web.Fail(c).Msg("模板不存在或已禁用").Send()
+		return
+	}
+	if err != nil {
+		web.Fail(c).Msg(err.Error()).Send()
+		return
+	}
+
+	task := res.Task
+	out := map[string]interface{}{
+		"task_id":  task.ID,
+		"name":     task.Name,
+		"template": task.TemplateName,
+		"status":   task.Status,
+	}
+	if res.SplitMode {
+		out["split_mode"] = true
+		out["sub_count"] = res.SubCount
+	}
+	web.OK(c).Data(out).Send()
 }
 
 func (a *API) Cancel(c *gin.Context) {
@@ -186,7 +182,7 @@ func (a *API) Progress(c *gin.Context) {
 }
 
 func (a *API) Status(c *gin.Context) {
-	var queuedCount, runningCount, completedToday int64
+	var queuedCount, runningCount, completedToday, failedToday, findingsToday int64
 
 	a.db.Model(&model.ScanTask{}).Where("status = ?", model.TaskStatusQueued).Count(&queuedCount)
 	a.db.Model(&model.ScanTask{}).Where("status = ?", model.TaskStatusRunning).Count(&runningCount)
@@ -194,14 +190,31 @@ func (a *API) Status(c *gin.Context) {
 	today := time.Now().Truncate(24 * time.Hour)
 	a.db.Model(&model.ScanTask{}).Where("status = ? AND finished_at >= ?",
 		model.TaskStatusCompleted, today).Count(&completedToday)
+	a.db.Model(&model.ScanTask{}).Where("status = ? AND finished_at >= ?",
+		model.TaskStatusFailed, today).Count(&failedToday)
+	a.db.Model(&model.ScanFinding{}).Where("created_at >= ?", today).Count(&findingsToday)
+
+	var avgDuration float64
+	row := a.db.Model(&model.ScanTask{}).
+		Select("AVG(JULIANDAY(finished_at) - JULIANDAY(started_at)) * 86400").
+		Where("status = ? AND finished_at IS NOT NULL AND started_at IS NOT NULL AND finished_at >= ?",
+			model.TaskStatusCompleted, today).Row()
+	if row != nil {
+		_ = row.Scan(&avgDuration)
+	}
 
 	web.OK(c).Data(map[string]interface{}{
-		"active_runners":   a.scheduler.ActiveTasks(),
-		"max_parallel":     a.scheduler.maxParallel,
-		"memory_queue_len": a.scheduler.QueueLen(),
-		"queued_tasks":     queuedCount,
-		"running_tasks":    runningCount,
-		"completed_today":  completedToday,
+		"active_runners":      a.scheduler.ActiveTasks(),
+		"max_parallel":        a.scheduler.MaxParallel(),
+		"memory_queue_len":    a.scheduler.QueueLen(),
+		"queued_tasks":        queuedCount,
+		"running_tasks":       runningCount,
+		"completed_today":     completedToday,
+		"failed_today":        failedToday,
+		"findings_today":      findingsToday,
+		"avg_task_duration_s": avgDuration,
+		"cache_hit_rate":      a.scheduler.RunnerCacheHitRate(),
+		"current_concurrency": a.scheduler.CurrentAdaptiveConcurrency(),
 	}).Send()
 }
 
@@ -233,6 +246,10 @@ func (a *API) ListTemplates(c *gin.Context) {
 	web.OK(c).Data(result).Send()
 }
 
+func (a *API) ListEnginePresets(c *gin.Context) {
+	web.OK(c).Data(ListScanEnginePresets()).Send()
+}
+
 func (a *API) Events(c *gin.Context) {
 	taskID := c.Param("id")
 	if taskID == "" {
@@ -258,7 +275,7 @@ func (a *API) Events(c *gin.Context) {
 		return
 	}
 
-	if task.Status == model.TaskStatusCompleted || task.Status == model.TaskStatusCancelled || task.Status == model.TaskStatusFailed {
+	if task.Status == model.TaskStatusCompleted || task.Status == model.TaskStatusCancelled || task.Status == model.TaskStatusFailed || task.Status == model.TaskStatusPartial {
 		writeSSE(c.Writer, "done", mustJSON(DonePayload{Status: task.Status}))
 		flusher.Flush()
 		return

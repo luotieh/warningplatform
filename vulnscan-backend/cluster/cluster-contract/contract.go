@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 	"vulnscan-backend/model"
+	"vulnscan-backend/pkg/nodeenroll"
 )
 
 type HeartbeatPayload struct {
@@ -74,6 +75,39 @@ type BanReport struct {
 	Reason     string `json:"reason"`
 }
 
+// KnowledgeManifestDTO 主控侧 PoC/指纹/扫描规则同步游标（供扫描节点对比）。
+type KnowledgeManifestDTO struct {
+	Versions   map[string]int64 `json:"versions"`
+	ServerTime time.Time        `json:"server_time"`
+}
+
+// NodeEnrollmentIssueRequest wraps enrollment.json from the node plus optional master hints.
+type NodeEnrollmentIssueRequest struct {
+	Enrollment nodeenroll.EnrollmentFile `json:"enrollment"`
+	MasterURL  string                    `json:"master_url"`
+	Label      string                    `json:"label"`
+}
+
+// NodeAgentCredentialsFile is returned to the operator once; the agent loads it via AGENT_CREDENTIALS_FILE.
+type NodeAgentCredentialsFile struct {
+	Version   int    `json:"version"`
+	MasterURL string `json:"master_url"`
+	NodeUUID  string `json:"node_uuid"`
+	Secret    string `json:"secret"`
+	IssuedAt  string `json:"issued_at"`
+	Label     string `json:"label,omitempty"`
+}
+
+const NodeAgentCredentialsVersion = 1
+
+// NodeEnrollmentIssueResponse is returned by POST /cluster/scan-nodes/enroll.
+// When enrollment includes public_key_pem, Encrypted is true and only Envelope is set (no plaintext secret on the wire).
+type NodeEnrollmentIssueResponse struct {
+	Encrypted   bool                           `json:"encrypted"`
+	Credentials *NodeAgentCredentialsFile      `json:"credentials,omitempty"`
+	Envelope    *nodeenroll.CredentialEnvelope `json:"envelope,omitempty"`
+}
+
 type WorkerQuery struct {
 	Page     int    `form:"page"`
 	PageSize int    `form:"page_size"`
@@ -92,4 +126,9 @@ type ServiceCluster interface {
 	ReportBan(ctx context.Context, report *BanReport) error
 
 	CheckStaleWorkers(ctx context.Context, timeout time.Duration) ([]model.WorkerNode, error)
+
+	KnowledgeManifest(ctx context.Context) (*KnowledgeManifestDTO, error)
+
+	// IssueScanNodeCredentials validates enrollment.json, creates vs_nodes row, returns plaintext or RSA-wrapped credentials.
+	IssueScanNodeCredentials(ctx context.Context, req *NodeEnrollmentIssueRequest) (*NodeEnrollmentIssueResponse, error)
 }

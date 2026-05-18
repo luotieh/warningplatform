@@ -185,9 +185,11 @@ func (s *serviceSLA) CheckAndUpdateSLA(ctx context.Context) (*slaContract.SLAChe
 		}
 
 		if needUpdate && newStatus == model.IncidentSLAStatusWarning {
-			sess.WithContext(ctx).Model(&model.SecurityIncident{}).
+			if err := sess.WithContext(ctx).Model(&model.SecurityIncident{}).
 				Where("id = ?", inc.Id).
-				Update("sla_status", newStatus)
+				Update("sla_status", newStatus).Error; err != nil {
+				continue
+			}
 		}
 
 		if needUpdate {

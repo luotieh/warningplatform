@@ -23,7 +23,7 @@ func New() *SYNScanner { return &SYNScanner{} }
 
 func (m *SYNScanner) ID() string       { return "syn_scan" }
 func (m *SYNScanner) Name() string     { return "SYN 半开扫描" }
-func (m *SYNScanner) Category() string { return "host" }
+func (m *SYNScanner) Category() string { return "discover" }
 
 func (m *SYNScanner) Params() []core.ModuleParam {
 	return []core.ModuleParam{

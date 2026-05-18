@@ -35,7 +35,7 @@ func New() *NetTopoScanner {
 
 func (m *NetTopoScanner) ID() string       { return "nettopo" }
 func (m *NetTopoScanner) Name() string     { return "网络拓扑探测" }
-func (m *NetTopoScanner) Category() string { return "recon-deep" }
+func (m *NetTopoScanner) Category() string { return "recon" }
 
 func (m *NetTopoScanner) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {
 	start := time.Now()

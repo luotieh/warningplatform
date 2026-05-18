@@ -3,6 +3,8 @@ package engine
 func BuiltinTemplates() []*ScanTemplate {
 	return []*ScanTemplate{
 		quickTemplate(),
+		assetEnrichTemplate(),
+		vulnRetestTemplate(),
 		reconTemplate(),
 		vulnTemplate(),
 		vulnFullTemplate(),
@@ -28,6 +30,36 @@ func quickTemplate() *ScanTemplate {
 	}
 }
 
+// assetEnrichTemplate 的 ID 须与 scanrunner.AssetEnrichTemplateID 一致（asset-enrich）。
+func assetEnrichTemplate() *ScanTemplate {
+	return &ScanTemplate{
+		ID:          "asset-enrich",
+		Name:        "资产信息富化",
+		Description: "DNS 枚举、存活与常用端口探测、服务识别、证书检测、IP 属性（走扫描引擎，结果写入扫描发现）",
+		Version:     "1.0.0",
+		Author:      "system",
+		Tags:        []string{"asset", "enrich", "recon"},
+		Stages: []TemplateStage{
+			{Name: "discover", Modules: []string{"icmp_ping", "port_scan"}, Parallel: true},
+			{Name: "enrich", Modules: []string{"service_probe", "dns_all", "ip_attr", "cert_check"}, Parallel: true, DependsOn: []string{"discover"}},
+		},
+	}
+}
+
+func vulnRetestTemplate() *ScanTemplate {
+	return &ScanTemplate{
+		ID:          "vuln-retest",
+		Name:        "漏洞回测",
+		Description: "针对指定目标复测 Nuclei/PoC 模板，验证漏洞是否仍可被触发",
+		Version:     "1.0.0",
+		Author:      "system",
+		Tags:        []string{"vuln", "retest", "poc"},
+		Stages: []TemplateStage{
+			{Name: "retest", Modules: []string{"nuclei-poc"}, Parallel: false},
+		},
+	}
+}
+
 func reconTemplate() *ScanTemplate {
 	return &ScanTemplate{
 		ID:          "recon",
@@ -37,10 +69,8 @@ func reconTemplate() *ScanTemplate {
 		Author:      "system",
 		Tags:        []string{"recon", "discovery"},
 		Stages: []TemplateStage{
-			{Name: "discover", Modules: []string{"icmp_ping", "port_scan", "syn_scan", "udp_scan"}, Parallel: true},
-			{Name: "probe", Modules: []string{"service_probe", "subdomain_brute", "web_crawl"}, Parallel: true, DependsOn: []string{"discover"}},
-			{Name: "recon-fast", Modules: []string{"tech_detect", "waf_detect", "favicon", "cert_check", "dns_all", "ip_attr", "real_ip"}, Parallel: true, DependsOn: []string{"probe"}},
-			{Name: "recon-deep", Modules: []string{"js_analyze", "web_fingerprint", "api_disc", "info_leak", "company_recon", "email_collect", "screenshot"}, Parallel: true, DependsOn: []string{"probe"}},
+			{Name: "discover", Modules: []string{"icmp_ping", "port_scan", "syn_scan", "udp_scan", "service_probe", "subdomain_brute", "web_crawl"}, Parallel: true},
+			{Name: "recon", Modules: []string{"tech_detect", "waf_detect", "favicon", "cert_check", "dns_all", "ip_attr", "real_ip", "js_analyze", "web_fingerprint", "api_disc", "info_leak", "company_recon", "email_collect", "screenshot"}, Parallel: true, DependsOn: []string{"discover"}},
 		},
 	}
 }
@@ -92,16 +122,18 @@ func fullTemplate() *ScanTemplate {
 		Author:      "system",
 		Tags:        []string{"full", "recommended"},
 		Stages: []TemplateStage{
-			{Name: "discover", Modules: []string{"icmp_ping", "port_scan", "syn_scan", "udp_scan"}, Parallel: true},
-			{Name: "host", Modules: []string{"service_probe"}, DependsOn: []string{"discover"}},
-			{Name: "recon-fast", Modules: []string{"tech_detect", "waf_detect", "favicon", "cert_check", "dns_all", "ip_attr", "real_ip"}, Parallel: true, DependsOn: []string{"host"}},
-			{Name: "recon-deep", Modules: []string{"subdomain_brute", "web_crawl", "js_analyze", "web_fingerprint", "api_disc", "info_leak", "company_recon", "email_collect", "screenshot"}, Parallel: true, DependsOn: []string{"host"}},
-			{Name: "vuln", Modules: []string{
+			{Name: "discover", Modules: []string{"icmp_ping", "port_scan", "syn_scan", "udp_scan", "service_probe"}, Parallel: true},
+			{Name: "recon", Modules: []string{
+				"tech_detect", "waf_detect", "favicon", "cert_check", "dns_all", "ip_attr", "real_ip",
+				"subdomain_brute", "web_crawl", "js_analyze", "web_fingerprint", "api_disc", "info_leak",
+				"company_recon", "email_collect", "screenshot",
+			}, Parallel: true, DependsOn: []string{"discover"}},
+			{Name: "attack", Modules: []string{
 				"sqli", "xss", "weak_pass", "brute_force",
 				"ssrf", "cmdi", "lfi", "ssti", "xxe", "nosqli",
 				"jwt_sec", "apisec", "advanced_vuln", "unauth",
-			}, Parallel: true, DependsOn: []string{"recon-fast", "recon-deep"}, Condition: &StageCondition{PrevStageMinTargets: 1}},
-			{Name: "enhance", Modules: []string{"fpenhance", "nettopo", "nuclei-poc", "dir_scan"}, Parallel: true, DependsOn: []string{"recon-deep"}},
+				"fpenhance", "nettopo", "nuclei-poc", "dir_scan",
+			}, Parallel: true, DependsOn: []string{"recon"}, Condition: &StageCondition{PrevStageMinTargets: 1}},
 		},
 	}
 }

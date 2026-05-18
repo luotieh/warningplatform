@@ -4,8 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
-	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -13,14 +12,12 @@ import (
 	"github.com/projectdiscovery/nuclei/v3/pkg/output"
 	"gorm.io/gorm"
 
+	"vulnscan-backend/pkg/scanmetrics"
 	"vulnscan-backend/scan/core"
 )
 
 type NucleiModule struct {
-	store    *PocStore
-	mu       sync.Mutex
-	cacheDir string
-	cacheVer int64
+	store *PocStore
 }
 
 func NewModule(db *gorm.DB) *NucleiModule {
@@ -41,32 +38,82 @@ func (m *NucleiModule) Category() string { return "vuln" }
 
 func (m *NucleiModule) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {
 	start := time.Now()
+	mc := &struct {
+		mode     string
+		outcome  string
+		findings int
+	}{outcome: "success"}
+	defer func() {
+		mode := mc.mode
+		if mode == "" {
+			mode = "unknown"
+		}
+		scanmetrics.RecordNucleiRun(mode, mc.outcome, time.Since(start).Seconds(), mc.findings)
+	}()
 
-	templates := m.loadTemplates(config)
-	if len(templates) == 0 {
-		slog.Info("[NucleiModule] 无PoC模板，跳过")
-		return &core.ModuleResult{Duration: time.Since(start)}, nil
+	tplFS, wfFS, useFS, err := CollectFilesystemTemplateSources(config)
+	if err != nil {
+		mc.outcome = "config_error"
+		return nil, err
+	}
+	if useFS {
+		mc.mode = "filesystem"
+	} else {
+		mc.mode = "database"
 	}
 
-	templateDir, err := m.ensureTemplateDir(templates)
-	if err != nil {
-		return nil, fmt.Errorf("准备模板目录失败: %w", err)
+	var opts []nucleilib.NucleiSDKOptions
+	var templateCount int
+
+	if useFS {
+		templateCount = len(tplFS) + len(wfFS)
+		slog.Info("[NucleiModule] 使用本地模板/工作流路径", append([]any{"template_paths", len(tplFS), "workflow_paths", len(wfFS)}, nucleiScanLogAttrs(config)...)...)
+		opts = buildNucleiOptions(tplFS, wfFS, config)
+	} else {
+		templates := m.loadTemplates(config)
+		if len(templates) == 0 && m.store.db != nil {
+			if n, perr := tryPullPocFromMaster(ctx, m.store.db, config); perr != nil {
+				slog.Warn("[NucleiModule] 从主控拉取 PoC 失败", append([]any{"error", perr}, nucleiScanLogAttrs(config)...)...)
+			} else if n > 0 {
+				slog.Info("[NucleiModule] 已从主控同步 PoC，重新加载模板", append([]any{"records", n}, nucleiScanLogAttrs(config)...)...)
+				m.store.InvalidateCache()
+				templates = m.loadTemplates(config)
+			}
+		}
+		if len(templates) == 0 {
+			slog.Info("[NucleiModule] 无PoC模板，跳过")
+			mc.outcome = "skipped_no_templates"
+			return &core.ModuleResult{Duration: time.Since(start)}, nil
+		}
+
+		templatePaths, matErr := materializePocTemplates(templates)
+		if matErr != nil {
+			mc.outcome = "init_error"
+			return nil, matErr
+		}
+		if len(templatePaths) == 0 {
+			slog.Info("[NucleiModule] 无有效模板路径，跳过")
+			mc.outcome = "skipped_no_templates"
+			return &core.ModuleResult{Duration: time.Since(start)}, nil
+		}
+		templateCount = len(templatePaths)
+		opts = buildNucleiOptions(templatePaths, nil, config)
 	}
 
 	targetURLs := buildTargetURLs(targets)
 	if len(targetURLs) == 0 {
+		mc.outcome = "skipped_no_targets"
 		return &core.ModuleResult{Duration: time.Since(start)}, nil
 	}
 
-	slog.Info("[NucleiModule] 开始Nuclei扫描", "templates", len(templates), "targets", len(targetURLs))
+	slog.Info("[NucleiModule] 开始Nuclei扫描", append([]any{"template_sources", templateCount, "targets", len(targetURLs)}, nucleiScanLogAttrs(config)...)...)
 
 	var findings []*core.Finding
 	var mu sync.Mutex
 
-	opts := buildNucleiOptions(templateDir, config)
-
 	ne, err := nucleilib.NewNucleiEngineCtx(ctx, opts...)
 	if err != nil {
+		mc.outcome = "init_error"
 		return nil, fmt.Errorf("初始化Nuclei引擎失败: %w", err)
 	}
 	defer ne.Close()
@@ -83,9 +130,11 @@ func (m *NucleiModule) Run(ctx context.Context, targets []*core.Target, config m
 	})
 	if err != nil {
 		slog.Warn("[NucleiModule] Nuclei执行出错", "error", err)
+		mc.outcome = "execute_error"
 	}
+	mc.findings = len(findings)
 
-	slog.Info("[NucleiModule] Nuclei扫描完成", "findings", len(findings), "duration", time.Since(start).Round(time.Millisecond))
+	slog.Info("[NucleiModule] Nuclei扫描完成", append([]any{"findings", len(findings), "duration", time.Since(start).Round(time.Millisecond)}, nucleiScanLogAttrs(config)...)...)
 
 	return &core.ModuleResult{
 		Findings: findings,
@@ -94,6 +143,14 @@ func (m *NucleiModule) Run(ctx context.Context, targets []*core.Target, config m
 }
 
 func (m *NucleiModule) loadTemplates(config map[string]interface{}) []*PocEntry {
+	if ids := configStringSlice(config, "poc_template_ids"); len(ids) > 0 {
+		matched := m.store.LoadByIDs(ids)
+		if len(matched) > 0 {
+			slog.Info("[NucleiModule] 按指定 PoC 回测", "templates", len(matched))
+			return matched
+		}
+		slog.Warn("[NucleiModule] 未找到指定 PoC 模板，回退全部 PoC", "ids", ids)
+	}
 	if severities, ok := config["poc_severities"].([]string); ok && len(severities) > 0 {
 		return m.store.LoadBySeverity(severities)
 	}
@@ -109,7 +166,14 @@ func (m *NucleiModule) loadTemplates(config map[string]interface{}) []*PocEntry 
 				"products", len(products), "matched_templates", len(matched))
 			return matched
 		}
-		slog.Info("[NucleiModule] 指纹匹配无结果，使用全部PoC", "products", products)
+		fallback := strings.ToLower(strings.TrimSpace(configString(config, "poc_unmatched_fallback", "skip")))
+		if fallback == "all" {
+			slog.Warn("[NucleiModule] 指纹匹配无结果，按配置回退为全部 PoC", "products", products)
+			return m.store.LoadAll()
+		}
+		slog.Info("[NucleiModule] 指纹匹配无结果，跳过 nuclei（降低误报）；需要全量请设 poc_unmatched_fallback=all",
+			"products", products)
+		return nil
 	}
 
 	return m.store.LoadAll()
@@ -131,10 +195,27 @@ func extractDetectedProducts(config map[string]interface{}) []string {
 	return nil
 }
 
-func buildNucleiOptions(templateDir string, config map[string]interface{}) []nucleilib.NucleiSDKOptions {
+func buildNucleiOptions(templatePaths []string, workflowPaths []string, config map[string]interface{}) []nucleilib.NucleiSDKOptions {
+	concurrency := nucleilib.Concurrency{
+		TemplateConcurrency:           25,
+		HostConcurrency:               10,
+		HeadlessHostConcurrency:       2,
+		HeadlessTemplateConcurrency:   2,
+		JavascriptTemplateConcurrency: 15,
+		TemplatePayloadConcurrency:    25,
+		ProbeConcurrency:              50,
+	}
+	if hasDetectedWAFs(config) {
+		concurrency.TemplateConcurrency = max(8, concurrency.TemplateConcurrency/2)
+		concurrency.HostConcurrency = max(3, concurrency.HostConcurrency/2)
+		concurrency.JavascriptTemplateConcurrency = max(5, concurrency.JavascriptTemplateConcurrency/2)
+		slog.Info("[NucleiModule] 检测到 WAF，降低 nuclei 并发", "template_conc", concurrency.TemplateConcurrency, "host_conc", concurrency.HostConcurrency)
+	}
+
 	opts := []nucleilib.NucleiSDKOptions{
 		nucleilib.WithTemplatesOrWorkflows(nucleilib.TemplateSources{
-			Templates: []string{templateDir},
+			Templates: templatePaths,
+			Workflows: workflowPaths,
 		}),
 		nucleilib.DisableUpdateCheck(),
 		nucleilib.WithNetworkConfig(nucleilib.NetworkConfig{
@@ -143,10 +224,7 @@ func buildNucleiOptions(templateDir string, config map[string]interface{}) []nuc
 			MaxHostError:    30,
 			SystemResolvers: true,
 		}),
-		nucleilib.WithConcurrency(nucleilib.Concurrency{
-			TemplateConcurrency: 25,
-			HostConcurrency:     10,
-		}),
+		nucleilib.WithConcurrency(concurrency),
 	}
 
 	if rateLimit, ok := config["rate_limit"].(int); ok && rateLimit > 0 {
@@ -163,7 +241,189 @@ func buildNucleiOptions(templateDir string, config map[string]interface{}) []nuc
 		opts = append(opts, nucleilib.WithHeaders(headers))
 	}
 
+	headless := boolFromConfig(config, "nuclei_headless")
+	if headless {
+		pageTO := intFromConfig(config, "nuclei_headless_page_timeout", 25)
+		if pageTO < 10 {
+			pageTO = 10
+		}
+		opts = append(opts, nucleilib.EnableHeadlessWithOpts(&nucleilib.HeadlessOpts{
+			PageTimeout:     pageTO,
+			ShowBrowser:     false,
+			UseChrome:       false,
+			HeadlessOptions: nil,
+		}))
+	}
+
+	if f := nucleiTemplateFilters(config, headless); f != nil {
+		opts = append(opts, nucleilib.WithTemplateFilters(*f))
+	}
+
+	opts = mergeInteractshNucleiOptions(opts, config)
+
+	if boolFromConfig(config, "nuclei_enable_stats") {
+		interval := intFromConfig(config, "nuclei_stats_interval_seconds", 30)
+		if interval < 5 {
+			interval = 5
+		}
+		opts = append(opts, nucleilib.EnableStatsWithOpts(nucleilib.StatsOptions{
+			Interval:         interval,
+			JSON:             boolFromConfig(config, "nuclei_stats_json"),
+			MetricServerPort: intFromConfig(config, "nuclei_stats_metrics_port", 0),
+		}))
+	}
+
 	return opts
+}
+
+func nucleiTemplateFilters(config map[string]interface{}, headlessEnabled bool) *nucleilib.TemplateFilters {
+	f := nucleilib.TemplateFilters{}
+
+	if _, ok := config["nuclei_exclude_severities"]; ok {
+		f.ExcludeSeverities = strings.TrimSpace(configString(config, "nuclei_exclude_severities", ""))
+	} else {
+		f.ExcludeSeverities = "info"
+	}
+
+	if sev := strings.TrimSpace(configString(config, "nuclei_severity", "")); sev != "" {
+		f.Severity = sev
+	}
+	if tags := configStringSlice(config, "nuclei_tags"); len(tags) > 0 {
+		f.Tags = tags
+	}
+	if inc := configStringSlice(config, "nuclei_include_tags"); len(inc) > 0 {
+		f.IncludeTags = inc
+	}
+	if ex := configStringSlice(config, "nuclei_exclude_tags"); len(ex) > 0 {
+		f.ExcludeTags = ex
+	}
+	if ids := configStringSlice(config, "nuclei_include_ids"); len(ids) > 0 {
+		f.IDs = ids
+	}
+	if exIDs := configStringSlice(config, "nuclei_exclude_ids"); len(exIDs) > 0 {
+		f.ExcludeIDs = exIDs
+	}
+	if p := strings.TrimSpace(configString(config, "nuclei_protocols", "")); p != "" {
+		f.ProtocolTypes = p
+	}
+	if !headlessEnabled {
+		prev := strings.TrimSpace(f.ExcludeProtocolTypes)
+		if prev == "" {
+			f.ExcludeProtocolTypes = "headless"
+		} else if !strings.Contains(strings.ToLower(prev), "headless") {
+			f.ExcludeProtocolTypes = prev + ",headless"
+		}
+	}
+	if ep := strings.TrimSpace(configString(config, "nuclei_exclude_protocols", "")); ep != "" {
+		if f.ExcludeProtocolTypes != "" {
+			f.ExcludeProtocolTypes += ","
+		}
+		f.ExcludeProtocolTypes += ep
+	}
+
+	if f.Severity == "" && f.ExcludeSeverities == "" && len(f.Tags) == 0 && len(f.IncludeTags) == 0 &&
+		len(f.ExcludeTags) == 0 && len(f.IDs) == 0 && len(f.ExcludeIDs) == 0 &&
+		f.ProtocolTypes == "" && f.ExcludeProtocolTypes == "" {
+		return nil
+	}
+	return &f
+}
+
+func hasDetectedWAFs(config map[string]interface{}) bool {
+	if s, ok := config["detected_wafs"].([]string); ok && len(s) > 0 {
+		return true
+	}
+	if raw, ok := config["detected_wafs"].([]interface{}); ok && len(raw) > 0 {
+		return len(raw) > 0
+	}
+	return false
+}
+
+func configString(config map[string]interface{}, key, def string) string {
+	v, ok := config[key]
+	if !ok || v == nil {
+		return def
+	}
+	if s, ok := v.(string); ok {
+		return strings.TrimSpace(s)
+	}
+	return def
+}
+
+func configStringSlice(config map[string]interface{}, key string) []string {
+	v, ok := config[key]
+	if !ok || v == nil {
+		return nil
+	}
+	if ss, ok := v.([]string); ok {
+		return ss
+	}
+	raw, ok := v.([]interface{})
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(raw))
+	for _, x := range raw {
+		if s, ok := x.(string); ok && strings.TrimSpace(s) != "" {
+			out = append(out, strings.TrimSpace(s))
+		}
+	}
+	return out
+}
+
+func boolFromConfig(config map[string]interface{}, key string) bool {
+	v, ok := config[key]
+	if !ok || v == nil {
+		return false
+	}
+	switch t := v.(type) {
+	case bool:
+		return t
+	case string:
+		s := strings.ToLower(strings.TrimSpace(t))
+		return s == "true" || s == "1" || s == "yes"
+	default:
+		return false
+	}
+}
+
+func intFromConfig(config map[string]interface{}, key string, def int) int {
+	if config == nil {
+		return def
+	}
+	v, ok := config[key]
+	if !ok || v == nil {
+		return def
+	}
+	switch t := v.(type) {
+	case int:
+		return t
+	case float64:
+		return int(t)
+	case string:
+		var n int
+		_, _ = fmt.Sscanf(strings.TrimSpace(t), "%d", &n)
+		return n
+	default:
+		return def
+	}
+}
+
+func nucleiScanLogAttrs(config map[string]interface{}) []any {
+	if config == nil {
+		return nil
+	}
+	var a []any
+	if tid := strings.TrimSpace(configString(config, "scan_task_id", "")); tid != "" {
+		a = append(a, "scan_task_id", tid)
+	}
+	if pid := strings.TrimSpace(configString(config, "scan_parent_task_id", "")); pid != "" {
+		a = append(a, "scan_parent_task_id", pid)
+	}
+	if rid := strings.TrimSpace(configString(config, "scan_request_id", "")); rid != "" {
+		a = append(a, "scan_request_id", rid)
+	}
+	return a
 }
 
 func buildTargetURLs(targets []*core.Target) []string {
@@ -287,49 +547,4 @@ func findMatchingTarget(host string, targets []*core.Target) *core.Target {
 		}
 	}
 	return nil
-}
-
-func (m *NucleiModule) ensureTemplateDir(templates []*PocEntry) (string, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	currentVer := m.store.CacheVersion()
-	if m.cacheDir != "" && m.cacheVer == currentVer {
-		if _, err := os.Stat(m.cacheDir); err == nil {
-			return m.cacheDir, nil
-		}
-	}
-
-	if m.cacheDir != "" {
-		os.RemoveAll(m.cacheDir)
-	}
-
-	dir, err := os.MkdirTemp("", "nuclei-templates-*")
-	if err != nil {
-		return "", err
-	}
-
-	for _, tmpl := range templates {
-		fileName := sanitizeFileName(tmpl.ID) + ".yaml"
-		path := filepath.Join(dir, fileName)
-		if writeErr := os.WriteFile(path, []byte(tmpl.RawContent), 0644); writeErr != nil {
-			slog.Warn("[NucleiModule] 写入模板失败", "id", tmpl.ID, "error", writeErr)
-		}
-	}
-
-	m.cacheDir = dir
-	m.cacheVer = currentVer
-	return dir, nil
-}
-
-func sanitizeFileName(id string) string {
-	result := make([]byte, 0, len(id))
-	for _, c := range []byte(id) {
-		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_' {
-			result = append(result, c)
-		} else {
-			result = append(result, '_')
-		}
-	}
-	return string(result)
 }

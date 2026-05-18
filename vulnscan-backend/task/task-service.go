@@ -136,6 +136,21 @@ func (s *serviceTask) ListFindings(query taskContract.FindingQuery) ([]model.Sca
 	if query.Keyword != "" {
 		tx = tx.Where("title LIKE ? OR target LIKE ?", "%"+query.Keyword+"%", "%"+query.Keyword+"%")
 	}
+	if query.Target != "" {
+		t := query.Target
+		if !strings.Contains(t, "://") {
+			host := t
+			if idx := strings.LastIndex(t, ":"); idx > 0 {
+				if _, err := strconv.Atoi(t[idx+1:]); err == nil {
+					host = t[:idx]
+				}
+			}
+			tx = tx.Where("(target = ? OR target = ? OR target = ? OR target LIKE ? OR target LIKE ?)",
+				host, "http://"+t, "https://"+t, "http://"+host+"/%", "https://"+host+"/%")
+		} else {
+			tx = tx.Where("target = ?", t)
+		}
+	}
 
 	if err := tx.Count(&count).Error; err != nil {
 		return nil, 0, err

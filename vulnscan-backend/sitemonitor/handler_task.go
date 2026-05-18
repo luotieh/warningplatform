@@ -18,7 +18,8 @@ func (h *HandlerMonitor) ListTasks(c *gin.Context) {
 	if !ok {
 		return
 	}
-	total, list, err := h.svc.ListTasks(c.Request.Context(), req)
+	scope := iamsdk.DataFilterScope(c, monitorFieldMapping)
+	total, list, err := h.svc.ListTasks(c.Request.Context(), req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
@@ -62,13 +63,14 @@ func (h *HandlerMonitor) CreateTask(c *gin.Context) {
 	task.Enabled = true
 	if task.ScheduleCron == "" {
 		task.ScheduleEnabled = true
-		task.ScheduleCron = "0 */5 * * * *"
+		task.ScheduleCron = "0 */1 * * * *"
 	}
 	if !task.ScheduleEnabled {
 		task.ScheduleEnabled = true
 	}
 	user, _ := iamsdk.GetCurrentUser(c)
 	task.CreatedBy = user.UserID
+	task.OrganizeID = user.OrganizeID
 	if err := h.svc.CreateTask(c.Request.Context(), &task); err != nil {
 		web.Fail(c).Err(err).Send()
 		return
@@ -155,8 +157,8 @@ func (h *HandlerMonitor) CreateTasksFromAssets(c *gin.Context) {
 			TargetIps:           asset.IPv4,
 			Enabled:             true,
 			ScheduleEnabled:     true,
-			ScheduleCron:        "0 */5 * * * *",
-			ConfigAvailability:  model.JSONMap{"enabled": true, "cron": "0 */5 * * * *"},
+			ScheduleCron:        "0 */1 * * * *",
+			ConfigAvailability:  model.JSONMap{"enabled": true, "cron": "0 */1 * * * *"},
 			ConfigDomainHijack:  model.JSONMap{"enabled": true, "cron": "0 0 */6 * * *"},
 			ConfigTamper:        model.JSONMap{"enabled": true, "cron": "0 0 */2 * * *"},
 			ConfigSensitiveWord: model.JSONMap{"enabled": true, "cron": "0 0 0 * * *"},
@@ -164,6 +166,7 @@ func (h *HandlerMonitor) CreateTasksFromAssets(c *gin.Context) {
 			ConfigBlacklink:     model.JSONMap{"enabled": true, "cron": "0 0 */6 * * *"},
 		}
 		task.CreatedBy = user.UserID
+		task.OrganizeID = user.OrganizeID
 
 		if err := h.svc.CreateTask(ctx, &task); err != nil {
 			results = append(results, result{

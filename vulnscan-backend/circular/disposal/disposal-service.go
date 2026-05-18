@@ -3,6 +3,8 @@ package disposal
 import (
 	"fmt"
 	"time"
+	"vulnscan-backend/circular/paging"
+	"vulnscan-backend/circular/scope"
 	"vulnscan-backend/model"
 
 	disposalContract "vulnscan-backend/circular/disposal/disposal-contract"
@@ -11,7 +13,6 @@ import (
 
 	"code.yt-security.com/public/core/v2/db"
 	"code.yt-security.com/public/core/v2/generate/qulid"
-	iamsdk "code.yt-security.com/public/sdk"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -24,40 +25,29 @@ func NewServiceDisposal(database *db.DB) *serviceDisposal {
 	return &serviceDisposal{db: database}
 }
 
-func (s *serviceDisposal) session() *gorm.DB {
-	sess, _ := s.db.GetDBSession()
-	return sess
+func (s *serviceDisposal) session() (*gorm.DB, error) {
+	return s.db.GetDBSession()
 }
 
 func (s *serviceDisposal) List(c *gin.Context, req inputContract.ListQuery) (int64, []inputContract.ListResp, error) {
 	var items []inputContract.ListResp
+	currentOrganize := scope.GetOrganize(c)
 
-	user, _ := iamsdk.GetCurrentUser(c)
-	currentOrganize := user.OrganizeID
-	if currentOrganize == "" {
-		currentOrganize = "yt-networks-security"
-	}
-
-	sess := s.session()
-
-	var circularIds []string
-	if err := sess.WithContext(c).Model(&model.CircularOrganizeStatus{}).
-		Where("organize = ? AND status = ?", currentOrganize, model.CircularToBeProcessed).
-		Pluck("circular_id", &circularIds).Error; err != nil {
+	sess, err := s.session()
+	if err != nil {
 		return 0, nil, err
 	}
-	if len(circularIds) == 0 {
-		return 0, items, nil
-	}
 
-	tx := sess.WithContext(c).Model(&model.Circular{}).Where("code IN ?", circularIds)
+	tx := sess.WithContext(c).Model(&model.Circular{}).
+		Joins("INNER JOIN circular_organize_status ON circular_organize_status.circular_id = circulars.id AND circular_organize_status.organize = ? AND circular_organize_status.status = ?", currentOrganize, model.CircularToBeProcessed)
+
 	var count int64
 	if err := tx.Count(&count).Error; err != nil {
 		return 0, nil, err
 	}
 
-	page, size := normalizePage(req.Page, req.Size)
-	if err := tx.Offset((page - 1) * size).Limit(size).Order("created_at DESC").Find(&items).Error; err != nil {
+	page, size := paging.Normalize(req.Page, req.Size)
+	if err := tx.Offset((page - 1) * size).Limit(size).Order("circulars.created_at DESC").Find(&items).Error; err != nil {
 		return 0, nil, err
 	}
 
@@ -65,37 +55,42 @@ func (s *serviceDisposal) List(c *gin.Context, req inputContract.ListQuery) (int
 }
 
 func (s *serviceDisposal) Dispose(c *gin.Context, id string, updatedBy string, req disposalContract.DisposalCondition) error {
-	sess := s.session()
-
-	user, _ := iamsdk.GetCurrentUser(c)
-	currentOrganize := user.OrganizeID
-	if currentOrganize == "" {
-		currentOrganize = "yt-networks-security"
+	sess, err := s.session()
+	if err != nil {
+		return err
 	}
+
+	currentOrganize := scope.GetOrganize(c)
 
 	var circular model.Circular
 	if err := sess.Where("id = ?", id).First(&circular).Error; err != nil {
-		return fmt.Errorf("通报不存在")
+		return fmt.Errorf("通报不存在: id=%s", id)
 	}
 
 	var orgStatus model.CircularOrganizeStatus
-	if err := sess.WithContext(c).Where("circular_id = ? AND organize = ? AND status = ?",
-		id, currentOrganize, model.CircularToBeProcessed).First(&orgStatus).Error; err != nil {
-		return fmt.Errorf("当前组织不在待处置状态")
+	if err := sess.WithContext(c).Where("circular_id = ? AND organize = ?",
+		id, currentOrganize).First(&orgStatus).Error; err != nil {
+		return fmt.Errorf("当前组织不在待处置状态: circular_id=%s, organize=%s", id, currentOrganize)
 	}
+
+	disposeEvt := model.CircularOrgEvtDispose
 
 	var dist model.CircularDistribution
 	if err := sess.WithContext(c).Where("circular_id = ? AND target_organize = ?", id, currentOrganize).
 		Order("depth desc").First(&dist).Error; err != nil {
-		return fmt.Errorf("未找到派发记录")
+		return fmt.Errorf("未找到派发记录: circular_id=%s, organize=%s", id, currentOrganize)
 	}
 
 	now := time.Now()
-	var isTimeout bool
 	if dist.ProcessingDeadline != "" {
 		if parse, err := time.Parse("2006-01-02 15:04:05", dist.ProcessingDeadline); err == nil && now.After(parse) {
-			isTimeout = true
+			disposeEvt = model.CircularOrgEvtTimeout
 		}
+	}
+
+	newOrgStatus, err := model.CircularOrgSM.Apply(orgStatus.Status, disposeEvt)
+	if err != nil {
+		return err
 	}
 
 	return sess.WithContext(c).Transaction(func(session *gorm.DB) error {
@@ -111,19 +106,15 @@ func (s *serviceDisposal) Dispose(c *gin.Context, id string, updatedBy string, r
 		}
 
 		disposalDataValue, _ := req.DisposalData.Value()
-		if err := session.Model(&model.Circular{}).Where("code = ?", id).Updates(map[string]interface{}{
+		if err := session.Model(&model.Circular{}).Where("id = ?", id).Updates(map[string]interface{}{
 			"disposal_organize": currentOrganize, "disposal_data": disposalDataValue,
 		}).Error; err != nil {
 			return err
 		}
 
-		newStatus := model.CircularDisposed
-		if isTimeout {
-			newStatus = model.CircularTimeOut
-		}
 		if err := session.Model(&model.CircularOrganizeStatus{}).
 			Where("circular_id = ? AND organize = ?", id, currentOrganize).
-			Update("status", newStatus).Error; err != nil {
+			Update("status", newOrgStatus).Error; err != nil {
 			return err
 		}
 
@@ -139,42 +130,47 @@ func (s *serviceDisposal) Dispose(c *gin.Context, id string, updatedBy string, r
 				return err
 			}
 		} else {
-			session.Model(&model.CircularOrganizeStatus{}).
+			if err := session.Model(&model.CircularOrganizeStatus{}).
 				Where("circular_id = ? AND organize = ?", id, parentOrganize).
-				Update("status", model.CircularToBeReviewed)
+				Update("status", model.CircularToBeReviewed).Error; err != nil {
+				return err
+			}
 		}
 
 		opLog := model.BuildCircularOperationLog(id, model.CircularOpDisposal, updatedBy, "处置完成", currentOrganize, map[string]interface{}{
-			"disposal_result": req.DisposalResult, "disposal_question": req.DisposalQuestion, "is_timeout": isTimeout,
+			"disposal_result": req.DisposalResult, "disposal_question": req.DisposalQuestion, "new_status": string(newOrgStatus),
 		})
 		return session.Create(&opLog).Error
 	})
 }
 
 func (s *serviceDisposal) Redistribute(c *gin.Context, req distributeContract.RedistributeReq, updatedBy string) error {
-	sess := s.session()
-
-	user, _ := iamsdk.GetCurrentUser(c)
-	currentOrganize := user.OrganizeID
-	if currentOrganize == "" {
-		currentOrganize = "yt-networks-security"
+	sess, err := s.session()
+	if err != nil {
+		return err
 	}
+
+	currentOrganize := scope.GetOrganize(c)
 
 	var circular model.Circular
 	if err := sess.Where("id = ?", req.CircularId).First(&circular).Error; err != nil {
-		return fmt.Errorf("通报不存在")
+		return fmt.Errorf("通报不存在: id=%s", req.CircularId)
 	}
 
 	var orgStatus model.CircularOrganizeStatus
-	if err := sess.WithContext(c).Where("circular_id = ? AND organize = ? AND status = ?",
-		req.CircularId, currentOrganize, model.CircularToBeProcessed).First(&orgStatus).Error; err != nil {
-		return fmt.Errorf("当前组织不在待处置状态")
+	if err := sess.WithContext(c).Where("circular_id = ? AND organize = ?",
+		req.CircularId, currentOrganize).First(&orgStatus).Error; err != nil {
+		return fmt.Errorf("当前组织不在待处置状态: circular_id=%s, organize=%s", req.CircularId, currentOrganize)
+	}
+
+	if _, err := model.CircularOrgSM.Apply(orgStatus.Status, model.CircularOrgEvtRedistribute); err != nil {
+		return err
 	}
 
 	var parentDist model.CircularDistribution
 	if err := sess.WithContext(c).Where("circular_id = ? AND target_organize = ?", req.CircularId, currentOrganize).
 		Order("depth desc").First(&parentDist).Error; err != nil {
-		return fmt.Errorf("未找到上级派发记录")
+		return fmt.Errorf("未找到上级派发记录: circular_id=%s, organize=%s", req.CircularId, currentOrganize)
 	}
 
 	now := time.Now()
@@ -194,25 +190,29 @@ func (s *serviceDisposal) Redistribute(c *gin.Context, req distributeContract.Re
 			return err
 		}
 
-		if err := session.Create(&model.CircularDistributionClosure{
-			Ancestor: distributionId, Descendant: distributionId, Distance: 0,
-		}).Error; err != nil {
-			return err
+		closures := []model.CircularDistributionClosure{
+			{Ancestor: distributionId, Descendant: distributionId, Distance: 0},
 		}
 
 		var parentClosures []model.CircularDistributionClosure
-		session.Where("descendant = ?", parentDist.Id).Find(&parentClosures)
+		if err := session.Where("descendant = ?", parentDist.Id).Find(&parentClosures).Error; err != nil {
+			return err
+		}
 		for _, pc := range parentClosures {
-			if err := session.Create(&model.CircularDistributionClosure{
+			closures = append(closures, model.CircularDistributionClosure{
 				Ancestor: pc.Ancestor, Descendant: distributionId, Distance: pc.Distance + 1,
-			}).Error; err != nil {
-				return err
-			}
+			})
 		}
 
-		session.Model(&model.CircularOrganizeStatus{}).
+		if err := session.Create(&closures).Error; err != nil {
+			return err
+		}
+
+		if err := session.Model(&model.CircularOrganizeStatus{}).
 			Where("circular_id = ? AND organize = ?", req.CircularId, currentOrganize).
-			Update("status", model.CircularRedistributed)
+			Update("status", model.CircularRedistributed).Error; err != nil {
+			return err
+		}
 
 		targetOrg := model.CircularOrganizeStatus{
 			CircularId: circular.Code, DistributionId: distributionId,
@@ -229,14 +229,4 @@ func (s *serviceDisposal) Redistribute(c *gin.Context, req distributeContract.Re
 		})
 		return session.Create(&opLog).Error
 	})
-}
-
-func normalizePage(page, size int) (int, int) {
-	if page <= 0 {
-		page = 1
-	}
-	if size <= 0 || size > 100 {
-		size = 20
-	}
-	return page, size
 }

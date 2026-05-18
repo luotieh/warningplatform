@@ -7,6 +7,7 @@ const Version = "2.0.0"
 type Config struct {
 	MasterURL         string
 	Token             string
+	Secret            string
 	MaxConcurrent     int
 	TaskTimeout       time.Duration
 	HeartbeatInterval time.Duration

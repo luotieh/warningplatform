@@ -208,7 +208,7 @@ onMounted(() => {
               >
                 <NFormItem label="监测间隔(分钟)">
                   <NInputNumber
-                    :value="getField(dim, 'cycle_minutes', 5)"
+                    :value="getField(dim, 'cycle_minutes', 1)"
                     :min="1"
                     :max="1440"
                     @update:value="(v: number | null) => setField(dim, 'cycle_minutes', v)"

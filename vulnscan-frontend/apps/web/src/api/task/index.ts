@@ -47,16 +47,30 @@ export function getTaskDetail(id: string) {
 export function createTask(data: {
   name: string;
   targets: string[];
-  profile?: string;
-  modules?: string[];
+  template_id?: string;
   parameters?: Record<string, any>;
   priority?: number;
 }) {
-  return requestClient.post('/scan/launch', data);
+  return requestClient.post('/scan/launch', {
+    ...data,
+    template_id: data.template_id || 'full',
+  });
 }
 
 export function cancelTask(id: string) {
   return requestClient.post(`/scan/cancel/${id}`);
+}
+
+/** 基于原任务配置重新入队（新任务 ID） */
+export function rerunTask(id: string) {
+  return requestClient.post<{
+    task_id: string;
+    name: string;
+    template: string;
+    status: string;
+    split_mode?: boolean;
+    sub_count?: number;
+  }>(`/scan/rerun/${id}`);
 }
 
 export function deleteTask(id: string) {
@@ -87,9 +101,20 @@ export function getScanProfiles() {
   return requestClient.get('/scan/profiles');
 }
 
+export interface ScanEnginePreset {
+  name: string;
+  description: string;
+  parameters: Record<string, any>;
+}
+
+export function getScanEnginePresets() {
+  return requestClient.get<ScanEnginePreset[]>('/scan/engine-presets');
+}
+
 export interface ScanFinding {
   id: string;
   task_id: string;
+  asset_id: string;
   module_id: string;
   type: string;
   category: string;
@@ -102,6 +127,8 @@ export interface ScanFinding {
   confidence: number;
   confidence_reason: string;
   evidence: string;
+  verification_level: string;
+  verification_detail: string;
   data: Record<string, any>;
   tags: string[];
   created_at: string;

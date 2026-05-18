@@ -5,7 +5,7 @@ import { BasicLayout } from '#/layouts';
 const routes: RouteRecordRaw[] = [
   {
     component: BasicLayout,
-    meta: { icon: 'lucide:mail-warning', order: 5, title: '通报处置' },
+    meta: { icon: 'lucide:mail-warning', order: 6, title: '通报处置' },
     name: 'Circular',
     path: '/circular',
     redirect: '/circular/input',
@@ -50,7 +50,8 @@ const routes: RouteRecordRaw[] = [
       {
         name: 'CircularVerify',
         path: 'verify',
-        component: () => import('#/views/circular/verify/list.vue'),
+        component: () => import('#/views/circular/flow-board.vue'),
+        props: { mode: 'verify' },
         meta: {
           icon: 'lucide:check-circle',
           title: '通报核验',
@@ -62,7 +63,8 @@ const routes: RouteRecordRaw[] = [
       {
         name: 'CircularDistribute',
         path: 'distribute',
-        component: () => import('#/views/circular/distribute/list.vue'),
+        component: () => import('#/views/circular/flow-board.vue'),
+        props: { mode: 'distribute' },
         meta: {
           icon: 'lucide:send',
           title: '通报派发',
@@ -97,7 +99,8 @@ const routes: RouteRecordRaw[] = [
       {
         name: 'CircularReview',
         path: 'review',
-        component: () => import('#/views/circular/review/list.vue'),
+        component: () => import('#/views/circular/flow-board.vue'),
+        props: { mode: 'review' },
         meta: {
           icon: 'lucide:clipboard-check',
           title: '通报审核',
@@ -123,30 +126,6 @@ const routes: RouteRecordRaw[] = [
           hideInMenu: true,
           title: '台账详情',
           activePath: '/circular/ledger',
-        },
-      },
-      {
-        name: 'CircularTemplate',
-        path: 'template',
-        component: () => import('#/views/circular/template/list.vue'),
-        meta: {
-          icon: 'lucide:file-text',
-          title: '模板管理',
-          perms: [
-            { action: 'create', label: '新建模板' },
-            { action: 'update', label: '编辑' },
-            { action: 'delete', label: '删除' },
-          ],
-        },
-      },
-      {
-        name: 'CircularTemplateAdd',
-        path: 'template/add',
-        component: () => import('#/views/circular/template/add.vue'),
-        meta: {
-          hideInMenu: true,
-          title: '新建模板',
-          activePath: '/circular/template',
         },
       },
     ],

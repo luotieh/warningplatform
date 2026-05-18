@@ -2,8 +2,11 @@
 package asset
 
 import (
+	"vulnscan-backend/scanrunner"
+
 	"code.yt-security.com/public/sdk/authorize"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type Asset struct {
@@ -13,6 +16,14 @@ type Asset struct {
 
 func NewAsset(handler *HandlerAsset, enrichHandler *EnrichHandler) *Asset {
 	return &Asset{handler: handler, enrichHandler: enrichHandler}
+}
+
+// BindScanRunner 在扫描调度器初始化后调用，使信息富化走漏扫引擎。
+func (m *Asset) BindScanRunner(session *gorm.DB, sched *scanrunner.Scheduler) {
+	if m == nil || m.enrichHandler == nil {
+		return
+	}
+	m.enrichHandler.BindScanRunner(session, sched)
 }
 
 func (m *Asset) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {

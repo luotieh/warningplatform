@@ -3,12 +3,15 @@ package verify
 import (
 	"context"
 	"fmt"
+	"vulnscan-backend/circular/paging"
+	"vulnscan-backend/circular/scope"
 	"vulnscan-backend/model"
 
 	inputContract "vulnscan-backend/circular/input/input-contract"
 	verifyContract "vulnscan-backend/circular/verify/verify-contract"
 
 	"code.yt-security.com/public/core/v2/db"
+	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
@@ -25,18 +28,19 @@ func (s *serviceVerify) session() *gorm.DB {
 	return sess
 }
 
-func (s *serviceVerify) List(ctx context.Context, req inputContract.ListQuery) (int64, []inputContract.ListResp, error) {
+func (s *serviceVerify) List(c *gin.Context, req inputContract.ListQuery) (int64, []inputContract.ListResp, error) {
 	var items []inputContract.ListResp
+	org := scope.GetOrganize(c)
 
 	sess := s.session()
-	tx := sess.WithContext(ctx).Model(&model.Circular{}).Where("status = ?", model.CircularToBeVerified)
+	tx := sess.WithContext(c).Model(&model.Circular{}).Where("status = ? AND organize = ?", model.CircularToBeVerified, org)
 
 	var count int64
 	if err := tx.Count(&count).Error; err != nil {
 		return 0, nil, err
 	}
 
-	page, size := normalizePage(req.Page, req.Size)
+	page, size := paging.Normalize(req.Page, req.Size)
 	offset := (page - 1) * size
 	if err := tx.Offset(offset).Limit(size).Order("created_at DESC").Find(&items).Error; err != nil {
 		return 0, nil, err
@@ -59,21 +63,22 @@ func (s *serviceVerify) Verify(ctx context.Context, req verifyContract.VerifyReq
 		return fmt.Errorf("未找到对应的通报")
 	}
 
-	var targetStatus model.CircularStatus
+	var event string
 	if req.Result == "pass" {
-		targetStatus = model.CircularToBeDistributed
+		event = model.CircularEvtVerifyPass
 	} else {
-		targetStatus = model.CircularRejected
+		event = model.CircularEvtVerifyReject
 	}
 
 	return sess.WithContext(ctx).Transaction(func(session *gorm.DB) error {
 		for _, circular := range circulars {
-			if circular.Status != model.CircularToBeVerified {
-				return fmt.Errorf("通报 %s 的状态异常", circular.Title)
+			newStatus, err := model.CircularSM.Apply(circular.Status, event)
+			if err != nil {
+				return fmt.Errorf("通报 %s 状态异常: %w", circular.Title, err)
 			}
 
 			if err := session.Model(&model.Circular{}).Where("id = ?", circular.Id).
-				Updates(map[string]interface{}{"status": targetStatus, "updated_by": updatedBy}).Error; err != nil {
+				Updates(map[string]interface{}{"status": newStatus, "updated_by": updatedBy}).Error; err != nil {
 				return err
 			}
 
@@ -95,14 +100,4 @@ func (s *serviceVerify) Verify(ctx context.Context, req verifyContract.VerifyReq
 		}
 		return nil
 	})
-}
-
-func normalizePage(page, size int) (int, int) {
-	if page <= 0 {
-		page = 1
-	}
-	if size <= 0 || size > 100 {
-		size = 20
-	}
-	return page, size
 }

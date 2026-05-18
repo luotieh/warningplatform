@@ -21,11 +21,11 @@ func (s *serviceIntegration) session() *gorm.DB {
 	return sess
 }
 
-func (s *serviceIntegration) ListSources(req ac.IntSourceListReq) ([]model.IntegrationSource, int64, error) {
+func (s *serviceIntegration) ListSources(req ac.IntSourceListReq, scopes ...func(*gorm.DB) *gorm.DB) ([]model.IntegrationSource, int64, error) {
 	var items []model.IntegrationSource
 	var count int64
 
-	q := s.session().Model(&model.IntegrationSource{})
+	q := s.session().Model(&model.IntegrationSource{}).Scopes(scopes...)
 	if req.Module != "" {
 		q = q.Where("module = ?", req.Module)
 	}

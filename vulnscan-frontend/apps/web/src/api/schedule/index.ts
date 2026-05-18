@@ -8,7 +8,7 @@ export interface ScanSchedule {
   template_id: string;
   template_name: string;
   targets: string[];
-  config: Record<string, any>;
+  config?: Record<string, any>;
   schedule_type: string;
   cron_expr: string;
   interval_min: number;

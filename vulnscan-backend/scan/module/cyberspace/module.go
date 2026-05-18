@@ -114,8 +114,14 @@ func (m *CyberSpaceModule) Run(ctx context.Context, targets []*core.Target, conf
 	wg.Wait()
 
 	for _, a := range allAssets {
+		host := a.IP
+		if a.Hostname != "" {
+			host = a.Hostname
+		}
+
 		finding := &core.Finding{
 			ModuleID:   m.ID(),
+			Target:     &core.Target{Host: host, IP: a.IP, Port: a.Port, Protocol: a.Protocol, Service: a.Service},
 			Type:       "cyber_asset",
 			Severity:   "info",
 			Confidence: 85,

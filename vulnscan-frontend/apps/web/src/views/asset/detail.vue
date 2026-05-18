@@ -1,8 +1,10 @@
 <script lang="ts" setup>
 import type { DataTableColumns } from 'naive-ui';
 
-import { computed, h, onMounted, ref } from 'vue';
+import { computed, h, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+
+import { useTabs } from '@vben/hooks';
 
 import type { Asset, AssetEnrichDetail, RiskTrendItem } from '#/api/asset';
 import {
@@ -13,8 +15,8 @@ import {
   getAssetRiskTrend,
   recalcAssetRisk,
 } from '#/api/asset';
-import { getAssetChangeLogs } from '#/api/assetmgr';
-import { createTask } from '#/api/task';
+import { getAssetChangeLogs, getOrganizeDetail } from '#/api/assetmgr';
+import { createTask, getScanEnginePresets, type ScanEnginePreset } from '#/api/task';
 
 import {
   NButton,
@@ -27,11 +29,14 @@ import {
   NGrid,
   NGridItem,
   NPopconfirm,
+  NSelect,
   NSpace,
+  NSpin,
   NStatistic,
   NTabPane,
   NTabs,
   NTag,
+  NTooltip,
   useMessage,
 } from 'naive-ui';
 
@@ -40,11 +45,13 @@ defineOptions({ name: 'AssetDetail' });
 const route = useRoute();
 const router = useRouter();
 const message = useMessage();
+const { setTabTitle, resetTabTitle } = useTabs();
 
 const assetId = computed(() => route.params.id as string);
 
 const loading = ref(false);
 const enrichLoading = ref(false);
+const scanSubmitting = ref(false);
 const asset = ref<Asset | null>(null);
 const enrich = ref<AssetEnrichDetail | null>(null);
 const riskTrend = ref<RiskTrendItem[]>([]);
@@ -52,6 +59,19 @@ const activeTab = ref('basic');
 
 const changeLogs = ref<any[]>([]);
 const changeLogsLoading = ref(false);
+/** 所属单位名称（接口仅返回 organize_id，名称需单独查组织） */
+const organizeName = ref('');
+
+const enginePresets = ref<ScanEnginePreset[]>([]);
+const scanEnginePreset = ref('');
+
+const enginePresetDetailOptions = computed(() => [
+  { label: '不使用预设', value: '' },
+  ...enginePresets.value.map((p) => ({
+    label: `${p.name} — ${p.description}`,
+    value: p.name,
+  })),
+]);
 
 const changeTypeMap: Record<string, { label: string; type: 'default' | 'error' | 'info' | 'success' | 'warning' }> = {
   create: { label: '创建', type: 'success' },
@@ -69,7 +89,6 @@ const sourceLabelMap: Record<string, string> = {
 const fieldLabelMap: Record<string, string> = {
   address: '地址',
   asset_family: '资产分类',
-  asset_subtype: '资产子类',
   data_source: '数据来源',
   domain: '域名',
   name: '系统名称',
@@ -80,26 +99,111 @@ const fieldLabelMap: Record<string, string> = {
   responsible_user_name: '责任人',
   security_protection_level: '等保等级',
   service: '服务',
-  system_type: '系统类型',
-  type: '资产类型',
   version: '版本',
+  'lifecycle state': '生命周期状态',
+  lifecycle_state: '生命周期状态',
+  is_online: '在线状态',
+  is_key: '关键资产',
+  ipv4: 'IPv4',
+  ipv6: 'IPv6',
+  data_number: '数据编号',
 };
+
+/** 资产分类 value → 展示名（与台账字典一致，缺省时回退原文） */
+const assetFamilyLabelMap: Record<string, string> = {
+  ip: 'IP资产',
+  domain_site: '域名网站',
+  business_system: '业务系统',
+  hardware: '硬件设备',
+  software: '软件资产',
+  app: 'APP',
+  mini_program: '小程序',
+  official_account: '公众号',
+  public_mailbox: '公共邮箱',
+  other: '其他',
+};
+
+function formatOperatorDisplay(raw?: string) {
+  if (!raw || raw === '-') return '-';
+  const s = String(raw);
+  if (s.length <= 14) return s;
+  return `${s.slice(0, 8)}…${s.slice(-6)}`;
+}
 
 const changeLogColumns: DataTableColumns<any> = [
   {
-    title: '变更类型', key: 'change_type', width: 100,
+    title: '变更类型',
+    key: 'change_type',
+    width: 100,
     render: (row: any) => {
       const meta = changeTypeMap[row.change_type];
       return meta ? h(NTag, { size: 'small', type: meta.type }, () => meta.label) : row.change_type;
     },
   },
-  { title: '字段', key: 'field', width: 130, render: (row: any) => fieldLabelMap[row.field] || row.field },
-  { title: '旧值', key: 'old_value', width: 160, ellipsis: { tooltip: true } },
-  { title: '新值', key: 'new_value', width: 160, ellipsis: { tooltip: true } },
-  { title: '来源', key: 'source', width: 90, render: (row: any) => sourceLabelMap[row.source] || row.source },
-  { title: '操作人', key: 'operator', width: 110, ellipsis: { tooltip: true } },
-  { title: '时间', key: 'created_at', width: 160, render: (row: any) => formatDateTime(row.created_at) },
+  {
+    title: '字段',
+    key: 'field',
+    minWidth: 120,
+    width: 140,
+    ellipsis: { tooltip: true },
+    render: (row: any) => fieldLabelMap[row.field] || row.field,
+  },
+  { title: '旧值', key: 'old_value', minWidth: 100, width: 140, ellipsis: { tooltip: true } },
+  { title: '新值', key: 'new_value', minWidth: 100, width: 140, ellipsis: { tooltip: true } },
+  { title: '来源', key: 'source', width: 88, render: (row: any) => sourceLabelMap[row.source] || row.source || '-' },
+  {
+    title: '操作人',
+    key: 'operator',
+    minWidth: 120,
+    width: 160,
+    render: (row: any) => {
+      const full = row.operator ?? '-';
+      const short = formatOperatorDisplay(full === '-' ? undefined : full);
+      return h(
+        'span',
+        { class: 'asset-detail__mono', title: full === short ? undefined : full },
+        short,
+      );
+    },
+  },
+  { title: '时间', key: 'created_at', width: 172, render: (row: any) => formatDateTime(row.created_at) },
 ];
+
+/** 端口探测表：优先 ports；仅有 services 时映射为同列结构（避免 data 为 undefined 导致表格报错） */
+const portProbeRows = computed(() => {
+  const e = enrich.value;
+  if (!e) return [];
+  const ports = e.ports;
+  if (Array.isArray(ports) && ports.length > 0) {
+    return ports.map((row) => ({
+      port: row.port,
+      protocol: row.protocol ?? '-',
+      service: row.service ?? '-',
+      version: row.version ?? '-',
+    }));
+  }
+  const services = e.services;
+  if (Array.isArray(services) && services.length > 0) {
+    return services.map((row) => ({
+      port: row.port ?? '-',
+      protocol: row.protocol?.trim() || '-',
+      service: row.service_name ?? '-',
+      version: row.version ?? '-',
+    }));
+  }
+  return [];
+});
+
+const assetFamilyLabel = computed(() => {
+  const v = asset.value?.asset_family;
+  if (!v) return '-';
+  return assetFamilyLabelMap[v] ?? v;
+});
+
+const assetTargetLine = computed(() => {
+  if (!asset.value) return '';
+  return getAssetTarget(asset.value) || '-';
+});
 
 const severityMap: Record<string, { label: string; type: 'default' | 'error' | 'info' | 'success' | 'warning' }> = {
   critical: { label: '严重', type: 'error' },
@@ -140,18 +244,46 @@ function getRiskColor(score: number) {
 }
 
 function getAssetTarget(row: Asset) {
-  if (row.url) return row.url;
+  if (row.address) return row.address;
   if (row.domain) return row.port ? `${row.domain}:${row.port}` : row.domain;
   if (row.ipv4) return row.port ? `${row.ipv4}:${row.port}` : row.ipv4;
   return row.port ? `${row.address}:${row.port}` : row.address;
+}
+
+function resolveScanTemplateId(row: Asset) {
+  if (['domain_site', 'business_system', 'app', 'mini_program', 'official_account', 'public_mailbox'].includes(row.asset_family || '')) {
+    return 'web-full';
+  }
+  return 'full';
+}
+
+async function fetchOrganizeName(orgId?: string) {
+  organizeName.value = '';
+  if (!orgId) return;
+  try {
+    const org: any = await getOrganizeDetail(orgId);
+    organizeName.value = org?.name?.trim() || '';
+  } catch {
+    organizeName.value = '';
+  }
+}
+
+async function syncTabTitleWithAsset() {
+  const name = asset.value?.name?.trim();
+  if (name) await setTabTitle(`资产 · ${name}`);
+  else await setTabTitle('资产详情');
 }
 
 async function fetchDetail() {
   loading.value = true;
   try {
     asset.value = await getAssetDetail(assetId.value);
+    await Promise.all([fetchOrganizeName(asset.value?.organize_id), syncTabTitleWithAsset()]);
   } catch {
     message.error('获取资产详情失败');
+    asset.value = null;
+    organizeName.value = '';
+    await syncTabTitleWithAsset();
   } finally {
     loading.value = false;
   }
@@ -180,9 +312,14 @@ async function fetchRiskTrend() {
 async function onEnrich() {
   enrichLoading.value = true;
   try {
-    await enrichAsset(assetId.value);
-    message.success('富化完成');
-    await fetchEnrich();
+    const data = await enrichAsset(assetId.value);
+    const tid = data?.task_id;
+    message.success(
+      tid
+        ? `已提交「${data.template || '资产信息富化'}」扫描（任务 ID：${tid}）。完成后结果会回写到本资产；富化任务记录将自动清理，请刷新本页查看。再次富化可点「信息富化」。`
+        : '已提交富化扫描，完成后请刷新本页查看结果。',
+    );
+    await Promise.all([fetchDetail(), fetchEnrich()]);
   } catch {
     message.error('富化失败');
   } finally {
@@ -207,11 +344,21 @@ async function onScan() {
     message.warning('当前资产缺少可扫描地址');
     return;
   }
+  scanSubmitting.value = true;
   try {
-    await createTask({ name: `扫描-${asset.value.name || asset.value.address}`, targets: [target] });
+    const parameters: Record<string, any> = {};
+    if (scanEnginePreset.value) parameters.engine_preset = scanEnginePreset.value;
+    await createTask({
+      name: `扫描-${asset.value.name || asset.value.address}`,
+      targets: [target],
+      template_id: resolveScanTemplateId(asset.value),
+      parameters: Object.keys(parameters).length > 0 ? parameters : undefined,
+    });
     message.success('扫描任务已创建');
-  } catch {
-    message.error('创建扫描任务失败');
+  } catch (e: any) {
+    message.error(e?.message || '创建扫描任务失败');
+  } finally {
+    scanSubmitting.value = false;
   }
 }
 
@@ -235,8 +382,9 @@ async function fetchChangeLogs() {
   if (changeLogs.value.length) return;
   changeLogsLoading.value = true;
   try {
-    const items: any = await getAssetChangeLogs(assetId.value);
-    changeLogs.value = Array.isArray(items) ? items : [];
+    const raw: any = await getAssetChangeLogs(assetId.value);
+    const list = Array.isArray(raw) ? raw : raw?.items ?? raw?.data ?? [];
+    changeLogs.value = Array.isArray(list) ? list : [];
   } catch {
     changeLogs.value = [];
   } finally {
@@ -244,9 +392,34 @@ async function fetchChangeLogs() {
   }
 }
 
+async function loadEnginePresetsForDetail() {
+  try {
+    enginePresets.value = await getScanEnginePresets();
+  } catch {
+    enginePresets.value = [];
+  }
+}
+
+watch(
+  assetId,
+  () => {
+    organizeName.value = '';
+    changeLogs.value = [];
+    riskTrend.value = [];
+    scanEnginePreset.value = '';
+    void resetTabTitle();
+    void fetchDetail();
+    void fetchEnrich();
+  },
+  { immediate: true },
+);
+
 onMounted(() => {
-  fetchDetail();
-  fetchEnrich();
+  void loadEnginePresetsForDetail();
+});
+
+onBeforeUnmount(() => {
+  void resetTabTitle();
 });
 </script>
 
@@ -254,20 +427,64 @@ onMounted(() => {
   <div style="padding: 16px">
     <NSpace vertical :size="16">
       <!-- 头部 -->
-      <NCard size="small">
-        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px">
-          <div style="display: flex; align-items: center; gap: 12px">
-            <NButton text @click="router.back()" style="font-size: 18px">
-              ←
-            </NButton>
-            <h2 style="margin: 0; font-size: 20px">
-              {{ asset?.name || '资产详情' }}
-            </h2>
-            <NTag v-if="asset?.is_key" type="warning" size="small">关键资产</NTag>
+      <NCard size="small" class="asset-detail__head-card">
+        <div class="asset-detail__head-row">
+          <div class="asset-detail__head-main">
+            <NButton text class="asset-detail__back" @click="router.back()">← 返回</NButton>
+            <div class="asset-detail__head-text">
+              <div class="asset-detail__title-line">
+                <h2 class="asset-detail__title">{{ asset?.name || '资产详情' }}</h2>
+                <NTag v-if="asset?.is_key" type="warning" size="small">关键资产</NTag>
+                <NTag :type="asset?.is_online ? 'success' : 'default'" size="small">
+                  {{ asset?.is_online ? '在线' : '离线' }}
+                </NTag>
+              </div>
+              <div v-if="asset" class="asset-detail__meta-line">
+                <span class="asset-detail__meta-item">
+                  <span class="asset-detail__meta-k">访问目标</span>{{ assetTargetLine }}
+                </span>
+                <span class="asset-detail__meta-sep">·</span>
+                <span class="asset-detail__meta-item">
+                  <span class="asset-detail__meta-k">分类</span>{{ assetFamilyLabel }}
+                </span>
+                <template v-if="asset.data_number">
+                  <span class="asset-detail__meta-sep">·</span>
+                  <span class="asset-detail__meta-item">
+                    <span class="asset-detail__meta-k">数据编号</span>{{ asset.data_number }}
+                  </span>
+                </template>
+                <template v-if="asset.organize_id || organizeName">
+                  <span class="asset-detail__meta-sep">·</span>
+                  <span class="asset-detail__meta-item">
+                    <span class="asset-detail__meta-k">所属单位</span>
+                    <template v-if="organizeName">{{ organizeName }}</template>
+                    <template v-else>
+                      <span class="asset-detail__mono" :title="asset.organize_id">{{ asset.organize_id }}</span>
+                    </template>
+                  </span>
+                </template>
+              </div>
+            </div>
           </div>
-          <NSpace :size="8">
-            <NButton size="small" type="warning" @click="onScan">发起扫描</NButton>
-            <NButton size="small" type="info" :loading="enrichLoading" @click="onEnrich">信息富化</NButton>
+          <NSpace :size="8" class="asset-detail__head-actions" align="center" wrap>
+            <NSelect
+              v-model:value="scanEnginePreset"
+              class="asset-detail__scan-preset"
+              size="small"
+              :options="enginePresetDetailOptions"
+              placeholder="引擎预设（可选）"
+              filterable
+              clearable
+              :consistent-menu-width="false"
+            />
+            <NButton size="small" type="warning" :loading="scanSubmitting" @click="onScan">发起扫描</NButton>
+            <NTooltip placement="bottom" :content-style="{ maxWidth: '380px' }">
+              <template #trigger>
+                <NButton size="small" type="info" :loading="enrichLoading" @click="onEnrich">信息富化</NButton>
+              </template>
+              根据访问地址 / IPv4 / 域名尝试解析并补全信息（如解析出 IP、反向域名、SSL
+              证书到期时间等），并写回当前资产记录；下方「网络信息」与统计会随之更新。
+            </NTooltip>
             <NButton size="small" @click="onRecalcRisk">风险重算</NButton>
             <NButton size="small" @click="router.push(`/asset/ledger?edit=${assetId}`)">编辑</NButton>
             <NPopconfirm @positive-click="onDelete">
@@ -308,7 +525,7 @@ onMounted(() => {
         </NGridItem>
         <NGridItem>
           <NCard size="small">
-            <NStatistic label="开放端口" :value="enrich?.ports?.length ?? 0" />
+            <NStatistic label="开放端口" :value="portProbeRows.length" />
           </NCard>
         </NGridItem>
       </NGrid>
@@ -320,10 +537,12 @@ onMounted(() => {
           <NTabPane name="basic" tab="基本信息">
             <NDescriptions :column="2" label-placement="left" bordered size="small">
               <NDescriptionsItem label="系统名称">{{ asset?.name || '-' }}</NDescriptionsItem>
-              <NDescriptionsItem label="资产类型">{{ asset?.type || '-' }}</NDescriptionsItem>
-              <NDescriptionsItem label="资产分类">{{ asset?.asset_family || '-' }}</NDescriptionsItem>
-              <NDescriptionsItem label="资产子类">{{ asset?.asset_subtype || '-' }}</NDescriptionsItem>
-              <NDescriptionsItem label="系统类型">{{ asset?.system_type || '-' }}</NDescriptionsItem>
+              <NDescriptionsItem label="所属单位">
+                <template v-if="organizeName">{{ organizeName }}</template>
+                <span v-else-if="asset?.organize_id" class="asset-detail__mono">{{ asset.organize_id }}</span>
+                <template v-else>-</template>
+              </NDescriptionsItem>
+              <NDescriptionsItem label="资产分类">{{ assetFamilyLabel }}</NDescriptionsItem>
               <NDescriptionsItem label="数据编号">{{ asset?.data_number || '-' }}</NDescriptionsItem>
               <NDescriptionsItem label="地域">{{ asset?.region_name || '-' }}</NDescriptionsItem>
               <NDescriptionsItem label="是否联网">
@@ -350,12 +569,11 @@ onMounted(() => {
           <!-- 网络信息 -->
           <NTabPane name="network" tab="网络信息">
             <NDescriptions :column="2" label-placement="left" bordered size="small">
-              <NDescriptionsItem label="地址">{{ asset?.address || '-' }}</NDescriptionsItem>
+              <NDescriptionsItem label="访问地址">{{ asset?.address || '-' }}</NDescriptionsItem>
               <NDescriptionsItem label="域名">{{ asset?.domain || '-' }}</NDescriptionsItem>
               <NDescriptionsItem label="IPv4">{{ asset?.ipv4 || '-' }}</NDescriptionsItem>
               <NDescriptionsItem label="IPv6">{{ asset?.ipv6 || '-' }}</NDescriptionsItem>
-              <NDescriptionsItem label="URL">{{ asset?.url || '-' }}</NDescriptionsItem>
-              <NDescriptionsItem label="端口">{{ asset?.port || '-' }}</NDescriptionsItem>
+              <NDescriptionsItem label="端口">{{ asset?.port ?? '-' }}</NDescriptionsItem>
               <NDescriptionsItem label="协议">{{ asset?.protocol || '-' }}</NDescriptionsItem>
               <NDescriptionsItem label="服务">{{ asset?.service || '-' }}</NDescriptionsItem>
               <NDescriptionsItem label="版本">{{ asset?.version || '-' }}</NDescriptionsItem>
@@ -366,17 +584,18 @@ onMounted(() => {
 
             <NDivider>端口与服务</NDivider>
             <NDataTable
-              v-if="enrich?.ports?.length || enrich?.services?.length"
+              v-if="portProbeRows.length"
               :columns="[
-                { title: '端口', key: 'port', width: 80 },
-                { title: '协议', key: 'protocol', width: 80 },
-                { title: '服务', key: 'service', width: 150 },
-                { title: '版本', key: 'version', width: 150 },
+                { title: '端口', key: 'port', width: 100 },
+                { title: '协议', key: 'protocol', width: 90 },
+                { title: '服务', key: 'service', minWidth: 120, ellipsis: { tooltip: true } },
+                { title: '版本', key: 'version', minWidth: 100, ellipsis: { tooltip: true } },
               ]"
-              :data="enrich.ports"
+              :data="portProbeRows"
               :bordered="false"
               size="small"
               :max-height="400"
+              :scroll-x="640"
             />
             <NEmpty v-else description="暂无端口与服务数据" />
           </NTabPane>
@@ -435,20 +654,102 @@ onMounted(() => {
 
           <!-- 变更日志 -->
           <NTabPane name="changelog" tab="变更日志">
-            <NDataTable
-              v-if="changeLogs.length"
-              :columns="changeLogColumns"
-              :data="changeLogs"
-              :bordered="false"
-              size="small"
-              :max-height="500"
-              striped
-              :loading="changeLogsLoading"
-            />
-            <NEmpty v-else description="暂无变更记录" />
+            <NSpin :show="changeLogsLoading">
+              <NDataTable
+                v-if="changeLogs.length"
+                :columns="changeLogColumns"
+                :data="changeLogs"
+                :bordered="false"
+                size="small"
+                :max-height="500"
+                striped
+                :scroll-x="980"
+              />
+              <NEmpty v-else-if="!changeLogsLoading" description="暂无变更记录" />
+            </NSpin>
           </NTabPane>
         </NTabs>
       </NCard>
     </NSpace>
   </div>
 </template>
+
+<style scoped>
+.asset-detail__head-card :deep(.n-card__content) {
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+.asset-detail__head-row {
+  align-items: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  justify-content: space-between;
+}
+
+.asset-detail__head-main {
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+}
+
+.asset-detail__back {
+  flex-shrink: 0;
+  font-size: 15px;
+  margin-top: 2px;
+}
+
+.asset-detail__head-text {
+  min-width: 0;
+}
+
+.asset-detail__title-line {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.asset-detail__title {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.asset-detail__meta-line {
+  color: var(--n-text-color-2);
+  font-size: 13px;
+  line-height: 1.6;
+  margin-top: 6px;
+  word-break: break-all;
+}
+
+.asset-detail__meta-k {
+  color: var(--n-text-color-3);
+  margin-right: 4px;
+}
+
+.asset-detail__meta-sep {
+  color: var(--n-text-color-3);
+  margin: 0 6px;
+}
+
+.asset-detail__meta-item {
+  white-space: normal;
+}
+
+.asset-detail__head-actions {
+  flex-shrink: 0;
+}
+
+.asset-detail__scan-preset {
+  width: min(240px, 42vw);
+}
+
+.asset-detail__mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: 12px;
+}
+</style>

@@ -32,6 +32,11 @@ func (s *ServicePoc) session() *gorm.DB {
 	return session
 }
 
+// Session 返回 GORM 会话（供 Handler 等创建 NucleiModule 等使用）。
+func (s *ServicePoc) Session() *gorm.DB {
+	return s.session()
+}
+
 func (s *ServicePoc) List(q PocQuery, scopes ...func(*gorm.DB) *gorm.DB) ([]model.PocTemplate, int64, error) {
 	tx := s.session().Model(&model.PocTemplate{}).Scopes(scopes...)
 	if q.Keyword != "" {

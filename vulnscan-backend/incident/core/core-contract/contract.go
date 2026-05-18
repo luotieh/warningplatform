@@ -2,17 +2,20 @@ package coreContract
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"time"
 	"vulnscan-backend/model"
+
+	"gorm.io/gorm"
 )
 
 type ServiceCore interface {
-	CreateIncident(ctx context.Context, req IncidentCreateReq, createdBy string) error
+	CreateIncident(ctx context.Context, req IncidentCreateReq, createdBy string, organizeID string) error
 	UpdateIncident(ctx context.Context, id string, req IncidentUpdateReq) error
 	DeleteIncident(ctx context.Context, id string) error
 	GetIncidentDetail(ctx context.Context, id string) (*IncidentDetailResp, error)
-	ListIncidents(ctx context.Context, req IncidentListReq) ([]IncidentListItem, int64, error)
+	ListIncidents(ctx context.Context, req IncidentListReq, scopes ...func(*gorm.DB) *gorm.DB) ([]IncidentListItem, int64, error)
 
 	GetDashboardStats(ctx context.Context) (*DashboardStatsResp, error)
 	GetChartByType(ctx context.Context) ([]ChartTypeItem, error)
@@ -243,10 +246,11 @@ func BuildIncidentListItem(inc model.SecurityIncident, now time.Time) IncidentLi
 
 func GenerateIncidentNo() string {
 	now := time.Now()
-	return fmt.Sprintf("SI%s%04d", now.Format("20060102150405"), randIntn(10000))
+	return fmt.Sprintf("SI%s%04d", now.Format("20060102150405"), cryptoRandIntn(10000))
 }
 
-// Avoid importing math/rand at top level to keep contract clean — inline stub
-var randIntn = func(n int) int {
-	return int(time.Now().UnixNano() % int64(n))
+func cryptoRandIntn(n int) int {
+	b := make([]byte, 4)
+	_, _ = rand.Read(b)
+	return int(uint32(b[0])|uint32(b[1])<<8|uint32(b[2])<<16|uint32(b[3])<<24) % n
 }

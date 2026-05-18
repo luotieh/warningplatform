@@ -64,92 +64,58 @@ func NewModuleFactory(db *gorm.DB) *ModuleFactory {
 	ds := dict.NewStore(nil)
 	pl := payload.NewLoader(db)
 	_ = pl.LoadAll()
-	return &ModuleFactory{db: db, rs: rs, ds: ds, loader: pl}
+	f := &ModuleFactory{db: db, rs: rs, ds: ds, loader: pl}
+	f.registerAll()
+	return f
+}
+
+func (f *ModuleFactory) registerAll() {
+	RegisterModule("icmp_ping", func(_ *ModuleDeps) core.ScanModule { return icmp.New() })
+	RegisterModule("port_scan", func(_ *ModuleDeps) core.ScanModule { return portscan.New() })
+	RegisterModule("syn_scan", func(_ *ModuleDeps) core.ScanModule { return synscan.New() })
+	RegisterModule("udp_scan", func(_ *ModuleDeps) core.ScanModule { return udpscan.New() })
+	RegisterModule("service_probe", func(d *ModuleDeps) core.ScanModule { return serviceprobe.NewWithDB(d.Factory.db) })
+	RegisterModule("subdomain_brute", func(d *ModuleDeps) core.ScanModule { return subdomain.New(d.Factory.ds) })
+	RegisterModule("web_crawl", func(_ *ModuleDeps) core.ScanModule { return webcrawl.New() })
+	RegisterModule("js_analyze", func(d *ModuleDeps) core.ScanModule { return jsanalyze.New(d.Factory.rs) })
+	RegisterModule("waf_detect", func(d *ModuleDeps) core.ScanModule { return wafdetect.New(d.Factory.rs) })
+	RegisterModule("tech_detect", func(d *ModuleDeps) core.ScanModule { return techdetect.New(d.Factory.rs) })
+	RegisterModule("web_fingerprint", func(d *ModuleDeps) core.ScanModule { return fingerprint.NewWithDB(d.Factory.db) })
+	RegisterModule("dns_all", func(_ *ModuleDeps) core.ScanModule { return dnsall.New() })
+	RegisterModule("favicon", func(_ *ModuleDeps) core.ScanModule { return favicon.New() })
+	RegisterModule("cert_check", func(_ *ModuleDeps) core.ScanModule { return certcheck.New() })
+	RegisterModule("api_disc", func(_ *ModuleDeps) core.ScanModule { return apidisc.New() })
+	RegisterModule("info_leak", func(_ *ModuleDeps) core.ScanModule { return infoleak.New() })
+	RegisterModule("ip_attr", func(_ *ModuleDeps) core.ScanModule { return ipattr.New() })
+	RegisterModule("real_ip", func(_ *ModuleDeps) core.ScanModule { return realip.New() })
+	RegisterModule("company_recon", func(_ *ModuleDeps) core.ScanModule { return company.New() })
+	RegisterModule("email_collect", func(_ *ModuleDeps) core.ScanModule { return emailcollect.New() })
+	RegisterModule("screenshot", func(_ *ModuleDeps) core.ScanModule { return screenshot.New() })
+	RegisterModule("dir_scan", func(_ *ModuleDeps) core.ScanModule { return dirscan.New() })
+	RegisterModule("sqli", func(d *ModuleDeps) core.ScanModule { return sqli.New(d.Factory.loader) })
+	RegisterModule("xss", func(d *ModuleDeps) core.ScanModule { return xss.New(d.Factory.loader) })
+	RegisterModule("weak_pass", func(_ *ModuleDeps) core.ScanModule { return weakpass.New() })
+	RegisterModule("brute_force", func(d *ModuleDeps) core.ScanModule { return bruteforce.New(d.Factory.ds) })
+	RegisterModule("ssrf", func(d *ModuleDeps) core.ScanModule { return ssrf.New("", d.Factory.loader) })
+	RegisterModule("cmdi", func(d *ModuleDeps) core.ScanModule { return cmdi.New(d.Factory.loader) })
+	RegisterModule("lfi", func(d *ModuleDeps) core.ScanModule { return lfi.New(d.Factory.loader) })
+	RegisterModule("ssti", func(d *ModuleDeps) core.ScanModule { return ssti.New(d.Factory.loader) })
+	RegisterModule("xxe", func(d *ModuleDeps) core.ScanModule { return xxe.New(d.Factory.loader) })
+	RegisterModule("nosqli", func(d *ModuleDeps) core.ScanModule { return nosqli.New(d.Factory.loader) })
+	RegisterModule("jwt_sec", func(_ *ModuleDeps) core.ScanModule { return jwtsec.New() })
+	RegisterModule("apisec", func(_ *ModuleDeps) core.ScanModule { return apisec.New() })
+	RegisterModule("fpenhance", func(_ *ModuleDeps) core.ScanModule { return fpenhance.New() })
+	RegisterModule("nettopo", func(_ *ModuleDeps) core.ScanModule { return nettopo.New() })
+	RegisterModule("nuclei-poc", func(d *ModuleDeps) core.ScanModule { return nuclei.NewModule(d.Factory.db) })
+	RegisterModule("advanced_vuln", func(d *ModuleDeps) core.ScanModule { return advancedvuln.New(d.Factory.loader) })
+	RegisterModule("unauth", func(_ *ModuleDeps) core.ScanModule { return unauth.New() })
 }
 
 func (f *ModuleFactory) Build(id string) core.ScanModule {
-	switch id {
-	case "icmp_ping":
-		return icmp.New()
-	case "port_scan":
-		return portscan.New()
-	case "syn_scan":
-		return synscan.New()
-	case "udp_scan":
-		return udpscan.New()
-	case "service_probe":
-		return serviceprobe.NewWithDB(f.db)
-	case "subdomain_brute":
-		return subdomain.New(f.ds)
-	case "web_crawl":
-		return webcrawl.New()
-	case "js_analyze":
-		return jsanalyze.New(f.rs)
-	case "waf_detect":
-		return wafdetect.New(f.rs)
-	case "tech_detect":
-		return techdetect.New(f.rs)
-	case "web_fingerprint":
-		return fingerprint.NewWithDB(f.db)
-	case "dns_all":
-		return dnsall.New()
-	case "favicon":
-		return favicon.New()
-	case "cert_check":
-		return certcheck.New()
-	case "api_disc":
-		return apidisc.New()
-	case "info_leak":
-		return infoleak.New()
-	case "ip_attr":
-		return ipattr.New()
-	case "real_ip":
-		return realip.New()
-	case "company_recon":
-		return company.New()
-	case "email_collect":
-		return emailcollect.New()
-	case "screenshot":
-		return screenshot.New()
-	case "dir_scan":
-		return dirscan.New()
-	case "sqli":
-		return sqli.New(f.loader)
-	case "xss":
-		return xss.New(f.loader)
-	case "weak_pass":
-		return weakpass.New()
-	case "brute_force":
-		return bruteforce.New(f.ds)
-	case "ssrf":
-		return ssrf.New("", f.loader)
-	case "cmdi":
-		return cmdi.New(f.loader)
-	case "lfi":
-		return lfi.New(f.loader)
-	case "ssti":
-		return ssti.New(f.loader)
-	case "xxe":
-		return xxe.New(f.loader)
-	case "nosqli":
-		return nosqli.New(f.loader)
-	case "jwt_sec":
-		return jwtsec.New()
-	case "apisec":
-		return apisec.New()
-	case "fpenhance":
-		return fpenhance.New()
-	case "nettopo":
-		return nettopo.New()
-	case "nuclei-poc":
-		return nuclei.NewModule(f.db)
-	case "advanced_vuln":
-		return advancedvuln.New(f.loader)
-	case "unauth":
-		return unauth.New()
-	default:
-		return nil
+	if builder, ok := GetModuleBuilder(id); ok {
+		return builder(&ModuleDeps{Factory: f})
 	}
+	return nil
 }
 
 func (f *ModuleFactory) BuildMany(ids []string) ([]core.ScanModule, error) {
@@ -165,15 +131,5 @@ func (f *ModuleFactory) BuildMany(ids []string) ([]core.ScanModule, error) {
 }
 
 func (f *ModuleFactory) AllIDs() []string {
-	return []string{
-		"icmp_ping", "port_scan", "syn_scan", "udp_scan",
-		"service_probe", "subdomain_brute", "web_crawl",
-		"js_analyze", "waf_detect", "tech_detect", "web_fingerprint",
-		"dns_all", "favicon", "cert_check", "api_disc", "info_leak",
-		"ip_attr", "real_ip", "company_recon", "email_collect", "screenshot",
-		"dir_scan", "sqli", "xss", "weak_pass", "brute_force",
-		"ssrf", "cmdi", "lfi", "ssti", "xxe", "nosqli",
-		"jwt_sec", "apisec", "fpenhance", "nettopo", "nuclei-poc",
-		"advanced_vuln", "unauth",
-	}
+	return RegisteredModuleIDs()
 }

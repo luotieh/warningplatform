@@ -79,6 +79,11 @@ func (s *ServiceNotify) MarkAllRead(userID string) {
 	tx.Updates(map[string]any{"read": true, "read_at": &now})
 }
 
+// Delete removes a notification by ID.
+func (s *ServiceNotify) Delete(id string) {
+	s.session().Where("id = ?", id).Delete(&model.Notification{})
+}
+
 // --- Sender methods (for programmatic notification creation) ---
 
 // NotifyTaskComplete creates a notification for a completed scan task.

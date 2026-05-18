@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"vulnscan-backend/circular/paging"
 	"vulnscan-backend/model"
 
 	inputContract "vulnscan-backend/circular/input/input-contract"
@@ -56,7 +57,7 @@ func (s *serviceReview) List(c *gin.Context, req inputContract.ListQuery) (int64
 		return 0, nil, err
 	}
 
-	page, size := normalizePage(req.Page, req.Size)
+	page, size := paging.Normalize(req.Page, req.Size)
 	if err := tx.Offset((page - 1) * size).Limit(size).Order("created_at DESC").Find(&items).Error; err != nil {
 		return 0, nil, err
 	}
@@ -129,13 +130,17 @@ func (s *serviceReview) reviewApprove(
 			return err
 		}
 
-		session.Model(&model.CircularOrganizeStatus{}).
+		if err := session.Model(&model.CircularOrganizeStatus{}).
 			Where("circular_id = ? AND organize = ?", circular.Code, currentOrganize).
-			Update("status", model.CircularReviewed)
+			Update("status", model.CircularReviewed).Error; err != nil {
+			return err
+		}
 
 		if isTopLevel {
-			session.Model(&model.Circular{}).Where("id = ?", circular.Id).
-				Updates(map[string]interface{}{"status": model.CircularCompleted, "updated_at": now, "updated_by": updatedBy})
+			if err := session.Model(&model.Circular{}).Where("id = ?", circular.Id).
+				Updates(map[string]interface{}{"status": model.CircularCompleted, "updated_at": now, "updated_by": updatedBy}).Error; err != nil {
+				return err
+			}
 		} else {
 			parentOrganize := receivedDist.CurrentOrganize
 			var parentOrgStatus model.CircularOrganizeStatus
@@ -147,11 +152,15 @@ func (s *serviceReview) reviewApprove(
 				}
 				po.CreatedAt = now
 				po.UpdatedAt = now
-				session.Create(&po)
+				if err := session.Create(&po).Error; err != nil {
+					return err
+				}
 			} else {
-				session.Model(&model.CircularOrganizeStatus{}).
+				if err := session.Model(&model.CircularOrganizeStatus{}).
 					Where("circular_id = ? AND organize = ?", circular.Code, parentOrganize).
-					Update("status", model.CircularToBeReviewed)
+					Update("status", model.CircularToBeReviewed).Error; err != nil {
+					return err
+				}
 			}
 		}
 
@@ -189,9 +198,11 @@ func (s *serviceReview) reviewReject(
 			return err
 		}
 
-		session.Model(&model.CircularOrganizeStatus{}).
+		if err := session.Model(&model.CircularOrganizeStatus{}).
 			Where("circular_id = ? AND organize = ?", circular.Code, currentOrganize).
-			Update("status", model.CircularRejected)
+			Update("status", model.CircularRejected).Error; err != nil {
+			return err
+		}
 
 		var deepestDist model.CircularDistribution
 		if err := session.Where("circular_id = ?", circular.Code).Order("depth desc").First(&deepestDist).Error; err != nil {
@@ -199,28 +210,22 @@ func (s *serviceReview) reviewReject(
 		}
 		lastOrganize := deepestDist.TargetOrganize
 
-		session.Model(&model.CircularOrganizeStatus{}).
+		if err := session.Model(&model.CircularOrganizeStatus{}).
 			Where("circular_id = ? AND organize = ?", circular.Code, lastOrganize).
-			Update("status", model.CircularToBeProcessed)
+			Update("status", model.CircularToBeProcessed).Error; err != nil {
+			return err
+		}
 
-		session.Model(&model.CircularOrganizeStatus{}).
+		if err := session.Model(&model.CircularOrganizeStatus{}).
 			Where("circular_id = ? AND organize != ? AND organize != ? AND status = ?",
 				circular.Code, currentOrganize, lastOrganize, model.CircularReviewed).
-			Update("status", model.CircularRedistributed)
+			Update("status", model.CircularRedistributed).Error; err != nil {
+			return err
+		}
 
 		opLog := model.BuildCircularOperationLog(circular.Code, model.CircularOpReviewReject, updatedBy, "审核驳回", currentOrganize, map[string]interface{}{
 			"instructions": req.Instructions, "rejected_to": lastOrganize,
 		})
 		return session.Create(&opLog).Error
 	})
-}
-
-func normalizePage(page, size int) (int, int) {
-	if page <= 0 {
-		page = 1
-	}
-	if size <= 0 || size > 100 {
-		size = 20
-	}
-	return page, size
 }

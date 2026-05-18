@@ -24,11 +24,11 @@ func (s *serviceOrganize) session() *gorm.DB {
 	return sess
 }
 
-func (s *serviceOrganize) List(req oc.OrganizeListReq) ([]model.Organize, int64, error) {
+func (s *serviceOrganize) List(req oc.OrganizeListReq, scopes ...func(*gorm.DB) *gorm.DB) ([]model.Organize, int64, error) {
 	var items []model.Organize
 	var count int64
 
-	q := s.session().Model(&model.Organize{}).Where("deleted_at IS NULL")
+	q := s.session().Model(&model.Organize{}).Scopes(scopes...).Where("deleted_at IS NULL")
 	if req.Name != "" {
 		q = q.Where("name LIKE ?", "%"+req.Name+"%")
 	}
@@ -75,6 +75,144 @@ func (s *serviceOrganize) Tree() ([]model.Organize, error) {
 	var items []model.Organize
 	err := s.session().Where("deleted_at IS NULL").Order("created_at").Find(&items).Error
 	return items, err
+}
+
+func (s *serviceOrganize) SyncFromIAM(nodes []*oc.OrganizeNode) (int, error) {
+	flat := flattenOrganizeNodes(nodes)
+	if len(flat) == 0 {
+		return 0, nil
+	}
+
+	tx := s.session().Begin()
+	count := 0
+	for _, n := range flat {
+		var existing model.Organize
+		err := tx.Where("id = ?", n.ID).First(&existing).Error
+		if err == nil {
+			tx.Model(&existing).Updates(map[string]interface{}{
+				"name":       n.Name,
+				"parent_id":  n.ParentID,
+				"deleted_at": nil,
+			})
+		} else {
+			tx.Create(&model.Organize{
+				ID:       n.ID,
+				Name:     n.Name,
+				ParentID: n.ParentID,
+			})
+			count++
+		}
+	}
+	if err := tx.Commit().Error; err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+func (s *serviceOrganize) Ensure(req oc.EnsureOrganizeReq) (*model.Organize, error) {
+	if req.UnifiedSocialCreditCode != "" {
+		conflict, err := s.findByUnifiedSocialCreditCode(req.UnifiedSocialCreditCode)
+		if err != nil {
+			return nil, err
+		}
+		if conflict != nil && conflict.ID != req.ID {
+			if err := s.applyEnsureUpdates(conflict, req, false); err != nil {
+				return nil, err
+			}
+			return conflict, nil
+		}
+	}
+
+	var existing model.Organize
+	err := s.session().Where("id = ? AND deleted_at IS NULL", req.ID).First(&existing).Error
+	if err == nil {
+		if err := s.applyEnsureUpdates(&existing, req, true); err != nil {
+			return nil, err
+		}
+		return &existing, nil
+	}
+
+	newOrg := model.Organize{
+		ID:                      req.ID,
+		Name:                    req.Name,
+		ParentID:                req.ParentID,
+		UnifiedSocialCreditCode: req.UnifiedSocialCreditCode,
+	}
+	if err := s.session().Omit("deleted_at").Create(&newOrg).Error; err != nil {
+		return nil, fmt.Errorf("创建组织失败: %w", err)
+	}
+	return &newOrg, nil
+}
+
+func (s *serviceOrganize) findByUnifiedSocialCreditCode(code string) (*model.Organize, error) {
+	if code == "" {
+		return nil, nil
+	}
+
+	var item model.Organize
+	err := s.session().Where("unified_social_credit_code = ? AND deleted_at IS NULL", code).First(&item).Error
+	if err == nil {
+		return &item, nil
+	}
+	if err == gorm.ErrRecordNotFound {
+		return nil, nil
+	}
+	return nil, err
+}
+
+func (s *serviceOrganize) applyEnsureUpdates(item *model.Organize, req oc.EnsureOrganizeReq, allowCreditCodeUpdate bool) error {
+	if item == nil {
+		return nil
+	}
+
+	needUpdate := false
+	updates := map[string]interface{}{}
+	if req.Name != "" && item.Name != req.Name {
+		updates["name"] = req.Name
+		needUpdate = true
+	}
+	if req.ParentID != "" && item.ParentID != req.ParentID {
+		updates["parent_id"] = req.ParentID
+		needUpdate = true
+	}
+	if allowCreditCodeUpdate && req.UnifiedSocialCreditCode != "" && item.UnifiedSocialCreditCode != req.UnifiedSocialCreditCode {
+		updates["unified_social_credit_code"] = req.UnifiedSocialCreditCode
+		needUpdate = true
+	}
+	if needUpdate {
+		if err := s.session().Model(item).Updates(updates).Error; err != nil {
+			return fmt.Errorf("更新组织失败: %w", err)
+		}
+	}
+
+	item.Name = firstNonEmptyStr(req.Name, item.Name)
+	item.ParentID = firstNonEmptyStr(req.ParentID, item.ParentID)
+	if allowCreditCodeUpdate {
+		item.UnifiedSocialCreditCode = firstNonEmptyStr(req.UnifiedSocialCreditCode, item.UnifiedSocialCreditCode)
+	}
+	return nil
+}
+
+func firstNonEmptyStr(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
+}
+
+func flattenOrganizeNodes(nodes []*oc.OrganizeNode) []oc.OrganizeNode {
+	var result []oc.OrganizeNode
+	var walk func([]*oc.OrganizeNode)
+	walk = func(list []*oc.OrganizeNode) {
+		for _, n := range list {
+			result = append(result, *n)
+			if len(n.Children) > 0 {
+				walk(n.Children)
+			}
+		}
+	}
+	walk(nodes)
+	return result
 }
 
 var _ oc.ServiceOrganize = (*serviceOrganize)(nil)

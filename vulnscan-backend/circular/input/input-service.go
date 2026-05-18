@@ -6,6 +6,8 @@ import (
 	"mime/multipart"
 	"strings"
 	"time"
+	"vulnscan-backend/circular/paging"
+	"vulnscan-backend/circular/scope"
 	"vulnscan-backend/model"
 
 	inputContract "vulnscan-backend/circular/input/input-contract"
@@ -69,11 +71,12 @@ func (s *serviceInput) Add(ctx context.Context, req inputContract.InputAddReq, c
 	return circular.Id, nil
 }
 
-func (s *serviceInput) List(ctx context.Context, req inputContract.ListQuery) (int64, []inputContract.ListResp, error) {
+func (s *serviceInput) List(c *gin.Context, req inputContract.ListQuery) (int64, []inputContract.ListResp, error) {
 	var items []inputContract.ListResp
+	org := scope.GetOrganize(c)
 
 	sess := s.session()
-	tx := sess.WithContext(ctx).Model(&model.Circular{}).Where("status != ?", model.CircularCompleted)
+	tx := sess.WithContext(c).Model(&model.Circular{}).Where("status != ? AND organize = ?", model.CircularCompleted, org)
 
 	if req.Status != "" {
 		tx = tx.Where("status = ?", req.Status)
@@ -90,7 +93,7 @@ func (s *serviceInput) List(ctx context.Context, req inputContract.ListQuery) (i
 		return 0, nil, err
 	}
 
-	page, size := normalizePage(req.Page, req.Size)
+	page, size := paging.Normalize(req.Page, req.Size)
 	offset := (page - 1) * size
 	if err := tx.Offset(offset).Limit(size).Order("created_at DESC").Find(&items).Error; err != nil {
 		return 0, nil, err
@@ -112,10 +115,18 @@ func (s *serviceInput) Detail(ctx context.Context, id string) (*inputContract.In
 
 	result := &inputContract.InputDetailResp{Circular: circular}
 
-	sess.WithContext(ctx).Where("circular_id = ?", circular.Code).Find(&result.OrganizeStatusList)
-	sess.WithContext(ctx).Where("circular_id = ?", circular.Code).Find(&result.Distributions)
-	sess.WithContext(ctx).Where("circular = ?", circular.Id).Find(&result.Disposals)
-	sess.WithContext(ctx).Where("circular_id = ?", circular.Code).Find(&result.Reviews)
+	if err := sess.WithContext(ctx).Where("circular_id = ?", circular.Code).Find(&result.OrganizeStatusList).Error; err != nil {
+		return nil, err
+	}
+	if err := sess.WithContext(ctx).Where("circular_id = ?", circular.Code).Find(&result.Distributions).Error; err != nil {
+		return nil, err
+	}
+	if err := sess.WithContext(ctx).Where("circular = ?", circular.Id).Find(&result.Disposals).Error; err != nil {
+		return nil, err
+	}
+	if err := sess.WithContext(ctx).Where("circular_id = ?", circular.Code).Find(&result.Reviews).Error; err != nil {
+		return nil, err
+	}
 
 	return result, nil
 }
@@ -125,14 +136,30 @@ func (s *serviceInput) Delete(ctx context.Context, id string) error {
 		return fmt.Errorf("id不可为空")
 	}
 	sess := s.session()
-	result := sess.WithContext(ctx).Where("id = ?", id).Delete(&model.Circular{})
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected == 0 {
+
+	var circular model.Circular
+	if err := sess.WithContext(ctx).Where("id = ?", id).First(&circular).Error; err != nil {
 		return fmt.Errorf("通报不存在")
 	}
-	return nil
+
+	return sess.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		code := circular.Code
+
+		tx.Where("circular_id = ?", code).Delete(&model.CircularOrganizeStatus{})
+		tx.Where("circular_id = ?", code).Delete(&model.CircularReview{})
+		tx.Where("circular_id = ?", code).Delete(&model.CircularOperationLog{})
+
+		var distIds []string
+		tx.Model(&model.CircularDistribution{}).Where("circular_id = ?", code).Pluck("id", &distIds)
+		if len(distIds) > 0 {
+			tx.Where("ancestor IN ? OR descendant IN ?", distIds, distIds).Delete(&model.CircularDistributionClosure{})
+		}
+		tx.Where("circular_id = ?", code).Delete(&model.CircularDistribution{})
+
+		tx.Where("circular = ?", id).Delete(&model.CircularDisposal{})
+
+		return tx.Where("id = ?", id).Delete(&model.Circular{}).Error
+	})
 }
 
 func (s *serviceInput) Edit(ctx context.Context, id string, req inputContract.InputEditReq, updatedBy string) error {
@@ -179,8 +206,8 @@ func (s *serviceInput) Submit(ctx context.Context, id string, updatedBy string) 
 		return fmt.Errorf("通报不存在")
 	}
 
-	if circular.Status != model.CircularToBeSubmit && circular.Status != model.CircularRejected {
-		return fmt.Errorf("通报状态错误")
+	if _, err := model.CircularSM.Apply(circular.Status, model.CircularEvtSubmit); err != nil {
+		return err
 	}
 
 	return sess.WithContext(ctx).Transaction(func(session *gorm.DB) error {
@@ -433,21 +460,9 @@ func (s *serviceInput) CommonTemplateDownload(c *gin.Context) {
 
 func (s *serviceInput) getDefaultTemplateId(ctx context.Context) string {
 	sess := s.session()
-	var item model.CircularTemplate
-	sess.WithContext(ctx).Where("default_flag = ?", true).First(&item)
-	return item.Id
-}
-
-// ─── helpers ───
-
-func normalizePage(page, size int) (int, int) {
-	if page <= 0 {
-		page = 1
-	}
-	if size <= 0 || size > 100 {
-		size = 20
-	}
-	return page, size
+	var item model.DynamicFormTemplate
+	sess.WithContext(ctx).Where("business = ? AND is_default = ?", "circular", true).First(&item)
+	return item.ID
 }
 
 func splitRegion(address string) [3]string {

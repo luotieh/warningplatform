@@ -17,10 +17,11 @@ import (
 
 type HandlerAsset struct {
 	svc assetContract.ServiceAsset
+	iam *iamsdk.Client
 }
 
-func NewHandlerAsset(svc assetContract.ServiceAsset) *HandlerAsset {
-	return &HandlerAsset{svc: svc}
+func NewHandlerAsset(svc assetContract.ServiceAsset, iam *iamsdk.Client) *HandlerAsset {
+	return &HandlerAsset{svc: svc, iam: iam}
 }
 
 func firstNonEmpty(values ...string) string {
@@ -30,6 +31,13 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func stringValueOr(value *string, fallback string) string {
+	if value != nil {
+		return *value
+	}
+	return fallback
 }
 
 func (h *HandlerAsset) List(c *gin.Context) {
@@ -93,7 +101,7 @@ func (h *HandlerAsset) Create(c *gin.Context) {
 		OS:                      req.OS,
 		DataNumber:              req.DataNumber,
 		SystemType:              req.SystemType,
-		AssetFamily:             req.AssetFamily,
+		AssetFamily:             normalizeAssetFamilyValue(req.AssetFamily, req.SystemType, req.Type, req.Domain, req.URL, req.Address),
 		AssetSubtype:            req.AssetSubtype,
 		IsOnline:                req.IsOnline,
 		IsKey:                   req.IsKey,
@@ -167,6 +175,12 @@ func (h *HandlerAsset) Update(c *gin.Context) {
 		return
 	}
 
+	existing, err := h.svc.GetByID(id)
+	if err != nil {
+		web.Err(c, web.NotFound).Send()
+		return
+	}
+
 	updates := make(map[string]any)
 	if req.Name != nil {
 		updates["name"] = *req.Name
@@ -222,9 +236,6 @@ func (h *HandlerAsset) Update(c *gin.Context) {
 	if req.SystemType != nil {
 		updates["system_type"] = *req.SystemType
 	}
-	if req.AssetFamily != nil {
-		updates["asset_family"] = *req.AssetFamily
-	}
 	if req.AssetSubtype != nil {
 		updates["asset_subtype"] = *req.AssetSubtype
 	}
@@ -275,6 +286,17 @@ func (h *HandlerAsset) Update(c *gin.Context) {
 
 	user, _ := iamsdk.GetCurrentUser(c)
 	updates["updated_by"] = user.UserID
+
+	if req.AssetFamily != nil || req.SystemType != nil || req.Type != nil || req.Domain != nil || req.URL != nil || req.Address != nil {
+		updates["asset_family"] = normalizeAssetFamilyValue(
+			stringValueOr(req.AssetFamily, existing.AssetFamily),
+			stringValueOr(req.SystemType, existing.SystemType),
+			stringValueOr(req.Type, existing.Type),
+			stringValueOr(req.Domain, existing.Domain),
+			stringValueOr(req.URL, existing.URL),
+			stringValueOr(req.Address, existing.Address),
+		)
+	}
 
 	if err := h.svc.Update(id, updates); err != nil {
 		web.Fail(c).Err(err).Send()
@@ -410,8 +432,8 @@ func (h *HandlerAsset) exportXLSX(c *gin.Context, items []model.Asset) {
 }
 
 func assetExportColumns() []assetImportColumn {
-	columns := make([]assetImportColumn, 0, len(assetImportColumns)+4)
-	columns = append(columns, assetImportColumns...)
+	columns := make([]assetImportColumn, 0, len(assetLedgerColumns)+4)
+	columns = append(columns, assetLedgerColumns...)
 	columns = append(columns,
 		assetImportColumn{Field: "risk_score", Group: "导出统计信息", Title: "风险分"},
 		assetImportColumn{Field: "vuln_count", Group: "导出统计信息", Title: "漏洞数"},

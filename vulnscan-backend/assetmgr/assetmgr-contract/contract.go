@@ -1,6 +1,10 @@
 package assetmgrContract
 
-import "vulnscan-backend/model"
+import (
+	"vulnscan-backend/model"
+
+	"gorm.io/gorm"
+)
 
 // ── 生命周期 ──
 
@@ -17,7 +21,7 @@ type TransitionReq struct {
 }
 
 type ServiceLifecycle interface {
-	ListTransitions(req LifecycleListReq) ([]model.AssetLifecycle, int64, error)
+	ListTransitions(req LifecycleListReq, scopes ...func(*gorm.DB) *gorm.DB) ([]model.AssetLifecycle, int64, error)
 	Transition(assetID, toState, operator, remark string) error
 }
 
@@ -32,7 +36,7 @@ type ComplianceItemReq struct {
 }
 
 type ServiceComplianceItem interface {
-	List(req ComplianceItemReq) ([]model.AssetCompliance, int64, error)
+	List(req ComplianceItemReq, scopes ...func(*gorm.DB) *gorm.DB) ([]model.AssetCompliance, int64, error)
 	Create(item *model.AssetCompliance) error
 	Update(id int64, data map[string]interface{}) error
 	Delete(id int64) error
@@ -47,7 +51,7 @@ type ResponsibleListReq struct {
 }
 
 type ServiceResponsible interface {
-	List(req ResponsibleListReq) ([]model.AssetResponsible, int64, error)
+	List(req ResponsibleListReq, scopes ...func(*gorm.DB) *gorm.DB) ([]model.AssetResponsible, int64, error)
 	Create(item *model.AssetResponsible) error
 	Update(id int64, data map[string]interface{}) error
 	Delete(id int64) error
@@ -62,7 +66,7 @@ type RiskListReq struct {
 }
 
 type ServiceRisk interface {
-	List(req RiskListReq) ([]model.AssetRiskScore, int64, error)
+	List(req RiskListReq, scopes ...func(*gorm.DB) *gorm.DB) ([]model.AssetRiskScore, int64, error)
 	GetByAssetID(assetID string) (*model.AssetRiskScore, error)
 	Recalculate(assetID string) error
 	RecalculateAll() (int, error)
@@ -79,7 +83,7 @@ type AlertListReq struct {
 }
 
 type ServiceAlert interface {
-	List(req AlertListReq) ([]model.Alert, int64, error)
+	List(req AlertListReq, scopes ...func(*gorm.DB) *gorm.DB) ([]model.Alert, int64, error)
 	Create(item *model.Alert) error
 	Ack(id string, ackedBy string) error
 	Resolve(id string) error
@@ -101,7 +105,7 @@ type ReviewReq struct {
 }
 
 type ServiceVerify interface {
-	List(req VerifyListReq) ([]model.AssetVerify, int64, error)
+	List(req VerifyListReq, scopes ...func(*gorm.DB) *gorm.DB) ([]model.AssetVerify, int64, error)
 	Submit(item *model.AssetVerify) error
 	Review(id string, status, remark, reviewer string) error
 }
@@ -157,7 +161,7 @@ type ArchiveListReq struct {
 }
 
 type ServiceVerifyTask interface {
-	ListTasks(req VerifyTaskListReq) ([]VerifyTaskResp, int64, error)
+	ListTasks(req VerifyTaskListReq, scopes ...func(*gorm.DB) *gorm.DB) ([]VerifyTaskResp, int64, error)
 	CreateTasks(req VerifyTaskCreateReq, operator, organizeID string) ([]model.AssetVerifyTask, error)
 	Receive(id, operator, organizeID, remark string) error
 	Confirm(id, operator, remark string) error
@@ -166,8 +170,8 @@ type ServiceVerifyTask interface {
 	Return(id, operator, remark string) error
 	Archive(id, operator, remark string) error
 	Reactivate(id, operator, remark string) error
-	ListLogs(req VerifyTaskLogsReq) ([]model.AssetVerifyOplog, int64, error)
-	ListArchives(req ArchiveListReq) ([]model.AssetArchiveSnapshot, int64, error)
+	ListLogs(req VerifyTaskLogsReq, scopes ...func(*gorm.DB) *gorm.DB) ([]model.AssetVerifyOplog, int64, error)
+	ListArchives(req ArchiveListReq, scopes ...func(*gorm.DB) *gorm.DB) ([]model.AssetArchiveSnapshot, int64, error)
 	GetArchive(id string) (*model.AssetArchiveSnapshot, error)
 }
 
@@ -180,7 +184,7 @@ type TemplateListReq struct {
 }
 
 type ServiceComplianceTemplate interface {
-	List(req TemplateListReq) ([]model.ComplianceTemplate, int64, error)
+	List(req TemplateListReq, scopes ...func(*gorm.DB) *gorm.DB) ([]model.ComplianceTemplate, int64, error)
 	GetByID(id int64) (*model.ComplianceTemplate, error)
 	Create(item *model.ComplianceTemplate) error
 	Update(id int64, data map[string]interface{}) error
@@ -200,7 +204,7 @@ type CheckResultListReq struct {
 }
 
 type ServiceCheckResult interface {
-	List(req CheckResultListReq) ([]model.ComplianceCheckResult, int64, error)
+	List(req CheckResultListReq, scopes ...func(*gorm.DB) *gorm.DB) ([]model.ComplianceCheckResult, int64, error)
 	Upsert(item *model.ComplianceCheckResult) error
 }
 
@@ -213,7 +217,7 @@ type IntSourceListReq struct {
 }
 
 type ServiceIntegration interface {
-	ListSources(req IntSourceListReq) ([]model.IntegrationSource, int64, error)
+	ListSources(req IntSourceListReq, scopes ...func(*gorm.DB) *gorm.DB) ([]model.IntegrationSource, int64, error)
 	CreateSource(item *model.IntegrationSource) error
 	UpdateSource(id int64, data map[string]interface{}) error
 	DeleteSource(id int64) error
@@ -235,9 +239,9 @@ type ExecutionListReq struct {
 }
 
 type ServiceWorkflow interface {
-	List(req WorkflowListReq) ([]model.Workflow, int64, error)
+	List(req WorkflowListReq, scopes ...func(*gorm.DB) *gorm.DB) ([]model.Workflow, int64, error)
 	Create(item *model.Workflow) error
 	Update(id string, data map[string]interface{}) error
 	Delete(id string) error
-	ListExecutions(req ExecutionListReq) ([]model.WorkflowExecution, int64, error)
+	ListExecutions(req ExecutionListReq, scopes ...func(*gorm.DB) *gorm.DB) ([]model.WorkflowExecution, int64, error)
 }

@@ -22,7 +22,7 @@ type Agent struct {
 
 func New(cfg Config, executors ...Executor) *Agent {
 	cfg.defaults()
-	client := NewClient(cfg.MasterURL, cfg.Token)
+	client := NewClient(cfg.MasterURL, cfg.Token, cfg.Secret)
 	scheduler := NewScheduler(executors, cfg.MaxConcurrent, cfg.TaskTimeout)
 
 	return &Agent{

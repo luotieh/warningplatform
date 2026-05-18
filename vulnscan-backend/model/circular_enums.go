@@ -1,14 +1,5 @@
 package model
 
-// ─── 通报模板类型 ───
-
-type CircularTemplateType string
-
-const (
-	CircularTmpInput    CircularTemplateType = "input"
-	CircularTmpDisposal CircularTemplateType = "disposal"
-)
-
 // ─── 通报数据来源 ───
 
 type CircularDataSource string

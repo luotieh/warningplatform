@@ -51,4 +51,10 @@ const (
 	TaskStatusCompleted = "completed"
 	TaskStatusFailed    = "failed"
 	TaskStatusCancelled = "cancelled"
+
+	TaskStatusSplitting = "splitting"
+	TaskStatusPartial   = "partial"
+
+	TaskTypeAssetEnrich = "asset_enrich"
+	TaskTypeVulnRetest  = "vuln_retest"
 )

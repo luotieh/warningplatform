@@ -19,7 +19,7 @@ func New() *UDPScanner { return &UDPScanner{} }
 
 func (m *UDPScanner) ID() string       { return "udp_scan" }
 func (m *UDPScanner) Name() string     { return "UDP 端口扫描" }
-func (m *UDPScanner) Category() string { return "host" }
+func (m *UDPScanner) Category() string { return "discover" }
 
 func (m *UDPScanner) Params() []core.ModuleParam {
 	return []core.ModuleParam{

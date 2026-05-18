@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"gorm.io/gorm"
@@ -86,8 +87,15 @@ type Runner struct {
 
 	eventBridge *EventBridge
 
+	resultCache *ResultCache
+
 	templateInstance *engine.TemplateInstance
 	planResolver     *PlanResolver
+
+	findingFilter *FindingFilter
+
+	enginePolicy          EnginePolicy
+	persistedFindingCount atomic.Int32
 }
 
 func NewRunner(db *gorm.DB, task model.ScanTask, eventBus *EventBus,
@@ -111,6 +119,7 @@ func NewRunner(db *gorm.DB, task model.ScanTask, eventBus *EventBus,
 		enricher:         orchestrate.NewTargetEnricher(),
 		checkpoint:       NewCheckpointManager(db),
 		strategy:         orchestrate.NewStrategyEngine(),
+		resultCache:      NewResultCache(10000, 30*time.Minute),
 		templateInstance: tmplInstance,
 		planResolver:     planResolver,
 	}
@@ -181,6 +190,27 @@ func (r *Runner) Cancel() {
 	}
 }
 
+func (r *Runner) loadFilters() {
+	var exclusions []model.ScanExclusion
+	var fpRules []model.FPRule
+
+	scopes := []string{model.ExclusionScopeGlobal}
+	if r.task.TemplateID != "" {
+		scopes = append(scopes, "template:"+r.task.TemplateID)
+	}
+
+	r.db.Where("enabled = ? AND scope IN ?", true, scopes).Find(&exclusions)
+	r.db.Where("enabled = ?", true).Find(&fpRules)
+
+	if len(exclusions) > 0 || len(fpRules) > 0 {
+		r.findingFilter = NewFindingFilter(exclusions, fpRules)
+		slog.Info("[Runner] 已加载过滤规则",
+			"exclusions", len(exclusions),
+			"fp_rules", len(fpRules),
+		)
+	}
+}
+
 func (r *Runner) GetProgress() *TaskProgress {
 	return r.progress.Get()
 }
@@ -208,6 +238,22 @@ func (r *Runner) Execute(ctx context.Context) {
 		close(r.logCh)
 		<-r.logDone
 	}()
+	defer r.tryMergeParentScanTask(context.Background())
+	defer r.finalizeAfterRun(context.Background())
+
+	r.loadFilters()
+
+	r.enginePolicy = ParseEnginePolicy(mergeTaskConfigSource(r.task))
+	r.persistedFindingCount.Store(0)
+	if p := r.enginePolicy; p.CircuitFailThreshold > 0 && p.CircuitResetSeconds > 0 {
+		r.circuit = orchestrate.NewCircuitBreaker(p.CircuitFailThreshold, time.Duration(p.CircuitResetSeconds)*time.Second)
+	}
+	if p := r.enginePolicy; p.AdaptiveMinConcurrency > 0 && p.AdaptiveMaxConcurrency >= p.AdaptiveMinConcurrency {
+		r.adaptive = orchestrate.NewAdaptiveController(p.AdaptiveMinConcurrency, p.AdaptiveMaxConcurrency)
+	}
+	if p := r.enginePolicy; p.CacheMaxEntries > 0 && p.CacheTTLSeconds > 0 {
+		r.resultCache = NewResultCache(p.CacheMaxEntries, time.Duration(p.CacheTTLSeconds)*time.Second)
+	}
 
 	slog.Info("[Runner] 开始执行任务", "task_id", r.task.ID, "targets", len(r.task.Targets))
 
@@ -222,6 +268,9 @@ func (r *Runner) Execute(ctx context.Context) {
 	}
 
 	r.moduleTimeout = DefaultTimeout(stages)
+	if r.enginePolicy.ModuleTimeoutSeconds > 0 {
+		r.moduleTimeout = time.Duration(r.enginePolicy.ModuleTimeoutSeconds) * time.Second
+	}
 
 	totalModules := TotalModules(stages)
 	r.progress.SetStages(len(stages))
@@ -234,11 +283,6 @@ func (r *Runner) Execute(ctx context.Context) {
 		"", "")
 
 	currentTargets := targets
-
-	stageCtx := &StageContext{
-		CompletedStages: make(map[string]StageResult),
-		Params:          r.templateInstance.Params,
-	}
 
 	cb := StageCallbacks{
 		OnModuleDone: func(stage string) {
@@ -262,99 +306,16 @@ func (r *Runner) Execute(ctx context.Context) {
 		Stream:      r.stream,
 		Checkpoint:  r.checkpoint,
 		Strategy:    r.strategy,
+		Cache:       r.resultCache,
 		TaskID:      r.task.ID,
+
+		TargetExclusionFilter: r.findingFilter,
 	}
 
-	for i, stage := range stages {
-		select {
-		case <-ctx.Done():
-			r.progress.FinishTask(model.TaskStatusCancelled, "任务被取消")
-			return
-		default:
-		}
+	r.executeDAG(ctx, stages, currentTargets, config, cb, engineOpts)
 
-		if !ShouldRun(stage, stageCtx) {
-			r.writeLog("info", fmt.Sprintf("阶段 [%s] 条件不满足，跳过", stage.name), stage.name, "")
-			if cb.OnModuleDone != nil {
-				for range stage.modules {
-					cb.OnModuleDone(stage.name)
-				}
-			}
-			continue
-		}
-
-		r.progress.SetCurrentStage(stage.name)
-		r.progress.SyncToDB(stage.name)
-		r.publishEvent(NewStageEvent(r.task.ID, stage.name, "started"))
-
-		moduleNames := make([]string, 0, len(stage.modules))
-		for _, m := range stage.modules {
-			moduleNames = append(moduleNames, m.ID())
-		}
-		r.writeLog("info",
-			fmt.Sprintf("阶段 [%s] 开始，包含 %d 个模块: %v", stage.name, len(stage.modules), moduleNames),
-			stage.name, "")
-
-		stageConfig := mergeConfig(config, stage.config)
-		timeout := r.moduleTimeout
-		if stage.timeout > 0 {
-			timeout = stage.timeout
-		}
-
-		stageFindings, stageTargets := ExecuteStageWithOpts(
-			ctx, r.task.ID, stage, currentTargets, stageConfig, timeout, cb, engineOpts,
-		)
-
-		stageCtx.CompletedStages[stage.name] = StageResult{
-			Findings: stageFindings,
-			Targets:  stageTargets,
-		}
-
-		if len(stageTargets) > 0 {
-			currentTargets = r.enricher.EnrichTargets(currentTargets, stageTargets)
-		}
-
-		if isReconStage(stage.name) && len(stageFindings) > 0 {
-			products := extractDetectedProducts(stageFindings, config)
-			if len(products) > 0 {
-				config["detected_products"] = products
-				r.writeLog("info",
-					fmt.Sprintf("检测到 %d 个产品/技术: %v", len(products), products),
-					stage.name, "")
-			}
-
-			wafs := extractDetectedWAFs(stageFindings)
-			if len(wafs) > 0 {
-				config["detected_wafs"] = wafs
-				r.writeLog("info",
-					fmt.Sprintf("检测到 %d 个WAF: %v", len(wafs), wafs),
-					stage.name, "")
-			}
-		}
-
-		r.progress.SetScanned(len(targets))
-		r.progress.IncrementStageDone()
-		r.progress.SyncToDB(stage.name)
-		r.publishEvent(NewStageEvent(r.task.ID, stage.name, "completed"))
-		r.publishEvent(NewProgressEvent(r.task.ID, *r.progress.Get()))
-
-		r.writeLog("info",
-			fmt.Sprintf("阶段 [%s] 完成 (%d/%d)，本阶段发现 %d 条结果",
-				stage.name, i+1, len(stages), len(stageFindings)),
-			stage.name, "")
-
-		select {
-		case <-ctx.Done():
-			r.writeLog("warn", "任务被取消", "", "")
-			r.publishEvent(NewDoneEvent(r.task.ID, model.TaskStatusCancelled, "任务被取消"))
-			r.progress.FinishTask(model.TaskStatusCancelled, "任务被取消")
-			return
-		default:
-		}
-
-		slog.Info("[Runner] Stage 完成", "task", r.task.ID, "stage", stage.name,
-			"stage_num", i+1, "total_stages", len(stages),
-			"findings_in_stage", len(stageFindings))
+	if r.progress.Get().Status == model.TaskStatusCancelled {
+		return
 	}
 
 	r.stream.Close()
@@ -369,10 +330,6 @@ func (r *Runner) Execute(ctx context.Context) {
 	r.progress.FinishTask(model.TaskStatusCompleted, "")
 	r.publishEvent(NewDoneEvent(r.task.ID, model.TaskStatusCompleted, ""))
 
-	if r.eventBridge != nil {
-		r.eventBridge.OnScanComplete(ctx, r.task.ID)
-	}
-
 	slog.Info("[Runner] 任务执行完成",
 		"task_id", r.task.ID,
 		"findings", r.progress.Get().FindingCount,
@@ -385,16 +342,32 @@ func (r *Runner) persistAndPublish(findings []*core.Finding, stage, moduleID str
 		return
 	}
 
+	if r.findingFilter != nil {
+		findings = r.findingFilter.FilterFindings(findings)
+		if len(findings) == 0 {
+			return
+		}
+	}
+
 	var records []model.ScanFinding
 
 	r.persistMu.Lock()
 	for _, f := range findings {
-		dedupKey := computeDedupKey(r.task.ID, f)
+		if r.enginePolicy.MaxFindingsPersisted > 0 && int(r.persistedFindingCount.Load()) >= r.enginePolicy.MaxFindingsPersisted {
+			slog.Info("[Persist] 已达 engine.max_findings 上限，停止实时持久化",
+				"task_id", r.task.ID, "limit", r.enginePolicy.MaxFindingsPersisted)
+			break
+		}
+		if !r.enginePolicy.AllowPersistFinding(f) {
+			continue
+		}
+		dedupKey := computeDedupKey(r.task.ID, f, r.enginePolicy.StrictDedup)
 		if _, ok := r.persistedKeys[dedupKey]; ok {
 			continue
 		}
 		r.persistedKeys[dedupKey] = struct{}{}
 		records = append(records, findingToRecord(r.task, f))
+		r.persistedFindingCount.Add(1)
 	}
 	r.persistMu.Unlock()
 
@@ -450,6 +423,26 @@ func (r *Runner) publishEvent(evt ScanEvent) {
 	}
 }
 
+// tryMergeParentScanTask 在子任务任意终态退出 Execute 时调用：若全部子任务已结束则合并父任务并触发父任务完成回调。
+func (r *Runner) tryMergeParentScanTask(doneCtx context.Context) {
+	pid := strings.TrimSpace(r.task.ParentID)
+	if pid == "" {
+		return
+	}
+	sp := NewTaskSplitter(r.db)
+	merged, err := sp.MergeResults(pid)
+	if err != nil {
+		slog.Warn("[TaskSplitter] 合并父扫描任务失败", "parent_id", pid, "child_id", r.task.ID, "error", err)
+		return
+	}
+	if !merged {
+		return
+	}
+	if r.eventBridge != nil {
+		r.eventBridge.OnScanComplete(doneCtx, pid)
+	}
+}
+
 func buildTargets(task model.ScanTask) []*core.Target {
 	var targets []*core.Target
 	for _, addr := range task.Targets {
@@ -459,17 +452,16 @@ func buildTargets(task model.ScanTask) []*core.Target {
 }
 
 func buildConfig(task model.ScanTask) map[string]interface{} {
-	config := make(map[string]interface{})
-	if task.Parameters != nil {
-		for k, v := range task.Parameters {
-			config[k] = v
-		}
+	config := MergePresetWithParameters(task.Parameters)
+	config["scan_task_id"] = task.ID
+	if strings.TrimSpace(task.ParentID) != "" {
+		config["scan_parent_task_id"] = task.ParentID
 	}
 	return config
 }
 
 func isReconStage(name string) bool {
-	return name == "recon" || name == "recon-fast" || name == "recon-deep"
+	return name == "recon" || name == "recon-fast" || name == "recon-deep" || name == "probe"
 }
 
 func extractDetectedProducts(findings []*core.Finding, config map[string]interface{}) []string {

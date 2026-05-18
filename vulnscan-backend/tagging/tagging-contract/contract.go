@@ -1,6 +1,10 @@
 package taggingContract
 
-import "vulnscan-backend/model"
+import (
+	"vulnscan-backend/model"
+
+	"gorm.io/gorm"
+)
 
 type TagListReq struct {
 	Page     int    `form:"page"`
@@ -22,7 +26,7 @@ type ChangeLogListReq struct {
 }
 
 type ServiceTag interface {
-	List(req TagListReq) ([]model.Tag, int64, error)
+	List(req TagListReq, scopes ...func(*gorm.DB) *gorm.DB) ([]model.Tag, int64, error)
 	GetByID(id int64) (*model.Tag, error)
 	Create(tag *model.Tag) error
 	Update(id int64, data map[string]interface{}) error
@@ -32,7 +36,7 @@ type ServiceTag interface {
 }
 
 type ServiceChangeLog interface {
-	List(req ChangeLogListReq) ([]model.AssetChangeLog, int64, error)
+	List(req ChangeLogListReq, scopes ...func(*gorm.DB) *gorm.DB) ([]model.AssetChangeLog, int64, error)
 	GetByAssetID(assetID string) ([]model.AssetChangeLog, error)
 	Record(log *model.AssetChangeLog) error
 }

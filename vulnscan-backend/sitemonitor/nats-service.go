@@ -2,7 +2,6 @@ package sitemonitor
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -113,19 +112,7 @@ func (s *NatsServiceImpl) GetActiveBaseline(ctx context.Context, url string) (*m
 	if err != nil {
 		return nil, fmt.Errorf("获取数据库会话失败: %w", err)
 	}
-	uh := urlHash(url)
-	var baseline model.MonitorBaseline
-	err = session.WithContext(ctx).
-		Where("url_hash = ? AND is_active = ?", uh, true).
-		Order("version DESC").
-		First(&baseline).Error
-	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return &baseline, nil
+	return GetActiveBaseline(ctx, session, url)
 }
 
 func (s *NatsServiceImpl) SaveBaselineFromAgent(ctx context.Context, outerTx *gorm.DB, executionID, url, agentID string, bu *model.MonitorBaselineUpdate) error {
@@ -247,11 +234,6 @@ func (s *NatsServiceImpl) Close() {
 	if s.nats != nil {
 		s.nats.Close()
 	}
-}
-
-func urlHash(rawURL string) string {
-	h := sha256.Sum256([]byte(rawURL))
-	return fmt.Sprintf("%x", h[:8])
 }
 
 func jsonBool(raw string, key string) bool {

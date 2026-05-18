@@ -4,10 +4,13 @@ import "time"
 
 type ASMProject struct {
 	BaseModel
-	Name        string `json:"name" gorm:"type:varchar(200);not null"`
-	Description string `json:"description" gorm:"type:varchar(500)"`
-	Schedule    string `json:"schedule" gorm:"type:varchar(100)"`
-	Enabled     bool   `json:"enabled" gorm:"default:true"`
+	Name            string     `json:"name" gorm:"type:varchar(200);not null"`
+	Description     string     `json:"description" gorm:"type:varchar(500)"`
+	Schedule        string     `json:"schedule" gorm:"type:varchar(100)"`
+	Enabled         bool       `json:"enabled" gorm:"default:true"`
+	CollectorConfig JSONMap    `json:"collector_config" gorm:"type:text"`
+	DiscoveryStatus string     `json:"discovery_status" gorm:"type:varchar(20);default:idle"`
+	LastDiscoveryAt *time.Time `json:"last_discovery_at"`
 }
 
 func (ASMProject) TableName() string { return "asm_projects" }

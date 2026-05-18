@@ -5,17 +5,23 @@ import (
 	"log/slog"
 	"time"
 
+	coreContract "vulnscan-backend/incident/core/core-contract"
+
 	"code.yt-security.com/public/core/v2/db"
 	"gorm.io/gorm"
 )
 
 type serviceMonitor struct {
-	db   *db.DB
-	nats *NatsServiceImpl
+	db          *db.DB
+	nats        *NatsServiceImpl
+	eventBridge *MonitorEventBridge
 }
 
-func NewServiceMonitor(database *db.DB) *serviceMonitor {
-	return &serviceMonitor{db: database}
+func NewServiceMonitor(database *db.DB, incidentSvc coreContract.ServiceCore) *serviceMonitor {
+	session, _ := database.GetDBSession()
+	bridge := NewMonitorEventBridge(session, incidentSvc)
+	SetMonitorIssueNotifier(bridge.OnIssueDetected)
+	return &serviceMonitor{db: database, eventBridge: bridge}
 }
 
 func (s *serviceMonitor) GetDB() *db.DB { return s.db }

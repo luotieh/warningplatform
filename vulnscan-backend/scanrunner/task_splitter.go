@@ -44,20 +44,32 @@ func (s *TaskSplitter) Split(parentTask model.ScanTask) ([]model.ScanTask, error
 	var subTasks []model.ScanTask
 	for i, group := range groups {
 		subID := uuid.New().String()
+		now := time.Now()
 		sub := model.ScanTask{
-			ID:       subID,
-			Name:     fmt.Sprintf("%s [分片 %d/%d: %s]", parentTask.Name, i+1, len(groups), group.key),
-			Targets:  group.targets,
-			Profile:  parentTask.Profile,
-			Config:   parentTask.Config,
-			Status:   "pending",
-			ParentID: parentTask.ID,
+			ID:           subID,
+			Name:         fmt.Sprintf("%s [分片 %d/%d: %s]", parentTask.Name, i+1, len(groups), group.key),
+			TemplateID:   parentTask.TemplateID,
+			TemplateName: parentTask.TemplateName,
+			Type:         parentTask.Type,
+			Targets:      group.targets,
+			Config:       parentTask.Config,
+			Parameters:   stripWorkerShardSchedulingParams(parentTask.Parameters),
+			Priority:     parentTask.Priority,
+			Profile:      parentTask.Profile,
+			ScheduleID:   parentTask.ScheduleID,
+			CreatedBy:    parentTask.CreatedBy,
+			OrganizeID:   parentTask.OrganizeID,
+			Status:       model.TaskStatusQueued,
+			TotalTargets: len(group.targets),
+			ParentID:     parentTask.ID,
+			CreatedAt:    now,
+			UpdatedAt:    now,
 		}
 		subTasks = append(subTasks, sub)
 	}
 
 	if err := s.db.Model(&parentTask).Updates(map[string]interface{}{
-		"status":    "splitting",
+		"status":    model.TaskStatusSplitting,
 		"sub_count": len(subTasks),
 	}).Error; err != nil {
 		return nil, fmt.Errorf("更新父任务状态失败: %w", err)
@@ -136,58 +148,121 @@ func (s *TaskSplitter) classifyTarget(t string) string {
 	return "other"
 }
 
-func (s *TaskSplitter) MergeResults(parentID string) error {
+func (s *TaskSplitter) MergeResults(parentID string) (merged bool, err error) {
+	var n int64
+	if err := s.db.Model(&model.ScanTask{}).Where("id = ?", parentID).Count(&n).Error; err != nil {
+		return false, err
+	}
+	if n == 0 {
+		return false, fmt.Errorf("父任务不存在: %s", parentID)
+	}
+
 	var subTasks []model.ScanTask
 	if err := s.db.Where("parent_id = ?", parentID).Find(&subTasks).Error; err != nil {
-		return fmt.Errorf("查询子任务失败: %w", err)
+		return false, fmt.Errorf("查询子任务失败: %w", err)
+	}
+	if len(subTasks) == 0 {
+		return false, nil
 	}
 
 	allDone := true
 	for _, sub := range subTasks {
-		if sub.Status != "completed" && sub.Status != "failed" && sub.Status != "cancelled" {
+		if !isScanTaskTerminalStatus(sub.Status) {
 			allDone = false
 			break
 		}
 	}
 
 	if !allDone {
-		return nil
+		return false, nil
 	}
 
 	var totalFindings int64
-	var completedCount, failedCount int
+	var completedCount, failedCount, cancelledCount, partialCount int
+	scannedSum := 0
+	openPortsSum := 0
+	aliveSum := 0
+	var vc, vh, vm, vl, vi int
+
 	for _, sub := range subTasks {
 		var count int64
 		s.db.Model(&model.ScanFinding{}).Where("task_id = ?", sub.ID).Count(&count)
 		totalFindings += count
 
 		switch sub.Status {
-		case "completed":
+		case model.TaskStatusCompleted:
 			completedCount++
-		case "failed":
+		case model.TaskStatusPartial:
+			partialCount++
+		case model.TaskStatusFailed:
 			failedCount++
+		case model.TaskStatusCancelled:
+			cancelledCount++
 		}
+		scannedSum += sub.ScannedTargets
+		openPortsSum += sub.OpenPorts
+		aliveSum += sub.AliveHosts
+		vc += sub.VulnCritical
+		vh += sub.VulnHigh
+		vm += sub.VulnMedium
+		vl += sub.VulnLow
+		vi += sub.VulnInfo
 	}
 
-	parentStatus := "completed"
-	if failedCount == len(subTasks) {
-		parentStatus = "failed"
-	} else if failedCount > 0 {
-		parentStatus = "partial"
+	parentStatus := model.TaskStatusCompleted
+	if completedCount == len(subTasks) {
+		parentStatus = model.TaskStatusCompleted
+	} else if failedCount == len(subTasks) {
+		parentStatus = model.TaskStatusFailed
+	} else if cancelledCount == len(subTasks) {
+		parentStatus = model.TaskStatusCancelled
+	} else if completedCount > 0 || partialCount > 0 {
+		parentStatus = model.TaskStatusPartial
+	} else {
+		parentStatus = model.TaskStatusFailed
 	}
 
-	s.db.Model(&model.ScanTask{}).Where("id = ?", parentID).Updates(map[string]interface{}{
-		"status":     parentStatus,
-		"updated_at": time.Now(),
-	})
+	now := time.Now()
+	updates := map[string]interface{}{
+		"status":          parentStatus,
+		"updated_at":      now,
+		"finished_at":     &now,
+		"progress":        100,
+		"scanned_targets": scannedSum,
+		"open_ports":      openPortsSum,
+		"alive_hosts":     aliveSum,
+		"vuln_critical":   vc,
+		"vuln_high":       vh,
+		"vuln_medium":     vm,
+		"vuln_low":        vl,
+		"vuln_info":       vi,
+		"current_stage":   "",
+		"current_module":  "",
+	}
+
+	if err := s.db.Model(&model.ScanTask{}).Where("id = ?", parentID).Updates(updates).Error; err != nil {
+		return false, fmt.Errorf("更新父任务状态失败: %w", err)
+	}
 
 	slog.Info("[TaskSplitter] 子任务结果合并完成",
 		"parent", parentID,
 		"subs", len(subTasks),
 		"completed", completedCount,
+		"partial", partialCount,
 		"failed", failedCount,
+		"cancelled", cancelledCount,
+		"parent_status", parentStatus,
 		"total_findings", totalFindings,
 	)
 
-	return nil
+	return true, nil
+}
+
+func isScanTaskTerminalStatus(s string) bool {
+	switch s {
+	case model.TaskStatusCompleted, model.TaskStatusFailed, model.TaskStatusCancelled, model.TaskStatusPartial:
+		return true
+	default:
+		return false
+	}
 }

@@ -86,6 +86,36 @@ func (s *PocStore) LoadAll() []*PocEntry {
 	return entries
 }
 
+// InvalidateCache 清空内存缓存，便于主控同步或外部写入 DB 后重新加载。
+func (s *PocStore) InvalidateCache() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.entries = nil
+	s.lastLoad = time.Time{}
+	s.version++
+}
+
+func (s *PocStore) LoadByIDs(ids []string) []*PocEntry {
+	all := s.LoadAll()
+	if len(ids) == 0 {
+		return nil
+	}
+	want := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id != "" {
+			want[strings.ToLower(id)] = struct{}{}
+		}
+	}
+	var filtered []*PocEntry
+	for _, entry := range all {
+		if _, ok := want[strings.ToLower(entry.ID)]; ok {
+			filtered = append(filtered, entry)
+		}
+	}
+	return filtered
+}
+
 func (s *PocStore) LoadBySeverity(severities []string) []*PocEntry {
 	all := s.LoadAll()
 	if len(severities) == 0 {
@@ -311,13 +341,6 @@ func (s *PocStore) ImportFromYAML(yamlContent string) (*model.PocTemplate, error
 
 	s.InvalidateCache()
 	return &existing, nil
-}
-
-func (s *PocStore) InvalidateCache() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.lastLoad = time.Time{}
-	s.version++
 }
 
 func (s *PocStore) CacheVersion() int64 {

@@ -92,8 +92,8 @@ func (s *serviceMonitor) GetTask(ctx context.Context, id string) (*model.Monitor
 	return &task, nil
 }
 
-func (s *serviceMonitor) ListTasks(ctx context.Context, req contract.TaskListReq) (int64, []model.MonitorTask, error) {
-	query := s.session().WithContext(ctx).Model(&model.MonitorTask{})
+func (s *serviceMonitor) ListTasks(ctx context.Context, req contract.TaskListReq, scopes ...func(*gorm.DB) *gorm.DB) (int64, []model.MonitorTask, error) {
+	query := s.session().WithContext(ctx).Model(&model.MonitorTask{}).Scopes(scopes...)
 	if req.Name != "" {
 		query = query.Where("task_name LIKE ?", "%"+req.Name+"%")
 	}

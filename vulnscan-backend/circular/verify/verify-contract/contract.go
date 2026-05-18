@@ -4,6 +4,8 @@ import (
 	"context"
 
 	inputContract "vulnscan-backend/circular/input/input-contract"
+
+	"github.com/gin-gonic/gin"
 )
 
 type VerifyReq struct {
@@ -12,6 +14,6 @@ type VerifyReq struct {
 }
 
 type ServiceVerify interface {
-	List(ctx context.Context, req inputContract.ListQuery) (int64, []inputContract.ListResp, error)
+	List(c *gin.Context, req inputContract.ListQuery) (int64, []inputContract.ListResp, error)
 	Verify(ctx context.Context, req VerifyReq, userId string) error
 }

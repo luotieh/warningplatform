@@ -33,7 +33,11 @@ type EngineOpts struct {
 	Stream      *orchestrate.FindingStream
 	Checkpoint  *CheckpointManager
 	Strategy    *orchestrate.StrategyEngine
+	Cache       *ResultCache
 	TaskID      string
+
+	// TargetExclusionFilter 若设置，在模块执行前按排除规则过滤目标（提高效率）。
+	TargetExclusionFilter *FindingFilter
 }
 
 const cancelGracePeriod = 10 * time.Second
@@ -73,6 +77,21 @@ func ExecuteStageWithOpts(
 		mods = opts.Prioritizer.SortModules(mods)
 	}
 
+	if len(mods) == 0 {
+		return nil, nil
+	}
+
+	modsBeforeWeb := len(mods)
+	mods = filterWebVulnModules(mods, config)
+	if skipped := modsBeforeWeb - len(mods); skipped > 0 && cb.OnModuleDone != nil {
+		for i := 0; i < skipped; i++ {
+			cb.OnModuleDone(stage.name)
+		}
+	}
+	if len(mods) == 0 {
+		return nil, nil
+	}
+
 	if len(mods) == 1 {
 		return executeSingleWithOpts(ctx, taskID, stage.name, mods[0], targets, config, moduleTimeout, cb, opts)
 	}
@@ -109,6 +128,34 @@ func executeSingleWithOpts(
 			cb.OnModuleDone(stageName)
 		}
 		return nil, nil
+	}
+
+	if opts.TargetExclusionFilter != nil && len(targets) > 0 {
+		targets = filterTargetsForExclusions(opts.TargetExclusionFilter, targets)
+		if len(targets) == 0 {
+			slog.Info("[Executor] 目标均被排除规则过滤，跳过模块", "task", taskID, "module", mod.ID())
+			if cb.OnModuleDone != nil {
+				cb.OnModuleDone(stageName)
+			}
+			return nil, nil
+		}
+	}
+
+	if opts.Cache != nil && len(targets) == 1 {
+		cacheKey := opts.Cache.Key(targets[0].Host, mod.ID(), config)
+		if cached, hit := opts.Cache.Get(cacheKey); hit {
+			slog.Info("[Executor] 缓存命中", "task", taskID, "module", mod.ID())
+			if cb.OnModuleDone != nil {
+				cb.OnModuleDone(stageName)
+			}
+			if cb.OnModuleResult != nil && len(cached) > 0 {
+				cb.OnModuleResult(cached, stageName, mod.ID())
+			}
+			if cb.OnLog != nil {
+				cb.OnLog("info", fmt.Sprintf("模块 [%s] 缓存命中，%d 条结果", mod.ID(), len(cached)), stageName, mod.ID())
+			}
+			return cached, nil
+		}
 	}
 
 	if opts.Circuit != nil && !opts.Circuit.CanExecute(mod.ID()) {
@@ -219,6 +266,12 @@ func executeSingleWithOpts(
 	if cb.OnModuleResult != nil {
 		cb.OnModuleResult(modFindings, stageName, mod.ID())
 	}
+
+	if opts.Cache != nil && len(targets) == 1 {
+		cacheKey := opts.Cache.Key(targets[0].Host, mod.ID(), config)
+		opts.Cache.Set(cacheKey, modFindings)
+	}
+
 	return modFindings, result.Targets
 }
 
@@ -250,6 +303,14 @@ func executeConcurrentWithOpts(
 		slog.Warn("[Executor] Stage 整体超时", "task", taskID, "stage", stage.name)
 	})
 	defer stageTimeout.Stop()
+
+	if opts.TargetExclusionFilter != nil && len(targets) > 0 {
+		targets = filterTargetsForExclusions(opts.TargetExclusionFilter, targets)
+		if len(targets) == 0 {
+			slog.Info("[Executor] 并发阶段目标均被排除规则过滤，跳过", "task", taskID, "stage", stage.name)
+			return nil, nil
+		}
+	}
 
 	for _, mod := range mods {
 		if opts.Checkpoint != nil && opts.Checkpoint.IsModuleCompleted(taskID, stage.name, mod.ID()) {

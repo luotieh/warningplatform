@@ -1,4 +1,4 @@
-﻿<script lang="ts" setup>
+<script lang="ts" setup>
 import { onMounted, ref } from 'vue';
 import { NButton, NCard, NDescriptions, NDescriptionsItem, NSpace, NTag, NSpin } from 'naive-ui';
 import { useRoute, useRouter } from 'vue-router';

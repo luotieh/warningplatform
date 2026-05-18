@@ -21,11 +21,11 @@ func (s *serviceTag) session() *gorm.DB {
 	return sess
 }
 
-func (s *serviceTag) List(req tc.TagListReq) ([]model.Tag, int64, error) {
+func (s *serviceTag) List(req tc.TagListReq, scopes ...func(*gorm.DB) *gorm.DB) ([]model.Tag, int64, error) {
 	var list []model.Tag
 	var count int64
 
-	q := s.session().Model(&model.Tag{})
+	q := s.session().Model(&model.Tag{}).Scopes(scopes...)
 	if req.Name != "" {
 		q = q.Where("name LIKE ?", "%"+req.Name+"%")
 	}

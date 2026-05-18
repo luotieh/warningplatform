@@ -146,6 +146,10 @@ func (s *Scheduler) startTask(ctx context.Context, task model.ScanTask) {
 				"status":    model.TaskStatusFailed,
 				"error_msg": "模板解析失败: " + err.Error(),
 			})
+		if task.Type == model.TaskTypeAssetEnrich {
+			task.Status = model.TaskStatusFailed
+			CleanupAssetEnrichTask(s.db, &task)
+		}
 		return
 	}
 
@@ -216,6 +220,7 @@ func (s *Scheduler) recoverFromDB(ctx context.Context) {
 	var tasks []model.ScanTask
 	err := s.db.WithContext(ctx).
 		Where("status = ?", model.TaskStatusQueued).
+		Where("(worker_id = '' OR worker_id IS NULL)").
 		Order("priority DESC, created_at ASC").
 		Find(&tasks).Error
 	if err != nil {
@@ -274,10 +279,47 @@ func (s *Scheduler) QueueLen() int {
 	return s.queue.Len()
 }
 
+func (s *Scheduler) MaxParallel() int {
+	return s.maxParallel
+}
+
 func (s *Scheduler) SubscribeEvents(taskID string) <-chan ScanEvent {
 	return s.eventBus.Subscribe(taskID, 256)
 }
 
 func (s *Scheduler) UnsubscribeEvents(taskID string, ch <-chan ScanEvent) {
 	s.eventBus.Unsubscribe(taskID, ch)
+}
+
+func (s *Scheduler) RunnerCacheHitRate() float64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var totalHits, totalMisses int64
+	for _, r := range s.runners {
+		if r.resultCache != nil {
+			h, m := r.resultCache.Stats()
+			totalHits += h
+			totalMisses += m
+		}
+	}
+	total := totalHits + totalMisses
+	if total == 0 {
+		return 0
+	}
+	return float64(totalHits) / float64(total)
+}
+
+func (s *Scheduler) CurrentAdaptiveConcurrency() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	maxConc := 0
+	for _, r := range s.runners {
+		if r.adaptive != nil {
+			c := r.adaptive.CurrentConcurrency()
+			if c > maxConc {
+				maxConc = c
+			}
+		}
+	}
+	return maxConc
 }

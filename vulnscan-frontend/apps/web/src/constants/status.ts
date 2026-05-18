@@ -5,6 +5,7 @@ export const vulnStatusLabels: Record<string, string> = {
   fixed: '已修复',
   ignored: '已忽略',
   reopened: '已重开',
+  verified: '已验证',
 };
 
 export const vulnStatusTypes: Record<string, string> = {
@@ -12,6 +13,7 @@ export const vulnStatusTypes: Record<string, string> = {
   fixed: 'success',
   ignored: 'default',
   reopened: 'warning',
+  verified: 'error',
 };
 
 export const VULN_STATUS_MAP: EnumMap = {
@@ -19,6 +21,7 @@ export const VULN_STATUS_MAP: EnumMap = {
   fixed: { label: '已修复', type: 'success' },
   ignored: { label: '已忽略', type: 'default' },
   reopened: { label: '已重开', type: 'warning' },
+  verified: { label: '已验证', type: 'error' },
 };
 
 export const taskStatusLabels: Record<string, string> = {

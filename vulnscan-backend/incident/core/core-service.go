@@ -26,7 +26,7 @@ func (s *serviceCore) session() *gorm.DB {
 	return sess
 }
 
-func (s *serviceCore) CreateIncident(ctx context.Context, req coreContract.IncidentCreateReq, createdBy string) error {
+func (s *serviceCore) CreateIncident(ctx context.Context, req coreContract.IncidentCreateReq, createdBy string, organizeID string) error {
 	sess := s.session()
 	now := time.Now()
 
@@ -106,6 +106,7 @@ func (s *serviceCore) CreateIncident(ctx context.Context, req coreContract.Incid
 		Level:           req.Level,
 		Source:          req.Source,
 		Status:          model.IncidentStatusPendingReview,
+		OrganizeID:      organizeID,
 		ReportTime:      reportTime,
 		AssetDetailID:   assetId,
 		EventMetadataID: metaId,
@@ -226,11 +227,11 @@ func (s *serviceCore) GetIncidentDetail(ctx context.Context, id string) (*coreCo
 	}, nil
 }
 
-func (s *serviceCore) ListIncidents(ctx context.Context, req coreContract.IncidentListReq) ([]coreContract.IncidentListItem, int64, error) {
+func (s *serviceCore) ListIncidents(ctx context.Context, req coreContract.IncidentListReq, scopes ...func(*gorm.DB) *gorm.DB) ([]coreContract.IncidentListItem, int64, error) {
 	sess := s.session()
 	now := time.Now()
 
-	tx := sess.WithContext(ctx).Model(&model.SecurityIncident{}).
+	tx := sess.WithContext(ctx).Model(&model.SecurityIncident{}).Scopes(scopes...).
 		Joins("LEFT JOIN incident_assets ON incident_assets.id = security_incidents.asset_detail_id")
 
 	if req.Name != "" {

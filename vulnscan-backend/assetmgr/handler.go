@@ -9,6 +9,7 @@ import (
 	"code.yt-security.com/public/core/v2/generate/qulid"
 	"code.yt-security.com/public/core/v2/web"
 	iamsdk "code.yt-security.com/public/sdk"
+	"code.yt-security.com/public/sdk/permission"
 	"github.com/gin-gonic/gin"
 )
 
@@ -50,7 +51,8 @@ func NewHandler(
 
 func (h *Handler) LifecycleList(c *gin.Context) {
 	req, _ := web.BindQuery[ac.LifecycleListReq](c)
-	items, count, err := h.lifecycle.ListTransitions(req)
+	scope := iamsdk.DataFilterScope(c, permission.DefaultFieldMapping)
+	items, count, err := h.lifecycle.ListTransitions(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
@@ -75,7 +77,8 @@ func (h *Handler) LifecycleTransition(c *gin.Context) {
 
 func (h *Handler) RiskList(c *gin.Context) {
 	req, _ := web.BindQuery[ac.RiskListReq](c)
-	items, count, err := h.risk.List(req)
+	scope := iamsdk.DataFilterScope(c, permission.DefaultFieldMapping)
+	items, count, err := h.risk.List(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
@@ -113,7 +116,8 @@ func (h *Handler) RiskRecalculateAll(c *gin.Context) {
 
 func (h *Handler) AlertList(c *gin.Context) {
 	req, _ := web.BindQuery[ac.AlertListReq](c)
-	items, count, err := h.alert.List(req)
+	scope := iamsdk.DataFilterScope(c, permission.DefaultFieldMapping)
+	items, count, err := h.alert.List(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
@@ -156,7 +160,8 @@ func (h *Handler) AlertResolve(c *gin.Context) {
 
 func (h *Handler) VerifyList(c *gin.Context) {
 	req, _ := web.BindQuery[ac.VerifyListReq](c)
-	items, count, err := h.verify.List(req)
+	scope := iamsdk.DataFilterScope(c, permission.DefaultFieldMapping)
+	items, count, err := h.verify.List(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
@@ -199,7 +204,8 @@ func (h *Handler) VerifyTaskList(c *gin.Context) {
 	if !ok {
 		return
 	}
-	items, count, err := h.verifyTask.ListTasks(req)
+	scope := iamsdk.DataFilterScope(c, permission.DefaultFieldMapping)
+	items, count, err := h.verifyTask.ListTasks(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
@@ -320,7 +326,8 @@ func (h *Handler) VerifyTaskLogs(c *gin.Context) {
 	if req.TaskID == "" {
 		req.TaskID = c.Param("id")
 	}
-	items, count, err := h.verifyTask.ListLogs(req)
+	scope := iamsdk.DataFilterScope(c, permission.DefaultFieldMapping)
+	items, count, err := h.verifyTask.ListLogs(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
@@ -333,7 +340,8 @@ func (h *Handler) ArchiveList(c *gin.Context) {
 	if !ok {
 		return
 	}
-	items, count, err := h.verifyTask.ListArchives(req)
+	scope := iamsdk.DataFilterScope(c, permission.DefaultFieldMapping)
+	items, count, err := h.verifyTask.ListArchives(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
@@ -352,7 +360,8 @@ func (h *Handler) ArchiveDetail(c *gin.Context) {
 
 func (h *Handler) ComplianceList(c *gin.Context) {
 	req, _ := web.BindQuery[ac.ComplianceItemReq](c)
-	items, count, err := h.compliance.List(req)
+	scope := iamsdk.DataFilterScope(c, permission.DefaultFieldMapping)
+	items, count, err := h.compliance.List(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
@@ -398,7 +407,8 @@ func (h *Handler) ComplianceDelete(c *gin.Context) {
 
 func (h *Handler) ResponsibleList(c *gin.Context) {
 	req, _ := web.BindQuery[ac.ResponsibleListReq](c)
-	items, count, err := h.responsible.List(req)
+	scope := iamsdk.DataFilterScope(c, permission.DefaultFieldMapping)
+	items, count, err := h.responsible.List(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
@@ -444,7 +454,8 @@ func (h *Handler) ResponsibleDelete(c *gin.Context) {
 
 func (h *Handler) TemplateList(c *gin.Context) {
 	req, _ := web.BindQuery[ac.TemplateListReq](c)
-	items, count, err := h.tmpl.List(req)
+	scope := iamsdk.DataFilterScope(c, permission.DefaultFieldMapping)
+	items, count, err := h.tmpl.List(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
@@ -491,7 +502,8 @@ func (h *Handler) TemplateItemCreate(c *gin.Context) {
 
 func (h *Handler) CheckResultList(c *gin.Context) {
 	req, _ := web.BindQuery[ac.CheckResultListReq](c)
-	items, count, err := h.check.List(req)
+	scope := iamsdk.DataFilterScope(c, permission.DefaultFieldMapping)
+	items, count, err := h.check.List(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
@@ -517,7 +529,8 @@ func (h *Handler) CheckResultUpsert(c *gin.Context) {
 
 func (h *Handler) IntSourceList(c *gin.Context) {
 	req, _ := web.BindQuery[ac.IntSourceListReq](c)
-	items, count, err := h.integration.ListSources(req)
+	scope := iamsdk.DataFilterScope(c, permission.DefaultFieldMapping)
+	items, count, err := h.integration.ListSources(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
@@ -563,7 +576,8 @@ func (h *Handler) IntSourceDelete(c *gin.Context) {
 
 func (h *Handler) WorkflowList(c *gin.Context) {
 	req, _ := web.BindQuery[ac.WorkflowListReq](c)
-	items, count, err := h.workflow.List(req)
+	scope := iamsdk.DataFilterScope(c, permission.DefaultFieldMapping)
+	items, count, err := h.workflow.List(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
@@ -609,7 +623,8 @@ func (h *Handler) WorkflowDelete(c *gin.Context) {
 
 func (h *Handler) WorkflowExecutions(c *gin.Context) {
 	req, _ := web.BindQuery[ac.ExecutionListReq](c)
-	items, count, err := h.workflow.ListExecutions(req)
+	scope := iamsdk.DataFilterScope(c, permission.DefaultFieldMapping)
+	items, count, err := h.workflow.ListExecutions(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return

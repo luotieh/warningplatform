@@ -12,11 +12,13 @@ export interface TemplateParam {
 
 export interface TemplateStage {
   name: string;
-  module: string;
+  module?: string;
+  modules?: string[];
   parallel: boolean;
   condition?: { prev_stage_has_findings?: boolean; prev_stage_min_targets?: number; expression?: string };
-  config: Record<string, any> | null;
+  config?: Record<string, any>;
   depends_on?: string[];
+  timeout?: string;
 }
 
 export interface ScanTemplate {

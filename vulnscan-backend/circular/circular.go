@@ -7,7 +7,6 @@ import (
 	"vulnscan-backend/circular/ledger"
 	"vulnscan-backend/circular/oplog"
 	"vulnscan-backend/circular/review"
-	"vulnscan-backend/circular/template"
 	"vulnscan-backend/circular/transfer"
 	"vulnscan-backend/circular/verify"
 	"vulnscan-backend/model"
@@ -18,7 +17,6 @@ import (
 )
 
 type Circular struct {
-	templateHandler   *template.HandlerTemplate
 	inputHandler      *input.HandlerInput
 	distributeHandler *distribute.HandlerDistribute
 	verifyHandler     *verify.HandlerVerify
@@ -30,7 +28,6 @@ type Circular struct {
 }
 
 func NewCircular(
-	templateHandler *template.HandlerTemplate,
 	inputHandler *input.HandlerInput,
 	distributeHandler *distribute.HandlerDistribute,
 	verifyHandler *verify.HandlerVerify,
@@ -43,7 +40,6 @@ func NewCircular(
 ) *Circular {
 	initModels(database)
 	return &Circular{
-		templateHandler:   templateHandler,
 		inputHandler:      inputHandler,
 		distributeHandler: distributeHandler,
 		verifyHandler:     verifyHandler,
@@ -57,15 +53,6 @@ func NewCircular(
 
 func (m *Circular) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
 	return authorize.RegisterRoutes(e.Group("/circular"), []authorize.Route{
-		{
-			Name: "通报模板管理", Path: "templates", Enabled: true,
-			Children: []authorize.Route{
-				{Name: "模板列表", Method: "GET", Handler: m.templateHandler.List, Enabled: true},
-				{Name: "模板创建", Method: "POST", Handler: m.templateHandler.Add, Enabled: true},
-				{Name: "模板更新", Path: ":id", Method: "PUT", Handler: m.templateHandler.Edit, Enabled: true},
-				{Name: "模板删除", Path: ":id", Method: "DELETE", Handler: m.templateHandler.Delete, Enabled: true},
-			},
-		},
 		{
 			Name: "通报录入", Path: "inputs", Enabled: true,
 			Children: []authorize.Route{
@@ -137,8 +124,6 @@ func (m *Circular) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
 func initModels(database *db.DB) {
 	session, _ := database.GetDBSession()
 	_ = session.AutoMigrate(
-		&model.CircularTemplate{},
-		&model.CircularTemplateHistory{},
 		&model.Circular{},
 		&model.CircularDistribution{},
 		&model.CircularDistributionClosure{},

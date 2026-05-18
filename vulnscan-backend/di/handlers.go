@@ -3,6 +3,8 @@ package di
 import (
 	"context"
 	"log/slog"
+	"os"
+	"strings"
 	"time"
 
 	"vulnscan-backend/asset"
@@ -13,8 +15,10 @@ import (
 	"vulnscan-backend/cluster/ws"
 	"vulnscan-backend/compliance"
 	"vulnscan-backend/dashboard"
+	"vulnscan-backend/exclusion"
 	fedClient "vulnscan-backend/federation/client"
 	"vulnscan-backend/formdesign"
+	"vulnscan-backend/fprule"
 	"vulnscan-backend/frontend"
 	"vulnscan-backend/health"
 	"vulnscan-backend/incident"
@@ -38,6 +42,8 @@ import (
 	"code.yt-security.com/public/core/v2/web"
 	iamsdk "code.yt-security.com/public/sdk"
 	"code.yt-security.com/public/sdk/authorize"
+	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type Handlers struct {
@@ -62,6 +68,8 @@ type Handlers struct {
 	Notify      *notify.NotifyRoutes
 	Compliance  *compliance.Compliance
 	Report      *report.Report
+	Exclusion   *exclusion.Exclusion
+	FPRule      *fprule.FPRule
 
 	embeddedAgent *monitoragent.EmbeddedAgent
 	fedClient     *fedClient.Client
@@ -99,7 +107,7 @@ func (h *Handlers) RouteLoad() {
 		SSO: ssoOpts,
 		Audit: &iamsdk.AuditMiddlewareOptions{
 			Domain:  h.Product.GetCode(),
-			Enabled: true,
+			Enabled: false,
 		},
 		PublicAuth: &iamsdk.PublicAuthProxyOptions{
 			SiteName:  h.Product.GetName(),
@@ -122,6 +130,8 @@ func (h *Handlers) RouteLoad() {
 	backends = append(backends, h.Notify.RoutesWithGroup(iamAuthGroup)...)
 	backends = append(backends, h.Compliance.RoutesWithGroup(iamAuthGroup)...)
 	backends = append(backends, h.Report.RoutesWithGroup(iamAuthGroup)...)
+	backends = append(backends, h.Exclusion.RoutesWithGroup(iamAuthGroup)...)
+	backends = append(backends, h.FPRule.RoutesWithGroup(iamAuthGroup)...)
 
 	settingRoutes := setting.NewSettingRoutes(h.Settings)
 	backends = append(backends, settingRoutes.RoutesWithGroup(iamAuthGroup)...)
@@ -152,6 +162,11 @@ func (h *Handlers) RouteLoad() {
 
 	healthHandler := health.NewHandler(h.DB)
 	healthHandler.RegisterRoutes(engine)
+
+	if metricsRouteEnabled() {
+		engine.GET("/metrics", gin.WrapH(promhttp.Handler()))
+		slog.Info("[+] Prometheus /metrics 已启用（环境变量 VULNSCAN_METRICS_ENABLED）")
+	}
 
 	h.initNodeAPI(engine)
 
@@ -199,4 +214,9 @@ func (h *Handlers) Shutdown() {
 		nats.Close()
 	}
 	h.IAM.Close()
+}
+
+func metricsRouteEnabled() bool {
+	s := strings.ToLower(strings.TrimSpace(os.Getenv("VULNSCAN_METRICS_ENABLED")))
+	return s == "true" || s == "1" || s == "yes"
 }

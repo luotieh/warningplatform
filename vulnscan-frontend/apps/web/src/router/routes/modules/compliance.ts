@@ -1,23 +1,7 @@
 import type { RouteRecordRaw } from 'vue-router';
 
-import { BasicLayout } from '#/layouts';
-
-const routes: RouteRecordRaw[] = [
-  {
-    component: BasicLayout,
-    meta: { hideInMenu: true, title: '合规检查' },
-    name: 'ComplianceCompat',
-    path: '/compliance',
-    redirect: '/monitor/baselines',
-    children: [
-      {
-        name: 'ComplianceBaselinesCompat',
-        path: 'baselines',
-        component: () => import('#/views/compliance/index.vue'),
-        meta: { hideInMenu: true, title: '基线检查', activePath: '/monitor/baselines' },
-      },
-    ],
-  },
-];
+// Baseline/compliance page code is intentionally kept in the repository,
+// but its route entry is disabled for now so the frontend will not load it.
+const routes: RouteRecordRaw[] = [];
 
 export default routes;

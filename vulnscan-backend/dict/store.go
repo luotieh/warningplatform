@@ -105,13 +105,13 @@ func (s *Store) Merge(sources ...[]string) []string {
 }
 
 func (s *Store) loadFromDB(name string) []string {
-	var dict model.Dictionary
-	if err := s.db.Where("name = ? AND status = ?", name, model.DictStatusActive).First(&dict).Error; err != nil {
+	var lib model.DataLibrary
+	if err := s.db.Where("name = ? AND status = ?", name, model.DataLibStatusActive).First(&lib).Error; err != nil {
 		return nil
 	}
 
-	var entries []model.DictionaryEntry
-	if err := s.db.Where("dictionary_id = ?", dict.ID).Order("priority DESC").Find(&entries).Error; err != nil {
+	var entries []model.DataLibraryEntry
+	if err := s.db.Where("library_id = ? AND enabled = ?", lib.ID, true).Order("priority DESC").Find(&entries).Error; err != nil {
 		return nil
 	}
 
@@ -123,18 +123,18 @@ func (s *Store) loadFromDB(name string) []string {
 }
 
 func (s *Store) loadByType(dictType string) []string {
-	var dicts []model.Dictionary
-	if err := s.db.Where("type = ? AND status = ?", dictType, model.DictStatusActive).Find(&dicts).Error; err != nil || len(dicts) == 0 {
+	var libs []model.DataLibrary
+	if err := s.db.Where("type = ? AND status = ?", dictType, model.DataLibStatusActive).Find(&libs).Error; err != nil || len(libs) == 0 {
 		return nil
 	}
 
 	var ids []string
-	for _, d := range dicts {
+	for _, d := range libs {
 		ids = append(ids, d.ID)
 	}
 
-	var entries []model.DictionaryEntry
-	if err := s.db.Where("dictionary_id IN ?", ids).Order("priority DESC").Find(&entries).Error; err != nil {
+	var entries []model.DataLibraryEntry
+	if err := s.db.Where("library_id IN ? AND enabled = ?", ids, true).Order("priority DESC").Find(&entries).Error; err != nil {
 		return nil
 	}
 

@@ -39,9 +39,9 @@ func (s *serviceTransfer) ReceiveIncident(ctx context.Context, req transferContr
 		return "", fmt.Errorf("该安全事件已流转，通报编号: %s", existing.Code)
 	}
 
-	var defaultTemplate model.CircularTemplate
-	if err := sess.WithContext(ctx).Where("type = ? AND default_flag = ?", model.CircularTmpInput, true).First(&defaultTemplate).Error; err != nil {
-		if err := sess.WithContext(ctx).Where("type = ?", model.CircularTmpInput).First(&defaultTemplate).Error; err != nil {
+	var defaultTemplate model.DynamicFormTemplate
+	if err := sess.WithContext(ctx).Where("business = ? AND object_type = ? AND is_default = ?", "circular", "input", true).First(&defaultTemplate).Error; err != nil {
+		if err := sess.WithContext(ctx).Where("business = ? AND object_type = ?", "circular", "input").First(&defaultTemplate).Error; err != nil {
 			return "", fmt.Errorf("未找到录入模板，请先创建录入模板")
 		}
 	}
@@ -53,7 +53,7 @@ func (s *serviceTransfer) ReceiveIncident(ctx context.Context, req transferContr
 	circular := model.Circular{
 		Code: circularCode, Title: req.Name, CustomCode: req.IncidentNo,
 		Source: model.CircularSourceSuperiorTransfer, Organize: "yt-networks-security",
-		CircularTemplate: defaultTemplate.Id, CircularData: circularData, Status: model.CircularToBeVerified,
+		CircularTemplate: defaultTemplate.ID, CircularData: circularData, Status: model.CircularToBeVerified,
 	}
 	circular.Id = circularCode
 	circular.CreatedBy = createdBy
@@ -138,7 +138,18 @@ func buildCircularDataFromIncident(req transferContract.TransferIncidentReq) mod
 		{"title": "隐患编号", "type": "input", "value": req.IncidentNo},
 		{"title": "隐患名称", "type": "input", "value": req.Name},
 	}
+	if req.Level > 0 {
+		levelLabels := map[int]string{1: "特别重大", 2: "重大", 3: "较大", 4: "一般"}
+		label := levelLabels[req.Level]
+		if label == "" {
+			label = fmt.Sprintf("级别%d", req.Level)
+		}
+		data = append(data, map[string]any{"title": "事件级别", "type": "select", "value": label})
+	}
 	if req.AssetInfo != nil {
+		if req.AssetInfo.AssetName != "" {
+			data = append(data, map[string]any{"title": "资产名称", "type": "input", "value": req.AssetInfo.AssetName})
+		}
 		data = append(data,
 			map[string]any{"title": "系统名称", "type": "input", "value": req.AssetInfo.SystemName},
 			map[string]any{"title": "网站域名IP", "type": "input", "value": req.AssetInfo.DomainIP},
@@ -152,14 +163,26 @@ func buildCircularDataFromIncident(req transferContract.TransferIncidentReq) mod
 		)
 	}
 	if req.MetadataInfo != nil {
+		if req.MetadataInfo.DataNo != "" {
+			data = append(data, map[string]any{"title": "数据编号", "type": "input", "value": req.MetadataInfo.DataNo})
+		}
 		data = append(data,
 			map[string]any{"title": "隐患类型", "type": "input", "value": req.MetadataInfo.IncidentType},
 			map[string]any{"title": "隐患URL", "type": "input", "value": req.MetadataInfo.IncidentURL},
 			map[string]any{"title": "隐患描述", "type": "input", "value": req.MetadataInfo.IncidentDescription},
 		)
+		if req.MetadataInfo.CveId != "" {
+			data = append(data, map[string]any{"title": "CVE编号", "type": "input", "value": req.MetadataInfo.CveId})
+		}
+		if req.MetadataInfo.CvssScore > 0 {
+			data = append(data, map[string]any{"title": "CVSS评分", "type": "input", "value": fmt.Sprintf("%.1f", req.MetadataInfo.CvssScore)})
+		}
 	}
 	if req.AiOpinion != "" {
 		data = append(data, map[string]any{"title": "AI预审意见", "type": "input", "value": req.AiOpinion})
+	}
+	if req.AiConfidence > 0 {
+		data = append(data, map[string]any{"title": "AI置信度", "type": "input", "value": fmt.Sprintf("%.0f%%", req.AiConfidence*100)})
 	}
 	return data
 }

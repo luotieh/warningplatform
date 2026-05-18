@@ -78,7 +78,7 @@ func (a *ManageAPI) Stats(c *gin.Context) {
 	a.db.Model(&model.SubMaster{}).Count(&totalSubs)
 	a.db.Model(&model.SubMaster{}).Where("status = ?", model.SubMasterOnline).Count(&onlineSubs)
 
-	versions := a.versionManager.AllVersions()
+	versions := a.versionManager.AllVersionsFromDB()
 
 	web.OK(c).Data(gin.H{
 		"total_sub_masters":  totalSubs,

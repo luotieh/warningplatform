@@ -28,6 +28,7 @@ func (m *Poc) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
 				{Name: "目录导入", Path: "import-dir", Method: "POST", Handler: m.handler.ImportDir, Enabled: true},
 				{Name: "校验YAML", Path: "validate", Method: "POST", Handler: m.handler.Validate, Enabled: true},
 				{Name: "测试POC", Path: "test", Method: "POST", Handler: m.handler.TestPoc, Enabled: true},
+				{Name: "Nuclei快捷扫描", Path: "quick-scan", Method: "POST", Handler: m.handler.QuickNucleiScan, Enabled: true},
 			},
 		},
 	})

@@ -7,6 +7,8 @@ import (
 	tc "vulnscan-backend/tagging/tagging-contract"
 
 	"code.yt-security.com/public/core/v2/web"
+	iamsdk "code.yt-security.com/public/sdk"
+	"code.yt-security.com/public/sdk/permission"
 	"github.com/gin-gonic/gin"
 )
 
@@ -23,7 +25,8 @@ func (h *HandlerTag) List(c *gin.Context) {
 	if !ok {
 		return
 	}
-	items, count, err := h.svc.List(req)
+	scope := iamsdk.DataFilterScope(c, permission.DefaultFieldMapping)
+	items, count, err := h.svc.List(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
@@ -111,7 +114,8 @@ func (h *HandlerChangeLog) List(c *gin.Context) {
 	if !ok {
 		return
 	}
-	items, count, err := h.svc.List(req)
+	scope := iamsdk.DataFilterScope(c, permission.DefaultFieldMapping)
+	items, count, err := h.svc.List(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return

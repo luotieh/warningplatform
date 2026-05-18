@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, h, onMounted } from 'vue';
 import {
-  NCard, NDataTable, NButton, NSpace, NTag, NModal, NForm,
-  NInput, NSelect, NSwitch, NPopconfirm, NGrid,
-  NFormItemGi, useMessage, NDynamicTags, NDrawer, NDrawerContent,
-  NDescriptions, NDescriptionsItem, NEmpty,
-  NDivider, NTimeline, NTimelineItem,
+  NCard, NDataTable, NButton, NSpace, NTag, NPopconfirm,
+  NInput, NSelect, NSwitch, NDrawer, NDrawerContent,
+  NForm, NGrid, NFormItemGi, NDynamicTags, NDivider,
+  NCollapse, NCollapseItem, NTooltip, NEmpty,
+  NDescriptions, NDescriptionsItem, NTimeline, NTimelineItem,
+  useMessage,
 } from 'naive-ui';
 import type { DataTableColumns } from 'naive-ui';
 import {
@@ -13,6 +14,7 @@ import {
   deleteTemplate, toggleTemplate,
   type ScanTemplate, type TemplateStage, type TemplateParam,
 } from '#/api/template';
+import { getPipelineModules, type ModuleInfo } from '#/api/pipeline';
 
 const message = useMessage();
 const loading = ref(false);
@@ -32,6 +34,22 @@ const categoryOptions = [
   { label: '应急', value: 'emergency' },
 ];
 
+const allModules = ref<ModuleInfo[]>([]);
+
+const categoryLabels: Record<string, string> = {
+  discover: '发现', host: '主机', probe: '探测', recon: '侦察', vuln: '漏洞',
+};
+
+const modulesByCategory = computed(() => {
+  const map = new Map<string, ModuleInfo[]>();
+  for (const m of allModules.value) {
+    const cat = m.category || 'other';
+    if (!map.has(cat)) map.set(cat, []);
+    map.get(cat)!.push(m);
+  }
+  return map;
+});
+
 async function fetchData() {
   loading.value = true;
   try {
@@ -46,15 +64,13 @@ async function fetchData() {
   }
 }
 
-onMounted(fetchData);
+async function loadModules() {
+  try {
+    allModules.value = await getPipelineModules();
+  } catch {}
+}
 
-const moduleLabels: Record<string, string> = {
-  port_scan: '端口扫描', service_probe: '服务识别', web_fingerprint: 'Web指纹',
-  dir_scan: '目录扫描', info_leak: '信息泄露', sqli: 'SQL注入',
-  xss: 'XSS检测', cert_check: '证书检测', weak_pass: '弱口令',
-  subdomain: '子域名', dns_all: 'DNS枚举', webcrawl: '爬虫',
-  bruteforce: '密码爆破', nuclei: 'Nuclei POC',
-};
+onMounted(() => { fetchData(); loadModules(); });
 
 const columns = computed<DataTableColumns<ScanTemplate>>(() => [
   {
@@ -124,13 +140,28 @@ function handleClone(row: ScanTemplate) {
   openEditor(undefined, row);
 }
 
-// ---- Editor Modal ----
+// ---- Visual Editor ----
 const editorVisible = ref(false);
 const editingId = ref('');
-const form = ref<Record<string, any>>({
-  name: '', code: '', category: 'custom', description: '', icon: '',
-  tags: [] as string[], params: [] as TemplateParam[], stages: [] as TemplateStage[],
+const activeStageIdx = ref(0);
+const form = ref<{
+  name: string; code: string; category: string; description: string;
+  tags: string[]; params: TemplateParam[]; stages: TemplateStage[];
+}>({
+  name: '', code: '', category: 'custom', description: '',
+  tags: [], params: [], stages: [],
 });
+
+function getStageModules(stage: TemplateStage): string[] {
+  if (stage.modules && stage.modules.length > 0) return stage.modules;
+  if (stage.module) return [stage.module];
+  return [];
+}
+
+function setStageModules(stage: TemplateStage, ids: string[]) {
+  stage.modules = ids;
+  stage.module = undefined;
+}
 
 function openEditor(row?: ScanTemplate, cloneFrom?: ScanTemplate) {
   const src = row ?? cloneFrom;
@@ -138,10 +169,9 @@ function openEditor(row?: ScanTemplate, cloneFrom?: ScanTemplate) {
     editingId.value = row ? row.id : '';
     form.value = {
       name: cloneFrom ? `${src.name} (副本)` : src.name,
-      code: cloneFrom ? '' : src.code,
-      category: src.category,
-      description: src.description,
-      icon: src.icon,
+      code: cloneFrom ? '' : (src.code || ''),
+      category: src.category || 'custom',
+      description: src.description || '',
       tags: [...(src.tags ?? [])],
       params: JSON.parse(JSON.stringify(src.params ?? [])),
       stages: JSON.parse(JSON.stringify(src.stages ?? [])),
@@ -149,7 +179,7 @@ function openEditor(row?: ScanTemplate, cloneFrom?: ScanTemplate) {
   } else {
     editingId.value = '';
     form.value = {
-      name: '', code: '', category: 'custom', description: '', icon: '',
+      name: '', code: '', category: 'custom', description: '',
       tags: [], params: [], stages: [],
     };
   }
@@ -157,11 +187,44 @@ function openEditor(row?: ScanTemplate, cloneFrom?: ScanTemplate) {
 }
 
 function addStage() {
-  form.value.stages.push({ name: '', module: '', parallel: false, config: {} });
+  form.value.stages.push({ name: `stage-${form.value.stages.length + 1}`, modules: [], parallel: false });
 }
 
 function removeStage(idx: number) {
   form.value.stages.splice(idx, 1);
+}
+
+function moveStage(idx: number, dir: 'up' | 'down') {
+  const newIdx = dir === 'up' ? idx - 1 : idx + 1;
+  if (newIdx < 0 || newIdx >= form.value.stages.length) return;
+  const temp = form.value.stages[idx]!;
+  form.value.stages[idx] = form.value.stages[newIdx]!;
+  form.value.stages[newIdx] = temp;
+}
+
+function addModuleToStage(stageIdx: number, mod: ModuleInfo) {
+  const stage = form.value.stages[stageIdx];
+  if (!stage) return;
+  const ids = getStageModules(stage);
+  if (ids.includes(mod.id)) {
+    message.warning(`模块 "${mod.name}" 已在此阶段中`);
+    return;
+  }
+  setStageModules(stage, [...ids, mod.id]);
+}
+
+function removeModuleFromStage(stageIdx: number, modId: string) {
+  const stage = form.value.stages[stageIdx];
+  if (!stage) return;
+  setStageModules(stage, getStageModules(stage).filter(id => id !== modId));
+}
+
+function addModuleToActiveStage(mod: ModuleInfo) {
+  if (form.value.stages.length === 0) {
+    addStage();
+    activeStageIdx.value = 0;
+  }
+  addModuleToStage(activeStageIdx.value, mod);
 }
 
 function addParam() {
@@ -174,6 +237,7 @@ function removeParam(idx: number) {
 
 async function handleSave() {
   if (!form.value.name) { message.warning('请输入名称'); return; }
+  if (form.value.stages.length === 0) { message.warning('请至少添加一个阶段'); return; }
 
   const payload = { ...form.value };
   if (editingId.value) {
@@ -185,6 +249,11 @@ async function handleSave() {
   }
   editorVisible.value = false;
   fetchData();
+}
+
+function getModuleName(id: string): string {
+  const m = allModules.value.find(mod => mod.id === id);
+  return m ? m.name : id;
 }
 
 // ---- Detail Drawer ----
@@ -219,80 +288,152 @@ function openDetail(row: ScanTemplate) {
       />
     </NCard>
 
-    <!-- Editor Modal -->
-    <NModal v-model:show="editorVisible" preset="card" :title="editingId ? '编辑模板' : '新建模板'" style="width:780px;max-height:85vh;overflow:auto">
-      <NForm :model="form" label-placement="left" label-width="80">
-        <NGrid :cols="2" :x-gap="16">
-          <NFormItemGi label="名称" span="2">
-            <NInput v-model:value="form.name" placeholder="模板名称" />
-          </NFormItemGi>
-          <NFormItemGi label="编码">
-            <NInput v-model:value="form.code" placeholder="唯一编码 (如 web-full)" />
-          </NFormItemGi>
-          <NFormItemGi label="分类">
-            <NSelect v-model:value="form.category" :options="categoryOptions.filter(o => o.value)" />
-          </NFormItemGi>
-          <NFormItemGi label="描述" span="2">
-            <NInput v-model:value="form.description" type="textarea" :rows="2" />
-          </NFormItemGi>
-          <NFormItemGi label="标签" span="2">
-            <NDynamicTags v-model:value="form.tags" />
-          </NFormItemGi>
-        </NGrid>
+    <!-- Visual Editor Drawer -->
+    <NDrawer v-model:show="editorVisible" :width="960" placement="right">
+      <NDrawerContent :title="editingId ? '编辑模板' : '新建模板'" :native-scrollbar="false">
+        <NForm :model="form" label-placement="left" label-width="70">
+          <NGrid :cols="2" :x-gap="16">
+            <NFormItemGi label="名称" span="1">
+              <NInput v-model:value="form.name" placeholder="模板名称" />
+            </NFormItemGi>
+            <NFormItemGi label="编码" span="1">
+              <NInput v-model:value="form.code" placeholder="唯一编码 (如 web-full)" />
+            </NFormItemGi>
+            <NFormItemGi label="分类" span="1">
+              <NSelect v-model:value="form.category" :options="categoryOptions.filter(o => o.value)" />
+            </NFormItemGi>
+            <NFormItemGi label="标签" span="1">
+              <NDynamicTags v-model:value="form.tags" />
+            </NFormItemGi>
+            <NFormItemGi label="描述" span="2">
+              <NInput v-model:value="form.description" type="textarea" :rows="2" />
+            </NFormItemGi>
+          </NGrid>
+        </NForm>
 
-        <NDivider>扫描参数 ({{ form.params.length }})</NDivider>
-        <div v-for="(p, idx) in form.params" :key="idx" class="mb-3 p-3" style="border:1px solid var(--border-color);border-radius:6px">
-          <NGrid :cols="3" :x-gap="12">
+        <NDivider>扫描阶段 ({{ form.stages.length }})</NDivider>
+
+        <div style="display:flex;gap:16px;min-height:300px">
+          <!-- Module Panel -->
+          <div style="width:220px;flex-shrink:0;border:1px solid var(--border-color);border-radius:8px;padding:8px;overflow-y:auto;max-height:500px">
+            <div style="font-size:12px;color:var(--text-color-3);margin-bottom:8px">可用模块（点击添加到选中阶段）</div>
+            <NCollapse :default-expanded-names="['discover','vuln']">
+              <NCollapseItem
+                v-for="[cat, mods] in modulesByCategory"
+                :key="cat"
+                :title="`${categoryLabels[cat] || cat} (${mods.length})`"
+                :name="cat"
+              >
+                <div style="display:flex;flex-direction:column;gap:3px">
+                  <NTooltip v-for="mod in mods" :key="mod.id" trigger="hover" placement="right">
+                    <template #trigger>
+                      <div
+                        :style="{
+                          padding:'4px 8px', borderRadius:'4px', fontSize:'12px', cursor:'pointer',
+                          border: '1px solid var(--border-color)',
+                          background: '#fafafa',
+                        }"
+                        @click="addModuleToActiveStage(mod)"
+                      >
+                        {{ mod.name }}
+                      </div>
+                    </template>
+                    {{ mod.id }}
+                  </NTooltip>
+                </div>
+              </NCollapseItem>
+            </NCollapse>
+          </div>
+
+          <!-- Stage Editor -->
+          <div style="flex:1;display:flex;flex-direction:column;gap:0">
+            <div v-if="form.stages.length === 0" style="text-align:center;padding:40px 0">
+              <NEmpty description="暂无阶段，点击下方按钮添加" />
+            </div>
+
+            <template v-for="(stage, si) in form.stages" :key="si">
+              <div v-if="si > 0" style="display:flex;justify-content:center;padding:2px 0">
+                <div style="width:2px;height:20px;background:linear-gradient(#1890ff,#722ed1);border-radius:1px" />
+              </div>
+
+              <NCard
+                size="small"
+                :class="{ 'stage-active': activeStageIdx === si }"
+                @click="activeStageIdx = si"
+              >
+                <template #header>
+                  <NSpace align="center" :size="8">
+                    <NInput v-model:value="stage.name" size="tiny" style="width:130px;font-weight:600" placeholder="阶段名" />
+                    <NSwitch v-model:value="stage.parallel" size="small" />
+                    <span style="font-size:11px;color:var(--text-color-3)">并行</span>
+                    <NTag size="tiny" :bordered="false">{{ getStageModules(stage).length }} 模块</NTag>
+                  </NSpace>
+                </template>
+                <template #header-extra>
+                  <NSpace :size="4">
+                    <NButton size="tiny" text :disabled="si === 0" @click.stop="moveStage(si, 'up')">↑</NButton>
+                    <NButton size="tiny" text :disabled="si === form.stages.length - 1" @click.stop="moveStage(si, 'down')">↓</NButton>
+                    <NButton size="tiny" text type="error" @click.stop="removeStage(si)">×</NButton>
+                  </NSpace>
+                </template>
+
+                <div v-if="getStageModules(stage).length === 0" style="color:#999;font-size:12px;padding:4px 0">
+                  点击左侧模块添加，或使用下方选择器
+                </div>
+                <div style="display:flex;flex-wrap:wrap;gap:5px">
+                  <NTag
+                    v-for="mid in getStageModules(stage)"
+                    :key="mid"
+                    closable size="small"
+                    @close="removeModuleFromStage(si, mid)"
+                  >
+                    {{ getModuleName(mid) }}
+                  </NTag>
+                </div>
+
+                <NSelect
+                  filterable placeholder="添加模块..." size="tiny" style="margin-top:6px;max-width:240px"
+                  :options="allModules.filter(m => !getStageModules(stage).includes(m.id)).map(m => ({ label: m.name, value: m.id }))"
+                  :value="null"
+                  @update:value="(id: string) => { const mod = allModules.find(m => m.id === id); if (mod) addModuleToStage(si, mod); }"
+                />
+              </NCard>
+            </template>
+
+            <NButton dashed block size="small" style="margin-top:8px" @click="addStage">+ 添加阶段</NButton>
+          </div>
+        </div>
+
+        <NDivider>参数定义 ({{ form.params.length }})</NDivider>
+        <div v-for="(p, idx) in form.params" :key="idx" class="mb-2 p-2" style="border:1px solid var(--border-color);border-radius:6px">
+          <NGrid :cols="4" :x-gap="8">
             <NFormItemGi label="名称" :show-feedback="false">
               <NInput v-model:value="p.name" size="small" placeholder="参数名" />
             </NFormItemGi>
             <NFormItemGi label="类型" :show-feedback="false">
-              <NSelect v-model:value="p.type" size="small" :options="[{ label: 'string', value: 'string' }, { label: 'int', value: 'int' }, { label: 'bool', value: 'bool' }]" />
+              <NSelect v-model:value="p.type" size="small" :options="[{label:'string',value:'string'},{label:'int',value:'int'},{label:'bool',value:'bool'}]" />
             </NFormItemGi>
             <NFormItemGi label="默认值" :show-feedback="false">
-              <NInput v-model:value="p.default" size="small" placeholder="默认值" />
-            </NFormItemGi>
-          </NGrid>
-          <NGrid :cols="2" :x-gap="12" class="mt-2">
-            <NFormItemGi label="描述" :show-feedback="false">
-              <NInput v-model:value="p.description" size="small" />
+              <NInput v-model:value="p.default" size="small" />
             </NFormItemGi>
             <NFormItemGi :show-feedback="false">
               <NSpace>
-                <NSwitch v-model:value="p.required" size="small" /> <span style="font-size:12px">必填</span>
-                <NButton size="tiny" type="error" quaternary @click="removeParam(idx as number)">移除</NButton>
+                <NSwitch v-model:value="p.required" size="small" /><span style="font-size:11px">必填</span>
+                <NButton size="tiny" type="error" quaternary @click="removeParam(idx)">移除</NButton>
               </NSpace>
             </NFormItemGi>
           </NGrid>
         </div>
         <NButton size="small" dashed block @click="addParam">+ 添加参数</NButton>
 
-        <NDivider>扫描阶段 ({{ form.stages.length }})</NDivider>
-        <div v-for="(s, idx) in form.stages" :key="idx" class="mb-3 p-3" style="border:1px solid var(--border-color);border-radius:6px">
-          <NGrid :cols="3" :x-gap="12">
-            <NFormItemGi label="名称" :show-feedback="false">
-              <NInput v-model:value="s.name" size="small" placeholder="阶段名" />
-            </NFormItemGi>
-            <NFormItemGi label="模块" :show-feedback="false">
-              <NInput v-model:value="s.module" size="small" placeholder="模块ID (如 port_scan)" />
-            </NFormItemGi>
-            <NFormItemGi :show-feedback="false">
-              <NSpace>
-                <NSwitch v-model:value="s.parallel" size="small" /> <span style="font-size:12px">并行</span>
-                <NButton size="tiny" type="error" quaternary @click="removeStage(idx as number)">移除</NButton>
-              </NSpace>
-            </NFormItemGi>
-          </NGrid>
-        </div>
-        <NButton size="small" dashed block @click="addStage">+ 添加阶段</NButton>
-      </NForm>
-      <template #footer>
-        <NSpace justify="end">
-          <NButton @click="editorVisible = false">取消</NButton>
-          <NButton type="primary" @click="handleSave">保存</NButton>
-        </NSpace>
-      </template>
-    </NModal>
+        <template #footer>
+          <NSpace justify="end">
+            <NButton @click="editorVisible = false">取消</NButton>
+            <NButton type="primary" @click="handleSave">保存</NButton>
+          </NSpace>
+        </template>
+      </NDrawerContent>
+    </NDrawer>
 
     <!-- Detail Drawer -->
     <NDrawer v-model:show="detailVisible" width="560">
@@ -311,15 +452,6 @@ function openDetail(row: ScanTemplate) {
           </NDescriptionsItem>
         </NDescriptions>
 
-        <NDivider>参数定义 ({{ detailItem.params?.length ?? 0 }})</NDivider>
-        <div v-if="detailItem.params?.length">
-          <div v-for="p in detailItem.params" :key="p.name" class="mb-2 p-2" style="background:var(--card-color);border-radius:4px">
-            <div style="font-weight:600">{{ p.name }} <NTag size="tiny" :bordered="false">{{ p.type }}</NTag></div>
-            <div style="font-size:12px;color:var(--text-color-3)">{{ p.description }} | 默认: {{ p.default ?? '-' }} {{ p.required ? '(必填)' : '' }}</div>
-          </div>
-        </div>
-        <NEmpty v-else description="无参数" />
-
         <NDivider>扫描阶段 ({{ detailItem.stages?.length ?? 0 }})</NDivider>
         <NTimeline v-if="detailItem.stages?.length">
           <NTimelineItem
@@ -328,10 +460,9 @@ function openDetail(row: ScanTemplate) {
             :title="`${idx + 1}. ${s.name}`"
             :type="s.parallel ? 'info' : 'success'"
           >
-            <div style="font-size:12px">
-              模块: <NTag size="tiny" :bordered="false">{{ moduleLabels[s.module] || s.module }}</NTag>
-              <span v-if="s.parallel" style="margin-left:8px;color:var(--info-color)">并行</span>
-            </div>
+            <NSpace :size="4" style="margin-top:4px">
+              <NTag v-for="mid in getStageModules(s)" :key="mid" size="tiny" :bordered="false">{{ getModuleName(mid) }}</NTag>
+            </NSpace>
           </NTimelineItem>
         </NTimeline>
         <NEmpty v-else description="无阶段定义" />

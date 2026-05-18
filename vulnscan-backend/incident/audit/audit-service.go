@@ -39,8 +39,9 @@ func (s *serviceAudit) AIPreAudit(ctx context.Context, id string) (*auditContrac
 		return nil, fmt.Errorf("事件不存在: %w", err)
 	}
 
-	if incident.Status == model.IncidentStatusReviewPassed {
-		return nil, fmt.Errorf("该事件已通过审核，无法进行AI预审")
+	if !model.IncidentSM.Can(incident.Status, model.IncidentEvtReviewPass) &&
+		!model.IncidentSM.Can(incident.Status, model.IncidentEvtReviewFail) {
+		return nil, fmt.Errorf("当前状态不允许AI预审")
 	}
 
 	result := CalculateRiskScore(&incident)
@@ -107,22 +108,27 @@ func (s *serviceAudit) ManualAudit(ctx context.Context, req auditContract.Manual
 		return fmt.Errorf("事件不存在: %w", err)
 	}
 
-	if incident.Status == model.IncidentStatusReviewPassed {
-		return fmt.Errorf("该事件已通过审核，无法重复审核")
-	}
-
-	updates := make(map[string]interface{})
-	var resultText string
-
+	var event string
 	switch req.AuditResult {
 	case "success":
-		updates["status"] = model.IncidentStatusReviewPassed
-		resultText = "审核通过"
+		event = model.IncidentEvtReviewPass
 	case "fail":
-		updates["status"] = model.IncidentStatusReviewFailed
-		resultText = "审核不通过"
+		event = model.IncidentEvtReviewFail
 	default:
 		return fmt.Errorf("无效的审核结果: %s", req.AuditResult)
+	}
+
+	newStatus, err := model.IncidentSM.Apply(incident.Status, event)
+	if err != nil {
+		return err
+	}
+
+	updates := map[string]interface{}{"status": newStatus}
+	var resultText string
+	if req.AuditResult == "success" {
+		resultText = "审核通过"
+	} else {
+		resultText = "审核不通过"
 	}
 
 	if err := sess.WithContext(ctx).Model(&model.SecurityIncident{}).
@@ -191,7 +197,9 @@ func (s *serviceAudit) transferToCircular(ctx context.Context, sess *gorm.DB, in
 		},
 		model.IncidentSourceSystemLocal,
 	)
-	_ = model.CreateIncidentOperationLog(sess.WithContext(ctx), transferLog)
+	if err := model.CreateIncidentOperationLog(sess.WithContext(ctx), transferLog); err != nil {
+		slog.Warn("创建流转操作日志失败", "incident_no", incident.IncidentNo, "error", err)
+	}
 	slog.Info("事件已流转到通报模块", "incident_no", incident.IncidentNo, "circular_code", circularCode)
 }
 

@@ -19,7 +19,16 @@ import {
 } from 'naive-ui';
 import { useRouter } from 'vue-router';
 
-import { getTaskList, createTask, cancelTask, deleteTask, type ScanTask } from '#/api/task';
+import {
+  getTaskList,
+  createTask,
+  cancelTask,
+  deleteTask,
+  rerunTask,
+  getScanEnginePresets,
+  type ScanTask,
+  type ScanEnginePreset,
+} from '#/api/task';
 import { getTemplateList, type ScanTemplate } from '#/api/template';
 import { taskStatusLabels, taskStatusTypes } from '#/constants/status';
 import ModuleConfigPanel from '../components/module-config-panel.vue';
@@ -43,62 +52,21 @@ const showAdvanced = ref(false);
 const showModuleConfig = ref(false);
 const moduleConfigs = ref<Record<string, Record<string, any>>>({});
 const templates = ref<ScanTemplate[]>([]);
+const enginePresets = ref<ScanEnginePreset[]>([]);
 const selectedTemplateId = ref('');
 const form = ref<{
   name: string;
   targets: string;
-  profile: string;
-  priority: number;
-  modules: string[];
   template_id: string;
+  priority: number;
   verification_level: string;
-}>({ name: '', targets: '', profile: 'full', priority: 5, modules: [], template_id: '', verification_level: 'both' });
-
-const profileOptions = [
-  { label: '全面扫描 — 信息收集+漏洞检测完整流程', value: 'full' },
-  { label: '快速扫描 — 存活检测+端口扫描+服务识别', value: 'quick' },
-  { label: '信息收集 — 子域名/DNS/指纹/WAF/技术栈', value: 'recon' },
-  { label: '漏洞扫描 — 常规漏洞检测模块', value: 'vuln' },
-  { label: '深度漏洞扫描 — 包含所有漏洞检测+API安全', value: 'vuln-full' },
-];
+  engine_preset: string;
+}>({ name: '', targets: '', template_id: '', priority: 5, verification_level: 'both', engine_preset: '' });
 
 const verificationOptions = [
   { label: '全部 — 原理验证+实际利用', value: 'both' },
   { label: '原理验证 — 仅检测漏洞模式，不实际利用', value: 'principle' },
   { label: '实际利用 — 确认漏洞可被利用', value: 'exploit' },
-];
-
-const moduleOptions = [
-  { label: 'ICMP 存活探测', value: 'icmp_ping' },
-  { label: '端口扫描', value: 'port_scan' },
-  { label: 'SYN 半开扫描', value: 'syn_scan' },
-  { label: 'UDP 端口扫描', value: 'udp_scan' },
-  { label: '服务探测', value: 'service_probe' },
-  { label: '子域名爆破', value: 'subdomain_brute' },
-  { label: 'DNS 全量枚举', value: 'dns_all' },
-  { label: 'Web 爬虫', value: 'web_crawl' },
-  { label: 'JS 分析', value: 'js_analyze' },
-  { label: 'WAF 检测', value: 'waf_detect' },
-  { label: '技术栈检测', value: 'tech_detect' },
-  { label: 'Favicon Hash', value: 'favicon' },
-  { label: 'TLS/SSL 证书检测', value: 'cert_check' },
-  { label: 'API 接口发现', value: 'api_disc' },
-  { label: '目录扫描', value: 'dir_scan' },
-  { label: '真实IP发现', value: 'real_ip' },
-  { label: 'SQL 注入检测', value: 'sqli' },
-  { label: 'XSS 检测', value: 'xss' },
-  { label: 'SSRF 检测', value: 'ssrf' },
-  { label: '弱口令检测', value: 'weak_pass' },
-  { label: '信息泄露检测', value: 'info_leak' },
-  { label: 'SSTI 模板注入检测', value: 'ssti' },
-  { label: 'XXE 外部实体注入', value: 'xxe' },
-  { label: 'NoSQL 注入检测', value: 'nosqli' },
-  { label: 'JWT 安全检测', value: 'jwt_sec' },
-  { label: '命令注入检测', value: 'cmdi' },
-  { label: '本地文件包含', value: 'lfi' },
-  { label: '暴力破解', value: 'bruteforce' },
-  { label: 'API 安全检测', value: 'apisec' },
-  { label: 'Nuclei PoC', value: 'nuclei' },
 ];
 
 const priorityOptions = [
@@ -208,6 +176,21 @@ const columns = [
         }));
       }
 
+      if (canRerunRow(row)) {
+        btns.push(
+          h(
+            NButton,
+            {
+              size: 'tiny',
+              type: 'info',
+              text: true,
+              onClick: () => handleRerunRow(row.id),
+            },
+            () => '重跑',
+          ),
+        );
+      }
+
       if (row.status !== 'running' && row.status !== 'queued') {
         btns.push(h(NPopconfirm, { onPositiveClick: () => handleDeleteRow(row.id) }, {
           trigger: () => h(NButton, { size: 'tiny', type: 'error', text: true }, () => '删除'),
@@ -236,6 +219,10 @@ async function fetchData() {
 }
 
 async function handleCreate() {
+  if (!form.value.template_id) {
+    message.warning('请选择扫描模板');
+    return;
+  }
   if (!form.value.targets.trim()) {
     message.warning('请输入扫描目标');
     return;
@@ -246,9 +233,8 @@ async function handleCreate() {
     const payload: Record<string, any> = {
       name: form.value.name || `扫描-${new Date().toLocaleString()}`,
       targets,
-      profile: form.value.profile,
+      template_id: form.value.template_id,
       priority: form.value.priority,
-      modules: form.value.modules.length > 0 ? form.value.modules : undefined,
     };
     const params: Record<string, any> = {};
     if (Object.keys(moduleConfigs.value).length > 0) {
@@ -257,18 +243,18 @@ async function handleCreate() {
     if (form.value.verification_level !== 'both') {
       params.verification_level = form.value.verification_level;
     }
+    if (form.value.engine_preset) {
+      params.engine_preset = form.value.engine_preset;
+    }
     if (Object.keys(params).length > 0) {
       payload.parameters = params;
-    }
-    if (form.value.template_id) {
-      payload.template_id = form.value.template_id;
     }
     await createTask(payload as Parameters<typeof createTask>[0]);
     message.success('任务创建成功');
     showCreate.value = false;
     showAdvanced.value = false;
     selectedTemplateId.value = '';
-    form.value = { name: '', targets: '', profile: 'full', priority: 5, modules: [], template_id: '', verification_level: 'both' };
+    form.value = { name: '', targets: '', template_id: '', priority: 5, verification_level: 'both', engine_preset: '' };
     await fetchData();
   } catch (e: any) {
     message.error(e?.message || '创建失败');
@@ -297,6 +283,29 @@ async function handleDeleteRow(id: string) {
   }
 }
 
+function canRerunRow(row: ScanTask) {
+  return (
+    row.status !== 'running' &&
+    row.status !== 'queued' &&
+    row.status !== 'splitting' &&
+    row.status !== 'pending'
+  );
+}
+
+async function handleRerunRow(id: string) {
+  try {
+    const res = await rerunTask(id);
+    message.success('已提交重新运行');
+    if (res?.task_id) {
+      router.push(`/scan/task/${res.task_id}`);
+    } else {
+      await fetchData();
+    }
+  } catch (e: any) {
+    message.error(e?.message || '重新运行失败');
+  }
+}
+
 async function handleBatchDelete() {
   if (checkedRowKeys.value.length === 0) {
     message.warning('请先选择任务');
@@ -319,10 +328,29 @@ async function loadTemplates() {
   } catch {}
 }
 
-const templateOptions = computed(() => [
-  { label: '不使用模板 (手动配置)', value: '' },
-  ...templates.value.map(t => ({ label: `${t.name} ${t.builtin ? '(内置)' : ''}`, value: t.id })),
+async function loadEnginePresets() {
+  try {
+    enginePresets.value = await getScanEnginePresets();
+  } catch {
+    enginePresets.value = [];
+  }
+}
+
+const templateOptions = computed(() =>
+  templates.value.map(t => ({ label: `${t.name} ${t.builtin ? '(内置)' : ''}`, value: t.id })),
+);
+
+const enginePresetOptions = computed(() => [
+  { label: '不使用预设', value: '' },
+  ...enginePresets.value.map((p) => ({
+    label: `${p.name} — ${p.description}`,
+    value: p.name,
+  })),
 ]);
+
+const selectedTemplate = computed(() =>
+  templates.value.find(t => t.id === selectedTemplateId.value),
+);
 
 function handleTemplateSelect(id: string) {
   selectedTemplateId.value = id;
@@ -336,6 +364,7 @@ function handleTemplateSelect(id: string) {
 onMounted(() => {
   fetchData();
   loadTemplates();
+  loadEnginePresets();
   refreshTimer = setInterval(() => {
     if (data.value.some((t) => t.status === 'running' || t.status === 'queued')) {
       fetchData();
@@ -417,8 +446,18 @@ onUnmounted(() => {
       <NForm label-placement="left" label-width="80" style="margin-top: 4px">
         <!-- Template -->
         <NFormItem label="扫描模板">
-          <NSelect v-model:value="selectedTemplateId" :options="templateOptions" placeholder="选择模板快速配置（可选）" @update:value="handleTemplateSelect" />
+          <NSelect v-model:value="selectedTemplateId" :options="templateOptions" placeholder="选择扫描模板" @update:value="handleTemplateSelect" />
         </NFormItem>
+
+        <!-- Stage Preview -->
+        <div v-if="selectedTemplate?.stages?.length" style="margin:-8px 0 12px;padding:8px 12px;background:var(--card-color);border-radius:6px;border:1px solid var(--border-color)">
+          <div style="font-size:12px;color:var(--text-color-3);margin-bottom:4px">执行阶段预览</div>
+          <NSpace :size="4" wrap>
+            <NTag v-for="(s, i) in selectedTemplate.stages" :key="i" size="small" :bordered="false" type="info">
+              {{ s.name }}
+            </NTag>
+          </NSpace>
+        </div>
 
         <!-- Task Name -->
         <NFormItem label="任务名称">
@@ -436,16 +475,6 @@ onUnmounted(() => {
           />
         </NFormItem>
 
-        <!-- Profile & Verification in a row -->
-        <div style="display: flex; gap: 16px">
-          <NFormItem label="扫描模式" style="flex: 1">
-            <NSelect v-model:value="form.profile" :options="profileOptions" />
-          </NFormItem>
-          <NFormItem label="验证级别" style="flex: 1">
-            <NSelect v-model:value="form.verification_level" :options="verificationOptions" />
-          </NFormItem>
-        </div>
-
         <!-- Advanced Toggle -->
         <div class="advanced-toggle" @click="showAdvanced = !showAdvanced">
           <span class="advanced-arrow" :class="{ expanded: showAdvanced }">&#9654;</span>
@@ -457,19 +486,19 @@ onUnmounted(() => {
             <NFormItem label="优先级" style="flex: 1">
               <NSelect v-model:value="form.priority" :options="priorityOptions" />
             </NFormItem>
-            <div style="flex: 1" />
+            <NFormItem label="验证级别" style="flex: 1">
+              <NSelect v-model:value="form.verification_level" :options="verificationOptions" />
+            </NFormItem>
           </div>
-          <NFormItem label="扫描模块">
+          <NFormItem label="引擎预设" style="margin-top: 4px">
             <NSelect
-              v-model:value="form.modules"
-              :options="moduleOptions"
-              multiple
+              v-model:value="form.engine_preset"
+              :options="enginePresetOptions"
+              placeholder="可选：合并默认 Nuclei/调度相关参数"
+              filterable
               clearable
-              placeholder="留空使用扫描模式默认模块"
-              max-tag-count="responsive"
             />
           </NFormItem>
-          <div class="form-hint">选择后将覆盖扫描模式的默认模块列表</div>
         </template>
 
         <!-- Module Config -->

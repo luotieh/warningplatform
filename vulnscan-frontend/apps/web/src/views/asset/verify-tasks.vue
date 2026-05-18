@@ -10,7 +10,7 @@ import {
   createVerifyTasks,
   forwardVerifyTask,
   getConstructionList,
-  getIamOrganizeTree,
+  getOrganizeTree,
   getVerifyTaskList,
   getVerifyTaskLogs,
   receiveVerifyTask,
@@ -118,26 +118,38 @@ const sourceMap: Record<string, string> = {
 };
 
 const statusOptions = Object.entries(statusMap).map(([value, item]) => ({ label: item.label, value }));
-const sourceOptions = Object.entries(sourceMap).map(([value, label]) => ({ label, value }));
+const sourceOptions = [
+  { label: sourceMap.manual, value: 'manual' },
+  { label: sourceMap.import, value: 'import' },
+  { label: sourceMap.discovery, value: 'discovery' },
+  { label: sourceMap.scan, value: 'scan' },
+];
+const sourceAliasMap: Record<string, string> = {
+  asset_create: 'manual',
+  asset_import: 'import',
+  manual_import: 'import',
+  auto_detect: 'discovery',
+  external: 'external',
+};
 
 function normalizeTree(nodes: any[] = []): any[] {
   return nodes
     .map((node) => {
-      const value = String(node.id ?? node.organize_id ?? node.value ?? '');
-      const label = node.name ?? node.organize_name ?? node.label ?? value;
+      const key = String(node.id ?? node.organize_id ?? node.key ?? node.value ?? '');
+      const label = node.name ?? node.organize_name ?? node.label ?? key;
       return {
         label,
-        value,
+        key,
         children: normalizeTree(node.children ?? []),
       };
     })
-    .filter((node) => node.label && node.value);
+    .filter((node) => node.label && node.key);
 }
 
 function flattenTree(nodes: any[] = [], result: Record<string, string> = {}) {
   nodes.forEach((node) => {
-    if (node.value) {
-      result[String(node.value)] = node.label;
+    if (node.key) {
+      result[String(node.key)] = node.label;
     }
     flattenTree(node.children ?? [], result);
   });
@@ -159,7 +171,11 @@ function displayName(value?: string, map: Record<string, string> = organizeNameM
 
 function displaySource(value?: string) {
   if (!value) return '-';
-  return sourceMap[value] ?? value;
+  const normalized = sourceAliasMap[value] ?? value;
+  if (normalized === 'external') {
+    return '\u5916\u90e8\u96c6\u6210';
+  }
+  return sourceMap[normalized] ?? normalized;
 }
 
 function displayStatus(value?: string) {
@@ -249,7 +265,7 @@ const assetColumns: DataTableColumns<Asset> = [
     ellipsis: { tooltip: true },
     render: (row) => renderMuted(displayName(row.organize_id)),
   },
-  { title: '系统类型', key: 'system_type', width: 120, render: (row) => renderMuted(row.system_type) },
+  { title: '资产分类', key: 'asset_family', width: 120, render: (row) => renderMuted(row.asset_family) },
 ];
 
 const logColumns: DataTableColumns<AssetVerifyOplog> = [
@@ -305,7 +321,7 @@ async function fetchAssets() {
 
 async function loadOrganizeTree() {
   try {
-    const res = await getIamOrganizeTree();
+    const res = await getOrganizeTree();
     const nodes = Array.isArray(res) ? res : ((res as any)?.data ?? (res as any)?.items ?? []);
     const options = normalizeTree(nodes);
     organizeTreeOptions.value = options;

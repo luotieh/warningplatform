@@ -3,37 +3,80 @@ import { normalizePagedResponse } from '#/api/helpers';
 
 // ─── Interfaces ───────────────────────────────────────────────
 
+export interface IncidentAsset {
+  id: string;
+  asset_name: string;
+  system_name: string;
+  domain_ip: string;
+  site_ip: string;
+  unit: string;
+  unit_type: string;
+  industry: string;
+  mlps_record_no: string;
+  mlps_level: string;
+  miit_record_no: string;
+  region: string;
+}
+
+export interface IncidentMetadata {
+  id: string;
+  data_no: string;
+  incident_type: string;
+  incident_url: string;
+  discovery_time: string;
+  vendor_region: string;
+  vendor_name: string;
+  incident_description: string;
+  vendor_time: string;
+  affected_count: string;
+  affected_type: string;
+  cvss_score: number;
+  cve_id: string;
+  owasp_category: string;
+  exploit_difficulty: string;
+  affect_scope: string;
+}
+
 export interface SecurityIncident {
   id: string;
   incident_no: string;
   name: string;
   description?: string;
-  status: number; // 1=待审核 2=AI预审中 3=待人工审核 4=审核通过 5=审核不通过 6=整改中 7=已关闭
-  level: number; // 1=低 2=中 3=高 4=紧急
-  source_system?: string;
-  source_ip?: string;
-  target_ip?: string;
-  target_port?: number;
-  attack_type?: string;
-  event_time?: string;
+  level: number;
+  source: number;
+  status: number;
+  status_text?: string;
+  report_time?: string;
   ai_pre_status?: number;
   ai_opinion?: string;
   ai_confidence?: number;
   risk_score?: number;
-  ai_tags?: string[];
+  ai_tags?: string | string[];
   ai_category?: string;
-  sla_level?: string;
-  sla_deadline?: string;
+  asset_detail_id?: string;
+  event_metadata_id?: string;
+  asset_detail?: IncidentAsset;
+  event_metadata?: IncidentMetadata;
   remediation_plan?: string;
   remediation_result?: string;
-  remediation_status?: number;
   remediation_deadline?: string;
-  remediation_submitted_at?: string;
+  remediation_assignee?: string;
+  asset_name?: string;
+  unit?: string;
+  is_overdue?: boolean;
+  remediation_submit_at?: string;
   verified_at?: string;
+  close_reason?: string;
   closed_at?: string;
-  asset_id?: string;
-  reporter?: string;
-  assignee?: string;
+  sla_level?: number;
+  sla_deadline?: string;
+  sla_status?: number;
+  sla_escalated_at?: string;
+  sla_escalated_to?: string;
+  sla_reminder_count?: number;
+  sla_last_reminder?: string;
+  current_step?: number;
+  operation_logs?: OpLog[];
   created_at: string;
   updated_at?: string;
 }
@@ -42,6 +85,8 @@ export interface IncidentComment {
   id: string;
   incident_id: string;
   content: string;
+  author_id: string;
+  author_name: string;
   author: string;
   parent_id?: string;
   created_at: string;
@@ -63,10 +108,16 @@ export interface KnowledgeArticle {
 export interface OpLog {
   id: string;
   incident_id: string;
-  action: string;
-  operator: string;
-  detail?: string;
-  created_at: string;
+  incident_no: string;
+  operation_type: string;
+  operation_type_zh: string;
+  operator_id: string;
+  operator_name: string;
+  operation_time: string;
+  result: string;
+  detail: string;
+  source_system: string;
+  source_system_zh: string;
 }
 
 export interface DashboardStats {
@@ -87,6 +138,51 @@ export interface SLAOverview {
   breach_rate?: number;
   avg_resolve_time?: number;
   items?: any[];
+}
+
+export interface RemediationStats {
+  total_count: number;
+  remediated_count: number;
+  overdue_count: number;
+  remediation_rate: number;
+  overdue_rate: number;
+  avg_remediation_day: number;
+  closed_count: number;
+  verifying_count: number;
+}
+
+export interface MultiDimItem {
+  dimension: string;
+  value: string;
+  count: number;
+}
+
+export interface TrendPoint {
+  date: string;
+  count: number;
+}
+
+export interface TrendPrediction {
+  historical: TrendPoint[];
+  predicted: TrendPoint[];
+  algorithm: string;
+  confidence: number;
+}
+
+export interface HotCategory {
+  name: string;
+  count: number;
+  ratio: number;
+}
+
+export interface AIAnalysisSummary {
+  overall_risk: string;
+  risk_score: number;
+  summary: string;
+  top_risk_areas: string[];
+  trend_direction: string;
+  recommendations: string[];
+  hot_categories: HotCategory[];
 }
 
 export interface IncidentAssetReq {
@@ -225,27 +321,28 @@ export function getChartByTrend(params?: Record<string, any>) {
 // ─── Stats ────────────────────────────────────────────────────
 
 export function getRemediationStats(params?: Record<string, any>) {
-  return requestClient.get('/incident/stats/remediation', { params });
+  return requestClient.get<RemediationStats>('/incident/stats/remediation', { params });
 }
 
-export function getOverdueList(params?: Record<string, any>) {
-  return requestClient.get('/incident/stats/overdue', { params });
+export async function getOverdueList(params?: Record<string, any>) {
+  const res = await baseRequestClient.get<any>('/incident/stats/overdue', { params });
+  return normalizePagedResponse<SecurityIncident>(res);
 }
 
 export function getMultiDimAnalysis(params?: Record<string, any>) {
-  return requestClient.get('/incident/stats/analysis', { params });
+  return requestClient.get<MultiDimItem[]>('/incident/stats/analysis', { params });
 }
 
-export function generateReport(params?: Record<string, any>) {
-  return requestClient.get('/incident/stats/report', { params });
+export function downloadIncidentReport(params?: Record<string, any>) {
+  return requestClient.download<Blob>('/incident/stats/report', { params });
 }
 
 export function getTrendPrediction(params?: Record<string, any>) {
-  return requestClient.get('/incident/stats/trend-prediction', { params });
+  return requestClient.get<TrendPrediction>('/incident/stats/trend-prediction', { params });
 }
 
 export function getAIAnalysis(params?: Record<string, any>) {
-  return requestClient.get('/incident/stats/ai-analysis', { params });
+  return requestClient.get<AIAnalysisSummary>('/incident/stats/ai-analysis', { params });
 }
 
 // ─── Comments ─────────────────────────────────────────────────
@@ -323,4 +420,39 @@ export function archiveKnowledge(id: string) {
 export async function getOplogList(params: { incident_id: string } & Record<string, any>) {
   const res = await baseRequestClient.get<any>('/incident/oplogs', { params });
   return normalizePagedResponse<OpLog>(res);
+}
+
+// ─── 流转到通报 ───
+
+export interface TransferToCircularReq {
+  incident_no: string;
+  name: string;
+  level?: number;
+  ai_opinion?: string;
+  ai_confidence?: number;
+  asset_info?: {
+    asset_name?: string;
+    system_name?: string;
+    domain_ip?: string;
+    site_ip?: string;
+    unit?: string;
+    unit_type?: string;
+    industry?: string;
+    mlps_record_no?: string;
+    mlps_level?: string;
+    region?: string;
+  };
+  metadata_info?: {
+    data_no?: string;
+    incident_type?: string;
+    incident_url?: string;
+    incident_description?: string;
+    cvss_score?: number;
+    cve_id?: string;
+  };
+  source_system?: string;
+}
+
+export function transferToCircular(data: TransferToCircularReq) {
+  return requestClient.post<{ circular_code: string }>('/circular/transfers', data);
 }

@@ -24,11 +24,11 @@ func (s *serviceConstruction) session() *gorm.DB {
 	return sess
 }
 
-func (s *serviceConstruction) List(req oc.ConstructionListReq) ([]model.ConstructionOrg, int64, error) {
+func (s *serviceConstruction) List(req oc.ConstructionListReq, scopes ...func(*gorm.DB) *gorm.DB) ([]model.ConstructionOrg, int64, error) {
 	var items []model.ConstructionOrg
 	var count int64
 
-	q := s.session().Model(&model.ConstructionOrg{})
+	q := s.session().Model(&model.ConstructionOrg{}).Scopes(scopes...)
 	if req.Name != "" {
 		q = q.Where("name LIKE ?", "%"+req.Name+"%")
 	}

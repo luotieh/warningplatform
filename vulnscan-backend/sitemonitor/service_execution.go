@@ -7,12 +7,16 @@ import (
 
 	"vulnscan-backend/model"
 	"vulnscan-backend/sitemonitor/contract"
+
+	"gorm.io/gorm"
 )
 
 // ══ 执行记录 ══
 
-func (s *serviceMonitor) ListExecutions(ctx context.Context, req contract.ExecutionListReq) (int64, []model.MonitorExecution, error) {
-	query := s.session().WithContext(ctx).Model(&model.MonitorExecution{})
+func (s *serviceMonitor) ListExecutions(ctx context.Context, req contract.ExecutionListReq, scopes ...func(*gorm.DB) *gorm.DB) (int64, []model.MonitorExecution, error) {
+	query := s.session().WithContext(ctx).Model(&model.MonitorExecution{}).
+		Joins("JOIN monitor_tasks ON monitor_tasks.id = monitor_executions.task_id").
+		Scopes(scopes...)
 	if req.TaskID != "" {
 		query = query.Where("task_id = ?", req.TaskID)
 	}
@@ -31,17 +35,17 @@ func (s *serviceMonitor) ListExecutions(ctx context.Context, req contract.Execut
 		query = query.Where("disposition = ?", req.Disposition)
 	}
 	if req.TimeStart != "" {
-		query = query.Where("created_at >= ?", req.TimeStart)
+		query = query.Where("monitor_executions.created_at >= ?", req.TimeStart)
 	}
 	if req.TimeEnd != "" {
-		query = query.Where("created_at <= ?", req.TimeEnd)
+		query = query.Where("monitor_executions.created_at <= ?", req.TimeEnd)
 	}
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
 		return 0, nil, err
 	}
 	var list []model.MonitorExecution
-	if err := paginateQuery(query, req.Index, req.Size).Order("created_at DESC").Find(&list).Error; err != nil {
+	if err := paginateQuery(query, req.Index, req.Size).Order("monitor_executions.created_at DESC").Find(&list).Error; err != nil {
 		return 0, nil, err
 	}
 	return total, list, nil

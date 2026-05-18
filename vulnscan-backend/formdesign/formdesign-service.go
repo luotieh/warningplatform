@@ -4,6 +4,7 @@ import (
 	"errors"
 	"time"
 
+	"vulnscan-backend/circular/paging"
 	"vulnscan-backend/model"
 
 	"code.yt-security.com/public/core/v2/db"
@@ -25,7 +26,7 @@ func (s *ServiceFormDesign) session() *gorm.DB {
 }
 
 func (s *ServiceFormDesign) ListTemplates(query templateListReq) ([]model.DynamicFormTemplate, int64, error) {
-	page, size := normalizePage(query.Page, query.PageSize)
+	page, size := paging.Normalize(query.Page, query.PageSize)
 	tx := s.session().Model(&model.DynamicFormTemplate{})
 	if query.Keyword != "" {
 		like := "%" + query.Keyword + "%"
@@ -304,7 +305,7 @@ func (s *ServiceFormDesign) PublishDraft(templateID string, req versionSaveReq, 
 }
 
 func (s *ServiceFormDesign) ListSubmissions(query submissionListReq) ([]model.DynamicFormSubmission, int64, error) {
-	page, size := normalizePage(query.Page, query.PageSize)
+	page, size := paging.Normalize(query.Page, query.PageSize)
 	tx := s.session().Model(&model.DynamicFormSubmission{})
 	if query.TemplateID != "" {
 		tx = tx.Where("template_id = ?", query.TemplateID)
@@ -466,16 +467,6 @@ func (s *ServiceFormDesign) resolveSubmissionVersion(templateID, versionID strin
 		return "", firstPositive(item.Version, 1), nil
 	}
 	return version.ID, version.Version, nil
-}
-
-func normalizePage(page, size int) (int, int) {
-	if page <= 0 {
-		page = 1
-	}
-	if size <= 0 || size > 100 {
-		size = 20
-	}
-	return page, size
 }
 
 func firstPositive(values ...int) int {

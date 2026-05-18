@@ -1,6 +1,7 @@
 package asset
 
 import (
+	"context"
 	"encoding/csv"
 	"io"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"code.yt-security.com/public/core/v2/generate/qulid"
 	"code.yt-security.com/public/core/v2/web"
 	iamsdk "code.yt-security.com/public/sdk"
+	"code.yt-security.com/public/sdk/identity"
 	"github.com/gin-gonic/gin"
 	"github.com/xuri/excelize/v2"
 	"gorm.io/gorm"
@@ -26,21 +28,19 @@ type assetImportColumn struct {
 	Required bool
 }
 
-var assetImportColumns = []assetImportColumn{
+var assetLedgerColumns = []assetImportColumn{
 	{Field: "name", Group: "系统基本信息", Title: "系统名称", Example: "办公自动化系统", Required: true},
 	{Field: "organize_name", Group: "系统基本信息", Title: "单位名称", Example: "某某单位", Required: true},
-	{Field: "system_type", Group: "系统基本信息", Title: "系统类型", Example: "应用系统", Required: true},
+	{Field: "asset_family", Group: "系统基本信息", Title: "资产分类", Example: "ip", Required: true},
 	{Field: "is_online", Group: "系统基本信息", Title: "是否联网", Example: "是", Required: true},
-	{Field: "ipv4", Group: "系统基本信息", Title: "IPV4地址", Example: "192.168.1.100", Required: true},
+	{Field: "ipv4", Group: "系统基本信息", Title: "IPV4地址", Example: "192.168.1.100", Required: false},
 	{Field: "ipv6", Group: "系统基本信息", Title: "IPV6地址", Example: "无", Required: true},
-	{Field: "url", Group: "系统基本信息", Title: "网址", Example: "https://oa.example.com", Required: true},
+	{Field: "address", Group: "系统基本信息", Title: "访问地址", Example: "https://oa.example.com", Required: true},
 	{Field: "is_key", Group: "系统基本信息", Title: "是否是关键信息基础设施", Example: "否", Required: true},
-	{Field: "security_protection_level", Group: "系统基本信息", Title: "安全保护等级", Example: "三级", Required: true},
+	{Field: "security_protection_level", Group: "系统基本信息", Title: "安全保护等级", Example: "无", Required: true},
 	{Field: "filing_cert_number", Group: "系统基本信息", Title: "备案证明编号", Example: "CERT-2024-001"},
 	{Field: "icp_filing_number", Group: "系统基本信息", Title: "ICP备案号", Example: "京ICP备12345678号"},
 	{Field: "public_security_filing", Group: "系统基本信息", Title: "公网安备案号", Example: "京公网安备11010802000000号"},
-	{Field: "address", Group: "系统基本信息", Title: "地址", Example: "192.168.1.100"},
-	{Field: "type", Group: "系统基本信息", Title: "资产类型", Example: "server"},
 	{Field: "data_number", Group: "系统基本信息", Title: "数据编号", Example: "DN-2024-001"},
 	{Field: "domain", Group: "系统基本信息", Title: "域名", Example: "oa.example.com"},
 	{Field: "port", Group: "系统基本信息", Title: "端口", Example: "443"},
@@ -81,6 +81,44 @@ var assetImportColumns = []assetImportColumn{
 	{Field: "remark", Group: "资产管理信息", Title: "备注", Example: "核心业务系统"},
 }
 
+var assetImportFields = []string{
+	"name",
+	"organize_name",
+	"asset_family",
+	"is_online",
+	"ipv4",
+	"ipv6",
+	"address",
+	"is_key",
+	"security_protection_level",
+	"filing_cert_number",
+	"icp_filing_number",
+	"public_security_filing",
+	"domain",
+	"construction_org",
+	"operation_org",
+	"responsible_user_name",
+	"tags",
+	"remark",
+}
+
+var assetImportColumns = pickAssetColumns(assetLedgerColumns, assetImportFields)
+
+func pickAssetColumns(columns []assetImportColumn, fields []string) []assetImportColumn {
+	fieldMap := make(map[string]assetImportColumn, len(columns))
+	for _, col := range columns {
+		fieldMap[col.Field] = col
+	}
+
+	result := make([]assetImportColumn, 0, len(fields))
+	for _, field := range fields {
+		if col, ok := fieldMap[field]; ok {
+			result = append(result, col)
+		}
+	}
+	return result
+}
+
 var assetExtraImportFields = map[string]bool{
 	"unit_type": true, "industry_category": true, "is_notification_member": true,
 	"unified_social_credit_code": true, "unit_address": true, "unit_detail_address": true,
@@ -90,10 +128,8 @@ var assetExtraImportFields = map[string]bool{
 }
 
 var assetDictImportIDs = map[string]string{
-	"type":                      "asset_type",
-	"system_type":               "asset_system_type",
+	"asset_family":              "asset_family",
 	"security_protection_level": "asset_security_level",
-	"data_source":               "asset_data_source",
 }
 
 func (h *HandlerAsset) ImportAssets(c *gin.Context) {
@@ -127,14 +163,18 @@ func (h *HandlerAsset) ImportAssets(c *gin.Context) {
 	}
 
 	headerMap, dataStart := detectAssetImportHeader(rows)
-	resolver := h.newAssetImportResolver()
 	user, _ := iamsdk.GetCurrentUser(c)
+	resolver := h.newAssetImportResolver(user.UserID, user.OrganizeID)
 
 	var items []*model.Asset
 	for _, row := range rows[dataStart:] {
 		orgID := getCell(row, headerMap, "organize_id")
 		if orgID == "" {
-			orgID = resolver.resolveOrganizeName(getCell(row, headerMap, "organize_name"))
+			orgID, err = resolver.resolveOrganizeName(c.Request.Context(), getCell(row, headerMap, "organize_name"))
+			if err != nil {
+				web.Fail(c).Msg("组织同步到 IAM 失败: " + err.Error()).Send()
+				return
+			}
 		}
 		item := &model.Asset{
 			ID:         qulid.GenerateID(),
@@ -152,16 +192,14 @@ func (h *HandlerAsset) ImportAssets(c *gin.Context) {
 			item.Name = item.Address
 		}
 
-		item.Type = resolver.resolveDictValue("type", getCell(row, headerMap, "type"))
-		if item.Type == "" {
-			item.Type = "server"
+		item.AssetFamily = resolver.resolveDictValue("asset_family", getCell(row, headerMap, "asset_family"))
+		if item.AssetFamily == "" {
+			item.AssetFamily = "ip"
 		}
-		item.SystemType = resolver.resolveDictValue("system_type", getCell(row, headerMap, "system_type"))
 		item.DataNumber = getCell(row, headerMap, "data_number")
 		item.Domain = getCell(row, headerMap, "domain")
 		item.IPv4 = getCell(row, headerMap, "ipv4")
 		item.IPv6 = getCell(row, headerMap, "ipv6")
-		item.URL = getCell(row, headerMap, "url")
 		item.Protocol = getCell(row, headerMap, "protocol")
 		item.Service = getCell(row, headerMap, "service")
 		item.Version = getCell(row, headerMap, "version")
@@ -172,7 +210,6 @@ func (h *HandlerAsset) ImportAssets(c *gin.Context) {
 		item.PublicSecurityFiling = getCell(row, headerMap, "public_security_filing")
 		item.IsOnline = parseBoolDefault(getCell(row, headerMap, "is_online"), true)
 		item.IsKey = parseBoolDefault(getCell(row, headerMap, "is_key"), false)
-		item.DataSource = model.DataSourceType(firstNonEmpty(resolver.resolveDictValue("data_source", getCell(row, headerMap, "data_source")), "manual_import"))
 		item.ConstructionOrgID = resolver.resolveConstructionOrg(buildConstructionOrgImport(row, headerMap, "construction_org"), user.UserID)
 		item.OperationOrgID = resolver.resolveConstructionOrg(buildConstructionOrgImport(row, headerMap, "operation_org"), user.UserID)
 		item.ResponsibleUserName = getCell(row, headerMap, "responsible_user_name")
@@ -514,19 +551,25 @@ func buildConstructionOrgImport(row []string, headerMap map[string]int, prefix s
 }
 
 type assetImportResolver struct {
-	db             *gorm.DB
-	dictMaps       map[string]map[string]string
-	orgByName      map[string]string
-	orgByID        map[string]model.ConstructionOrg
-	organizeByName map[string]string
+	db              *gorm.DB
+	dictMaps        map[string]map[string]string
+	orgByName       map[string]string
+	orgByID         map[string]model.ConstructionOrg
+	organizeByName  map[string]string
+	iam             *iamsdk.Client
+	createdBy       string
+	defaultParentID string
 }
 
-func (h *HandlerAsset) newAssetImportResolver() *assetImportResolver {
+func (h *HandlerAsset) newAssetImportResolver(createdBy string, defaultParentID string) *assetImportResolver {
 	resolver := &assetImportResolver{
-		dictMaps:       map[string]map[string]string{},
-		orgByName:      map[string]string{},
-		orgByID:        map[string]model.ConstructionOrg{},
-		organizeByName: map[string]string{},
+		dictMaps:        map[string]map[string]string{},
+		orgByName:       map[string]string{},
+		orgByID:         map[string]model.ConstructionOrg{},
+		organizeByName:  map[string]string{},
+		iam:             h.iam,
+		createdBy:       createdBy,
+		defaultParentID: defaultParentID,
 	}
 	if svc, ok := h.svc.(*serviceAsset); ok {
 		resolver.db = svc.session()
@@ -559,15 +602,91 @@ func (h *HandlerAsset) newAssetImportResolver() *assetImportResolver {
 	return resolver
 }
 
-func (r *assetImportResolver) resolveOrganizeName(name string) string {
+func (r *assetImportResolver) resolveOrganizeName(ctx context.Context, name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
-		return ""
+		return "", nil
 	}
 	if id, ok := r.organizeByName[name]; ok {
+		return id, nil
+	}
+	info, err := r.findIAMOrganizeByName(ctx, name)
+	if err != nil {
+		return "", err
+	}
+	if info != nil {
+		return r.ensureLocalOrganize(info), nil
+	}
+	info, err = r.createIAMOrganize(ctx, name)
+	if err != nil {
+		return "", err
+	}
+	if info != nil {
+		return r.ensureLocalOrganize(info), nil
+	}
+	return "", nil
+}
+
+func (r *assetImportResolver) findIAMOrganizeByName(ctx context.Context, name string) (*identity.OrganizeInfo, error) {
+	if r.iam == nil || name == "" {
+		return nil, nil
+	}
+	options, err := r.iam.Organize.GetOrganizeOptions(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	for _, option := range options {
+		if strings.TrimSpace(option.Name) != name {
+			continue
+		}
+		info, err := r.iam.Organize.GetOrganize(ctx, option.ID)
+		if err != nil {
+			return nil, err
+		}
+		return info, nil
+	}
+	return nil, nil
+}
+
+func (r *assetImportResolver) createIAMOrganize(ctx context.Context, name string) (*identity.OrganizeInfo, error) {
+	if r.iam == nil || name == "" {
+		return nil, nil
+	}
+	info, err := r.iam.Organize.CreateOrganize(ctx, &identity.CreateOrganizeRequest{
+		Name:     name,
+		ParentID: r.defaultParentID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return info, nil
+}
+
+func (r *assetImportResolver) ensureLocalOrganize(info *identity.OrganizeInfo) string {
+	if info == nil {
+		return ""
+	}
+	if id, ok := r.organizeByName[info.Name]; ok && id != "" {
 		return id
 	}
-	return ""
+	if r.db == nil {
+		return info.ID
+	}
+	org := model.Organize{
+		ID:                      info.ID,
+		Name:                    info.Name,
+		ParentID:                info.ParentID,
+		UnifiedSocialCreditCode: info.CreditCode,
+		CreatedBy:               r.createdBy,
+	}
+	if err := r.db.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "id"}},
+		DoUpdates: clause.AssignmentColumns([]string{"name", "parent_id", "unified_social_credit_code"}),
+	}).Create(&org).Error; err != nil {
+		return ""
+	}
+	r.organizeByName[info.Name] = info.ID
+	return info.ID
 }
 
 func (r *assetImportResolver) resolveDictValue(field string, value string) string {
@@ -645,11 +764,13 @@ func addImportDictSheet(f *excelize.File) {
 	_, _ = f.NewSheet(sheet)
 	rows := [][]string{
 		{"字段", "说明"},
-		{"资产类型 / 系统类型 / 安全保护等级 / 数据来源", "可填写系统管理-数据字典中的标签或值，例如“应用系统”或 application。"},
+		{"资产分类 / 安全保护等级 / 数据来源", "可填写系统管理-数据字典中的标签或值，例如“业务系统”或 business_system。"},
 		{"建设单位 / 运维单位", "可填写已有建设运维单位名称或ID；填写新名称时导入会自动创建基础单位记录。"},
 		{"资产所属单位ID", "来源于 IAM 组织，请填写组织ID；留空时使用当前用户所属组织。"},
+		{"单位名称", "当未填写所属单位ID时，可填写单位名称；导入时会优先匹配 IAM / 本地单位，不存在时按现有逻辑补录。"},
 		{"布尔字段", "支持 是/否、true/false、1/0。"},
 		{"标签", "多个标签用逗号、分号或顿号分隔。"},
+		{"探测补齐字段", "端口、协议、服务、版本、操作系统等字段默认不在模板中，建议通过后续探测自动补齐。"},
 		{"所在地", "建设运维单位的所在地建议先在资产管理-建设运维单位页面维护。"},
 	}
 	for r, row := range rows {

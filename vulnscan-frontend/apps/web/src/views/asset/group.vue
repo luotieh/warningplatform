@@ -21,8 +21,7 @@ const form = reactive({
 });
 
 const ruleFieldOptions = [
-  { label: '类型', value: 'type' },
-  { label: '系统类型', value: 'system_type' },
+  { label: '资产分类', value: 'asset_family' },
   { label: '保护等级', value: 'security_protection_level' },
   { label: '数据来源', value: 'data_source' },
   { label: '地址', value: 'address' },

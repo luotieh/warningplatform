@@ -5,6 +5,7 @@ import (
 
 	"code.yt-security.com/public/core/v2/web"
 	iamsdk "code.yt-security.com/public/sdk"
+	"code.yt-security.com/public/sdk/permission"
 	"github.com/gin-gonic/gin"
 )
 
@@ -21,7 +22,8 @@ func (h *HandlerCore) List(c *gin.Context) {
 	if !ok {
 		return
 	}
-	items, count, err := h.svc.ListIncidents(c.Request.Context(), req)
+	scope := iamsdk.DataFilterScope(c, permission.DefaultFieldMapping)
+	items, count, err := h.svc.ListIncidents(c.Request.Context(), req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
@@ -35,7 +37,7 @@ func (h *HandlerCore) Create(c *gin.Context) {
 		return
 	}
 	user, _ := iamsdk.GetCurrentUser(c)
-	if err := h.svc.CreateIncident(c.Request.Context(), req, user.UserID); err != nil {
+	if err := h.svc.CreateIncident(c.Request.Context(), req, user.UserID, user.OrganizeID); err != nil {
 		web.Fail(c).Err(err).Send()
 		return
 	}

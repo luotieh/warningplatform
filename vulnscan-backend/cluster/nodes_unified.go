@@ -1,10 +1,14 @@
 package cluster
 
 import (
+	"os"
+	"runtime"
 	"time"
 
 	"code.yt-security.com/public/core/v2/web"
 	"github.com/gin-gonic/gin"
+	"github.com/shirou/gopsutil/v4/cpu"
+	"github.com/shirou/gopsutil/v4/mem"
 	"gorm.io/gorm"
 
 	"vulnscan-backend/model"
@@ -37,12 +41,19 @@ type UnifiedNode struct {
 	TasksCompleted int64 `json:"tasks_completed,omitempty"`
 }
 
-type nodesAPI struct {
-	db *gorm.DB
+type LocalScheduler interface {
+	ActiveTasks() int
+	QueueLen() int
+	MaxParallel() int
 }
 
-func RegisterUnifiedNodeRoutes(g *gin.RouterGroup, db *gorm.DB) {
-	api := &nodesAPI{db: db}
+type nodesAPI struct {
+	db        *gorm.DB
+	scheduler LocalScheduler
+}
+
+func RegisterUnifiedNodeRoutes(g *gin.RouterGroup, db *gorm.DB, scheduler LocalScheduler) {
+	api := &nodesAPI{db: db, scheduler: scheduler}
 	g.GET("/nodes", api.List)
 }
 
@@ -51,6 +62,14 @@ func (a *nodesAPI) List(c *gin.Context) {
 	status := c.Query("status")
 
 	var nodes []UnifiedNode
+
+	if nodeType == "" || nodeType == "local" {
+		if local := a.buildLocalNode(); local != nil {
+			if status == "" || status == local.Status {
+				nodes = append(nodes, *local)
+			}
+		}
+	}
 
 	if nodeType == "" || nodeType == "worker" {
 		nodes = append(nodes, a.loadWorkerNodes(status)...)
@@ -65,6 +84,73 @@ func (a *nodesAPI) List(c *gin.Context) {
 		"nodes":   nodes,
 		"summary": summary,
 	}).Send()
+}
+
+const embeddedAgentUUID = "embedded-default"
+
+func (a *nodesAPI) buildLocalNode() *UnifiedNode {
+	if a.scheduler == nil {
+		return nil
+	}
+
+	hostname, _ := os.Hostname()
+	activeTasks := a.scheduler.ActiveTasks()
+	capacity := a.scheduler.MaxParallel()
+	queueLen := a.scheduler.QueueLen()
+
+	cpuPct := 0.0
+	if percents, err := cpu.Percent(0, false); err == nil && len(percents) > 0 {
+		cpuPct = percents[0]
+	}
+
+	memPct := 0.0
+	if v, err := mem.VirtualMemory(); err == nil {
+		memPct = v.UsedPercent
+	}
+
+	// Merge embedded monitor agent stats
+	var embeddedAgent model.MonitorAgent
+	if err := a.db.Where("uuid = ?", embeddedAgentUUID).First(&embeddedAgent).Error; err == nil {
+		activeTasks += embeddedAgent.RunningTasks
+		capacity += embeddedAgent.MaxConcurrent
+		queueLen += embeddedAgent.QueuedTasks
+	}
+
+	nodeStatus := "online"
+	if capacity > 0 && activeTasks >= capacity {
+		nodeStatus = "busy"
+	}
+
+	score := 100.0
+	if capacity > 0 {
+		score -= float64(activeTasks) / float64(capacity) * 40
+	}
+	if cpuPct > 50 {
+		score -= (cpuPct - 50) * 0.4
+	}
+	if memPct > 50 {
+		score -= (memPct - 50) * 0.3
+	}
+	if score < 0 {
+		score = 0
+	}
+
+	return &UnifiedNode{
+		ID:            "local",
+		Name:          "本地执行引擎",
+		Type:          "local",
+		IP:            "127.0.0.1",
+		Status:        nodeStatus,
+		Version:       runtime.Version(),
+		CPUUsage:      cpuPct,
+		MemUsage:      memPct,
+		ActiveTasks:   activeTasks,
+		Capacity:      capacity,
+		HealthScore:   score,
+		LastHeartbeat: time.Now().Format(time.RFC3339),
+		Hostname:      hostname,
+		QueuedTasks:   queueLen,
+	}
 }
 
 func (a *nodesAPI) loadWorkerNodes(status string) []UnifiedNode {
@@ -103,7 +189,7 @@ func (a *nodesAPI) loadWorkerNodes(status string) []UnifiedNode {
 
 func (a *nodesAPI) loadAgentNodes(status string) []UnifiedNode {
 	var agents []model.MonitorAgent
-	q := a.db.Model(&model.MonitorAgent{})
+	q := a.db.Model(&model.MonitorAgent{}).Where("uuid != ?", embeddedAgentUUID)
 	if status != "" {
 		q = q.Where("status = ?", status)
 	}

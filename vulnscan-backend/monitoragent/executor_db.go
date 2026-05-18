@@ -47,9 +47,21 @@ func (e *DBExecutor) Execute(ctx context.Context, payload json.RawMessage) *agen
 
 	slog.Info("embedded monitor exec", "execution_id", msg.ExecutionID, "dimension", msg.Dimension, "url", msg.URL)
 
-	snap, err := e.pageService.FetchPage(ctx, msg.URL)
 	result.FinishedAt = time.Now().UTC().Format(time.RFC3339)
 
+	if msg.Dimension == "sensitive_file" {
+		result.Status = "success"
+		analyzed, aErr := e.analysis.Analyze(ctx, msg.Dimension, "", msg.URL, &msg)
+		if aErr != nil {
+			result.Status = "failed"
+			result.Error = aErr.Error()
+		} else {
+			result.Result = analyzed
+		}
+		return result
+	}
+
+	snap, err := e.pageService.FetchPage(ctx, msg.URL)
 	if err != nil {
 		result.Status = "failed"
 		result.Error = err.Error()

@@ -1,4 +1,4 @@
-﻿<script lang="ts" setup>
+<script lang="ts" setup>
 import { onMounted, ref } from 'vue';
 import { NCard, NGrid, NGridItem, NStatistic, NDataTable, NSpin } from 'naive-ui';
 import { getDashboardStats, getChartByType, getChartByTrend, getSLAOverview, type DashboardStats, type SLAOverview } from '#/api/incident';

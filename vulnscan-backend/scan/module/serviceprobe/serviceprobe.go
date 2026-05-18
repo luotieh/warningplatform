@@ -32,7 +32,7 @@ func NewWithDB(db *gorm.DB) *ServiceProbe {
 
 func (m *ServiceProbe) ID() string       { return "service_probe" }
 func (m *ServiceProbe) Name() string     { return "服务探测" }
-func (m *ServiceProbe) Category() string { return "probe" }
+func (m *ServiceProbe) Category() string { return "discover" }
 
 func (m *ServiceProbe) Store() *FingerprintStore { return m.store }
 
@@ -131,6 +131,9 @@ func (m *ServiceProbe) Run(ctx context.Context, targets []*core.Target, config m
 				data["tls_self_signed"] = fmt.Sprintf("%v", probeResult.TLSInfo.IsSelfSigned)
 				data["tls_expired"] = fmt.Sprintf("%v", probeResult.TLSInfo.IsExpired)
 				data["tls_days_until_expiry"] = fmt.Sprintf("%d", probeResult.TLSInfo.DaysUntilExpiry)
+				if !probeResult.TLSInfo.NotAfter.IsZero() {
+					data["tls_not_after"] = probeResult.TLSInfo.NotAfter.Format(time.RFC3339)
+				}
 			}
 
 			title := fmt.Sprintf("检测到服务: %s", probeResult.Service)

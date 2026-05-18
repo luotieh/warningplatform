@@ -7,13 +7,14 @@ import (
 	"vulnscan-backend/model"
 
 	"code.yt-security.com/public/core/v2/generate/qulid"
+	"gorm.io/gorm"
 )
 
 // ══ Agent ══
 
-func (s *serviceMonitor) ListAgents(ctx context.Context) ([]model.MonitorAgent, error) {
+func (s *serviceMonitor) ListAgents(ctx context.Context, scopes ...func(*gorm.DB) *gorm.DB) ([]model.MonitorAgent, error) {
 	var agents []model.MonitorAgent
-	if err := s.session().WithContext(ctx).Order("updated_at DESC").Find(&agents).Error; err != nil {
+	if err := s.session().WithContext(ctx).Scopes(scopes...).Order("updated_at DESC").Find(&agents).Error; err != nil {
 		return nil, err
 	}
 	return agents, nil

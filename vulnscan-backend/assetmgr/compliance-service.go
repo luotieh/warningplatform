@@ -21,11 +21,11 @@ func (s *serviceComplianceItem) session() *gorm.DB {
 	return sess
 }
 
-func (s *serviceComplianceItem) List(req ac.ComplianceItemReq) ([]model.AssetCompliance, int64, error) {
+func (s *serviceComplianceItem) List(req ac.ComplianceItemReq, scopes ...func(*gorm.DB) *gorm.DB) ([]model.AssetCompliance, int64, error) {
 	var items []model.AssetCompliance
 	var count int64
 
-	q := s.session().Model(&model.AssetCompliance{})
+	q := s.session().Model(&model.AssetCompliance{}).Scopes(scopes...)
 	if req.AssetID != "" {
 		q = q.Where("asset_id = ?", req.AssetID)
 	}
@@ -79,11 +79,11 @@ func (s *serviceComplianceTemplate) session() *gorm.DB {
 	return sess
 }
 
-func (s *serviceComplianceTemplate) List(req ac.TemplateListReq) ([]model.ComplianceTemplate, int64, error) {
+func (s *serviceComplianceTemplate) List(req ac.TemplateListReq, scopes ...func(*gorm.DB) *gorm.DB) ([]model.ComplianceTemplate, int64, error) {
 	var items []model.ComplianceTemplate
 	var count int64
 
-	q := s.session().Model(&model.ComplianceTemplate{})
+	q := s.session().Model(&model.ComplianceTemplate{}).Scopes(scopes...)
 	if req.Standard != "" {
 		q = q.Where("standard = ?", req.Standard)
 	}
@@ -152,11 +152,11 @@ func (s *serviceCheckResult) session() *gorm.DB {
 	return sess
 }
 
-func (s *serviceCheckResult) List(req ac.CheckResultListReq) ([]model.ComplianceCheckResult, int64, error) {
+func (s *serviceCheckResult) List(req ac.CheckResultListReq, scopes ...func(*gorm.DB) *gorm.DB) ([]model.ComplianceCheckResult, int64, error) {
 	var items []model.ComplianceCheckResult
 	var count int64
 
-	q := s.session().Model(&model.ComplianceCheckResult{})
+	q := s.session().Model(&model.ComplianceCheckResult{}).Scopes(scopes...)
 	if req.AssetID != "" {
 		q = q.Where("asset_id = ?", req.AssetID)
 	}

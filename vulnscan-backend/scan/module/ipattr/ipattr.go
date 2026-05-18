@@ -44,6 +44,7 @@ type IPInfo struct {
 	City     string
 	CIDR     string
 	RealIP   string
+	PtrHost  string
 	Evidence []string
 }
 
@@ -161,6 +162,21 @@ func (m *IPAttributor) Run(ctx context.Context, targets []*core.Target, config m
 				attr = "代理/反向代理"
 			}
 
+			data := map[string]string{
+				"ip":       ipAddr,
+				"is_cdn":   fmt.Sprintf("%v", info.IsCDN),
+				"is_waf":   fmt.Sprintf("%v", info.IsWAF),
+				"is_cloud": fmt.Sprintf("%v", info.IsCloud),
+				"provider": info.Provider,
+				"asn":      fmt.Sprintf("%d", info.ASN),
+				"asn_org":  info.ASNOrg,
+				"country":  info.Country,
+				"city":     info.City,
+			}
+			if info.PtrHost != "" {
+				data["ptr_host"] = info.PtrHost
+			}
+
 			result.Findings = append(result.Findings, &core.Finding{
 				ModuleID:   m.ID(),
 				Target:     target,
@@ -170,17 +186,7 @@ func (m *IPAttributor) Run(ctx context.Context, targets []*core.Target, config m
 				Confidence: 80,
 				Evidence:   strings.Join(info.Evidence, "; "),
 				Timestamp:  time.Now(),
-				Data: map[string]string{
-					"ip":       ipAddr,
-					"is_cdn":   fmt.Sprintf("%v", info.IsCDN),
-					"is_waf":   fmt.Sprintf("%v", info.IsWAF),
-					"is_cloud": fmt.Sprintf("%v", info.IsCloud),
-					"provider": info.Provider,
-					"asn":      fmt.Sprintf("%d", info.ASN),
-					"asn_org":  info.ASNOrg,
-					"country":  info.Country,
-					"city":     info.City,
-				},
+				Data:       data,
 			})
 			mu.Unlock()
 		}(t, ip)
@@ -246,6 +252,9 @@ func (m *IPAttributor) analyzeIP(ctx context.Context, ip string) *IPInfo {
 			info.IsWAF = true
 			info.Evidence = append(info.Evidence, fmt.Sprintf("PTR含WAF特征: %s", ptr))
 		}
+	}
+	if len(ptrRecords) > 0 && info.PtrHost == "" {
+		info.PtrHost = strings.TrimSuffix(strings.TrimSpace(ptrRecords[0]), ".")
 	}
 
 	if len(info.Evidence) == 0 {

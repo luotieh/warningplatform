@@ -24,6 +24,7 @@ import {
   reopenVuln,
   deleteVuln,
   getVulnStatusHistory,
+  retestVuln,
   type Vulnerability,
   type VulnStatusHistory,
 } from '#/api/vuln';
@@ -34,6 +35,7 @@ const route = useRoute();
 const router = useRouter();
 const message = useMessage();
 const loading = ref(true);
+const retestLoading = ref(false);
 const vuln = ref<Vulnerability | null>(null);
 const history = ref<VulnStatusHistory[]>([]);
 
@@ -48,10 +50,10 @@ const sevColors: Record<string, { bg: string; fg: string }> = {
   info: { bg: '#f0f5ff', fg: '#1890ff' },
 };
 const statusLabels: Record<string, string> = {
-  open: '待修复', fixed: '已修复', ignored: '已忽略', reopened: '已重开',
+  open: '待修复', fixed: '已修复', ignored: '已忽略', reopened: '已重开', verified: '已验证',
 };
 const statusTypes: Record<string, string> = {
-  open: 'error', fixed: 'success', ignored: 'default', reopened: 'warning',
+  open: 'error', fixed: 'success', ignored: 'default', reopened: 'warning', verified: 'error',
 };
 
 async function fetchData() {
@@ -81,6 +83,22 @@ async function handleAction(action: 'fix' | 'ignore' | 'reopen') {
     await fetchData();
   } catch (e: any) {
     message.error(e?.message || '操作失败');
+  }
+}
+
+async function handleRetest() {
+  if (!vuln.value) return;
+  retestLoading.value = true;
+  try {
+    const res = await retestVuln(vuln.value.id);
+    message.success(res?.task_id ? `回测任务已提交（${res.task_id}）` : '回测任务已提交');
+    if (res?.task_id) {
+      router.push(`/scan/task/${res.task_id}`);
+    }
+  } catch (e: any) {
+    message.error(e?.message || '回测失败');
+  } finally {
+    retestLoading.value = false;
   }
 }
 
@@ -117,6 +135,7 @@ onMounted(fetchData);
           </template>
           <template #header-extra>
             <NSpace :size="8">
+              <NButton size="small" type="warning" :loading="retestLoading" @click="handleRetest">漏洞回测</NButton>
               <NButton v-if="vuln.status === 'open' || vuln.status === 'reopened'" size="small" type="success" @click="handleAction('fix')">标记修复</NButton>
               <NButton v-if="vuln.status === 'open' || vuln.status === 'reopened'" size="small" @click="handleAction('ignore')">标记忽略</NButton>
               <NButton v-if="vuln.status === 'fixed' || vuln.status === 'ignored'" size="small" type="warning" @click="handleAction('reopen')">重新打开</NButton>

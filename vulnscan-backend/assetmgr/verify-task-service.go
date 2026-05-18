@@ -26,13 +26,14 @@ func (s *serviceVerifyTask) session() *gorm.DB {
 	return sess
 }
 
-func (s *serviceVerifyTask) ListTasks(req ac.VerifyTaskListReq) ([]ac.VerifyTaskResp, int64, error) {
+func (s *serviceVerifyTask) ListTasks(req ac.VerifyTaskListReq, scopes ...func(*gorm.DB) *gorm.DB) ([]ac.VerifyTaskResp, int64, error) {
 	var items []ac.VerifyTaskResp
 	var count int64
 
 	q := s.session().Table((&model.AssetVerifyTask{}).TableName() + " AS t").
 		Select("t.*, a.name AS asset_name, a.address, a.type AS asset_type, a.data_number").
-		Joins("LEFT JOIN " + (&model.Asset{}).TableName() + " AS a ON a.id = t.asset_id")
+		Joins("LEFT JOIN " + (&model.Asset{}).TableName() + " AS a ON a.id = t.asset_id").
+		Scopes(scopes...)
 	if req.AssetID != "" {
 		q = q.Where("t.asset_id = ?", req.AssetID)
 	}
@@ -268,10 +269,10 @@ func (s *serviceVerifyTask) Reactivate(id, operator, remark string) error {
 	})
 }
 
-func (s *serviceVerifyTask) ListLogs(req ac.VerifyTaskLogsReq) ([]model.AssetVerifyOplog, int64, error) {
+func (s *serviceVerifyTask) ListLogs(req ac.VerifyTaskLogsReq, scopes ...func(*gorm.DB) *gorm.DB) ([]model.AssetVerifyOplog, int64, error) {
 	var items []model.AssetVerifyOplog
 	var count int64
-	q := s.session().Model(&model.AssetVerifyOplog{})
+	q := s.session().Model(&model.AssetVerifyOplog{}).Scopes(scopes...)
 	if req.TaskID != "" {
 		q = q.Where("task_id = ?", req.TaskID)
 	}
@@ -289,10 +290,10 @@ func (s *serviceVerifyTask) ListLogs(req ac.VerifyTaskLogsReq) ([]model.AssetVer
 	return items, count, err
 }
 
-func (s *serviceVerifyTask) ListArchives(req ac.ArchiveListReq) ([]model.AssetArchiveSnapshot, int64, error) {
+func (s *serviceVerifyTask) ListArchives(req ac.ArchiveListReq, scopes ...func(*gorm.DB) *gorm.DB) ([]model.AssetArchiveSnapshot, int64, error) {
 	var items []model.AssetArchiveSnapshot
 	var count int64
-	q := s.session().Model(&model.AssetArchiveSnapshot{})
+	q := s.session().Model(&model.AssetArchiveSnapshot{}).Scopes(scopes...)
 	if req.AssetID != "" {
 		q = q.Where("asset_id = ?", req.AssetID)
 	}

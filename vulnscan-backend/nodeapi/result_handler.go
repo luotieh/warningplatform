@@ -1,12 +1,14 @@
 package nodeapi
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"time"
 
 	"vulnscan-backend/model"
+	"vulnscan-backend/sitemonitor"
 
 	"gorm.io/gorm"
 )
@@ -19,28 +21,18 @@ func NewDBMonitorResultHandler(db *gorm.DB) *DBMonitorResultHandler {
 	return &DBMonitorResultHandler{db: db}
 }
 
-func (h *DBMonitorResultHandler) HandleMonitorResult(executionID, status, errMsg, result, startedAt, finishedAt string) {
-	updates := map[string]any{
-		"status":      status,
-		"result_json": result,
-	}
-	if errMsg != "" {
-		updates["error"] = errMsg
-	}
-	if startedAt != "" {
-		if t, err := time.Parse(time.RFC3339, startedAt); err == nil {
-			updates["started_at"] = t
-		}
-	}
-	if finishedAt != "" {
-		if t, err := time.Parse(time.RFC3339, finishedAt); err == nil {
-			updates["finished_at"] = t
-		}
-	}
-
-	if err := h.db.Model(&model.MonitorExecution{}).
-		Where("id = ?", executionID).
-		Updates(updates).Error; err != nil {
+func (h *DBMonitorResultHandler) HandleMonitorResult(executionID, agentID, status, errMsg, result, startedAt, finishedAt string) {
+	if err := sitemonitor.FinalizeFromTaskResult(
+		context.Background(),
+		h.db,
+		executionID,
+		agentID,
+		status,
+		errMsg,
+		result,
+		startedAt,
+		finishedAt,
+	); err != nil {
 		slog.Error("save monitor result failed", "execution_id", executionID, "error", err)
 	}
 }

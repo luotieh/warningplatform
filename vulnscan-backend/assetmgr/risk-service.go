@@ -21,11 +21,11 @@ func (s *serviceRisk) session() *gorm.DB {
 	return sess
 }
 
-func (s *serviceRisk) List(req ac.RiskListReq) ([]model.AssetRiskScore, int64, error) {
+func (s *serviceRisk) List(req ac.RiskListReq, scopes ...func(*gorm.DB) *gorm.DB) ([]model.AssetRiskScore, int64, error) {
 	var items []model.AssetRiskScore
 	var count int64
 
-	q := s.session().Model(&model.AssetRiskScore{})
+	q := s.session().Model(&model.AssetRiskScore{}).Scopes(scopes...)
 	if req.MinScore > 0 {
 		q = q.Where("total_score >= ?", req.MinScore)
 	}

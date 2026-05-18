@@ -13,10 +13,12 @@ const routes: RouteRecordRaw[] = [
       {
         name: 'AssetLedger',
         path: 'ledger',
-        component: () => import('#/views/asset/ledger.vue'),
+        component: () => import('#/views/asset/ledger/index.vue'),
         meta: {
           icon: 'lucide:book-open',
           title: '资产台账',
+          /** 应用内多标签切换时保留列表状态，避免每次切回都重新 init / 打接口 */
+          keepAlive: true,
           perms: [
             { action: 'create', label: '新建资产' },
             { action: 'update', label: '编辑' },

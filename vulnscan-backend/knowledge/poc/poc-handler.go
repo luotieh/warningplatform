@@ -6,15 +6,18 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
 	"vulnscan-backend/knowledge/nuclei"
 	"vulnscan-backend/model"
+	"vulnscan-backend/scan/core"
 
 	nucleilib "github.com/projectdiscovery/nuclei/v3/lib"
 	"github.com/projectdiscovery/nuclei/v3/pkg/output"
 
+	"code.yt-security.com/public/core/v2/generate/qulid"
 	"code.yt-security.com/public/core/v2/web"
 	iamsdk "code.yt-security.com/public/sdk"
 	"code.yt-security.com/public/sdk/permission"
@@ -278,6 +281,74 @@ type testPocMatch struct {
 	MatcherName string `json:"matcher_name,omitempty"`
 	Evidence    string `json:"evidence,omitempty"`
 	CurlCmd     string `json:"curl_command,omitempty"`
+}
+
+const quickNucleiScanMaxTargets = 20
+
+type quickNucleiScanReq struct {
+	Targets        []string               `json:"targets"`
+	URLs           []string               `json:"urls"`
+	Parameters     map[string]interface{} `json:"parameters"`
+	TimeoutSeconds int                    `json:"timeout_seconds"`
+}
+
+// QuickNucleiScan 使用与扫描任务相同的 NucleiModule 对少量目标做一次 PoC 探测（不落库扫描任务）。
+// 需在 parameters 中配置 nuclei_template_paths / nuclei_template_dir 等本地模板，或依赖已启用的库内 PoC。
+func (h *HandlerPoc) QuickNucleiScan(c *gin.Context) {
+	req, ok := web.BindJSON[quickNucleiScanReq](c)
+	if !ok {
+		return
+	}
+
+	var targets []*core.Target
+	targets = append(targets, nuclei.TargetsFromScanLines(req.Targets)...)
+	for _, u := range req.URLs {
+		u = strings.TrimSpace(u)
+		if u == "" {
+			continue
+		}
+		targets = append(targets, &core.Target{URL: u})
+	}
+	if len(targets) == 0 {
+		web.Fail(c).Msg("请提供 targets 或 urls").Send()
+		return
+	}
+	if len(targets) > quickNucleiScanMaxTargets {
+		web.Fail(c).Msg(fmt.Sprintf("目标数量不能超过 %d", quickNucleiScanMaxTargets)).Send()
+		return
+	}
+
+	cfg := make(map[string]interface{})
+	for k, v := range req.Parameters {
+		cfg[k] = v
+	}
+	cfg["scan_request_id"] = qulid.GenerateID()
+
+	to := req.TimeoutSeconds
+	if to <= 0 {
+		to = 90
+	}
+	if to > 180 {
+		to = 180
+	}
+	if to < 10 {
+		to = 10
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), time.Duration(to)*time.Second)
+	defer cancel()
+
+	mod := nuclei.NewModule(h.svc.Session())
+	res, err := mod.Run(ctx, targets, cfg)
+	if err != nil {
+		web.Fail(c).Err(err).Send()
+		return
+	}
+
+	web.OK(c).Data(gin.H{
+		"findings":    res.Findings,
+		"duration_ms": res.Duration.Milliseconds(),
+	}).Send()
 }
 
 func (h *HandlerPoc) TestPoc(c *gin.Context) {

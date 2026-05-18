@@ -6,6 +6,9 @@ export interface ASMProject {
   description: string;
   schedule: string;
   enabled: boolean;
+  collector_config: Record<string, any> | null;
+  discovery_status: string;
+  last_discovery_at: string | null;
   created_at: string;
 }
 
@@ -74,8 +77,16 @@ export function runDiscovery(projectId: string) {
   return requestClient.post(`/asm/projects/${projectId}/discover`);
 }
 
-export function getDiscoveredAssets(projectId: string) {
-  return baseRequestClient.get<any>(`/asm/projects/${projectId}/assets`);
+export function getDiscoveredAssets(projectId: string, params?: Record<string, any>) {
+  return baseRequestClient.get<any>(`/asm/projects/${projectId}/assets`, { params });
+}
+
+export function getDiscoveryStatus(projectId: string) {
+  return requestClient.get<{ status: string; last_discovery_at: string | null }>(`/asm/projects/${projectId}/discovery-status`);
+}
+
+export function exportAssets(projectId: string) {
+  return `/api/asm/projects/${projectId}/assets/export`;
 }
 
 export function getChanges(projectId: string) {

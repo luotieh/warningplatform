@@ -12,6 +12,28 @@ import (
 
 const defaultMaxDedupEntries = 500000
 
+// hostLevelTypes 主机级别的发现类型，去重时不应包含端口号
+// 这些发现本质上是关于 IP/域名 而非具体服务的，同一 IP/域名 的不同端口应视为重复
+var hostLevelTypes = map[string]bool{
+	"ip_attribution":         true, // IP归属
+	"real_ip":                true, // 真实IP
+	"asn":                    true, // ASN
+	"organization":           true, // 组织
+	"domain":                 true, // 域名
+	"ip_range":               true, // IP段
+	"internal_ip_leak":       true, // 内网IP泄露
+	"dns_multi_ip":           true, // DNS多IP
+	"dns_cname":              true, // DNS CNAME
+	"dns_nameservers":        true, // DNS域名服务器
+	"cdn_detected":           true, // CDN检测
+	"load_balancer_detected": true, // 负载均衡检测
+	"reverse_dns":            true, // 反向DNS
+	"traceroute":             true, // 路由追踪
+	"network_gateway":        true, // 网络网关
+	"subdomain":              true, // 子域名
+	"waf":                    true, // WAF检测
+}
+
 type FindingDeduplicator struct {
 	mu         sync.RWMutex
 	seen       map[string]struct{}
@@ -69,8 +91,13 @@ func (d *FindingDeduplicator) Fingerprint(taskID string, f *core.Finding) string
 		parts = append(parts, taskID)
 	}
 
+	isHostLevel := hostLevelTypes[f.Type]
+
 	if f.Target != nil {
-		parts = append(parts, f.Target.Host, f.Target.IP, fmt.Sprintf("%d", f.Target.Port))
+		parts = append(parts, f.Target.Host, f.Target.IP)
+		if !isHostLevel {
+			parts = append(parts, fmt.Sprintf("%d", f.Target.Port))
+		}
 	}
 	parts = append(parts, f.ModuleID, f.Type, f.Title)
 

@@ -66,3 +66,20 @@ export interface VulnStatusHistory {
 export function getVulnStatusHistory(id: string) {
   return requestClient.get<VulnStatusHistory[]>(`/vuln/${id}/history`);
 }
+
+export interface VulnRetestResult {
+  task_id: string;
+  status: string;
+  vuln_id: string;
+  finding_id?: string;
+}
+
+/** 对漏洞库条目发起 PoC 回测 */
+export function retestVuln(id: string) {
+  return requestClient.post<VulnRetestResult>(`/vuln/${id}/retest`);
+}
+
+/** 从扫描发现项入库并回测 */
+export function retestFindingFromScan(findingId: string) {
+  return requestClient.post<VulnRetestResult>(`/vuln/findings/${findingId}/retest`);
+}

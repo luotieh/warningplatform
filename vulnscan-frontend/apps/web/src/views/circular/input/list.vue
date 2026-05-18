@@ -1,4 +1,4 @@
-﻿<script lang="ts" setup>
+<script lang="ts" setup>
 import { h, onMounted, ref, computed } from 'vue';
 import { NButton, NCard, NDataTable, NInput, NSelect, NSpace, NTag, NPopconfirm, useMessage } from 'naive-ui';
 import { useRouter } from 'vue-router';

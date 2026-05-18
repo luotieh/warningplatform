@@ -102,7 +102,7 @@ func (h *Handler) Register(c *gin.Context) {
 			Modules:     license.Modules,
 			Features:    license.Features,
 		},
-		CurrentVersions: h.versionManager.AllVersions(),
+		CurrentVersions: h.versionManager.AllVersionsFromDB(),
 	}).Send()
 }
 
@@ -138,7 +138,7 @@ func (h *Handler) Heartbeat(c *gin.Context) {
 
 	web.OK(c).Data(fedSync.HeartbeatResponse{
 		Status:          "ok",
-		CurrentVersions: h.versionManager.AllVersions(),
+		CurrentVersions: h.versionManager.AllVersionsFromDB(),
 	}).Send()
 }
 
@@ -202,7 +202,7 @@ func (h *Handler) handleSync(c *gin.Context, dataType string) {
 // SyncManifest returns current version numbers for all data types.
 func (h *Handler) SyncManifest(c *gin.Context) {
 	web.OK(c).Data(fedSync.ManifestResponse{
-		Versions:   h.versionManager.AllVersions(),
+		Versions:   h.versionManager.AllVersionsFromDB(),
 		ServerTime: time.Now(),
 	}).Send()
 }
@@ -309,7 +309,7 @@ func (h *Handler) GlobalStats(c *gin.Context) {
 	h.db.Model(&model.SubMaster{}).Count(&totalSubs)
 	h.db.Model(&model.SubMaster{}).Where("status = ?", model.SubMasterOnline).Count(&onlineSubs)
 
-	versions := h.versionManager.AllVersions()
+	versions := h.versionManager.AllVersionsFromDB()
 
 	web.OK(c).Data(gin.H{
 		"total_sub_masters":  totalSubs,

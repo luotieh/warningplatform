@@ -13,8 +13,7 @@ const routes: RouteRecordRaw[] = [
       {
         name: 'MonitorCenter',
         path: 'center',
-        component: () =>
-          import('#/views/site-monitor/monitor-center.vue'),
+        component: () => import('#/views/site-monitor/monitor-center.vue'),
         meta: { title: '监测中心', icon: 'ri:dashboard-line' },
       },
       {
@@ -36,8 +35,7 @@ const routes: RouteRecordRaw[] = [
       {
         name: 'MonitorExecutions',
         path: 'tasks/executions',
-        component: () =>
-          import('#/views/site-monitor/executions/index.vue'),
+        component: () => import('#/views/site-monitor/executions/index.vue'),
         meta: {
           title: '执行结果',
           activePath: '/monitor/tasks',
@@ -47,12 +45,20 @@ const routes: RouteRecordRaw[] = [
       {
         name: 'ExecutionDetail',
         path: 'tasks/executions/detail/:id',
-        component: () =>
-          import('#/views/site-monitor/executions/detail.vue'),
+        component: () => import('#/views/site-monitor/executions/detail.vue'),
         meta: {
           title: '结果详情',
           activePath: '/monitor/tasks',
           hideInMenu: true,
+        },
+      },
+      {
+        name: 'MonitorLedger',
+        path: 'ledger',
+        component: () => import('#/views/site-monitor/ledger/index.vue'),
+        meta: {
+          title: '监测台账',
+          icon: 'ri:book-2-line',
         },
       },
       {
@@ -67,12 +73,6 @@ const routes: RouteRecordRaw[] = [
         path: 'config',
         component: () => import('#/views/site-monitor/config/index.vue'),
         meta: { title: '监测配置', icon: 'ri:settings-4-line' },
-      },
-      {
-        name: 'MonitorComplianceBaselines',
-        path: 'baselines',
-        component: () => import('#/views/compliance/index.vue'),
-        meta: { title: '基线检查', icon: 'lucide:shield-check' },
       },
     ],
   },

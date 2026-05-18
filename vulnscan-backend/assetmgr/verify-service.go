@@ -22,11 +22,11 @@ func (s *serviceVerify) session() *gorm.DB {
 	return sess
 }
 
-func (s *serviceVerify) List(req ac.VerifyListReq) ([]model.AssetVerify, int64, error) {
+func (s *serviceVerify) List(req ac.VerifyListReq, scopes ...func(*gorm.DB) *gorm.DB) ([]model.AssetVerify, int64, error) {
 	var items []model.AssetVerify
 	var count int64
 
-	q := s.session().Model(&model.AssetVerify{})
+	q := s.session().Model(&model.AssetVerify{}).Scopes(scopes...)
 	if req.AssetID != "" {
 		q = q.Where("asset_id = ?", req.AssetID)
 	}

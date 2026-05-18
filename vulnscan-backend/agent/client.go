@@ -7,19 +7,22 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
 type Client struct {
 	baseURL    string
 	token      string
+	secret     string
 	httpClient *http.Client
 }
 
-func NewClient(baseURL, token string) *Client {
+func NewClient(baseURL, token, secret string) *Client {
 	return &Client{
 		baseURL: baseURL,
 		token:   token,
+		secret:  strings.TrimSpace(secret),
 		httpClient: &http.Client{
 			Timeout: 60 * time.Second,
 			Transport: &http.Transport{
@@ -46,6 +49,9 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body any) ([]b
 		return nil, err
 	}
 	req.Header.Set("X-Agent-Token", c.token)
+	if c.secret != "" {
+		req.Header.Set("X-Agent-Secret", c.secret)
+	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient.Do(req)

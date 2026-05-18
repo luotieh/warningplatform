@@ -1,13 +1,15 @@
 package ledger
 
 import (
-	"context"
 	"fmt"
+	"vulnscan-backend/circular/paging"
+	"vulnscan-backend/circular/scope"
 	"vulnscan-backend/model"
 
 	inputContract "vulnscan-backend/circular/input/input-contract"
 
 	"code.yt-security.com/public/core/v2/db"
+	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
@@ -24,18 +26,21 @@ func (s *serviceLedger) session() *gorm.DB {
 	return sess
 }
 
-func (s *serviceLedger) List(ctx context.Context, req inputContract.ListQuery) (int64, []inputContract.ListResp, error) {
+func (s *serviceLedger) List(c *gin.Context, req inputContract.ListQuery) (int64, []inputContract.ListResp, error) {
 	var items []inputContract.ListResp
+	org := scope.GetOrganize(c)
 
 	sess := s.session()
-	tx := sess.WithContext(ctx).Model(&model.Circular{}).Where("status = ?", model.CircularCompleted)
+	tx := sess.WithContext(c).Model(&model.Circular{}).
+		Where("status = ? AND (organize = ? OR code IN (SELECT circular_id FROM circular_organize_status WHERE organize = ?))",
+			model.CircularCompleted, org, org)
 
 	var count int64
 	if err := tx.Count(&count).Error; err != nil {
 		return 0, nil, err
 	}
 
-	page, size := normalizePage(req.Page, req.Size)
+	page, size := paging.Normalize(req.Page, req.Size)
 	if err := tx.Offset((page - 1) * size).Limit(size).Order("created_at DESC").Find(&items).Error; err != nil {
 		return 0, nil, err
 	}
@@ -43,14 +48,14 @@ func (s *serviceLedger) List(ctx context.Context, req inputContract.ListQuery) (
 	return count, items, nil
 }
 
-func (s *serviceLedger) Detail(ctx context.Context, id string) (*inputContract.InputDetailResp, error) {
+func (s *serviceLedger) Detail(c *gin.Context, id string) (*inputContract.InputDetailResp, error) {
 	if id == "" {
 		return nil, fmt.Errorf("id不能为空")
 	}
 
 	sess := s.session()
 	var circular model.Circular
-	if err := sess.WithContext(ctx).Where("id = ?", id).First(&circular).Error; err != nil {
+	if err := sess.WithContext(c).Where("id = ?", id).First(&circular).Error; err != nil {
 		return nil, fmt.Errorf("通报不存在")
 	}
 	if circular.Status != model.CircularCompleted {
@@ -59,20 +64,10 @@ func (s *serviceLedger) Detail(ctx context.Context, id string) (*inputContract.I
 
 	result := &inputContract.InputDetailResp{Circular: circular}
 
-	sess.WithContext(ctx).Where("circular_id = ?", circular.Code).Find(&result.OrganizeStatusList)
-	sess.WithContext(ctx).Where("circular_id = ?", circular.Code).Find(&result.Distributions)
-	sess.WithContext(ctx).Where("circular = ?", circular.Id).Find(&result.Disposals)
-	sess.WithContext(ctx).Where("circular_id = ?", circular.Code).Find(&result.Reviews)
+	sess.WithContext(c).Where("circular_id = ?", circular.Code).Find(&result.OrganizeStatusList)
+	sess.WithContext(c).Where("circular_id = ?", circular.Code).Find(&result.Distributions)
+	sess.WithContext(c).Where("circular = ?", circular.Id).Find(&result.Disposals)
+	sess.WithContext(c).Where("circular_id = ?", circular.Code).Find(&result.Reviews)
 
 	return result, nil
-}
-
-func normalizePage(page, size int) (int, int) {
-	if page <= 0 {
-		page = 1
-	}
-	if size <= 0 || size > 100 {
-		size = 20
-	}
-	return page, size
 }

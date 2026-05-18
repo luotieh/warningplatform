@@ -96,3 +96,20 @@ export function testPoc(yaml: string, targetUrl: string) {
     target_url: targetUrl,
   });
 }
+
+/** 与扫描任务相同的 Nuclei 引擎，不落库；parameters 需含 nuclei_template_dir 等或依赖库内已启用 PoC */
+export interface QuickNucleiScanParams {
+  targets?: string[];
+  urls?: string[];
+  parameters?: Record<string, any>;
+  timeout_seconds?: number;
+}
+
+export interface QuickNucleiScanResult {
+  findings: Record<string, any>[];
+  duration_ms: number;
+}
+
+export function quickNucleiScan(body: QuickNucleiScanParams) {
+  return requestClient.post<QuickNucleiScanResult>('/poc/quick-scan', body);
+}

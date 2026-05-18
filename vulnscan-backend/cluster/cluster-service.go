@@ -8,6 +8,7 @@ import (
 	"time"
 
 	clusterContract "vulnscan-backend/cluster/cluster-contract"
+	fedSync "vulnscan-backend/federation/sync"
 	"vulnscan-backend/model"
 
 	"code.yt-security.com/public/core/v2/db"
@@ -192,7 +193,7 @@ func (s *serviceCluster) PollTask(ctx context.Context, workerID string, slots in
 
 	var candidates []model.ScanTask
 	if err := s.session().WithContext(ctx).
-		Where("status = ? AND (worker_id = '' OR worker_id IS NULL)", model.TaskStatusQueued).
+		Where("status = ? AND (worker_id = ? OR worker_id = '' OR worker_id IS NULL)", model.TaskStatusQueued, workerID).
 		Order("priority DESC, created_at ASC").
 		Limit(slots * 2).
 		Find(&candidates).Error; err != nil {
@@ -424,6 +425,18 @@ func (s *serviceCluster) CheckStaleWorkers(ctx context.Context, timeout time.Dur
 
 	slog.Warn("[Cluster] 检测到失联Worker", "count", len(staleWorkers), "ids", ids)
 	return staleWorkers, nil
+}
+
+func (s *serviceCluster) KnowledgeManifest(ctx context.Context) (*clusterContract.KnowledgeManifestDTO, error) {
+	sess := s.session()
+	if ctx != nil {
+		sess = sess.WithContext(ctx)
+	}
+	vm := fedSync.NewVersionManager(sess)
+	return &clusterContract.KnowledgeManifestDTO{
+		Versions:   vm.AllVersionsFromDB(),
+		ServerTime: time.Now(),
+	}, nil
 }
 
 func (s *serviceCluster) recoverTasksFromWorkers(ctx context.Context, workerIDs []string) {

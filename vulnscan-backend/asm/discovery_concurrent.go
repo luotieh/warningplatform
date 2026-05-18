@@ -100,7 +100,7 @@ func (e *ConcurrentDiscoveryEngine) Discover(ctx context.Context, project *ASMPr
 }
 
 func streamDedupAndScore(ctx context.Context, input <-chan DiscoveredAsset, errCh <-chan error) ([]DiscoveredAsset, error) {
-	seen := make(map[string]bool)
+	seen := make(map[string]int) // key → index in results
 	var results []DiscoveredAsset
 	scorer := NewRiskScorer()
 
@@ -127,8 +127,19 @@ func streamDedupAndScore(ctx context.Context, input <-chan DiscoveredAsset, errC
 			}
 
 			key := normalizeAssetKey(asset)
-			if !seen[key] {
-				seen[key] = true
+			if idx, exists := seen[key]; exists {
+				for k, v := range asset.Attributes {
+					if results[idx].Attributes == nil {
+						results[idx].Attributes = make(map[string]string)
+					}
+					results[idx].Attributes[k] = v
+				}
+				if asset.Source != results[idx].Source {
+					results[idx].Source += "," + asset.Source
+				}
+				results[idx].RiskScore = scorer.Calculate(results[idx])
+			} else {
+				seen[key] = len(results)
 				asset.FirstSeen = time.Now()
 				asset.LastSeen = time.Now()
 				asset.Status = "active"

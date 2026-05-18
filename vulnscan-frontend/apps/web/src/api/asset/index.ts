@@ -4,9 +4,7 @@ import { baseRequestClient, requestClient } from '#/api/request';
 export interface Asset {
   id: string;
   name: string;
-  type: string;
   asset_family?: string;
-  asset_subtype?: string;
   address: string;
   region_code?: string;
   region_name?: string;
@@ -21,13 +19,11 @@ export interface Asset {
   domain?: string;
   ipv4?: string;
   ipv6?: string;
-  url?: string;
   protocol?: string;
   service?: string;
   version?: string;
   os?: string;
   data_number?: string;
-  system_type?: string;
   is_online?: boolean;
   is_key?: boolean;
   security_protection_level?: string;
@@ -102,7 +98,7 @@ export interface AssetEnrichDetail {
   vulns: { id: string; title: string; severity: string; status: string; target: string; created_at: string }[];
   asset_vulns: { id: string; title: string; severity: string; status: string; target: string; created_at: string }[];
   scan_history: { id: string; name: string; status: string; created_at: string; finished_at?: string }[];
-  services: { service_name: string; version: string; port: string; count: number }[];
+  services: { service_name: string; version: string; port: string; protocol?: string; count: number }[];
   monitor_tasks: { id: string; task_name: string; target_homepage: string; enabled: boolean; next_run_at?: string }[];
   summary: { port_count: number; vuln_count: number; scan_count: number; risk_score: number; last_scan?: string };
 }
@@ -138,6 +134,10 @@ export function batchAssignGroup(assetIds: string[], groupId: string) {
   return requestClient.post('/asset/batch-assign', { asset_ids: assetIds, group_id: groupId });
 }
 
+export function batchUpdateAssets(ids: string[], updates: Record<string, any>) {
+  return requestClient.post('/asset/batch-update', { ids, updates });
+}
+
 export function importAssets(file: File) {
   const formData = new FormData();
   formData.append('file', file);
@@ -146,8 +146,34 @@ export function importAssets(file: File) {
   });
 }
 
-export function getImportTemplateUrl() {
-  return '/api/asset/import/template';
+function blobFromAxiosResponse(res: { data?: unknown }): Blob {
+  const raw = res?.data;
+  if (raw instanceof Blob) {
+    return raw;
+  }
+  if (typeof raw === 'string' || raw instanceof ArrayBuffer) {
+    return new Blob([raw]);
+  }
+  throw new Error('文件下载响应格式异常');
+}
+
+/** 下载资产导入模板（需携带鉴权头，勿用直链） */
+export async function downloadImportTemplate(): Promise<Blob> {
+  const res = await baseRequestClient.get('/asset/import/template', {
+    responseType: 'blob',
+  });
+  return blobFromAxiosResponse(res);
+}
+
+export async function exportAssets(
+  params?: Record<string, any>,
+  format: 'csv' | 'xlsx' = 'xlsx',
+): Promise<Blob> {
+  const res = await baseRequestClient.get('/asset/export', {
+    params: { ...params, format },
+    responseType: 'blob',
+  });
+  return blobFromAxiosResponse(res);
 }
 
 export interface RiskTrendItem {
@@ -175,12 +201,24 @@ export function getRiskRanking(params?: Record<string, any>) {
   return requestClient.get<RiskRankingItem[]>('/asset/risk-ranking', { params });
 }
 
+export interface AssetEnrichRunResult {
+  asset_id?: string;
+  task_id: string;
+  status: string;
+  template: string;
+  split_mode?: boolean;
+  sub_count?: number;
+  target_count?: number;
+  skipped?: number;
+  engine_enrich?: boolean;
+}
+
 export function enrichAsset(assetId: string) {
-  return requestClient.post(`/asset/${assetId}/enrich-run`);
+  return requestClient.post<AssetEnrichRunResult>(`/asset/${assetId}/enrich-run`);
 }
 
 export function batchEnrichAssets(assetIds: string[]) {
-  return requestClient.post('/asset/batch-enrich', { asset_ids: assetIds });
+  return requestClient.post<AssetEnrichRunResult>('/asset/batch-enrich', { ids: assetIds });
 }
 
 export function recalcAssetRisk(assetId: string) {

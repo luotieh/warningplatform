@@ -13,38 +13,6 @@ import (
 	"vulnscan-backend/scan/core"
 )
 
-var reconFindingTypes = map[string]struct{}{
-	"host_alive":       {},
-	"port_open":        {},
-	"udp_port":         {},
-	"service":          {},
-	"web_page":         {},
-	"web_info":         {},
-	"dns_record":       {},
-	"subdomain":        {},
-	"cert_info":        {},
-	"favicon":          {},
-	"tech":             {},
-	"api":              {},
-	"waf":              {},
-	"js_info":          {},
-	"crawler":          {},
-	"url":              {},
-	"form":             {},
-	"xhr":              {},
-	"cdn_detected":     {},
-	"zone_transfer":    {},
-	"internal_ip_leak": {},
-	"fingerprint":      {},
-	"real_ip":          {},
-	"email":            {},
-}
-
-func isReconFinding(f *core.Finding) bool {
-	_, ok := reconFindingTypes[f.Type]
-	return ok
-}
-
 func (r *Runner) persistFindings() {
 	findings := r.progress.GetFindings()
 
@@ -52,22 +20,46 @@ func (r *Runner) persistFindings() {
 		return
 	}
 
+	if r.findingFilter != nil {
+		before := len(findings)
+		findings = r.findingFilter.FilterFindings(findings)
+		if filtered := before - len(findings); filtered > 0 {
+			slog.Info("[Persist] 过滤规则命中",
+				"task_id", r.task.ID,
+				"filtered", filtered,
+				"remaining", len(findings),
+			)
+		}
+		if len(findings) == 0 {
+			return
+		}
+	}
+
 	assetCache := r.buildAssetCache()
 
-	seen := make(map[string]struct{})
 	var records []model.ScanFinding
 	reconCount, vulnCount := 0, 0
 
+	r.persistMu.Lock()
 	for _, f := range findings {
-		dedupKey := computeDedupKey(r.task.ID, f)
-		if _, ok := seen[dedupKey]; ok {
+		if r.enginePolicy.MaxFindingsPersisted > 0 && int(r.persistedFindingCount.Load()) >= r.enginePolicy.MaxFindingsPersisted {
+			slog.Info("[Persist] 已达 engine.max_findings 上限，停止批量持久化",
+				"task_id", r.task.ID, "limit", r.enginePolicy.MaxFindingsPersisted)
+			break
+		}
+		if !r.enginePolicy.AllowPersistFinding(f) {
 			continue
 		}
-		seen[dedupKey] = struct{}{}
+		dedupKey := computeDedupKey(r.task.ID, f, r.enginePolicy.StrictDedup)
+		if _, ok := r.persistedKeys[dedupKey]; ok {
+			continue
+		}
+		r.persistedKeys[dedupKey] = struct{}{}
 
 		rec := findingToRecord(r.task, f)
 		rec.AssetID = r.resolveAssetID(assetCache, rec.Target, rec.Port)
 		records = append(records, rec)
+		r.persistedFindingCount.Add(1)
 
 		if rec.Category == model.FindingCategoryRecon {
 			reconCount++
@@ -75,6 +67,7 @@ func (r *Runner) persistFindings() {
 			vulnCount++
 		}
 	}
+	r.persistMu.Unlock()
 
 	if len(records) == 0 {
 		return
@@ -148,10 +141,7 @@ func findingToRecord(task model.ScanTask, f *core.Finding) model.ScanFinding {
 		severity = "info"
 	}
 
-	category := model.FindingCategoryVuln
-	if isReconFinding(f) {
-		category = model.FindingCategoryRecon
-	}
+	category := model.InferFindingCategory(f.ModuleID, f.Type)
 
 	data := model.JSONMap{}
 	for k, v := range f.Data {
@@ -197,16 +187,24 @@ func extractHostFromURL(rawURL string) string {
 	return rawURL
 }
 
-func computeDedupKey(taskID string, f *core.Finding) string {
+func computeDedupKey(taskID string, f *core.Finding, strict bool) string {
+	if f == nil {
+		return ""
+	}
 	target := ""
 	port := 0
 	protocol := ""
+	typeStr := f.Type
+	sev := f.Severity
 	if f.Target != nil {
 		target = f.Target.Host + f.Target.IP + f.Target.URL
 		port = f.Target.Port
 		protocol = f.Target.Protocol
 	}
 	raw := fmt.Sprintf("%s|%s|%d|%s|%s|%s", taskID, target, port, protocol, f.ModuleID, f.Title)
+	if strict {
+		raw += fmt.Sprintf("|%s|%s", typeStr, sev)
+	}
 	hash := sha256.Sum256([]byte(raw))
 	return fmt.Sprintf("%x", hash[:16])
 }

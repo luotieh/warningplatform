@@ -35,6 +35,8 @@ func NewAnalysisEngine(fetcher RuleFetcher) *AnalysisEngine {
 	reg.Register(analyzer.NewBlacklinkAnalyzer(rs))
 	reg.Register(analyzer.NewAvailabilityAnalyzer(rs))
 	reg.Register(analyzer.NewDomainHijackAnalyzer(rs))
+	reg.Register(analyzer.NewTamperAnalyzer(rs))
+	reg.Register(analyzer.NewSensitiveFileAnalyzer(rs))
 
 	return &AnalysisEngine{
 		ruleFetcher: fetcher,
@@ -50,6 +52,8 @@ func NewAnalysisEngineFromDB(db *gorm.DB) *AnalysisEngine {
 	reg.Register(analyzer.NewBlacklinkAnalyzer(rs))
 	reg.Register(analyzer.NewAvailabilityAnalyzer(rs))
 	reg.Register(analyzer.NewDomainHijackAnalyzer(rs))
+	reg.Register(analyzer.NewTamperAnalyzer(rs))
+	reg.Register(analyzer.NewSensitiveFileAnalyzer(rs))
 
 	return &AnalysisEngine{
 		gormDB:   db,
@@ -139,6 +143,29 @@ func (e *AnalysisEngine) refreshRulesFromDB() {
 		newData[key] = raw
 	}
 
+	var fileLibs []model.MonitorFileLibrary
+	e.gormDB.Find(&fileLibs)
+	for _, lib := range fileLibs {
+		var entries []model.MonitorFileEntry
+		e.gormDB.Where("library_id = ?", lib.ID).Find(&entries)
+		type entryOut struct {
+			Path string `json:"path"`
+			Mark string `json:"mark"`
+			Risk string `json:"risk"`
+		}
+		eo := make([]entryOut, 0, len(entries))
+		for _, ent := range entries {
+			eo = append(eo, entryOut{Path: ent.Path, Mark: ent.Mark, Risk: ent.Risk})
+		}
+		key := fmt.Sprintf("lib/file/%s", lib.ID)
+		raw, _ := json.Marshal(map[string]any{
+			"id":      lib.ID,
+			"name":    lib.Name,
+			"entries": eo,
+		})
+		newData[key] = raw
+	}
+
 	e.rules.replace(newData)
 	slog.Info("rules refreshed from DB", "count", len(newData))
 }
@@ -154,6 +181,19 @@ func (e *AnalysisEngine) Analyze(ctx context.Context, dimension, snapshotJSON, u
 		TaskID:       task.TaskID,
 		URL:          url,
 		SnapshotJSON: snapshotJSON,
+		Config:       task.Config,
+	}
+	if task.Baseline != nil {
+		input.Baseline = &model.MonitorBaseline{
+			Version:           task.Baseline.Version,
+			Simhash:           task.Baseline.Simhash,
+			ContentHash:       task.Baseline.ContentHash,
+			DomStructureHash:  task.Baseline.DomStructureHash,
+			VisualHash:        task.Baseline.VisualHash,
+			Title:             task.Baseline.Title,
+			StatusCode:        task.Baseline.StatusCode,
+			VisibleTextLength: task.Baseline.VisibleTextLength,
+		}
 	}
 
 	output, err := a.Analyze(ctx, input)
@@ -247,6 +287,28 @@ func (e *AnalysisEngine) formatResult(dimension string, output *analyzer.Output,
 			}
 		}
 		raw, _ := json.Marshal(result)
+		return string(raw)
+
+	case "tamper":
+		tr := model.MonitorTamperResult{
+			Tampered:       output.HasIssue,
+			Severity:       output.Severity,
+			BaselineUpdate: output.BaselineUpdate,
+		}
+		if output.DetailsJSON != "" {
+			var details map[string]any
+			if err := json.Unmarshal([]byte(output.DetailsJSON), &details); err == nil {
+				tr.Diff = details
+			}
+		}
+		raw, _ := json.Marshal(tr)
+		return string(raw)
+
+	case "sensitive_file":
+		if output.DetailsJSON != "" {
+			return output.DetailsJSON
+		}
+		raw, _ := json.Marshal(map[string]any{"has_hit": output.HasIssue})
 		return string(raw)
 
 	default:

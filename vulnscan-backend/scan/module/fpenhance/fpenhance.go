@@ -38,7 +38,7 @@ func New() *FPEnhanceScanner {
 
 func (m *FPEnhanceScanner) ID() string       { return "fpenhance" }
 func (m *FPEnhanceScanner) Name() string     { return "增强指纹探测" }
-func (m *FPEnhanceScanner) Category() string { return "recon-deep" }
+func (m *FPEnhanceScanner) Category() string { return "recon" }
 
 func (m *FPEnhanceScanner) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {
 	start := time.Now()

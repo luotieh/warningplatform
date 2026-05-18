@@ -27,11 +27,48 @@ func (m *DNSEnumerator) Run(ctx context.Context, targets []*core.Target, config 
 	var mu sync.Mutex
 
 	for _, t := range targets {
-		domain := t.Host
-		if domain == "" || net.ParseIP(domain) != nil {
+		host := strings.TrimSpace(t.Host)
+		if host == "" {
+			host = strings.TrimSpace(t.IP)
+		}
+		if host == "" {
 			continue
 		}
 
+		if ip := net.ParseIP(host); ip != nil {
+			ptrs, err := net.DefaultResolver.LookupAddr(ctx, host)
+			if err != nil || len(ptrs) == 0 {
+				continue
+			}
+			mu.Lock()
+			for _, name := range ptrs {
+				val := strings.TrimSuffix(strings.TrimSpace(name), ".")
+				if val == "" {
+					continue
+				}
+				result.Findings = append(result.Findings, &core.Finding{
+					ModuleID:         m.ID(),
+					Target:           t,
+					Type:             "dns_record",
+					Title:            fmt.Sprintf("[PTR] %s → %s", host, truncate(val, 80)),
+					Severity:         "info",
+					Confidence:       95,
+					ConfidenceReason: "反向 DNS (PTR) 解析",
+					Timestamp:        time.Now(),
+					Data: map[string]string{
+						"record_type": "PTR",
+						"name":        host,
+						"value":       val,
+						"domain":      host,
+						"ip":          host,
+					},
+				})
+			}
+			mu.Unlock()
+			continue
+		}
+
+		domain := host
 		records := m.enumerateAll(ctx, domain)
 
 		mu.Lock()

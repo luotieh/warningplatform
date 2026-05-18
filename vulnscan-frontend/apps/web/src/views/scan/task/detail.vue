@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { onMounted, onUnmounted, ref, computed, h } from 'vue';
+import { onMounted, onUnmounted, ref, computed, h, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import {
@@ -11,6 +11,8 @@ import {
   NDrawer,
   NDrawerContent,
   NInput,
+  NModal,
+  NPagination,
   NProgress,
   NSelect,
   NSpin,
@@ -28,6 +30,7 @@ import {
   getTaskAssets,
   cancelTask,
   deleteTask,
+  rerunTask,
   pauseTask,
   resumeTask,
   exportTaskReport,
@@ -41,6 +44,7 @@ import {
 } from '#/api/task';
 
 import { createIncident, type CreateIncidentReq } from '#/api/incident';
+import { retestFindingFromScan } from '#/api/vuln';
 import { taskStatusLabels, taskStatusTypes } from '#/constants/status';
 import TopologyGraph from '../components/topology-graph.vue';
 
@@ -62,10 +66,13 @@ const activeSubTab = ref('overview');
 const filterSeverity = ref<string | null>(null);
 const filterModule = ref<string | null>(null);
 const filterKeyword = ref('');
+const endpointSearch = ref('');
+const tabBarRef = ref<HTMLElement | null>(null);
 const summary = ref<FindingSummary | null>(null);
 
 const showDetail = ref(false);
 const detailItem = ref<ScanFinding | null>(null);
+const showAllModules = ref(false);
 
 const assets = ref<AssetSummary[]>([]);
 const assetsLoading = ref(false);
@@ -82,9 +89,14 @@ interface EndpointNode {
 
 const selectedEndpoint = ref('');
 
-const hostOnlyTabs = new Set(['subdomain', 'dns_record', 'cert_info', 'port_open', 'service', 'infra', 'nettopo', 'info_collect', 'all']);
+const hostOnlyTabs = new Set(['subdomain', 'dns_record', 'cert_info', 'port_open', 'infra', 'nettopo', 'info_collect', 'all']);
+
+const cachedEndpointList = ref<EndpointNode[]>([]);
 
 const endpointList = computed<EndpointNode[]>(() => {
+  if (selectedEndpoint.value && cachedEndpointList.value.length > 0) {
+    return cachedEndpointList.value;
+  }
   const ignorePort = hostOnlyTabs.has(activeSubTab.value);
   const map = new Map<string, EndpointNode>();
   for (const f of mergedFindings.value) {
@@ -98,22 +110,12 @@ const endpointList = computed<EndpointNode[]>(() => {
       map.set(key, { key, host, port, label: key, count: 1 });
     }
   }
-  return Array.from(map.values()).sort((a, b) => {
+  const list = Array.from(map.values()).sort((a, b) => {
     if (a.host !== b.host) return a.host.localeCompare(b.host);
     return a.port - b.port;
   });
-});
-
-const filteredByEndpoint = computed(() => {
-  if (!selectedEndpoint.value) return mergedFindings.value;
-  const ep = selectedEndpoint.value;
-  const ignorePort = hostOnlyTabs.has(activeSubTab.value);
-  return mergedFindings.value.filter((f) => {
-    const host = cleanTarget(f.target);
-    const port = ignorePort ? 0 : (f.port || 0);
-    const key = port > 0 ? `${host}:${port}` : host;
-    return key === ep;
-  });
+  if (list.length > 0) cachedEndpointList.value = list;
+  return list.length > 0 ? list : cachedEndpointList.value;
 });
 
 interface LogEntry {
@@ -169,6 +171,12 @@ const dataKeyLabels: Record<string, string> = {
   enctype: '编码类型',
   email: '邮箱',
   source: '来源',
+  confidence_basis: '置信度依据',
+  matched_seed: '命中种子域',
+  matched_seed_root: '命中根域',
+  matched_company: '命中公司名',
+  query_company: '查询企业名称',
+  matched_host: '搜索结果主机',
   tag: '标签',
   attribute: '属性',
   technologies: '技术栈',
@@ -188,6 +196,23 @@ const dataKeyLabels: Record<string, string> = {
   screenshot: '页面截图',
 };
 
+const retestingFindingId = ref<string | null>(null);
+
+async function handleRetestFinding(row: ScanFinding) {
+  retestingFindingId.value = row.id;
+  try {
+    const res = await retestFindingFromScan(row.id);
+    message.success(res?.task_id ? `回测任务已提交（${res.task_id}）` : '回测任务已提交');
+    if (res?.task_id) {
+      router.push(`/scan/task/${res.task_id}`);
+    }
+  } catch (e: any) {
+    message.error(e?.message || '回测失败');
+  } finally {
+    retestingFindingId.value = null;
+  }
+}
+
 function openDetail(row: ScanFinding) {
   detailItem.value = row;
   showDetail.value = true;
@@ -202,52 +227,94 @@ function openScreenshot(b64: string) {
 }
 
 const convertingToIncident = ref(false);
+const markingFP = ref(false);
+
+async function handleMarkFP(finding: ScanFinding) {
+  const reason = window.prompt('请输入标记误报的原因（可选）：');
+  if (reason === null) return;
+
+  markingFP.value = true;
+  try {
+    const { markAsFP } = await import('#/api/fp-rule');
+    await markAsFP({ finding_id: finding.id, match_type: 'fingerprint', reason: reason || '' });
+    message.success('已标记为误报，后续扫描将自动过滤');
+  } catch (e: any) {
+    message.error(e?.message || '标记失败');
+  } finally {
+    markingFP.value = false;
+  }
+}
 
 async function convertFindingToIncident(finding: ScanFinding) {
   const severityToLevel: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1, info: 1 };
   const moduleToType: Record<string, string> = {
-    sqli: 'SQL注入', xss: 'XSS漏洞', cmdi: '命令注入', lfi: '文件包含',
-    ssrf: 'SSRF', ssti: '模板注入', xxe: 'XXE注入', nosqli: 'NoSQL注入',
-    rce: '远程代码执行', jwt_sec: 'JWT安全', poc: '已知漏洞',
+    sqli: 'SQL注入', sql: 'SQL注入',
+    xss: 'XSS漏洞',
+    cmdi: '命令注入', rce: '远程代码执行', command: '远程代码执行',
+    lfi: '文件包含', ssti: '模板注入', xxe: 'XXE注入',
+    ssrf: 'SSRF服务端请求伪造',
+    nosqli: 'NoSQL注入',
+    jwt_sec: 'JWT安全缺陷', jwt: 'JWT安全缺陷',
+    weak_pass: '弱口令', brute: '爆破',
+    cert_check: '证书安全', cert: '证书安全',
+    info_leak: '信息泄露', dir_scan: '信息泄露',
+    poc: '已知漏洞利用',
   };
+
+  function classifyIncidentType(moduleId: string): string {
+    if (!moduleId) return moduleToType[finding.type] || '漏洞';
+    for (const [key, label] of Object.entries(moduleToType)) {
+      if (moduleId.includes(key)) return label;
+    }
+    return moduleToType[finding.type] || '漏洞';
+  }
 
   const d = finding.data || {};
   const target = cleanTarget(finding.target);
   const ip = d.ip || d.site_ip || '';
   const url = d.url || d.matched_at || (finding.port > 0 ? `${target}:${finding.port}` : target);
 
-  // 构建完整的描述信息
   const descParts: string[] = [];
   if (finding.description) descParts.push(finding.description);
   if (finding.evidence) descParts.push(`证据: ${finding.evidence}`);
   if (d.service) descParts.push(`服务: ${d.service}${d.version ? ' ' + d.version : ''}`);
   if (finding.port > 0) descParts.push(`端口: ${finding.port}/${finding.protocol || 'tcp'}`);
   if (d.banner) descParts.push(`Banner: ${String(d.banner).slice(0, 200)}`);
-  if ((finding as any).verification_level) descParts.push(`验证级别: ${(finding as any).verification_level === 'exploit' ? '实际利用' : '原理验证'}`);
-  if ((finding as any).verification_detail) descParts.push(`验证方式: ${(finding as any).verification_detail}`);
+  if (finding.verification_level) descParts.push(`验证级别: ${finding.verification_level === 'exploit' ? '实际利用' : '原理验证'}`);
+  if (finding.verification_detail) descParts.push(`验证方式: ${finding.verification_detail}`);
   if (finding.confidence) descParts.push(`置信度: ${finding.confidence}%`);
   if (finding.module_id) descParts.push(`检测模块: ${moduleLabels[finding.module_id] ?? finding.module_id}`);
 
+  let cvssScore: number | undefined;
+  if (d.cvss_score != null) {
+    const n = Number(d.cvss_score);
+    if (!isNaN(n)) cvssScore = n;
+  }
+
+  let exploitDiff = '未知';
+  if (finding.verification_level === 'exploit') exploitDiff = '低';
+  else if (finding.verification_level === 'principle') exploitDiff = '中';
+
   const req: CreateIncidentReq = {
-    name: finding.title || `${moduleToType[finding.module_id] || finding.type} - ${target}`,
+    name: finding.title || `${classifyIncidentType(finding.module_id)} - ${target}`,
     level: severityToLevel[finding.severity] ?? 2,
     source: 2,
     report_time: finding.created_at || undefined,
     asset: {
       domain_ip: target,
       site_ip: ip,
-      asset_name: d.host || target,
-      system_name: d.title || d.server || '',
+      asset_name: target,
+      system_name: d.hostname || d.server || target,
     },
     metadata: {
-      incident_type: moduleToType[finding.module_id] ? 'web_attack' : 'other',
+      incident_type: classifyIncidentType(finding.module_id),
       incident_description: descParts.join('\n'),
       incident_url: url,
       discovery_time: finding.created_at || undefined,
       cve_id: d.cve_id || d.cve || '',
-      cvss_score: d.cvss_score ? Number(d.cvss_score) : undefined,
+      cvss_score: cvssScore,
       owasp_category: d.owasp_category || d.owasp || '',
-      exploit_difficulty: (finding as any).verification_level === 'exploit' ? '低' : '中',
+      exploit_difficulty: exploitDiff,
       affect_scope: d.affect_scope || (finding.port > 0 ? `${target}:${finding.port}` : target),
     },
   };
@@ -494,23 +561,23 @@ const severityConfig: Record<string, { color: string; label: string }> = {
 };
 
 const subTabDefs = [
-  { key: 'overview', label: '任务概览', isOverview: true },
-  { key: 'all', label: '全部' },
-  { key: 'host_alive', label: '资产' },
-  { key: 'port_open', label: '端口', mergeTypes: ['port_open', 'udp_port'] },
-  { key: 'service', label: '服务' },
-  { key: 'subdomain', label: '子域名' },
-  { key: 'dns_record', label: 'DNS', mergeTypes: ['dns_record', 'dns_cname', 'dns_multi_ip', 'dns_nameservers', 'reverse_dns', 'zone_transfer'] },
-  { key: 'web_page', label: '网站/URL', mergeTypes: ['web_page', 'web_info', 'url', 'script', 'crawler'] },
-  { key: 'form', label: '表单' },
-  { key: 'tech', label: '指纹', mergeTypes: ['tech', 'tech_stack', 'fingerprint', 'favicon', 'favicon_hash', 'header_fingerprint', 'js_fingerprint'] },
-  { key: 'cert_info', label: '证书/TLS', mergeTypes: ['cert_info', 'cert_expired', 'cert_expiring_soon', 'self_signed_cert', 'weak_tls', 'tls_fingerprint', 'tls_cert_expired', 'tls_weak_version', 'weak_cipher', 'weak_signature', 'weak_key'] },
-  { key: 'waf', label: 'WAF', mergeTypes: ['waf', 'waf_detected'] },
-  { key: 'nettopo', label: '网络拓扑', mergeTypes: ['traceroute', 'network_gateway', 'dns_multi_ip', 'dns_cname', 'dns_nameservers', 'reverse_dns', 'cdn_detected', 'load_balancer_detected'] },
-  { key: 'infra', label: '基础设施', mergeTypes: ['ip_attribution', 'real_ip', 'asn', 'organization', 'domain', 'ip_range', 'internal_ip_leak'] },
-  { key: 'api_disc', label: 'API', mergeTypes: ['api_endpoint', 'api_endpoint_exposed', 'api_unauth_access', 'api_no_rate_limit', 'api_info_leak_header', 'api_cors_wildcard', 'api_verbose_error', 'api_idor', 'api_graphql_introspection', 'api_graphql_types'] },
-  { key: 'info_collect', label: '信息收集', mergeTypes: ['email', 'directory', 'dir_found', 'code_leak', 'cyber_asset', 'missing_security_headers', 'info_leak', 'body_regex', 'body_contains', 'header', 'git_leak', 'nuclei'] },
-  { key: 'vuln', label: '漏洞' },
+  { key: 'overview', label: '任务概览', isOverview: true, group: 'summary' },
+  { key: 'all', label: '全部', group: 'summary' },
+  { key: 'vuln', label: '漏洞', group: 'summary' },
+  { key: 'host_alive', label: '资产', group: 'findings' },
+  { key: 'port_open', label: '端口/服务', mergeTypes: ['port_open', 'udp_port', 'service'], group: 'findings' },
+  { key: 'subdomain', label: '子域名', group: 'findings' },
+  { key: 'dns_record', label: 'DNS', mergeTypes: ['dns_record', 'dns_cname', 'dns_multi_ip', 'dns_nameservers', 'reverse_dns', 'zone_transfer'], group: 'findings' },
+  { key: 'web_page', label: '网站/URL', mergeTypes: ['web_page', 'web_info', 'url', 'script', 'screenshot'], group: 'findings' },
+  { key: 'crawler', label: '爬虫', mergeTypes: ['crawler', 'xhr'], group: 'findings' },
+  { key: 'tech', label: '指纹', mergeTypes: ['tech', 'tech_stack', 'fingerprint', 'favicon', 'favicon_hash', 'header_fingerprint', 'js_fingerprint'], group: 'findings' },
+  { key: 'cert_info', label: '证书/TLS', mergeTypes: ['cert_info', 'cert_expired', 'cert_expiring_soon', 'self_signed_cert', 'weak_tls', 'tls_fingerprint', 'tls_cert_expired', 'tls_weak_version', 'weak_cipher', 'weak_signature', 'weak_key'], group: 'findings' },
+  { key: 'waf', label: 'WAF', mergeTypes: ['waf', 'waf_detected'], group: 'findings' },
+  { key: 'infra', label: '基础设施', mergeTypes: ['ip_attribution', 'real_ip', 'asn', 'organization', 'domain', 'ip_range', 'internal_ip_leak'], group: 'findings' },
+  { key: 'nettopo', label: '网络拓扑', mergeTypes: ['traceroute', 'network_gateway', 'dns_multi_ip', 'dns_cname', 'dns_nameservers', 'reverse_dns', 'cdn_detected', 'load_balancer_detected'], group: 'findings' },
+  { key: 'form', label: '表单', group: 'findings' },
+  { key: 'api_disc', label: 'API', mergeTypes: ['api_endpoint', 'api_endpoint_exposed', 'api_unauth_access', 'api_no_rate_limit', 'api_info_leak_header', 'api_cors_wildcard', 'api_verbose_error', 'api_idor', 'api_graphql_introspection', 'api_graphql_types'], group: 'findings' },
+  { key: 'info_collect', label: '信息收集', mergeTypes: ['email', 'directory', 'dir_found', 'code_leak', 'cyber_asset', 'missing_security_headers', 'info_leak', 'body_regex', 'body_contains', 'header', 'git_leak', 'nuclei'], group: 'findings' },
 ];
 
 function formatTime(raw?: string) {
@@ -538,30 +605,26 @@ const isActive = computed(
   () => task.value?.status === 'running' || task.value?.status === 'queued',
 );
 
+const canRerun = computed(() => {
+  const s = task.value?.status;
+  return (
+    !!s &&
+    !isActive.value &&
+    s !== 'splitting' &&
+    s !== 'pending'
+  );
+});
+
 const subTabsWithCount = computed(() => {
   if (!summary.value?.by_type) return subTabDefs.map((t) => ({ ...t, count: 0 }));
 
-  const vulnTypes = new Set([
-    'sqli', 'sqli_error', 'sqli_boolean', 'sqli_time', 'sqli_union',
-    'xss', 'xss_reflected', 'xss_dom',
-    'ssrf', 'ssrf_potential',
-    'cmdi_time', 'cmdi_output', 'lfi',
-    'ssti', 'ssti_error', 'ssti_exploit',
-    'xxe_error', 'xxe_entity', 'xxe_file_read', 'xxe_ssrf',
-    'nosqli_error', 'nosqli_boolean', 'nosqli_operator', 'nosqli_auth_bypass',
-    'jwt_alg_none', 'jwt_no_expiry', 'jwt_long_expiry', 'jwt_weak_secret', 'jwt_alg_none_bypass', 'jwt_empty_sig',
-    'weak_pass', 'weak_password',
-  ]);
-
-  return subTabDefs.map((t) => {
+  const withCount = subTabDefs.map((t) => {
     if ('isOverview' in t && t.isOverview) return { ...t, count: -1 };
     let count = 0;
     if (t.key === 'all') {
       count = summary.value!.total_findings;
     } else if (t.key === 'vuln') {
-      for (const [k, v] of Object.entries(summary.value!.by_type)) {
-        if (vulnTypes.has(k)) count += v;
-      }
+      count = summary.value!.by_category?.['vuln'] ?? 0;
     } else if ('mergeTypes' in t && t.mergeTypes) {
       for (const mt of t.mergeTypes) {
         count += summary.value!.by_type[mt] ?? 0;
@@ -571,6 +634,8 @@ const subTabsWithCount = computed(() => {
     }
     return { ...t, count };
   });
+
+  return withCount.filter((t) => t.count !== 0 || t.key === 'overview' || t.key === 'all' || t.key === 'vuln');
 });
 
 const severityOptions = [
@@ -675,6 +740,20 @@ const colActions = {
   render: (row: ScanFinding) => h(NButton, { size: 'tiny', type: 'primary', secondary: true, onClick: () => openDetail(row) }, () => '详情'),
 };
 
+const colVulnActions = {
+  title: '操作', key: 'actions', width: 120, fixed: 'right' as const,
+  render: (row: ScanFinding) => h(NSpace, { size: 4 }, () => [
+    h(NButton, {
+      size: 'tiny',
+      type: 'warning',
+      secondary: true,
+      loading: retestingFindingId.value === row.id,
+      onClick: () => handleRetestFinding(row),
+    }, () => '回测'),
+    h(NButton, { size: 'tiny', type: 'primary', secondary: true, onClick: () => openDetail(row) }, () => '详情'),
+  ]),
+};
+
 function dataCol(title: string, key: string, width: number, extra?: (row: ScanFinding) => any) {
   return {
     title, key: `data_${key}`, width, ellipsis: { tooltip: true },
@@ -739,14 +818,6 @@ const findingColumns = computed(() => {
         const proto = d(row, 'protocol').toUpperCase() || '-';
         return h(NTag, { size: 'tiny', bordered: false, type: proto === 'TCP' ? 'info' : proto === 'UDP' ? 'warning' : 'default' }, () => proto);
       }),
-      dataCol('IP', 'ip', 130),
-      colConfidence, colTime, colActions,
-    ];
-  }
-  if (tab === 'service') {
-    return [
-      colTarget,
-      { title: '端口', key: 'port_tag', width: 100, render: portTag },
       dataCol('服务', 'service', 100, (row) => {
         const svc = d(row, 'service');
         if (!svc) return h('span', { style: 'color: #ccc' }, '-');
@@ -757,12 +828,13 @@ const findingColumns = computed(() => {
         if (!ver) return h('span', { style: 'color: #ccc' }, '-');
         return h(NTag, { size: 'tiny', bordered: false, type: 'success' }, () => ver);
       }),
-      dataCol('Banner', 'banner', 200, (row) => {
+      dataCol('Banner', 'banner', 180, (row) => {
         const banner = d(row, 'banner');
         if (!banner) return h('span', { style: 'color: #ccc' }, '-');
-        const short = banner.split('\n')[0]?.substring(0, 80) ?? '';
+        const short = banner.split('\n')[0]?.substring(0, 60) ?? '';
         return h('span', { style: 'font-family: "SF Mono", Consolas, monospace; font-size: 11px; color: #555', title: banner }, short);
       }),
+      dataCol('IP', 'ip', 130),
       colConfidence, colTime, colActions,
     ];
   }
@@ -954,7 +1026,7 @@ const findingColumns = computed(() => {
         if (vl === 'principle') return h(NTag, { size: 'small', type: 'warning', bordered: false }, () => '原理验证');
         return h(NTag, { size: 'small', bordered: false }, () => '原理验证');
       }},
-      colConfidence, colModule, colTime, colActions,
+      colConfidence, colModule, colTime, colVulnActions,
     ];
   }
   if (tab === 'infra') {
@@ -1004,15 +1076,31 @@ const findingColumns = computed(() => {
     ];
   }
 
-  return [colTarget, colType, {
+  if (tab === 'crawler') {
+    return [
+      colTarget,
+      dataCol('URL', 'url', 280, (row) => {
+        const url = d(row, 'url') || d(row, 'path');
+        if (!url) return h('span', { style: 'color: #ccc' }, '-');
+        return h('a', { href: url, target: '_blank', style: 'font-size: 12px; color: #1890ff; text-decoration: none; word-break: break-all', title: url, onClick: (e: Event) => e.stopPropagation() }, url.length > 70 ? url.substring(0, 70) + '...' : url);
+      }),
+      { title: '状态码', key: 'status_tag', width: 70, align: 'center' as const, render: statusTag },
+      dataCol('内容类型', 'content_type', 120),
+      colType, colTime, colActions,
+    ];
+  }
+
+  return [colTarget, colSeverity, colType, {
     title: '发现内容', key: 'content', minWidth: 280,
     render: (row: ScanFinding) => {
+      const title = row.title || d(row, 'name');
       const sm = getDataSummary(row);
       return h('div', { style: 'line-height: 1.5' }, [
-        sm ? h('div', { style: 'font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 500px', title: sm }, sm) : h('span', { style: 'color: #ccc' }, '-'),
+        title ? h('div', { style: 'font-size: 12px; font-weight: 500; color: #1a1a1a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 400px', title }, title) : null,
+        sm && sm !== title ? h('div', { style: 'font-size: 11px; color: #888; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 400px; margin-top: 1px', title: sm }, sm) : (!title ? h('span', { style: 'color: #ccc' }, '-') : null),
       ]);
     },
-  }, colSeverity, colConfidence, colModule, colTime, colActions];
+  }, colConfidence, colModule, colTime, colActions];
 });
 
 const assetColumns = computed(() => {
@@ -1146,6 +1234,16 @@ async function fetchFindings() {
       }
     }
 
+    if (selectedEndpoint.value) {
+      const ignorePort = hostOnlyTabs.has(activeSubTab.value);
+      const [host, port] = selectedEndpoint.value.split(':');
+      if (ignorePort || !port) {
+        params.target = host;
+      } else {
+        params.target = selectedEndpoint.value;
+      }
+    }
+
     if (filterSeverity.value) params.severity = filterSeverity.value;
     if (filterModule.value) params.module_id = filterModule.value;
     if (filterKeyword.value.trim()) params.keyword = filterKeyword.value.trim();
@@ -1182,7 +1280,16 @@ function onModuleChipClick(mod: string) {
   filterModule.value = mod;
   filterSeverity.value = null;
   filterKeyword.value = '';
-  onSubTabChange('all');
+  selectedEndpoint.value = '';
+  cachedEndpointList.value = [];
+  findings.value = [];
+  activeSubTab.value = 'all';
+  if (assets.value.length === 0) fetchAssets();
+  findingsPage.value = 1;
+  fetchFindings();
+  nextTick(() => {
+    tabBarRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
 }
 
 async function fetchAssets() {
@@ -1219,6 +1326,21 @@ async function handleDelete() {
   }
 }
 
+async function handleRerun() {
+  if (!task.value) return;
+  try {
+    const res = await rerunTask(task.value.id);
+    message.success('已提交重新运行');
+    if (res?.task_id) {
+      router.push(`/scan/task/${res.task_id}`);
+    } else {
+      await fetchData();
+    }
+  } catch (e: any) {
+    message.error(e?.message || '重新运行失败');
+  }
+}
+
 async function handlePause() {
   if (!task.value) return;
   try {
@@ -1246,7 +1368,8 @@ async function handleExport(format: 'json' | 'markdown' | 'csv') {
   if (!task.value) return;
   try {
     const res = await exportTaskReport(task.value.id, format);
-    const blob = res instanceof Blob ? res : new Blob([res as any]);
+    const raw = (res as any)?.data ?? res;
+    const blob = raw instanceof Blob ? raw : new Blob([typeof raw === 'string' ? raw : JSON.stringify(raw, null, 2)]);
     const ext = format === 'markdown' ? 'md' : format;
     const filename = `${task.value.name}.${ext}`;
     const url = URL.createObjectURL(blob);
@@ -1349,11 +1472,60 @@ function stopSSE() {
 }
 
 const mergedFindings = computed(() => {
-  if (liveFindings.value.length === 0) return findings.value;
-  if (findingsPage.value > 1) return findings.value;
-  const pageIds = new Set(findings.value.map((f) => f.id));
-  const extra = liveFindings.value.filter((f) => !pageIds.has(f.id));
-  return [...extra, ...findings.value];
+  let items = findings.value;
+  if (liveFindings.value.length > 0 && findingsPage.value === 1) {
+    const pageIds = new Set(items.map((f) => f.id));
+    const extra = liveFindings.value.filter((f) => !pageIds.has(f.id));
+    items = [...extra, ...items];
+  }
+
+  if (activeSubTab.value !== 'port_open') return items;
+
+  const portTypes = new Set(['port_open', 'udp_port']);
+  const grouped = new Map<string, { port: ScanFinding | null; service: ScanFinding | null }>();
+  const order: string[] = [];
+
+  for (const f of items) {
+    const key = `${f.target}||${f.port || 0}`;
+    if (!grouped.has(key)) {
+      grouped.set(key, { port: null, service: null });
+      order.push(key);
+    }
+    const g = grouped.get(key)!;
+    if (portTypes.has(f.type)) {
+      if (!g.port) g.port = f;
+    } else {
+      if (!g.service) g.service = f;
+    }
+  }
+
+  const result: ScanFinding[] = [];
+  for (const key of order) {
+    const g = grouped.get(key)!;
+    if (g.port && g.service) {
+      const merged = { ...g.port, data: { ...g.port.data } };
+      const sd = g.service.data ?? {};
+      if (sd.service && !merged.data.service) merged.data.service = sd.service;
+      if (sd.version && !merged.data.version) merged.data.version = sd.version;
+      if (sd.banner && !merged.data.banner) merged.data.banner = sd.banner;
+      if (sd.protocol && !merged.data.protocol) merged.data.protocol = sd.protocol;
+      result.push(merged);
+    } else {
+      result.push(g.port ?? g.service!);
+    }
+  }
+  return result;
+});
+
+const filteredByEndpoint = computed(() => {
+  if (!selectedEndpoint.value) return mergedFindings.value;
+  const ignorePort = hostOnlyTabs.has(activeSubTab.value);
+  return mergedFindings.value.filter((f) => {
+    const host = cleanTarget(f.target);
+    const port = ignorePort ? 0 : (f.port || 0);
+    const key = port > 0 ? `${host}:${port}` : host;
+    return key === selectedEndpoint.value;
+  });
 });
 
 async function fetchLogs() {
@@ -1429,6 +1601,9 @@ onUnmounted(() => {
                 </template>
                 确定取消此任务？
               </NPopconfirm>
+              <NButton v-if="canRerun" size="small" type="primary" @click="handleRerun">
+                重新运行
+              </NButton>
               <NSelect
                 v-if="task.status === 'completed' || task.status === 'failed'"
                 size="small"
@@ -1511,13 +1686,6 @@ onUnmounted(() => {
                 <div class="stat-label">低危</div>
               </div>
             </div>
-            <div class="stat-item">
-              <span class="stat-dot" style="background: #4299e1" />
-              <div class="stat-body">
-                <div class="stat-value">{{ task.vuln_info ?? 0 }}</div>
-                <div class="stat-label">信息</div>
-              </div>
-            </div>
           </div>
         </NCard>
 
@@ -1525,30 +1693,33 @@ onUnmounted(() => {
         <NCard v-if="summary && Object.keys(summary.by_module).length > 0" size="small" style="margin-bottom: 16px">
           <div style="font-size: 13px; font-weight: 600; margin-bottom: 12px; color: var(--text-color-1, #333)">模块执行概览</div>
           <div class="module-chips">
-            <div v-for="(count, mod) in summary.by_module" :key="mod" class="module-chip" @click="onModuleChipClick(mod as string)">
-              <span class="module-chip-name">{{ moduleLabels[mod as string] ?? mod }}</span>
+            <div
+              v-for="[mod, count] in Object.entries(summary.by_module).slice(0, 8)"
+              :key="mod"
+              class="module-chip"
+              @click="onModuleChipClick(mod)"
+            >
+              <span class="module-chip-name">{{ moduleLabels[mod] ?? mod }}</span>
               <span class="module-chip-count">{{ count }}</span>
+            </div>
+            <div 
+              v-if="Object.keys(summary.by_module).length > 8" 
+              class="module-chip" 
+              style="opacity: 0.7; cursor: pointer;"
+              @click="showAllModules = true"
+            >
+              +{{ Object.keys(summary.by_module).length - 8 }} 更多
             </div>
           </div>
         </NCard>
 
         <!-- Tab Bar -->
-        <div class="tab-bar">
-          <template v-for="tab in subTabsWithCount" :key="tab.key">
-            <div v-if="tab.key === 'overview'" class="tab-overview-group">
-              <div
-                class="tab-item"
-                :class="{ active: activeSubTab === 'overview' }"
-                @click="onSubTabChange('overview')"
-              >
-                {{ tab.label }}
-              </div>
-              <div class="tab-separator" />
-            </div>
+        <div ref="tabBarRef" class="tab-bar">
+          <template v-for="(tab, idx) in subTabsWithCount" :key="tab.key">
+            <div v-if="idx > 0 && tab.group !== subTabsWithCount[idx - 1]?.group" class="tab-separator" />
             <div
-              v-else
               class="tab-item"
-              :class="{ active: activeSubTab === tab.key }"
+              :class="{ active: activeSubTab === tab.key, 'tab-vuln': tab.key === 'vuln' && tab.count > 0 && activeSubTab !== tab.key }"
               @click="onSubTabChange(tab.key)"
             >
               {{ tab.label }}
@@ -1753,72 +1924,106 @@ onUnmounted(() => {
 
         <!-- Findings Content: Unified Endpoint Split Layout -->
         <template v-if="activeSubTab !== 'overview' && activeSubTab !== 'host_alive'">
-          <div v-if="endpointList.length > 1" style="display: flex; gap: 16px; min-height: 500px">
+          <div v-if="endpointList.length > 1" style="display: flex; gap: 16px; min-height: 500px;">
             <!-- Left: Endpoint List -->
-            <div style="width: 260px; flex-shrink: 0; border: 1px solid #f0f0f0; border-radius: 8px; background: #fafafa; overflow-y: auto; max-height: 700px">
-              <div style="padding: 10px 12px; font-size: 13px; font-weight: 600; color: #333; border-bottom: 1px solid #f0f0f0; position: sticky; top: 0; background: #fafafa; z-index: 1">
+            <div style="width: min(300px, 25%); min-width: 200px; flex-shrink: 0; border: 1px solid #f0f0f0; border-radius: 8px; background: #fafafa; overflow: hidden; max-height: 700px; display: flex; flex-direction: column;">
+              <div style="padding: 10px 12px; font-size: 13px; font-weight: 600; color: #333; border-bottom: 1px solid #f0f0f0; position: sticky; top: 0; background: #fafafa; z-index: 1;">
                 目标地址
                 <span style="font-weight: 400; color: #999; font-size: 12px; margin-left: 6px">{{ endpointList.length }} 个</span>
               </div>
-              <div
-                style="padding: 8px 12px; cursor: pointer; font-size: 12px; transition: background 0.15s; border-bottom: 1px solid #f5f5f5"
-                :style="{ background: selectedEndpoint === '' ? '#e6f7ff' : 'transparent', color: selectedEndpoint === '' ? '#1890ff' : '#555', fontWeight: selectedEndpoint === '' ? '600' : '400' }"
-                @click="selectedEndpoint = ''"
-              >
-                全部 <span style="font-size: 11px; color: #999">({{ mergedFindings.length }})</span>
-              </div>
-              <div
-                v-for="ep in endpointList"
-                :key="ep.key"
-                style="padding: 8px 12px; cursor: pointer; font-size: 12px; transition: background 0.15s; border-bottom: 1px solid #f5f5f5; display: flex; align-items: center; justify-content: space-between"
-                :style="{ background: selectedEndpoint === ep.key ? '#e6f7ff' : 'transparent', color: selectedEndpoint === ep.key ? '#1890ff' : '#333' }"
-                @click="selectedEndpoint = ep.key"
-              >
-                <div style="min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap" :title="ep.label">
-                  <span style="font-weight: 500">{{ ep.host }}</span>
-                  <span v-if="ep.port > 0" style="color: #1890ff; font-weight: 600; margin-left: 2px">:{{ ep.port }}</span>
+              <NInput v-model:value="endpointSearch" placeholder="搜索目标" size="small" style="margin: 8px; border-radius: 4px;" />
+              <div style="flex: 1; overflow-y: auto;">
+                <div
+                  style="padding: 8px 12px; cursor: pointer; font-size: 12px; transition: background 0.15s; border-bottom: 1px solid #f5f5f5;"
+                  :style="{ background: selectedEndpoint === '' ? '#e6f7ff' : 'transparent', color: selectedEndpoint === '' ? '#1890ff' : '#555', fontWeight: selectedEndpoint === '' ? '600' : '400' }"
+                  @click="selectedEndpoint = ''; findingsPage = 1; fetchFindings()"
+                >
+                  全部 <span style="font-size: 11px; color: #999">({{ findingsTotal }})</span>
                 </div>
-                <span style="font-size: 11px; padding: 1px 6px; border-radius: 10px; font-weight: 600; flex-shrink: 0; margin-left: 6px"
-                  :style="{ background: selectedEndpoint === ep.key ? 'rgba(24,144,255,0.15)' : '#eee', color: selectedEndpoint === ep.key ? '#1890ff' : '#888' }"
-                >{{ ep.count }}</span>
+                <div
+                  v-for="ep in endpointList.filter(e => !endpointSearch || e.key.includes(endpointSearch))"
+                  :key="ep.key"
+                  style="padding: 8px 12px; cursor: pointer; font-size: 12px; transition: background 0.15s; border-bottom: 1px solid #f5f5f5; display: flex; align-items: center; justify-content: space-between;"
+                  :style="{ background: selectedEndpoint === ep.key ? '#e6f7ff' : 'transparent', color: selectedEndpoint === ep.key ? '#1890ff' : '#333' }"
+                  @click="selectedEndpoint = ep.key; findingsPage = 1; fetchFindings()"
+                >
+                  <div style="min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="ep.label">
+                    <span style="font-weight: 500">{{ ep.host }}</span>
+                    <span v-if="ep.port > 0" style="color: #1890ff; font-weight: 600; margin-left: 2px">:{{ ep.port }}</span>
+                  </div>
+                  <span style="font-size: 11px; padding: 1px 6px; border-radius: 10px; font-weight: 600; flex-shrink: 0; margin-left: 6px;"
+                    :style="{ background: selectedEndpoint === ep.key ? 'rgba(24,144,255,0.15)' : '#eee', color: selectedEndpoint === ep.key ? '#1890ff' : '#888' }"
+                  >{{ ep.count }}</span>
+                </div>
               </div>
             </div>
 
             <!-- Right: Filtered Findings -->
-            <div style="flex: 1; min-width: 0">
-              <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap">
+            <div style="flex: 1; min-width: 600px;">
+              <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; padding: 8px 12px; background: #fafafa; border-radius: 8px;">
                 <NSelect v-model:value="filterSeverity" :options="severityOptions" placeholder="严重级别" clearable size="small" style="width: 120px" @update:value="() => { findingsPage = 1; fetchFindings(); }" />
                 <NSelect v-model:value="filterModule" :options="moduleOptions" placeholder="扫描模块" clearable size="small" style="width: 160px" @update:value="() => { findingsPage = 1; fetchFindings(); }" />
-                <NInput v-model:value="filterKeyword" placeholder="搜索" clearable size="small" style="width: 160px" @keydown.enter="() => { findingsPage = 1; fetchFindings(); }" @clear="() => { findingsPage = 1; fetchFindings(); }" />
-                <NButton size="small" type="primary" @click="() => { findingsPage = 1; fetchFindings(); }">搜索</NButton>
-                <NButton size="small" @click="() => { filterSeverity = null; filterModule = null; filterKeyword = ''; selectedEndpoint = ''; findingsPage = 1; fetchFindings(); }">重置</NButton>
-                <span style="font-size: 12px; color: #999; margin-left: auto">{{ filteredByEndpoint.length }} 条</span>
+                <NInput v-model:value="filterKeyword" placeholder="搜索标题/目标" clearable size="small" style="width: 180px" @keydown.enter="() => { findingsPage = 1; fetchFindings(); }" @clear="() => { findingsPage = 1; fetchFindings(); }" />
+                <div style="display: flex; gap: 8px;">
+                  <NButton size="small" type="primary" @click="() => { findingsPage = 1; fetchFindings(); }">搜索</NButton>
+                  <NButton size="small" @click="() => { filterSeverity = null; filterModule = null; filterKeyword = ''; selectedEndpoint = ''; findingsPage = 1; fetchFindings(); }">重置</NButton>
+                </div>
+                <span style="font-size: 12px; color: #999; margin-left: auto;">共 <b style="color: #333">{{ findingsTotal }}</b> 条</span>
               </div>
               <NDataTable
                 v-if="findingsLoading || filteredByEndpoint.length > 0"
                 :columns="findingColumns"
                 :data="filteredByEndpoint"
                 :loading="findingsLoading"
-                :pagination="{ page: findingsPage, pageSize: findingsPageSize, showSizePicker: true, pageSizes: [20, 50, 100] }"
+                :row-key="(row: ScanFinding) => row.id"
+                :pagination="false"
                 :bordered="false"
                 size="small"
                 striped
                 :max-height="600"
                 :scroll-x="800"
               />
+              <div v-if="findingsTotal > 0" style="display: flex; justify-content: flex-end; margin-top: 12px;">
+                <NPagination
+                  :page="findingsPage"
+                  :page-size="findingsPageSize"
+                  :item-count="findingsTotal"
+                  :page-sizes="[20, 50, 100]"
+                  show-size-picker
+                  @update:page="(p: number) => { findingsPage = p; fetchFindings(); }"
+                  @update:page-size="(ps: number) => { findingsPageSize = ps; findingsPage = 1; fetchFindings(); }"
+                />
+              </div>
               <NEmpty v-if="!findingsLoading && filteredByEndpoint.length === 0" description="该目标暂无发现" style="padding: 60px 0" />
             </div>
           </div>
 
           <!-- Single endpoint: Standard Table Layout -->
           <template v-else>
-            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap">
+            <div v-if="activeSubTab === 'all' && summary?.by_severity && Object.keys(summary.by_severity).length > 0" class="severity-bar">
+              <div
+                v-for="sev in ['critical', 'high', 'medium', 'low', 'info']"
+                :key="sev"
+                v-show="(summary.by_severity[sev] ?? 0) > 0"
+                class="severity-chip"
+                :class="{ active: filterSeverity === sev }"
+                :style="{ '--sev-color': (severityConfig[sev] ?? { color: '#999' }).color }"
+                @click="() => { filterSeverity = filterSeverity === sev ? null : sev; findingsPage = 1; fetchFindings(); }"
+              >
+                <span class="severity-chip-dot" />
+                <span class="severity-chip-label">{{ (severityConfig[sev] ?? { label: sev }).label }}</span>
+                <span class="severity-chip-count">{{ summary.by_severity[sev] ?? 0 }}</span>
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; padding: 8px 12px; background: #fafafa; border-radius: 8px;">
               <NSelect v-model:value="filterSeverity" :options="severityOptions" placeholder="严重级别" clearable size="small" style="width: 120px" @update:value="() => { findingsPage = 1; fetchFindings(); }" />
               <NSelect v-model:value="filterModule" :options="moduleOptions" placeholder="扫描模块" clearable size="small" style="width: 180px" @update:value="() => { findingsPage = 1; fetchFindings(); }" />
               <NInput v-model:value="filterKeyword" placeholder="搜索标题/目标" clearable size="small" style="width: 200px" @keydown.enter="() => { findingsPage = 1; fetchFindings(); }" @clear="() => { findingsPage = 1; fetchFindings(); }" />
-              <NButton size="small" type="primary" @click="() => { findingsPage = 1; fetchFindings(); }">搜索</NButton>
-              <NButton size="small" @click="() => { filterSeverity = null; filterModule = null; filterKeyword = ''; activeSubTab = 'all'; findingsPage = 1; fetchFindings(); }">重置</NButton>
-              <span style="font-size: 13px; color: #999; margin-left: auto">共 <b style="color: #333">{{ findingsTotal }}</b> 条结果</span>
+              <div style="display: flex; gap: 8px;">
+                <NButton size="small" type="primary" @click="() => { findingsPage = 1; fetchFindings(); }">搜索</NButton>
+                <NButton size="small" @click="() => { filterSeverity = null; filterModule = null; filterKeyword = ''; activeSubTab = 'all'; findingsPage = 1; fetchFindings(); }">重置</NButton>
+              </div>
+              <span style="font-size: 13px; color: #999; margin-left: auto;">共 <b style="color: #333">{{ findingsTotal }}</b> 条结果</span>
             </div>
             <NDataTable
               v-if="findingsLoading || mergedFindings.length > 0"
@@ -1826,21 +2031,24 @@ onUnmounted(() => {
               :data="mergedFindings"
               :loading="findingsLoading"
               :row-key="(row: ScanFinding) => row.id"
-              :pagination="{
-                page: findingsPage,
-                pageSize: findingsPageSize,
-                itemCount: findingsTotal,
-                showSizePicker: true,
-                pageSizes: [20, 50, 100],
-                onChange: (p: number) => { findingsPage = p; fetchFindings(); },
-                onUpdatePageSize: (ps: number) => { findingsPageSize = ps; findingsPage = 1; fetchFindings(); },
-              }"
+              :pagination="false"
               :bordered="false"
               size="small"
               striped
               :max-height="600"
               :scroll-x="950"
             />
+            <div v-if="findingsTotal > 0" style="display: flex; justify-content: flex-end; margin-top: 12px;">
+              <NPagination
+                :page="findingsPage"
+                :page-size="findingsPageSize"
+                :item-count="findingsTotal"
+                :page-sizes="[20, 50, 100]"
+                show-size-picker
+                @update:page="(p: number) => { findingsPage = p; fetchFindings(); }"
+                @update:page-size="(ps: number) => { findingsPageSize = ps; findingsPage = 1; fetchFindings(); }"
+              />
+            </div>
             <NEmpty v-if="!findingsLoading && mergedFindings.length === 0" description="暂无扫描发现" style="padding: 60px 0" />
           </template>
         </template>
@@ -1947,6 +2155,13 @@ onUnmounted(() => {
                 </span>
               </NSpace>
             </NDescriptionsItem>
+            <NDescriptionsItem v-if="detailItem.confidence_reason" label="置信度依据">
+              <div
+                style="white-space: pre-wrap; line-height: 1.7; color: #444; font-size: 12px; background: #fafafa; border: 1px solid #ececec; border-radius: 6px; padding: 8px 10px"
+              >
+                {{ detailItem.confidence_reason }}
+              </div>
+            </NDescriptionsItem>
             <NDescriptionsItem v-if="(detailItem as any).verification_level" label="验证级别">
               <NTag
                 size="small"
@@ -2015,22 +2230,51 @@ onUnmounted(() => {
 
           <!-- Convert to Incident -->
           <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid #e8e8e8">
-            <NButton
-              type="warning"
-              size="small"
-              :loading="convertingToIncident"
-              style="width: 100%"
-              @click="convertFindingToIncident(detailItem!)"
-            >
-              转为安全事件
-            </NButton>
+            <NSpace vertical :size="8">
+              <NButton
+                type="warning"
+                size="small"
+                :loading="convertingToIncident"
+                style="width: 100%"
+                @click="convertFindingToIncident(detailItem!)"
+              >
+                转为安全事件
+              </NButton>
+              <NButton
+                type="error"
+                size="small"
+                secondary
+                :loading="markingFP"
+                style="width: 100%"
+                @click="handleMarkFP(detailItem!)"
+              >
+                标记误报
+              </NButton>
+            </NSpace>
           </div>
         </template>
       </NDrawerContent>
     </NDrawer>
+
+    <!-- All Modules Modal -->
+    <NModal v-model:show="showAllModules" preset="card" title="所有扫描模块" :style="{ width: '480px' }">
+      <div style="max-height: 400px; overflow-y: auto;">
+        <div v-if="summary?.by_module" class="module-chips" style="display: flex; flex-direction: column; gap: 8px;">
+          <div 
+            v-for="[mod, count] in Object.entries(summary.by_module).sort((a, b) => b[1] - a[1])" 
+            :key="mod" 
+            class="module-chip" 
+            style="justify-content: space-between;"
+            @click="onModuleChipClick(mod); showAllModules = false;"
+          >
+            <span class="module-chip-name">{{ moduleLabels[mod] ?? mod }}</span>
+            <span class="module-chip-count">{{ count }}</span>
+          </div>
+        </div>
+      </div>
+    </NModal>
   </div>
 </template>
-
 <style scoped>
 @keyframes pulse {
   0%, 100% { opacity: 1; }
@@ -2219,17 +2463,11 @@ onUnmounted(() => {
   z-index: 10;
 }
 
-.tab-overview-group {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-
 .tab-separator {
   width: 1px;
   height: 20px;
   background: #d9d9d9;
-  margin: 0 4px;
+  margin: 0 6px;
   flex-shrink: 0;
 }
 
@@ -2247,6 +2485,11 @@ onUnmounted(() => {
 .tab-item:hover:not(.active) {
   background: #eef2f6;
   color: #333;
+}
+
+.tab-item.tab-vuln {
+  color: #cf1322;
+  font-weight: 500;
 }
 
 .tab-item.active {
@@ -2275,5 +2518,59 @@ onUnmounted(() => {
 .asset-card:hover {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
   border-color: #d6e4ff !important;
+}
+
+/* Severity Bar */
+.severity-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #eef2f6;
+}
+
+.severity-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+  border: 1px solid transparent;
+  user-select: none;
+}
+
+.severity-chip:hover {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: var(--sev-color);
+}
+
+.severity-chip.active {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: var(--sev-color);
+  box-shadow: 0 0 0 1px var(--sev-color);
+}
+
+.severity-chip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--sev-color);
+  flex-shrink: 0;
+}
+
+.severity-chip-label {
+  color: var(--sev-color);
+  font-weight: 500;
+}
+
+.severity-chip-count {
+  font-weight: 700;
+  color: var(--sev-color);
 }
 </style>

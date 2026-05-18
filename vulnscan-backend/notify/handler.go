@@ -57,6 +57,12 @@ func (h *Handler) MarkAllRead(c *gin.Context) {
 	web.OK(c).Send()
 }
 
+func (h *Handler) Delete(c *gin.Context) {
+	id := c.Param("id")
+	h.svc.Delete(id)
+	web.OK(c).Send()
+}
+
 type NotifyRoutes struct {
 	handler *Handler
 }
@@ -66,15 +72,18 @@ func NewNotifyRoutes(handler *Handler) *NotifyRoutes {
 }
 
 func (m *NotifyRoutes) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
-	return authorize.RegisterRoutes(e.Group("/notify"), []authorize.Route{
+	backends := authorize.RegisterRoutes(e.Group("/notify"), []authorize.Route{
 		{
 			Name: "站内通知", Enabled: true,
 			Children: []authorize.Route{
-				{Name: "通知列表", Path: "list", Method: "GET", Handler: m.handler.List, Enabled: true},
+				{Name: "通知列表", Method: "GET", Handler: m.handler.List, Enabled: true},
 				{Name: "未读数量", Path: "unread-count", Method: "GET", Handler: m.handler.UnreadCount, Enabled: true},
 				{Name: "标记已读", Path: ":id/read", Method: "POST", Handler: m.handler.MarkRead, Enabled: true},
 				{Name: "全部已读", Path: "read-all", Method: "POST", Handler: m.handler.MarkAllRead, Enabled: true},
+				{Name: "删除通知", Path: ":id", Method: "DELETE", Handler: m.handler.Delete, Enabled: true},
 			},
 		},
 	})
+
+	return backends
 }

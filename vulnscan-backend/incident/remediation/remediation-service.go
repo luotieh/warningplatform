@@ -35,10 +35,8 @@ func (s *serviceRemediation) SubmitRemediation(ctx context.Context, req remediat
 		return fmt.Errorf("事件不存在")
 	}
 
-	if incident.Status != model.IncidentStatusReviewPassed &&
-		incident.Status != model.IncidentStatusRemediation &&
-		incident.Status != model.IncidentStatusRemediating {
-		return fmt.Errorf("当前状态不允许提交整改方案，当前状态: %s", model.IncidentStatusText[incident.Status])
+	if _, err := model.IncidentSM.Apply(incident.Status, model.IncidentEvtRemediate); err != nil {
+		return fmt.Errorf("当前状态不允许提交整改方案: %w", err)
 	}
 
 	now := time.Now()
@@ -80,21 +78,25 @@ func (s *serviceRemediation) VerifyRemediation(ctx context.Context, req remediat
 		return fmt.Errorf("事件不存在")
 	}
 
-	if incident.Status != model.IncidentStatusRemediating &&
-		incident.Status != model.IncidentStatusVerifying {
-		return fmt.Errorf("当前状态不允许验证整改，当前状态: %s", model.IncidentStatusText[incident.Status])
+	var event string
+	if req.Result == "pass" {
+		event = model.IncidentEvtVerifyPass
+	} else {
+		event = model.IncidentEvtVerifyFail
+	}
+	newStatus, err := model.IncidentSM.Apply(incident.Status, event)
+	if err != nil {
+		return fmt.Errorf("当前状态不允许验证整改: %w", err)
 	}
 
 	now := time.Now()
-	updates := make(map[string]interface{})
+	updates := map[string]interface{}{"status": newStatus}
 	var result string
 
 	if req.Result == "pass" {
-		updates["status"] = model.IncidentStatusVerifying
 		updates["verified_at"] = &now
 		result = "验证通过"
 	} else {
-		updates["status"] = model.IncidentStatusRemediating
 		result = "验证不通过"
 	}
 
@@ -124,8 +126,8 @@ func (s *serviceRemediation) CloseIncident(ctx context.Context, req remediationC
 		return fmt.Errorf("事件不存在")
 	}
 
-	if incident.Status == model.IncidentStatusClosed {
-		return fmt.Errorf("事件已关闭，不可重复操作")
+	if _, err := model.IncidentSM.Apply(incident.Status, model.IncidentEvtClose); err != nil {
+		return err
 	}
 
 	now := time.Now()

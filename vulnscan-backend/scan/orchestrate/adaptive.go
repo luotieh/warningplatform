@@ -40,12 +40,15 @@ const (
 )
 
 func NewAdaptiveController(minConc, maxConc int) *AdaptiveController {
+	if minConc < 2 {
+		minConc = 2
+	}
 	ac := &AdaptiveController{
 		minConcurrency: minConc,
 		maxConcurrency: maxConc,
 		windowSize:     100,
 		latencies:      make([]float64, 0, 100),
-		adjustInterval: 5 * time.Second,
+		adjustInterval: 3 * time.Second,
 		lastAdjust:     time.Now(),
 		state:          stateClosed,
 		halfOpenLimit:  3,
@@ -86,6 +89,14 @@ func (ac *AdaptiveController) RecordFailure(latencyMs float64) {
 
 	ac.mu.Lock()
 	ac.failStreak++
+
+	if ac.failStreak >= 3 && ac.state == stateClosed {
+		current := int(ac.current.Load())
+		newConc := max(ac.minConcurrency, current/2)
+		ac.current.Store(int32(newConc))
+		slog.Warn("[Adaptive] 快速降级：连续失败", "failStreak", ac.failStreak, "concurrency", newConc)
+	}
+
 	if ac.failStreak >= 10 && ac.state == stateClosed {
 		ac.state = stateOpen
 		ac.openUntil = time.Now().Add(30 * time.Second)
@@ -139,13 +150,13 @@ func (ac *AdaptiveController) maybeAdjust() {
 	var newConc int
 
 	switch {
-	case successRate > 0.98 && avgLatency < 200:
+	case successRate > 0.95 && avgLatency < 200:
 		newConc = current + max(1, current/5)
-	case successRate > 0.95 && avgLatency < 500:
+	case successRate > 0.90 && avgLatency < 500:
 		newConc = current + max(1, current/10)
-	case successRate < 0.80 || p95 > 5000:
+	case successRate < 0.80 || p95 > 3000:
 		newConc = current - max(1, current/3)
-	case successRate < 0.90 || p95 > 2000:
+	case successRate < 0.90 || p95 > 1000:
 		newConc = current - max(1, current/5)
 	default:
 		return

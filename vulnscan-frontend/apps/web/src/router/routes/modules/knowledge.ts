@@ -40,27 +40,12 @@ const routes: RouteRecordRaw[] = [
         },
       },
       {
-        name: 'DictManage',
-        path: 'dict',
-        component: () => import('#/views/knowledge/dict/list.vue'),
+        name: 'DataLibManage',
+        path: 'datalib',
+        component: () => import('#/views/knowledge/datalib/list.vue'),
         meta: {
           icon: 'lucide:book-open',
-          title: '字典管理',
-          perms: [
-            { action: 'create', label: '新建' },
-            { action: 'import', label: '导入' },
-            { action: 'update', label: '编辑' },
-            { action: 'delete', label: '删除' },
-          ],
-        },
-      },
-      {
-        name: 'PayloadManage',
-        path: 'payload',
-        component: () => import('#/views/knowledge/payload/list.vue'),
-        meta: {
-          icon: 'lucide:shield-check',
-          title: 'Payload 管理',
+          title: '数据字典',
           perms: [
             { action: 'create', label: '新建' },
             { action: 'import', label: '导入' },
@@ -71,24 +56,24 @@ const routes: RouteRecordRaw[] = [
       },
       {
         name: 'DictWordDetail',
-        path: 'dict/word/:id',
+        path: 'datalib/word/:id',
         component: () =>
           import('#/views/knowledge/rule-dict/word-detail.vue'),
         meta: {
           hideInMenu: true,
           title: '词库详情',
-          activePath: '/knowledge/dict',
+          activePath: '/knowledge/datalib',
         },
       },
       {
         name: 'DictFileDetail',
-        path: 'dict/file/:id',
+        path: 'datalib/file/:id',
         component: () =>
           import('#/views/knowledge/rule-dict/file-detail.vue'),
         meta: {
           hideInMenu: true,
           title: '文件库详情',
-          activePath: '/knowledge/dict',
+          activePath: '/knowledge/datalib',
         },
       },
       {
@@ -122,6 +107,7 @@ const routes: RouteRecordRaw[] = [
         meta: {
           icon: 'lucide:notebook-pen',
           title: '安全知识',
+          hideInMenu: true,
           perms: [
             { action: 'create', label: '新建' },
             { action: 'update', label: '编辑' },

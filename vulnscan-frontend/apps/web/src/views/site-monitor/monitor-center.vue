@@ -103,6 +103,14 @@ const dimMap: Record<string, string> = Object.fromEntries(
   dimensions.map((v) => [v.key, v.label]),
 );
 
+const taskNameMap = computed<Record<string, string>>(() =>
+  Object.fromEntries(
+    taskDataList.value
+      .filter((item) => item.id && item.task_name)
+      .map((item) => [item.id, item.task_name]),
+  ),
+);
+
 const statusLabel = (v: string) =>
   ({
     failed: '失败',
@@ -147,6 +155,16 @@ const dimensionCards = computed(() =>
   }),
 );
 
+const issueDimensionCards = computed(() =>
+  [...dimensionCards.value]
+    .filter((item) => item.issueCount > 0)
+    .sort((a, b) => b.issueCount - a.issueCount),
+);
+
+const compactExecutions = computed(() => recentExecutions.value.slice(0, 8));
+const compactAgents = computed(() => agentList.value.slice(0, 8));
+const activeTab = ref('tasks');
+
 const lastRefreshAt = ref<null | string>(null);
 
 async function fetchDashboardStats() {
@@ -174,6 +192,10 @@ async function fetchDashboardStats() {
   }
 }
 
+async function refreshAll() {
+  await Promise.all([fetchDashboardStats(), fetchTaskList()]);
+}
+
 const refreshIntervalOptions = [
   { label: '10 秒', value: 10_000 },
   { label: '30 秒', value: 30_000 },
@@ -183,7 +205,7 @@ const refreshIntervalOptions = [
 
 const { enabled: autoRefreshEnabled, interval: autoRefreshInterval } =
   useAutoRefresh({
-    task: fetchDashboardStats,
+    task: refreshAll,
     interval: 30_000,
     immediate: true,
     runOnMount: true,
@@ -194,7 +216,13 @@ const goExecDetail = (row: MonitorExecution) =>
 
 // ── Agent 状态表格 ──
 const agentColumns: DataTableColumns<MonitorAgent> = [
-  { key: 'uuid', title: 'UUID', minWidth: 220, ellipsis: { tooltip: true } },
+  {
+    key: 'label',
+    title: '节点名称',
+    minWidth: 220,
+    ellipsis: { tooltip: true },
+    render: (row) => row.label || row.uuid || '-',
+  },
   { key: 'version', title: '版本', width: 90, align: 'center' },
   {
     key: 'status',
@@ -248,7 +276,13 @@ const agentColumns: DataTableColumns<MonitorAgent> = [
 
 // ── 执行记录表格 ──
 const executionColumns: DataTableColumns<MonitorExecution> = [
-  { key: 'id', title: '执行ID', width: 180, ellipsis: { tooltip: true } },
+  {
+    key: 'task_name',
+    title: '任务名称',
+    minWidth: 180,
+    ellipsis: { tooltip: true },
+    render: (row) => (row as any).task_name || taskNameMap.value[row.task_id] || row.task_id,
+  },
   { key: 'url', title: 'URL', minWidth: 220, ellipsis: { tooltip: true } },
   {
     key: 'dimension',
@@ -307,6 +341,85 @@ const executionColumns: DataTableColumns<MonitorExecution> = [
           type: 'primary',
           size: 'small',
           onClick: () => goExecDetail(row),
+        },
+        { default: () => '详情' },
+      ),
+  },
+];
+
+const previewExecutionColumns: DataTableColumns<MonitorExecution> = [
+  {
+    key: 'task_name',
+    title: '任务名称',
+    minWidth: 180,
+    align: 'center',
+    render: (row) =>
+      h(
+        'div',
+        {
+          style: {
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            textAlign: 'center',
+            gap: '6px',
+          },
+        },
+        [
+          h(
+            'span',
+            {
+              style: {
+                color: 'var(--n-text-color)',
+                fontWeight: 600,
+                maxWidth: '100%',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              },
+              title: (row as any).task_name || taskNameMap.value[row.task_id] || row.task_id,
+            },
+            (row as any).task_name || taskNameMap.value[row.task_id] || row.task_id,
+          ),
+          h(
+            NTag,
+            {
+              size: 'small',
+              bordered: false,
+              type: 'default',
+              style: { width: 'fit-content', margin: '0 auto' },
+            },
+            { default: () => dimMap[row.dimension] || row.dimension || '-' },
+          ),
+        ],
+      ),
+  },
+  { key: 'url', title: 'URL', minWidth: 220, align: 'center', ellipsis: { tooltip: true } },
+  {
+    key: 'status',
+    title: '状态',
+    width: 80,
+    align: 'center',
+    render: (row) =>
+      h(
+        'span',
+        { style: { color: statusColor(row.status), fontWeight: 500 } },
+        statusLabel(row.status),
+      ),
+  },
+  {
+    key: 'op',
+    title: '操作',
+    width: 70,
+    align: 'center',
+    render: (row) =>
+      h(
+        NButton,
+        {
+          text: true,
+          type: 'primary',
+          size: 'small',
+          onClick: () => openDetailDrawer(row),
         },
         { default: () => '详情' },
       ),
@@ -929,7 +1042,7 @@ function execStatusType(s: string) {
           size="small"
           type="primary"
           :loading="loading"
-          @click="fetchDashboardStats"
+          @click="refreshAll"
         >
           立即刷新
         </NButton>
@@ -1021,6 +1134,62 @@ function execStatusType(s: string) {
     </NGrid>
 
     <!-- Tab 切换区 -->
+    <div v-if="issueDimensionCards.length > 0" class="issue-banner mt-4">
+      <div class="issue-banner__title">
+        <IconifyIcon icon="ri:alarm-warning-line" />
+        <span>褰撳墠閲嶇偣椋庨櫓缁村害</span>
+      </div>
+      <div class="issue-banner__list">
+        <span
+          v-for="item in issueDimensionCards.slice(0, 4)"
+          :key="item.key"
+          class="issue-pill"
+          :style="{ '--issue-color': item.color }"
+        >
+          {{ item.label }} {{ item.issueCount }}
+        </span>
+      </div>
+    </div>
+
+    <div class="preview-layout mt-4">
+      <NCard class="preview-card" title="最近执行记录" size="small">
+        <template #header-extra>
+          <NTag size="small" :bordered="false">
+            {{ recentExecutions.length }} 条
+          </NTag>
+        </template>
+        <NDataTable
+          :columns="previewExecutionColumns"
+          :data="compactExecutions"
+          :loading="loading"
+          :pagination="false"
+          :max-height="260"
+          :row-key="(r: MonitorExecution) => r.id"
+          size="small"
+          :scroll-x="620"
+          class="exec-table"
+        />
+      </NCard>
+
+      <NCard class="preview-card" title="节点状态" size="small">
+        <template #header-extra>
+          <NTag size="small" :bordered="false" type="success">
+            在线 {{ stats.onlineAgents }}/{{ stats.totalAgents }}
+          </NTag>
+        </template>
+        <NDataTable
+          :columns="agentColumns"
+          :data="compactAgents"
+          :loading="loading"
+          :pagination="false"
+          :max-height="260"
+          :row-key="(r: MonitorAgent) => r.uuid"
+          size="small"
+          class="agent-table"
+        />
+      </NCard>
+    </div>
+
     <NCard class="mt-4">
       <NTabs type="line" v-model:value="activeTab" class="tab-container">
         <NTabPane name="tasks" tab="监测任务">
@@ -1450,10 +1619,6 @@ function execStatusType(s: string) {
 </template>
 
 <style scoped>
-.activeTab {
-  color: var(--n-primary-color);
-}
-
 .stats-grid {
   margin-bottom: 0;
 }
@@ -1590,6 +1755,83 @@ function execStatusType(s: string) {
   color: var(--n-text-color);
 }
 
+.issue-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(255, 251, 235, 0.95) 0%, rgba(255, 247, 237, 0.98) 100%);
+}
+
+.issue-banner__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #b45309;
+  font-weight: 600;
+}
+
+.issue-banner__title > span {
+  font-size: 0;
+}
+
+.issue-banner__title > span::after {
+  content: '当前重点风险维度';
+  font-size: 14px;
+}
+
+.issue-banner__list {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.issue-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--issue-color) 10%, white);
+  color: var(--issue-color);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.preview-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+}
+
+.preview-card,
+.preview-card :deep(.n-card__content) {
+  min-width: 0;
+}
+
+.preview-card :deep(.n-card-header__extra) {
+  display: none;
+}
+
+.preview-card:first-child :deep(.n-card-header__main),
+.preview-card:last-child :deep(.n-card-header__main) {
+  font-size: 0;
+}
+
+.preview-card:first-child :deep(.n-card-header__main)::after {
+  content: '最近执行记录';
+  font-size: 16px;
+}
+
+.preview-card:last-child :deep(.n-card-header__main)::after {
+  content: '节点状态';
+  font-size: 16px;
+}
+
 .tab-container {
   --n-tab-color: var(--n-text-color-3);
   --n-tab-color-active: var(--n-primary-color);
@@ -1700,5 +1942,20 @@ function execStatusType(s: string) {
 
 .records-filter :deep(.n-date-picker-trigger) {
   height: 28px;
+}
+
+@media (max-width: 1200px) {
+  .preview-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .issue-banner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .issue-banner__list {
+    justify-content: flex-start;
+  }
 }
 </style>

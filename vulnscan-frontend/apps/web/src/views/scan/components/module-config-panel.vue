@@ -32,12 +32,10 @@ const categoryGroups = computed(() => {
 });
 
 const categoryLabels: Record<string, string> = {
-  discover: '发现',
-  host: '主机',
-  probe: '探测',
-  'recon-fast': '快速侦察',
-  'recon-deep': '深度侦察',
+  discover: '资产发现',
+  recon: '信息收集',
   vuln: '漏洞检测',
+  attack: '漏洞利用',
 };
 
 async function loadConfigs() {

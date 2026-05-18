@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"math"
 	"sort"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -171,8 +172,14 @@ type TaskShard struct {
 
 // ShardTask splits a task's targets across available workers, sorted by HealthScore.
 func (d *DistributedScheduler) ShardTask(ctx context.Context, task model.ScanTask) ([]TaskShard, error) {
+	return ShardScanTaskByWorkers(d.db, ctx, task)
+}
+
+// ShardScanTaskByWorkers 按在线 Worker 健康度与容量将目标列表切分为多分片；无 Worker 或目标过少时返回单分片（WorkerID 为空，由任意节点或本机调度执行）。
+func ShardScanTaskByWorkers(db *gorm.DB, ctx context.Context, task model.ScanTask) ([]TaskShard, error) {
+	minTargets := workerShardMinTargets(task.Parameters)
 	var workers []model.WorkerNode
-	err := d.db.WithContext(ctx).
+	err := db.WithContext(ctx).
 		Where("status = ? AND active_tasks < capacity", model.WorkerStatusOnline).
 		Find(&workers).Error
 	if err != nil {
@@ -185,7 +192,7 @@ func (d *DistributedScheduler) ShardTask(ctx context.Context, task model.ScanTas
 	}
 
 	targetCount := len(task.Targets)
-	if targetCount <= 10 || workerCount <= 1 {
+	if targetCount <= minTargets || workerCount <= 1 {
 		return []TaskShard{{ShardIndex: 0, TotalShards: 1, Targets: task.Targets}}, nil
 	}
 
@@ -237,6 +244,34 @@ func (d *DistributedScheduler) ShardTask(ctx context.Context, task model.ScanTas
 	}
 
 	return shards, nil
+}
+
+func workerShardMinTargets(params model.JSONMap) int {
+	const defaultMin = 10
+	if params == nil {
+		return defaultMin
+	}
+	v, ok := params["worker_shard_min_targets"]
+	if !ok || v == nil {
+		return defaultMin
+	}
+	switch t := v.(type) {
+	case int:
+		if t > 0 {
+			return t
+		}
+	case float64:
+		if t > 0 {
+			return int(t)
+		}
+	case string:
+		var n int
+		_, _ = fmt.Sscanf(strings.TrimSpace(t), "%d", &n)
+		if n > 0 {
+			return n
+		}
+	}
+	return defaultMin
 }
 
 // --- Rebalancing ---

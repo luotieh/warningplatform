@@ -198,20 +198,29 @@ func (AssetRiskHistory) TableName() string { return "vs_asset_risk_history" }
 
 // Organize 组织单位
 type Organize struct {
-	ID                      string     `gorm:"primarykey;type:varchar(36)" json:"id"`
-	ParentID                string     `gorm:"type:varchar(36);index" json:"parent_id"`
-	Name                    string     `gorm:"type:varchar(200);not null" json:"name"`
-	UnifiedSocialCreditCode string     `gorm:"type:varchar(50);uniqueIndex" json:"unified_social_credit_code"`
-	IndustryCategory        string     `gorm:"type:varchar(100)" json:"industry_category"`
-	UnitType                string     `gorm:"type:varchar(50)" json:"unit_type"`
-	Address                 string     `gorm:"type:varchar(500)" json:"address"`
-	ContactName             string     `gorm:"type:varchar(100)" json:"contact_name"`
-	ContactPhone            string     `gorm:"type:varchar(30)" json:"contact_phone"`
-	AssetCount              int64      `gorm:"default:0" json:"asset_count"`
-	DeletedAt               *time.Time `gorm:"index" json:"deleted_at"`
-	CreatedBy               string     `gorm:"type:varchar(64)" json:"created_by"`
-	CreatedAt               time.Time  `json:"created_at"`
-	UpdatedAt               time.Time  `json:"updated_at"`
+	ID                        string     `gorm:"primarykey;type:varchar(36)" json:"id"`
+	ParentID                  string     `gorm:"type:varchar(36);index" json:"parent_id"`
+	Name                      string     `gorm:"type:varchar(200);not null" json:"name"`
+	UnifiedSocialCreditCode   string     `gorm:"type:varchar(50);uniqueIndex" json:"unified_social_credit_code"`
+	IndustryCategory          string     `gorm:"type:varchar(100)" json:"industry_category"`
+	UnitType                  string     `gorm:"type:varchar(50)" json:"unit_type"`
+	IsNotificationMember      bool       `gorm:"default:false" json:"is_notification_member"`
+	Address                   string     `gorm:"type:varchar(500)" json:"address"`
+	UnitDetailAddress         string     `gorm:"type:varchar(500)" json:"unit_detail_address"`
+	LeaderName                string     `gorm:"type:varchar(100)" json:"leader_name"`
+	LeaderTitle               string     `gorm:"type:varchar(100)" json:"leader_title"`
+	ResponsibleDepartmentName string     `gorm:"type:varchar(200)" json:"responsible_department_name"`
+	DepartmentLeaderName      string     `gorm:"type:varchar(100)" json:"department_leader_name"`
+	DepartmentLeaderTitle     string     `gorm:"type:varchar(100)" json:"department_leader_title"`
+	DepartmentLeaderPhone     string     `gorm:"type:varchar(30)" json:"department_leader_phone"`
+	ContactName               string     `gorm:"type:varchar(100)" json:"contact_name"`
+	ContactTitle              string     `gorm:"type:varchar(100)" json:"contact_title"`
+	ContactPhone              string     `gorm:"type:varchar(30)" json:"contact_phone"`
+	AssetCount                int64      `gorm:"default:0" json:"asset_count"`
+	DeletedAt                 *time.Time `gorm:"index" json:"deleted_at"`
+	CreatedBy                 string     `gorm:"type:varchar(64)" json:"created_by"`
+	CreatedAt                 time.Time  `json:"created_at"`
+	UpdatedAt                 time.Time  `json:"updated_at"`
 }
 
 func (Organize) TableName() string { return "vs_organize" }

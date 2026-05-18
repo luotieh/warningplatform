@@ -35,6 +35,37 @@ export function checkStaleWorkers() {
   return requestClient.post('/cluster/workers/check-stale');
 }
 
+export interface ScanNodeCredentials {
+  version: number;
+  master_url: string;
+  node_uuid: string;
+  secret: string;
+  issued_at: string;
+  label?: string;
+}
+
+export interface CredentialEnvelope {
+  v: number;
+  ek: string;
+  nonce: string;
+  ct: string;
+  algo: string;
+}
+
+export interface IssueScanNodeResponse {
+  encrypted: boolean;
+  credentials?: ScanNodeCredentials;
+  envelope?: CredentialEnvelope;
+}
+
+export function issueScanNodeCredentials(body: {
+  enrollment: Record<string, unknown>;
+  master_url?: string;
+  label?: string;
+}) {
+  return requestClient.post<IssueScanNodeResponse>('/cluster/scan-nodes/enroll', body);
+}
+
 export function getClusterStats() {
   return requestClient.get('/scan/status');
 }
@@ -42,7 +73,7 @@ export function getClusterStats() {
 export interface UnifiedNode {
   id: string;
   name: string;
-  type: 'worker' | 'agent';
+  type: 'worker' | 'agent' | 'local';
   ip: string;
   status: string;
   version: string;
@@ -76,4 +107,14 @@ export interface NodeSummary {
 
 export function getUnifiedNodes(params?: { type?: string; status?: string }) {
   return requestClient.get<{ nodes: UnifiedNode[]; summary: NodeSummary }>('/nodes', { params });
+}
+
+/** 主控知识库同步游标（与节点 node-api/knowledge/manifest 数值一致） */
+export interface NodeKnowledgeManifest {
+  versions: Record<string, number>;
+  server_time: string;
+}
+
+export function getNodeKnowledgeManifest() {
+  return requestClient.get<NodeKnowledgeManifest>('/cluster/node-knowledge/manifest');
 }

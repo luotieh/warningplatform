@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import { h, onMounted, reactive, ref } from 'vue';
-import { getArchiveDetail, getArchiveList, getIamOrganizeTree, type AssetArchiveSnapshot } from '#/api/assetmgr';
+import { getArchiveDetail, getArchiveList, getOrganizeTree, type AssetArchiveSnapshot } from '#/api/assetmgr';
 import {
   NButton,
   NCard,
@@ -27,7 +27,7 @@ const data = ref<AssetArchiveSnapshot[]>([]);
 const detail = ref<AssetArchiveSnapshot | null>(null);
 const organizeTreeOptions = ref<any[]>([]);
 const drawer = ref(false);
-const searchForm = reactive({ keyword: '', asset_id: '', organize_id: '', batch_id: '' });
+const searchForm = reactive({ keyword: '', organize_id: '' });
 
 const pagination = reactive({
   page: 1,
@@ -72,9 +72,9 @@ const columns = [
 function normalizeTree(nodes: any[] = []): any[] {
   return nodes.map((node) => ({
     label: node.name || node.organize_name || node.label || node.id,
-    value: node.id || node.organize_id || node.value,
+    key: node.id || node.organize_id || node.key || node.value,
     children: normalizeTree(node.children ?? []),
-  })).filter((node) => node.label && node.value);
+  })).filter((node) => node.label && node.key);
 }
 
 async function fetchList() {
@@ -109,14 +109,16 @@ async function showDetail(row: AssetArchiveSnapshot) {
 
 async function loadOrganizeTree() {
   try {
-    organizeTreeOptions.value = normalizeTree(await getIamOrganizeTree());
+    const res = await getOrganizeTree();
+    const nodes = Array.isArray(res) ? res : ((res as any)?.data ?? (res as any)?.items ?? []);
+    organizeTreeOptions.value = normalizeTree(nodes);
   } catch {
     organizeTreeOptions.value = [];
   }
 }
 
 function resetSearch() {
-  Object.assign(searchForm, { keyword: '', asset_id: '', organize_id: '', batch_id: '' });
+  Object.assign(searchForm, { keyword: '', organize_id: '' });
   pagination.page = 1;
   fetchList();
 }
@@ -134,20 +136,14 @@ onMounted(() => {
         <NFormItem label="关键词">
           <NInput v-model:value="searchForm.keyword" clearable placeholder="系统名称 / 地址" />
         </NFormItem>
-        <NFormItem label="资产ID">
-          <NInput v-model:value="searchForm.asset_id" clearable placeholder="资产ID" />
-        </NFormItem>
         <NFormItem label="所属单位">
           <NTreeSelect
             v-model:value="searchForm.organize_id"
             clearable
             filterable
             :options="organizeTreeOptions"
-            placeholder="选择 IAM 单位"
+            placeholder="选择单位"
           />
-        </NFormItem>
-        <NFormItem label="批次">
-          <NInput v-model:value="searchForm.batch_id" clearable placeholder="批次ID" />
         </NFormItem>
         <NFormItem>
           <NSpace :size="8">
@@ -193,7 +189,7 @@ onMounted(() => {
           :data="[
             { label: '备案编号', value: detail.snapshot.asset.filing_cert_number || '-' },
             { label: 'ICP备案', value: detail.snapshot.asset.icp_filing_number || '-' },
-            { label: '系统类型', value: detail.snapshot.asset.system_type || '-' },
+            { label: '资产分类', value: detail.snapshot.asset.asset_family || '-' },
             { label: '等保等级', value: detail.snapshot.asset.security_protection_level || '-' },
             { label: '建设单位', value: detail.snapshot.asset.construction_org_id || '-' },
             { label: '运维单位', value: detail.snapshot.asset.operation_org_id || '-' },

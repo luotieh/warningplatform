@@ -17,7 +17,8 @@ func (h *HandlerMonitor) ListExecutions(c *gin.Context) {
 	if !ok {
 		return
 	}
-	total, list, err := h.svc.ListExecutions(c.Request.Context(), req)
+	scope := iamsdk.DataFilterScope(c, monitorExecutionFieldMapping)
+	total, list, err := h.svc.ListExecutions(c.Request.Context(), req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return

@@ -1,6 +1,7 @@
 package nodeapi
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +11,8 @@ import (
 
 	"vulnscan-backend/agent"
 	"vulnscan-backend/model"
+	"vulnscan-backend/pkg/nodeauth"
+	"vulnscan-backend/sitemonitor"
 
 	"code.yt-security.com/public/core/v2/web"
 	"github.com/gin-gonic/gin"
@@ -27,11 +30,32 @@ func (a *NodeAPI) authMiddleware() gin.HandlerFunc {
 			return
 		}
 
+		secret := c.GetHeader("X-Agent-Secret")
+		if secret == "" {
+			secret = c.Query("agent_secret")
+		}
+
 		var node model.Node
 		err := a.gdb().Where("uuid = ? AND status != ?", token, "disabled").First(&node).Error
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid agent token"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid agent credentials"})
 			return
+		}
+
+		if a.opts.RequireAgentSecret && node.AgentSecretHash == "" {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "node agent secret not configured on server"})
+			return
+		}
+
+		if node.AgentSecretHash != "" {
+			if secret == "" {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing X-Agent-Secret"})
+				return
+			}
+			if !nodeauth.VerifySecret(secret, node.AgentSecretHash) {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid agent credentials"})
+				return
+			}
 		}
 
 		c.Set("node_uuid", node.UUID)
@@ -142,12 +166,14 @@ func (a *NodeAPI) pollBothTaskTypes(nodeUUID string, batch int) []agent.TaskEnve
 					continue
 				}
 
-				payload, _ := json.Marshal(map[string]any{
-					"execution_id": exec.ID,
-					"task_id":      task.ID,
-					"dimension":    exec.Dimension,
-					"url":          task.TargetHomepage,
-				})
+				msg, err := sitemonitor.BuildMonitorTaskMessage(context.Background(), session, &exec, &task)
+				if err != nil {
+					continue
+				}
+				payload, err := sitemonitor.MarshalMonitorPayload(msg)
+				if err != nil {
+					continue
+				}
 
 				tasks = append(tasks, agent.TaskEnvelope{
 					ID:      exec.ID,
@@ -166,6 +192,7 @@ func (a *NodeAPI) pollBothTaskTypes(nodeUUID string, batch int) []agent.TaskEnve
 	var scanTasks []model.ScanTask
 	session.
 		Where("status = ?", model.TaskStatusQueued).
+		Where("worker_id = ? OR worker_id = '' OR worker_id IS NULL", nodeUUID).
 		Order("priority DESC, created_at ASC").
 		Limit(scanBatch).
 		Find(&scanTasks)
@@ -177,7 +204,7 @@ func (a *NodeAPI) pollBothTaskTypes(nodeUUID string, batch int) []agent.TaskEnve
 		}
 
 		res := session.Model(&model.ScanTask{}).
-			Where("id IN ? AND status = ?", scanIDs, model.TaskStatusQueued).
+			Where("id IN ? AND status = ? AND (worker_id = ? OR worker_id = ? OR worker_id IS NULL)", scanIDs, model.TaskStatusQueued, nodeUUID, "").
 			Updates(map[string]any{"status": model.TaskStatusRunning, "worker_id": nodeUUID})
 
 		if res.RowsAffected > 0 {
@@ -220,7 +247,15 @@ func (a *NodeAPI) ReportResult(c *gin.Context) {
 	switch result.Type {
 	case "monitor":
 		if a.monitorResult != nil {
-			a.monitorResult.HandleMonitorResult(result.ID, result.Status, result.Error, result.Result, result.StartedAt, result.FinishedAt)
+			a.monitorResult.HandleMonitorResult(
+				result.ID,
+				result.AgentID,
+				result.Status,
+				result.Error,
+				result.Result,
+				result.StartedAt,
+				result.FinishedAt,
+			)
 		}
 	case "scan":
 		if a.scanResult != nil {

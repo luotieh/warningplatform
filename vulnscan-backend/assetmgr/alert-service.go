@@ -24,11 +24,11 @@ func (s *serviceAlert) session() *gorm.DB {
 	return sess
 }
 
-func (s *serviceAlert) List(req ac.AlertListReq) ([]model.Alert, int64, error) {
+func (s *serviceAlert) List(req ac.AlertListReq, scopes ...func(*gorm.DB) *gorm.DB) ([]model.Alert, int64, error) {
 	var items []model.Alert
 	var count int64
 
-	q := s.session().Model(&model.Alert{})
+	q := s.session().Model(&model.Alert{}).Scopes(scopes...)
 	if req.AssetID != "" {
 		q = q.Where("asset_id = ?", req.AssetID)
 	}

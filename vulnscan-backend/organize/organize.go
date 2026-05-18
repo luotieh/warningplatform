@@ -21,10 +21,13 @@ func (m *Organize) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
 			Children: []authorize.Route{
 				{Name: "组织列表", Path: "list", Method: "GET", Handler: m.orgHandler.List, Enabled: true},
 				{Name: "组织树", Path: "tree", Method: "GET", Handler: m.orgHandler.Tree, Enabled: true},
+				{Name: "IAM组织树", Path: "iam-tree", Method: "GET", Handler: m.orgHandler.IAMTree, Enabled: true},
 				{Name: "组织详情", Path: ":id", Method: "GET", Handler: m.orgHandler.GetByID, Enabled: true},
 				{Name: "创建组织", Method: "POST", Handler: m.orgHandler.Create, Enabled: true},
 				{Name: "更新组织", Path: ":id", Method: "PUT", Handler: m.orgHandler.Update, Enabled: true},
 				{Name: "删除组织", Path: ":id", Method: "DELETE", Handler: m.orgHandler.Delete, Enabled: true},
+				{Name: "同步IAM组织", Path: "sync-iam", Method: "POST", Handler: m.orgHandler.SyncIam, Enabled: true},
+				{Name: "确保组织存在", Path: "ensure", Method: "POST", Handler: m.orgHandler.Ensure, Enabled: true},
 			},
 		},
 		{

@@ -3,6 +3,9 @@ package asm
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"strings"
+	"sync"
 	"time"
 
 	"vulnscan-backend/model"
@@ -12,19 +15,22 @@ import (
 )
 
 type Handler struct {
-	svc    *ServiceASM
-	engine *ConcurrentDiscoveryEngine
-	diff   *DiffEngine
-	alert  *AlertEngine
+	svc           *ServiceASM
+	engine        *ConcurrentDiscoveryEngine
+	diff          *DiffEngine
+	alert         *AlertEngine
+	allCollectors []AssetCollector
+	mu            sync.Mutex
 }
 
 func NewHandler(svc *ServiceASM, extraCollectors ...AssetCollector) *Handler {
 	sess := svc.session()
 	return &Handler{
-		svc:    svc,
-		engine: NewConcurrentDiscoveryEngine(10, 120*time.Second, extraCollectors...),
-		diff:   NewDiffEngine(),
-		alert:  NewAlertEngine(sess),
+		svc:           svc,
+		engine:        NewConcurrentDiscoveryEngine(10, 120*time.Second, extraCollectors...),
+		diff:          NewDiffEngine(),
+		alert:         NewAlertEngine(sess),
+		allCollectors: extraCollectors,
 	}
 }
 
@@ -140,6 +146,18 @@ func (h *Handler) RunDiscovery(c *gin.Context) {
 		return
 	}
 
+	h.svc.UpdateProject(projectID, map[string]interface{}{
+		"discovery_status": "running",
+	})
+
+	go h.executeDiscovery(project, dbSeeds)
+
+	web.OK(c).Data(gin.H{"status": "running", "project_id": projectID}).Send()
+}
+
+func (h *Handler) executeDiscovery(project *model.ASMProject, dbSeeds []model.ASMSeed) {
+	projectID := project.ID
+
 	asmProject := &ASMProject{
 		ID:   project.ID,
 		Name: project.Name,
@@ -150,12 +168,16 @@ func (h *Handler) RunDiscovery(c *gin.Context) {
 
 	prevAssets := h.svc.GetPreviousAssets(projectID)
 
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 120*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
-	discovered, err := h.engine.Discover(ctx, asmProject)
+	engine := h.getEngineForProject(project)
+	discovered, err := engine.Discover(ctx, asmProject)
 	if err != nil {
-		web.Fail(c).Msg("发现引擎执行失败").Err(err).Send()
+		slog.Error("ASM发现引擎执行失败", "project", projectID, "error", err)
+		h.svc.UpdateProject(projectID, map[string]interface{}{
+			"discovery_status": "failed",
+		})
 		return
 	}
 
@@ -210,19 +232,66 @@ func (h *Handler) RunDiscovery(c *gin.Context) {
 	}
 
 	h.svc.SaveDiscoveryResults(projectID, newAssets, dbChanges)
+	h.alert.EvaluateRules(projectID, changes, discovered)
 
-	alerts := h.alert.EvaluateRules(projectID, changes, discovered)
+	h.svc.UpdateProject(projectID, map[string]interface{}{
+		"discovery_status":  "completed",
+		"last_discovery_at": now,
+	})
 
+	slog.Info("ASM发现完成", "project", projectID, "assets", len(newAssets), "changes", len(changes))
+}
+
+func (h *Handler) getEngineForProject(project *model.ASMProject) *ConcurrentDiscoveryEngine {
+	if project.CollectorConfig == nil {
+		return h.engine
+	}
+	enabledList, ok := project.CollectorConfig["enabled_collectors"]
+	if !ok {
+		return h.engine
+	}
+	names, ok := enabledList.([]interface{})
+	if !ok || len(names) == 0 {
+		return h.engine
+	}
+	nameSet := make(map[string]bool, len(names))
+	for _, n := range names {
+		if s, ok := n.(string); ok {
+			nameSet[s] = true
+		}
+	}
+	var filtered []AssetCollector
+	for _, c := range h.allCollectors {
+		if nameSet[c.Name()] {
+			filtered = append(filtered, c)
+		}
+	}
+	if len(filtered) == 0 {
+		return h.engine
+	}
+	return NewConcurrentDiscoveryEngine(10, 10*time.Minute, filtered...)
+}
+
+func (h *Handler) DiscoveryStatus(c *gin.Context) {
+	projectID := c.Param("id")
+	project, _, err := h.svc.GetProject(projectID)
+	if err != nil {
+		web.Err(c, web.NotFound).Send()
+		return
+	}
 	web.OK(c).Data(gin.H{
-		"discovered": len(newAssets),
-		"changes":    len(changes),
-		"alerts":     alerts,
+		"status":            project.DiscoveryStatus,
+		"last_discovery_at": project.LastDiscoveryAt,
 	}).Send()
 }
 
 func (h *Handler) ListDiscoveredAssets(c *gin.Context) {
 	projectID := c.Param("id")
-	assets, count := h.svc.ListDiscoveredAssets(projectID)
+	query, ok := web.BindQuery[AssetListQuery](c)
+	if !ok {
+		return
+	}
+	assets, count := h.svc.ListDiscoveredAssets(projectID, query)
 	web.OK(c).List(count, assets).Send()
 }
 
@@ -284,4 +353,29 @@ func (h *Handler) ExposureReport(c *gin.Context) {
 		"open_alerts":       report.OpenAlerts,
 		"top_risk_assets":   report.TopRiskAssets,
 	}).Send()
+}
+
+func (h *Handler) ExportAssets(c *gin.Context) {
+	projectID := c.Param("id")
+	assets, _ := h.svc.GetAllAssets(projectID)
+
+	c.Header("Content-Type", "text/csv; charset=utf-8")
+	c.Header("Content-Disposition", "attachment; filename=asm_assets.csv")
+
+	c.Writer.WriteString("\xEF\xBB\xBF")
+	c.Writer.WriteString("类型,值,来源,风险分,状态,首次发现,最后发现\n")
+	for _, a := range assets {
+		line := fmt.Sprintf("%s,%s,%s,%d,%s,%s,%s\n",
+			a.Type, csvEscape(a.Value), csvEscape(a.Source),
+			a.RiskScore, a.Status,
+			a.FirstSeen.Format(time.RFC3339), a.LastSeen.Format(time.RFC3339))
+		c.Writer.WriteString(line)
+	}
+}
+
+func csvEscape(s string) string {
+	if strings.ContainsAny(s, ",\"\n") {
+		return "\"" + strings.ReplaceAll(s, "\"", "\"\"") + "\""
+	}
+	return s
 }

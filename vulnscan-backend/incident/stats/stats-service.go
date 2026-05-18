@@ -73,7 +73,7 @@ func (s *serviceStats) GetRemediationStats(ctx context.Context) (*statsContract.
 		AvgDays float64
 	}
 	sess.Model(&model.SecurityIncident{}).
-		Select("AVG(TIMESTAMPDIFF(DAY, created_at, closed_at)) as avg_days").
+		Select("AVG(julianday(closed_at) - julianday(created_at)) as avg_days").
 		Where("status = ? AND closed_at IS NOT NULL", model.IncidentStatusClosed).
 		Scan(&avgResult)
 	resp.AvgRemediationDay = math.Round(avgResult.AvgDays*100) / 100

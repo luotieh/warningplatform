@@ -1,20 +1,31 @@
 package vuln
 
 import (
+	"errors"
+
+	"vulnscan-backend/scanrunner"
 	vulnContract "vulnscan-backend/vuln/vuln-contract"
 
 	"code.yt-security.com/public/core/v2/web"
 	iamsdk "code.yt-security.com/public/sdk"
 	"code.yt-security.com/public/sdk/permission"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type HandlerVuln struct {
-	svc vulnContract.ServiceVuln
+	svc       vulnContract.ServiceVuln
+	scanDB    *gorm.DB
+	scanSched *scanrunner.Scheduler
 }
 
 func NewHandlerVuln(svc vulnContract.ServiceVuln) *HandlerVuln {
 	return &HandlerVuln{svc: svc}
+}
+
+func (h *HandlerVuln) BindScanRunner(session *gorm.DB, sched *scanrunner.Scheduler) {
+	h.scanDB = session
+	h.scanSched = sched
 }
 
 func (h *HandlerVuln) List(c *gin.Context) {
@@ -114,6 +125,75 @@ func (h *HandlerVuln) StatusHistory(c *gin.Context) {
 		return
 	}
 	web.OK(c).Data(items).Send()
+}
+
+func (h *HandlerVuln) Retest(c *gin.Context) {
+	uri, ok := web.BindUri[web.Id](c)
+	if !ok {
+		return
+	}
+	if h.scanDB == nil || h.scanSched == nil {
+		web.Fail(c).Msg("扫描调度器未初始化").Send()
+		return
+	}
+	vuln, err := h.svc.GetByID(uri.Id)
+	if err != nil {
+		web.Err(c, web.NotFound).Send()
+		return
+	}
+	user, _ := iamsdk.GetCurrentUser(c)
+	res, err := scanrunner.LaunchVulnRetest(h.scanDB, h.scanSched, vuln, user.UserID, user.OrganizeID)
+	if errors.Is(err, scanrunner.ErrTemplateNotFound) {
+		web.Fail(c).Msg("回测模板不存在，请重启服务同步内置模板").Send()
+		return
+	}
+	if err != nil {
+		web.Fail(c).Msg(err.Error()).Send()
+		return
+	}
+	web.OK(c).Data(map[string]any{
+		"task_id":  res.Task.ID,
+		"status":   res.Task.Status,
+		"vuln_id":  vuln.ID,
+		"template": res.Task.TemplateName,
+	}).Send()
+}
+
+func (h *HandlerVuln) RetestFromFinding(c *gin.Context) {
+	uri, ok := web.BindUri[web.Id](c)
+	if !ok {
+		return
+	}
+	if h.scanDB == nil || h.scanSched == nil {
+		web.Fail(c).Msg("扫描调度器未初始化").Send()
+		return
+	}
+	vulnID, err := scanrunner.EnsureVulnFromFinding(h.scanDB, uri.Id)
+	if err != nil {
+		web.Fail(c).Err(err).Send()
+		return
+	}
+	vuln, err := h.svc.GetByID(vulnID)
+	if err != nil {
+		web.Err(c, web.NotFound).Send()
+		return
+	}
+	user, _ := iamsdk.GetCurrentUser(c)
+	res, err := scanrunner.LaunchVulnRetest(h.scanDB, h.scanSched, vuln, user.UserID, user.OrganizeID)
+	if errors.Is(err, scanrunner.ErrTemplateNotFound) {
+		web.Fail(c).Msg("回测模板不存在，请重启服务同步内置模板").Send()
+		return
+	}
+	if err != nil {
+		web.Fail(c).Msg(err.Error()).Send()
+		return
+	}
+	web.OK(c).Data(map[string]any{
+		"task_id":    res.Task.ID,
+		"status":     res.Task.Status,
+		"vuln_id":    vuln.ID,
+		"finding_id": uri.Id,
+	}).Send()
 }
 
 func (h *HandlerVuln) Stats(c *gin.Context) {

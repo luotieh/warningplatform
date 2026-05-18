@@ -181,6 +181,12 @@ func (eb *EventBridge) OnIncidentReviewPassed(ctx context.Context, incident mode
 }
 
 func (eb *EventBridge) createIncidentFromFinding(ctx context.Context, f model.ScanFinding) error {
+	var scanTask model.ScanTask
+	organizeID := ""
+	if err := eb.db.WithContext(ctx).Select("organize_id").Where("id = ?", f.TaskID).First(&scanTask).Error; err == nil {
+		organizeID = scanTask.OrganizeID
+	}
+
 	level := severityToIncidentLevel(f.Severity)
 
 	name := f.Title
@@ -197,28 +203,43 @@ func (eb *EventBridge) createIncidentFromFinding(ctx context.Context, f model.Sc
 
 	cveId := ""
 	cvssScore := 0.0
+	owaspCategory := ""
 	incidentURL := ""
-	incidentType := "漏洞"
+	incidentType := classifyIncidentType(f.ModuleID)
+	affectScope := f.Target
+
+	if f.Port > 0 {
+		affectScope = fmt.Sprintf("%s:%d", f.Target, f.Port)
+	}
 
 	if f.Data != nil {
-		if v, ok := f.Data["cve_id"].(string); ok {
-			cveId = v
-		}
-		if v, ok := f.Data["cvss_score"].(string); ok {
-			fmt.Sscanf(v, "%f", &cvssScore)
-		}
-		if v, ok := f.Data["matched_at"].(string); ok {
+		cveId = extractStr(f.Data, "cve_id", "cve")
+		cvssScore = extractCvss(f.Data)
+		owaspCategory = extractStr(f.Data, "owasp_category", "owasp")
+
+		if v := extractStr(f.Data, "matched_at", "url"); v != "" {
 			incidentURL = v
 		}
-		if v, ok := f.Data["template_id"].(string); ok && incidentType == "漏洞" {
-			if strings.Contains(v, "xss") {
-				incidentType = "XSS漏洞"
-			} else if strings.Contains(v, "sqli") || strings.Contains(v, "sql-injection") {
-				incidentType = "SQL注入"
-			} else if strings.Contains(v, "rce") || strings.Contains(v, "command") {
-				incidentType = "远程代码执行"
-			}
+
+		if v := extractStr(f.Data, "affect_scope"); v != "" {
+			affectScope = v
 		}
+	}
+
+	descParts := []string{f.Description}
+	if f.Evidence != "" {
+		descParts = append(descParts, "证据: "+f.Evidence)
+	}
+	if f.VerificationDetail != "" {
+		descParts = append(descParts, "验证方式: "+f.VerificationDetail)
+	}
+
+	exploitDifficulty := "未知"
+	switch f.VerificationLevel {
+	case "exploit":
+		exploitDifficulty = "低"
+	case "principle":
+		exploitDifficulty = "中"
 	}
 
 	req := coreContract.IncidentCreateReq{
@@ -233,9 +254,12 @@ func (eb *EventBridge) createIncidentFromFinding(ctx context.Context, f model.Sc
 			IncidentType:        incidentType,
 			IncidentURL:         incidentURL,
 			DiscoveryTime:       discoveryTime,
-			IncidentDescription: f.Description,
+			IncidentDescription: strings.Join(descParts, "\n"),
 			CvssScore:           cvssScore,
 			CveId:               cveId,
+			OwaspCategory:       owaspCategory,
+			ExploitDifficulty:   exploitDifficulty,
+			AffectScope:         affectScope,
 		},
 	}
 
@@ -253,7 +277,57 @@ func (eb *EventBridge) createIncidentFromFinding(ctx context.Context, f model.Sc
 		}
 	}
 
-	return eb.incidentSvc.CreateIncident(ctx, req, "system")
+	return eb.incidentSvc.CreateIncident(ctx, req, "system", organizeID)
+}
+
+func extractStr(data model.JSONMap, keys ...string) string {
+	for _, k := range keys {
+		if v, ok := data[k].(string); ok && v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+func extractCvss(data model.JSONMap) float64 {
+	if v, ok := data["cvss_score"].(float64); ok {
+		return v
+	}
+	if v, ok := data["cvss_score"].(string); ok {
+		var score float64
+		fmt.Sscanf(v, "%f", &score)
+		return score
+	}
+	return 0
+}
+
+func classifyIncidentType(moduleID string) string {
+	switch {
+	case strings.Contains(moduleID, "sqli") || strings.Contains(moduleID, "sql"):
+		return "SQL注入"
+	case strings.Contains(moduleID, "xss"):
+		return "XSS漏洞"
+	case strings.Contains(moduleID, "cmdi") || strings.Contains(moduleID, "rce") || strings.Contains(moduleID, "command"):
+		return "远程代码执行"
+	case strings.Contains(moduleID, "lfi") || strings.Contains(moduleID, "xxe") || strings.Contains(moduleID, "ssti"):
+		return "服务端注入"
+	case strings.Contains(moduleID, "ssrf"):
+		return "SSRF服务端请求伪造"
+	case strings.Contains(moduleID, "nosqli"):
+		return "NoSQL注入"
+	case strings.Contains(moduleID, "jwt"):
+		return "JWT安全缺陷"
+	case strings.Contains(moduleID, "weak_pass") || strings.Contains(moduleID, "brute"):
+		return "弱口令/爆破"
+	case strings.Contains(moduleID, "cert"):
+		return "证书安全"
+	case strings.Contains(moduleID, "info_leak") || strings.Contains(moduleID, "dir_scan"):
+		return "信息泄露"
+	case strings.Contains(moduleID, "poc"):
+		return "已知漏洞利用"
+	default:
+		return "漏洞"
+	}
 }
 
 func (eb *EventBridge) incidentAlreadyExists(ctx context.Context, taskID string, f model.ScanFinding) bool {

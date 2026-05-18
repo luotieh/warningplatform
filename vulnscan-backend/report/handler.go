@@ -19,6 +19,10 @@ type previewReq struct {
 	TaskID string `json:"task_id"`
 }
 
+type taskReportURI struct {
+	TaskID string `uri:"task_id" binding:"required"`
+}
+
 func NewHandler(svc *ServiceReport) *Handler {
 	return &Handler{
 		svc:       svc,
@@ -27,13 +31,13 @@ func NewHandler(svc *ServiceReport) *Handler {
 }
 
 func (h *Handler) Generate(c *gin.Context) {
-	var req struct {
+	req, ok := web.BindJSON[struct {
 		Title  string `json:"title" binding:"required"`
 		Type   string `json:"type"`
 		Format string `json:"format"`
 		TaskID string `json:"task_id"`
-	}
-	if !web.ValidationJson(c, &req) {
+	}](c)
+	if !ok {
 		return
 	}
 	if req.Format == "" {
@@ -44,16 +48,21 @@ func (h *Handler) Generate(c *gin.Context) {
 	}
 
 	data := h.svc.BuildReportData(req.Title, req.Type, req.TaskID)
-
 	content, err := h.generator.Generate(data, req.Format)
 	if err != nil {
-		web.Fail(c).Msg("报告生成失败").Err(err).Send()
+		web.Fail(c).Msg("生成报告失败").Err(err).Send()
 		return
 	}
 
 	contentType := "application/json"
 	ext := "json"
 	switch req.Format {
+	case FormatWord:
+		contentType = "application/msword; charset=utf-8"
+		ext = "doc"
+	case FormatPDF:
+		contentType = "application/pdf"
+		ext = "pdf"
 	case FormatMarkdown:
 		contentType = "text/markdown; charset=utf-8"
 		ext = "md"
@@ -73,7 +82,7 @@ func (h *Handler) Generate(c *gin.Context) {
 func (h *Handler) Preview(c *gin.Context) {
 	req, _ := web.BindJSON[previewReq](c)
 	if req.Title == "" {
-		req.Title = "安全评估报告"
+		req.Title = "扫描报告预览"
 	}
 	if req.Type == "" {
 		req.Type = TypeTechnical
@@ -84,16 +93,17 @@ func (h *Handler) Preview(c *gin.Context) {
 }
 
 func (h *Handler) Compare(c *gin.Context) {
-	baseID := c.Query("base")
-	compareID := c.Query("compare")
-	if baseID == "" || compareID == "" {
-		web.Err(c, web.ParamsMissingRequired).Send()
+	query, ok := web.BindQuery[struct {
+		Base    string `form:"base" binding:"required"`
+		Compare string `form:"compare" binding:"required"`
+	}](c)
+	if !ok {
 		return
 	}
 
-	result, err := h.svc.CompareTasks(baseID, compareID)
+	result, err := h.svc.CompareTasks(query.Base, query.Compare)
 	if err != nil {
-		web.Fail(c).Msg("对比失败").Err(err).Send()
+		web.Fail(c).Msg("对比任务失败").Err(err).Send()
 		return
 	}
 	web.OK(c).Data(result).Send()
@@ -105,32 +115,40 @@ func (h *Handler) AvailableTasks(c *gin.Context) {
 }
 
 func (h *Handler) TaskReport(c *gin.Context) {
-	taskID := c.Param("task_id")
-	format := c.DefaultQuery("format", "json")
+	uri, ok := web.BindUri[taskReportURI](c)
+	if !ok {
+		return
+	}
+	format := c.DefaultQuery("format", FormatJSON)
 
-	task, err := h.svc.GetTask(taskID)
+	task, err := h.svc.GetTask(uri.TaskID)
 	if err != nil {
 		web.Err(c, web.NotFound).Send()
 		return
 	}
 
-	title := fmt.Sprintf("扫描报告 - %s", task.Name)
-	data := h.svc.BuildReportData(title, TypeTechnical, taskID)
-
-	if format == "json" {
+	title := fmt.Sprintf("扫描任务报告 - %s", task.Name)
+	data := h.svc.BuildReportData(title, TypeTechnical, uri.TaskID)
+	if format == FormatJSON {
 		web.OK(c).Data(data).Send()
 		return
 	}
 
 	content, err := h.generator.Generate(data, format)
 	if err != nil {
-		web.Fail(c).Msg("报告生成失败").Err(err).Send()
+		web.Fail(c).Msg("生成报告失败").Err(err).Send()
 		return
 	}
 
 	contentType := "application/octet-stream"
 	ext := format
 	switch format {
+	case FormatWord:
+		contentType = "application/msword; charset=utf-8"
+		ext = "doc"
+	case FormatPDF:
+		contentType = "application/pdf"
+		ext = "pdf"
 	case FormatMarkdown:
 		contentType = "text/markdown; charset=utf-8"
 		ext = "md"
@@ -142,7 +160,7 @@ func (h *Handler) TaskReport(c *gin.Context) {
 		ext = "sarif.json"
 	}
 
-	filename := fmt.Sprintf("report_%s.%s", taskID, ext)
+	filename := fmt.Sprintf("report_%s.%s", uri.TaskID, ext)
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
 	c.Data(200, contentType, content)
 }

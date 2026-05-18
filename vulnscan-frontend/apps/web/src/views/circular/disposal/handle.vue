@@ -1,4 +1,4 @@
-﻿<script lang="ts" setup>
+<script lang="ts" setup>
 import { onMounted, ref } from 'vue';
 import { NButton, NCard, NDescriptions, NDescriptionsItem, NForm, NFormItem, NInput, NSpace, NTag, NSpin, useMessage } from 'naive-ui';
 import { useRoute, useRouter } from 'vue-router';
@@ -10,6 +10,7 @@ const route = useRoute();
 const router = useRouter();
 const message = useMessage();
 const loading = ref(true);
+const submitting = ref(false);
 const detail = ref<CircularDetailResp | null>(null);
 const form = ref({ disposal_result: '', disposal_question: '' });
 
@@ -18,11 +19,19 @@ async function fetchData() {
 }
 
 async function handleSubmit() {
-  if (!form.value.disposal_result) { message.warning('请填写处置结果'); return; }
+  if (submitting.value) return;
+  if (!form.value.disposal_result.trim()) { message.warning('请填写处置结果'); return; }
+  if (form.value.disposal_result.length > 2000) { message.warning('处置结果不能超过2000字'); return; }
+  submitting.value = true;
   try {
     await disposeCircular(route.params.id as string, form.value);
-    message.success('处置提交成功'); router.push('/circular/disposal');
-  } catch (e: any) { message.error(e?.message || '处置失败'); }
+    message.success('处置提交成功');
+    router.push('/circular/disposal');
+  } catch (e: any) {
+    message.error(e?.message || '处置失败');
+  } finally {
+    submitting.value = false;
+  }
 }
 
 onMounted(fetchData);
@@ -44,7 +53,7 @@ onMounted(fetchData);
         </NForm>
         <NSpace justify="end">
           <NButton @click="router.back()">取消</NButton>
-          <NButton type="primary" @click="handleSubmit">提交处置</NButton>
+          <NButton type="primary" :loading="submitting" :disabled="submitting" @click="handleSubmit">提交处置</NButton>
         </NSpace>
       </NCard>
     </NSpin>

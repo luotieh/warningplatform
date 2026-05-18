@@ -1,8 +1,11 @@
 package vuln
 
 import (
+	"vulnscan-backend/scanrunner"
+
 	"code.yt-security.com/public/sdk/authorize"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type Vuln struct {
@@ -11,6 +14,12 @@ type Vuln struct {
 
 func NewVuln(handler *HandlerVuln) *Vuln {
 	return &Vuln{handler: handler}
+}
+
+func (m *Vuln) BindScanRunner(session *gorm.DB, sched *scanrunner.Scheduler) {
+	if m != nil && m.handler != nil {
+		m.handler.BindScanRunner(session, sched)
+	}
 }
 
 func (m *Vuln) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
@@ -25,6 +34,8 @@ func (m *Vuln) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
 				{Name: "标记已修复", Path: ":id/fix", Method: "POST", Handler: m.handler.MarkFixed, Enabled: true},
 				{Name: "标记忽略", Path: ":id/ignore", Method: "POST", Handler: m.handler.MarkIgnored, Enabled: true},
 				{Name: "重新打开", Path: ":id/reopen", Method: "POST", Handler: m.handler.Reopen, Enabled: true},
+				{Name: "漏洞回测", Path: ":id/retest", Method: "POST", Handler: m.handler.Retest, Enabled: true},
+				{Name: "发现项回测", Path: "findings/:id/retest", Method: "POST", Handler: m.handler.RetestFromFinding, Enabled: true},
 				{Name: "状态历史", Path: ":id/history", Method: "GET", Handler: m.handler.StatusHistory, Enabled: true},
 			},
 		},

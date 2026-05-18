@@ -3,12 +3,12 @@ import { h, onMounted, ref } from 'vue';
 import {
   NButton, NCard, NDataTable, NDrawer, NDrawerContent, NEmpty, NForm,
   NFormItem, NGrid, NGridItem, NInput, NModal, NPopconfirm, NSelect,
-  NSpace, NStatistic, NTabPane, NTabs, NTag,
+  NSpace, NStatistic, NTabPane, NTabs, NTag, NPagination,
 } from 'naive-ui';
 import type { ASMChange, ASMDiscoveredAsset, ASMProject, ASMSeed } from '#/api/asm';
 import {
   addSeed, createProject, deleteProject, deleteSeed,
-  getChanges, getDiscoveredAssets, getExposureReport, getProject, getProjects, runDiscovery,
+  getChanges, getDiscoveredAssets, getExposureReport, getProject, getProjects, exportAssets, runDiscovery,
 } from '#/api/asm';
 import { message } from '#/adapter/naive';
 import { useErrorHandler } from '#/composables/useErrorHandler';
@@ -28,6 +28,33 @@ const discoveredAssets = ref<ASMDiscoveredAsset[]>([]);
 const changes = ref<ASMChange[]>([]);
 const discovering = ref(false);
 const activeTab = ref('assets');
+
+const assetFilter = ref({ keyword: '', type: '', status: '', min_risk: 0 });
+const assetPage = ref(1);
+const assetPageSize = ref(20);
+const assetTotal = ref(0);
+
+const assetTypeOptions = [
+  { label: '全部', value: '' },
+  { label: '域名', value: 'domain' },
+  { label: '子域名', value: 'subdomain' },
+  { label: 'IP', value: 'ip' },
+  { label: 'URL', value: 'url' },
+  { label: '端口', value: 'port' },
+  { label: '服务', value: 'service' },
+];
+
+const assetStatusOptions = [
+  { label: '全部', value: '' },
+  { label: '活跃', value: 'active' },
+  { label: '不活跃', value: 'inactive' },
+];
+
+const riskOptions = [
+  { label: '全部', value: 0 },
+  { label: '高风险 (≥70)', value: 70 },
+  { label: '中风险 (≥40)', value: 40 },
+];
 
 const seedTypeOptions = [
   { label: '域名', value: 'domain' },
@@ -126,13 +153,23 @@ async function openProject(project: ASMProject) {
 
 async function loadProjectData(id: string) {
   try {
+    const params: Record<string, any> = {
+      index: assetPage.value,
+      size: assetPageSize.value,
+    };
+    if (assetFilter.value.keyword) params.keyword = assetFilter.value.keyword;
+    if (assetFilter.value.type) params.type = assetFilter.value.type;
+    if (assetFilter.value.status) params.status = assetFilter.value.status;
+    if (assetFilter.value.min_risk > 0) params.min_risk = assetFilter.value.min_risk;
+
     const [assetsRes, changesRes] = await Promise.allSettled([
-      getDiscoveredAssets(id),
+      getDiscoveredAssets(id, params),
       getChanges(id),
     ]);
     if (assetsRes.status === 'fulfilled') {
       const body = (assetsRes.value as any)?.data ?? assetsRes.value;
       discoveredAssets.value = body?.data ?? [];
+      assetTotal.value = body?.count ?? 0;
     }
     if (changesRes.status === 'fulfilled') {
       const body = (changesRes.value as any)?.data ?? changesRes.value;
@@ -141,14 +178,34 @@ async function loadProjectData(id: string) {
   } catch {}
 }
 
+function onAssetFilterChange() {
+  assetPage.value = 1;
+  if (activeProject.value) loadProjectData(activeProject.value.id);
+}
+
+function onAssetPageChange(p: number) {
+  assetPage.value = p;
+  if (activeProject.value) loadProjectData(activeProject.value.id);
+}
+
+function onAssetPageSizeChange(s: number) {
+  assetPageSize.value = s;
+  assetPage.value = 1;
+  if (activeProject.value) loadProjectData(activeProject.value.id);
+}
+
+function onExportAssets() {
+  if (!activeProject.value) return;
+  window.open(exportAssets(activeProject.value.id), '_blank');
+}
+
 async function onRunDiscovery(id: string) {
   discovering.value = true;
   try {
-    const res: any = await runDiscovery(id);
-    const body = res?.data ?? res;
-    message.success(`发现完成: ${body?.discovered ?? 0} 个资产, ${body?.changes ?? 0} 个变更`);
+    await runDiscovery(id);
+    message.success('发现任务已启动，请稍后刷新查看结果');
     if (activeProject.value?.id === id) {
-      await loadProjectData(id);
+      setTimeout(() => loadProjectData(id), 3000);
     }
   } catch (e) { handleError(e, '发现执行失败'); }
   finally { discovering.value = false; }
@@ -234,8 +291,29 @@ onMounted(fetchProjects);
 
         <NTabs v-model:value="activeTab" type="line" size="small">
           <NTabPane name="assets" tab="发现资产">
+            <NSpace style="margin-bottom:12px" :wrap="true" :size="8">
+              <NInput v-model:value="assetFilter.keyword" placeholder="搜索资产值" size="small" style="width:180px" clearable @clear="onAssetFilterChange" @keyup.enter="onAssetFilterChange" />
+              <NSelect v-model:value="assetFilter.type" :options="assetTypeOptions" size="small" style="width:110px" @update:value="onAssetFilterChange" />
+              <NSelect v-model:value="assetFilter.status" :options="assetStatusOptions" size="small" style="width:110px" @update:value="onAssetFilterChange" />
+              <NSelect v-model:value="assetFilter.min_risk" :options="riskOptions" size="small" style="width:130px" @update:value="onAssetFilterChange" />
+              <NButton size="small" @click="onAssetFilterChange">搜索</NButton>
+              <NButton size="small" type="info" @click="onExportAssets">导出CSV</NButton>
+            </NSpace>
             <NEmpty v-if="discoveredAssets.length === 0" description="暂无发现资产，点击「执行发现」启动扫描" />
-            <NDataTable v-else :data="discoveredAssets" :columns="assetColumns" :bordered="false" size="small" :max-height="400" />
+            <template v-else>
+              <NDataTable :data="discoveredAssets" :columns="assetColumns" :bordered="false" size="small" :max-height="350" />
+              <div style="display:flex;justify-content:flex-end;margin-top:12px">
+                <NPagination
+                  :page="assetPage"
+                  :page-size="assetPageSize"
+                  :item-count="assetTotal"
+                  :page-sizes="[10, 20, 50]"
+                  show-size-picker
+                  @update:page="onAssetPageChange"
+                  @update:page-size="onAssetPageSizeChange"
+                />
+              </div>
+            </template>
           </NTabPane>
           <NTabPane name="changes" tab="变更记录">
             <NEmpty v-if="changes.length === 0" description="暂无变更记录" />

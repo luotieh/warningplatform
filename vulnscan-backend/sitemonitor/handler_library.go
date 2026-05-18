@@ -8,6 +8,7 @@ import (
 	"vulnscan-backend/sitemonitor/contract"
 
 	"code.yt-security.com/public/core/v2/web"
+	iamsdk "code.yt-security.com/public/sdk"
 	"github.com/gin-gonic/gin"
 )
 
@@ -18,7 +19,8 @@ func (h *HandlerMonitor) ListWordLibraries(c *gin.Context) {
 	if !ok {
 		return
 	}
-	total, list, err := h.svc.ListWordLibraries(c.Request.Context(), req)
+	scope := iamsdk.DataFilterScope(c, monitorFieldMapping)
+	total, list, err := h.svc.ListWordLibraries(c.Request.Context(), req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
@@ -272,7 +274,8 @@ func (h *HandlerMonitor) ListFileLibraries(c *gin.Context) {
 	if !ok {
 		return
 	}
-	total, list, err := h.svc.ListFileLibraries(c.Request.Context(), req)
+	scope := iamsdk.DataFilterScope(c, monitorFieldMapping)
+	total, list, err := h.svc.ListFileLibraries(c.Request.Context(), req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return

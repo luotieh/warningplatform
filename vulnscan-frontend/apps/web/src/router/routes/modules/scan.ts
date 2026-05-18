@@ -31,6 +31,68 @@ const routes: RouteRecordRaw[] = [
         meta: { hideInMenu: true, title: '任务详情' },
       },
       {
+        name: 'ScanVulnList',
+        path: 'vulns',
+        component: () => import('#/views/vuln/list.vue'),
+        meta: {
+          icon: 'lucide:bug',
+          title: '漏洞列表',
+          perms: [
+            { action: 'verify', label: '验证' },
+            { action: 'delete', label: '删除' },
+          ],
+        },
+      },
+      {
+        name: 'ScanVulnDetail',
+        path: 'vulns/:id',
+        component: () => import('#/views/vuln/detail.vue'),
+        meta: { hideInMenu: true, title: '漏洞详情', activePath: '/scan/vulns' },
+      },
+      {
+        name: 'ScanReport',
+        path: 'report',
+        redirect: '/reports/scan',
+        meta: { hideInMenu: true, title: '报告中心' },
+      },
+      {
+        name: 'ScanCompare',
+        path: 'compare',
+        component: () => import('#/views/dashboard/compare.vue'),
+        meta: {
+          icon: 'lucide:git-compare',
+          title: '任务对比',
+        },
+      },
+      {
+        name: 'ScanExclusions',
+        path: 'exclusions',
+        component: () => import('#/views/scan/exclusions/list.vue'),
+        meta: {
+          icon: 'lucide:shield-off',
+          title: '例外/排除项',
+          perms: [
+            { action: 'create', label: '创建规则' },
+            { action: 'update', label: '编辑规则' },
+            { action: 'delete', label: '删除规则' },
+          ],
+        },
+      },
+      {
+        name: 'ScanFPRules',
+        path: 'fp-rules',
+        component: () => import('#/views/scan/fp-rules/list.vue'),
+        meta: {
+          icon: 'lucide:shield-check',
+          title: '误报管理',
+          perms: [
+            { action: 'create', label: '创建规则' },
+            { action: 'update', label: '编辑规则' },
+            { action: 'delete', label: '删除规则' },
+          ],
+        },
+      },
+      {
         name: 'ScanTemplate',
         path: 'template',
         component: () => import('#/views/scan/template/list.vue'),
@@ -56,34 +118,6 @@ const routes: RouteRecordRaw[] = [
             { action: 'toggle', label: '启停调度' },
           ],
         },
-      },
-      {
-        name: 'ScanPipeline',
-        path: 'pipeline',
-        component: () => import('#/views/scan/pipeline/editor.vue'),
-        meta: {
-          icon: 'lucide:workflow',
-          title: '流程编排',
-        },
-      },
-      {
-        name: 'ScanVulnList',
-        path: 'vulns',
-        component: () => import('#/views/vuln/list.vue'),
-        meta: {
-          icon: 'lucide:bug',
-          title: '漏洞列表',
-          perms: [
-            { action: 'verify', label: '验证' },
-            { action: 'delete', label: '删除' },
-          ],
-        },
-      },
-      {
-        name: 'ScanVulnDetail',
-        path: 'vulns/:id',
-        component: () => import('#/views/vuln/detail.vue'),
-        meta: { hideInMenu: true, title: '漏洞详情', activePath: '/scan/vulns' },
       },
     ],
   },

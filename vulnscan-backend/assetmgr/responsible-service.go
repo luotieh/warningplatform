@@ -21,11 +21,11 @@ func (s *serviceResponsible) session() *gorm.DB {
 	return sess
 }
 
-func (s *serviceResponsible) List(req ac.ResponsibleListReq) ([]model.AssetResponsible, int64, error) {
+func (s *serviceResponsible) List(req ac.ResponsibleListReq, scopes ...func(*gorm.DB) *gorm.DB) ([]model.AssetResponsible, int64, error) {
 	var items []model.AssetResponsible
 	var count int64
 
-	q := s.session().Model(&model.AssetResponsible{})
+	q := s.session().Model(&model.AssetResponsible{}).Scopes(scopes...)
 	if req.AssetID != "" {
 		q = q.Where("asset_id = ?", req.AssetID)
 	}

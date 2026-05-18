@@ -14,6 +14,8 @@ import type {
   MonitorAgent,
   MonitorDefaultConfig,
   MonitorExecution,
+  MonitorReportData,
+  MonitorReportRequest,
   MonitorTask,
   PageParams,
   TaskCreateDTO,
@@ -182,6 +184,23 @@ export const getTaskList = (
 export const createTask = (data: TaskCreateDTO) =>
   requestClient.post<{ id: string }>(base('/tasks'), data);
 
+export const createTasksFromAssets = (assetIds: string[]) =>
+  requestClient.post<{
+    total: number;
+    success: number;
+    results: Array<{
+      asset_id: string;
+      asset_name: string;
+      task_id?: string;
+      success: boolean;
+      skipped: boolean;
+      reason?: string;
+      error?: string;
+    }>;
+  }>(base('/tasks/from-assets'), {
+    asset_ids: assetIds,
+  });
+
 export const getTaskDetail = (id: string) =>
   requestClient.get<MonitorTask>(base(`/tasks/${id}`));
 
@@ -282,6 +301,9 @@ export const getEvidenceAssetUrl = (
 
 export const getDashboardStats = () =>
   requestClient.get<DashboardStats>(base('/dashboard/stats'));
+
+export const generateMonitorReport = (data: MonitorReportRequest) =>
+  requestClient.post<MonitorReportData>(base('/reports/generate'), data);
 
 // ════════════════════════════════════════
 // Agent API

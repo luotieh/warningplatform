@@ -34,6 +34,7 @@ type FindingQuery struct {
 	Severity string `form:"severity"`
 	ModuleID string `form:"module_id"`
 	Keyword  string `form:"keyword"`
+	Target   string `form:"target"`
 }
 
 type FindingSummary struct {

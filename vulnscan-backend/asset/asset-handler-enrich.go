@@ -1,14 +1,16 @@
 package asset
 
 import (
-	"crypto/tls"
+	"errors"
 	"fmt"
-	"net"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	assetContract "vulnscan-backend/asset/asset-contract"
 	"vulnscan-backend/model"
+	"vulnscan-backend/scanrunner"
 
 	"code.yt-security.com/public/core/v2/db"
 	"code.yt-security.com/public/core/v2/generate/qulid"
@@ -19,16 +21,161 @@ import (
 )
 
 type EnrichHandler struct {
-	database *db.DB
+	database      *db.DB
+	scanDB        *gorm.DB
+	scanScheduler *scanrunner.Scheduler
 }
 
 func NewEnrichHandler(database *db.DB) *EnrichHandler {
 	return &EnrichHandler{database: database}
 }
 
+// BindScanRunner 由 DI 在扫描调度器就绪后注入，用于信息富化走漏扫引擎。
+func (h *EnrichHandler) BindScanRunner(session *gorm.DB, sched *scanrunner.Scheduler) {
+	h.scanDB = session
+	h.scanScheduler = sched
+}
+
 func (h *EnrichHandler) session() *gorm.DB {
 	sess, _ := h.database.GetDBSession()
 	return sess
+}
+
+// ── 资产详情：端口 / 服务（从扫描发现聚合，兼容 SQLite 与 JSON 字段）──
+
+func scanFindingDataString(data model.JSONMap, key string) string {
+	if data == nil {
+		return ""
+	}
+	v, ok := data[key]
+	if !ok || v == nil {
+		return ""
+	}
+	switch t := v.(type) {
+	case string:
+		return strings.TrimSpace(t)
+	case float64:
+		return strconv.FormatInt(int64(t), 10)
+	case int:
+		return strconv.Itoa(t)
+	case int64:
+		return strconv.FormatInt(t, 10)
+	case bool:
+		if t {
+			return "true"
+		}
+		return "false"
+	default:
+		return strings.TrimSpace(fmt.Sprintf("%v", v))
+	}
+}
+
+func scanFindingDataInt(data model.JSONMap, key string) int {
+	s := scanFindingDataString(data, key)
+	if s == "" {
+		return 0
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
+func portFindingsToPortInfo(rows []model.ScanFinding) []portInfo {
+	out := make([]portInfo, 0, len(rows))
+	seen := make(map[string]struct{})
+	for _, f := range rows {
+		port := f.Port
+		if port == 0 {
+			port = scanFindingDataInt(f.Data, "port")
+		}
+		proto := strings.TrimSpace(f.Protocol)
+		if proto == "" {
+			proto = scanFindingDataString(f.Data, "protocol")
+		}
+		svc := scanFindingDataString(f.Data, "service")
+		ver := scanFindingDataString(f.Data, "version")
+		key := fmt.Sprintf("%d|%s|%s|%s", port, proto, svc, ver)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, portInfo{
+			Port:     port,
+			Protocol: proto,
+			Service:  svc,
+			Version:  ver,
+		})
+	}
+	return out
+}
+
+type serviceAggKey struct {
+	ServiceName string
+	Version     string
+	Port        string
+	Protocol    string
+}
+
+func serviceFindingsToServiceInfo(rows []model.ScanFinding) []serviceInfo {
+	counts := make(map[serviceAggKey]int)
+	for _, f := range rows {
+		svc := scanFindingDataString(f.Data, "service")
+		if svc == "" {
+			svc = strings.TrimSpace(f.Title)
+		}
+		ver := scanFindingDataString(f.Data, "version")
+		portStr := scanFindingDataString(f.Data, "port")
+		if portStr == "" || portStr == "0" {
+			if f.Port > 0 {
+				portStr = strconv.Itoa(f.Port)
+			} else {
+				portStr = "0"
+			}
+		}
+		proto := strings.TrimSpace(f.Protocol)
+		if proto == "" {
+			proto = scanFindingDataString(f.Data, "protocol")
+		}
+		k := serviceAggKey{svc, ver, portStr, proto}
+		counts[k]++
+	}
+	out := make([]serviceInfo, 0, len(counts))
+	for k, n := range counts {
+		out = append(out, serviceInfo{
+			ServiceName: k.ServiceName,
+			Version:     k.Version,
+			Port:        k.Port,
+			Protocol:    k.Protocol,
+			Count:       n,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		pi, _ := strconv.Atoi(out[i].Port)
+		pj, _ := strconv.Atoi(out[j].Port)
+		if pi != pj {
+			return pi < pj
+		}
+		return out[i].ServiceName < out[j].ServiceName
+	})
+	return out
+}
+
+func mergedOpenPortCount(ports []portInfo, services []serviceInfo) int {
+	uniq := make(map[int]struct{})
+	for _, p := range ports {
+		if p.Port > 0 {
+			uniq[p.Port] = struct{}{}
+		}
+	}
+	for _, s := range services {
+		n, err := strconv.Atoi(s.Port)
+		if err == nil && n > 0 {
+			uniq[n] = struct{}{}
+		}
+	}
+	return len(uniq)
 }
 
 func (h *EnrichHandler) AssetDetail(c *gin.Context) {
@@ -44,11 +191,15 @@ func (h *EnrichHandler) AssetDetail(c *gin.Context) {
 		return
 	}
 
+	addressLike := "%" + asset.Address + "%"
 	var ports []portInfo
-	h.session().Raw(`SELECT DISTINCT port, protocol, service, version
-		FROM vs_scan_finding
-		WHERE target LIKE ? AND type = 'port_open'
-		ORDER BY port`, "%"+asset.Address+"%").Scan(&ports)
+	var portFindings []model.ScanFinding
+	_ = h.session().Model(&model.ScanFinding{}).
+		Where("target LIKE ? AND type = ?", addressLike, "port_open").
+		Order("port ASC").
+		Limit(400).
+		Find(&portFindings).Error
+	ports = portFindingsToPortInfo(portFindings)
 
 	var vulns []vulnBrief
 	h.session().Model(&model.Vulnerability{}).
@@ -66,14 +217,12 @@ func (h *EnrichHandler) AssetDetail(c *gin.Context) {
 		LIMIT 20`, "%"+asset.Address+"%").Scan(&scanHistory)
 
 	var services []serviceInfo
-	h.session().Raw(`SELECT DISTINCT
-		COALESCE(data->>'service', '') as service_name,
-		COALESCE(data->>'version', '') as version,
-		COALESCE(data->>'port', '0') as port,
-		COUNT(*) as count
-		FROM vs_scan_finding
-		WHERE target LIKE ? AND type = 'service'
-		GROUP BY service_name, version, port`, "%"+asset.Address+"%").Scan(&services)
+	var serviceFindings []model.ScanFinding
+	_ = h.session().Model(&model.ScanFinding{}).
+		Where("target LIKE ? AND type = ?", addressLike, "service").
+		Limit(800).
+		Find(&serviceFindings).Error
+	services = serviceFindingsToServiceInfo(serviceFindings)
 
 	type monitorTaskBrief struct {
 		ID             string     `json:"id"`
@@ -106,7 +255,7 @@ func (h *EnrichHandler) AssetDetail(c *gin.Context) {
 		"services":      services,
 		"monitor_tasks": monitorTasks,
 		"summary": gin.H{
-			"port_count":    len(ports),
+			"port_count":    mergedOpenPortCount(ports, services),
 			"vuln_count":    len(vulns),
 			"scan_count":    len(scanHistory),
 			"monitor_count": len(monitorTasks),
@@ -199,48 +348,65 @@ func (h *EnrichHandler) AggregateFromScans(c *gin.Context) {
 }
 
 func (h *EnrichHandler) AssetStats(c *gin.Context) {
-	scope := iamsdk.DataFilterScope(c, assetFieldMapping)
-	assetFamily := c.Query("asset_family")
-
-	assetQuery := h.session().Model(&model.Asset{}).Scopes(scope)
-	if assetFamily != "" {
-		assetQuery = assetQuery.Where("asset_family = ?", assetFamily)
+	listQuery, ok := web.BindQuery[assetContract.AssetQuery](c)
+	if !ok {
+		return
 	}
+	listQuery.Page = 0
+	listQuery.PageSize = 0
+
+	scope := iamsdk.DataFilterScope(c, assetFieldMapping)
 
 	var totalAssets int64
-	assetQuery.Count(&totalAssets)
+	if err := buildAssetListQuery(h.session(), listQuery, scope).Count(&totalAssets).Error; err != nil {
+		web.Fail(c).Err(err).Send()
+		return
+	}
 
 	var activeAssets int64
-	assetQuery.Where("status = 1").Count(&activeAssets)
+	if err := buildAssetListQuery(h.session(), listQuery, scope).Where("status = 1").Count(&activeAssets).Error; err != nil {
+		web.Fail(c).Err(err).Send()
+		return
+	}
 
 	var keyAssets int64
-	assetQuery.Where("is_key = true").Count(&keyAssets)
+	if err := buildAssetListQuery(h.session(), listQuery, scope).Where("is_key = ?", true).Count(&keyAssets).Error; err != nil {
+		web.Fail(c).Err(err).Send()
+		return
+	}
 
 	var riskHigh int64
-	assetQuery.Where("risk_score >= 70").Count(&riskHigh)
+	if err := buildAssetListQuery(h.session(), listQuery, scope).Where("risk_score >= 70").Count(&riskHigh).Error; err != nil {
+		web.Fail(c).Err(err).Send()
+		return
+	}
 
 	type typeStat struct {
 		Type  string `json:"type"`
 		Count int64  `json:"count"`
 	}
 	var typeStats []typeStat
-	h.session().Model(&model.Asset{}).
+	if err := buildAssetListQuery(h.session(), listQuery, scope).
 		Select("type, COUNT(*) as count").
-		Scopes(scope).
 		Group("type").
-		Find(&typeStats)
+		Find(&typeStats).Error; err != nil {
+		web.Fail(c).Err(err).Send()
+		return
+	}
 
 	type groupStat struct {
 		GroupID string `json:"group_id"`
 		Count   int64  `json:"count"`
 	}
 	var groupStats []groupStat
-	h.session().Model(&model.Asset{}).
-		Select("group_id, COUNT(*) as count").
-		Scopes(scope).
+	if err := buildAssetListQuery(h.session(), listQuery, scope).
 		Where("group_id != ''").
+		Select("group_id, COUNT(*) as count").
 		Group("group_id").
-		Find(&groupStats)
+		Find(&groupStats).Error; err != nil {
+		web.Fail(c).Err(err).Send()
+		return
+	}
 
 	var vulnAssets int64
 	h.session().Model(&model.Vulnerability{}).
@@ -510,6 +676,7 @@ type serviceInfo struct {
 	ServiceName string `json:"service_name"`
 	Version     string `json:"version"`
 	Port        string `json:"port"`
+	Protocol    string `json:"protocol"`
 	Count       int    `json:"count"`
 }
 
@@ -696,6 +863,16 @@ func (h *EnrichHandler) ImportFromCyberspace(c *gin.Context) {
 
 // ── 信息富化 ──
 
+func scanTargetForAsset(a *model.Asset) string {
+	if d := strings.TrimSpace(a.Domain); d != "" {
+		return d
+	}
+	if ip := strings.TrimSpace(a.IPv4); ip != "" {
+		return ip
+	}
+	return strings.TrimSpace(a.Address)
+}
+
 func (h *EnrichHandler) EnrichAsset(c *gin.Context) {
 	id := c.Param("id")
 	var asset model.Asset
@@ -703,159 +880,127 @@ func (h *EnrichHandler) EnrichAsset(c *gin.Context) {
 		web.Err(c, web.NotFound).Send()
 		return
 	}
-
-	updates := make(map[string]interface{})
-	results := make(map[string]interface{})
-
-	host := asset.Address
-	if asset.IPv4 != "" {
-		host = asset.IPv4
+	if h.scanDB == nil || h.scanScheduler == nil {
+		web.Fail(c).Msg("扫描调度器未初始化，无法提交富化任务").Send()
+		return
 	}
-	if asset.Domain != "" {
-		host = asset.Domain
+	target := scanTargetForAsset(&asset)
+	if target == "" {
+		web.Fail(c).Msg("该资产没有可扫描的主机地址（域名 / IP / 地址）").Send()
+		return
 	}
-
-	if ip := asset.IPv4; ip == "" && asset.Address != "" {
-		if resolved := resolveIP(asset.Address); resolved != "" {
-			updates["ipv4"] = resolved
-			results["resolved_ip"] = resolved
-		}
+	user, _ := iamsdk.GetCurrentUser(c)
+	name := fmt.Sprintf("资产富化: %s", strings.TrimSpace(asset.Name))
+	if strings.TrimSpace(asset.Name) == "" {
+		name = fmt.Sprintf("资产富化: %s", target)
 	}
-
-	if sslInfo := checkSSL(host, asset.Port); sslInfo != nil {
-		results["ssl"] = sslInfo
-		if sslInfo["expires_at"] != nil {
-			updates["ssl_expires_at"] = sslInfo["expires_at"]
-		}
+	res, err := scanrunner.LaunchScan(h.scanDB, h.scanScheduler, scanrunner.LaunchScanParams{
+		Name:       name,
+		Targets:    []string{target},
+		TemplateID: scanrunner.AssetEnrichTemplateID,
+		Priority:   6,
+		CreatedBy:  user.UserID,
+		OrganizeID: user.OrganizeID,
+		TaskType:   model.TaskTypeAssetEnrich,
+		Parameters: map[string]interface{}{"asset_id": id},
+	})
+	if errors.Is(err, scanrunner.ErrTemplateNotFound) {
+		web.Fail(c).Msg("内置富化扫描模板不存在，请重启服务以同步模板").Send()
+		return
 	}
-
-	if rdns := reverseDNS(asset.IPv4); rdns != "" {
-		results["reverse_dns"] = rdns
-		if asset.Domain == "" {
-			updates["domain"] = rdns
-		}
+	if err != nil {
+		web.Fail(c).Msg("提交扫描任务失败: " + err.Error()).Send()
+		return
 	}
-
-	if len(updates) > 0 {
-		h.session().Model(&model.Asset{}).Where("id = ?", id).Updates(updates)
+	task := res.Task
+	out := gin.H{
+		"asset_id":      id,
+		"task_id":       task.ID,
+		"status":        task.Status,
+		"template":      task.TemplateName,
+		"split_mode":    res.SplitMode,
+		"engine_enrich": true,
 	}
-
-	results["asset_id"] = id
-	results["updated_fields"] = len(updates)
-	web.OK(c).Data(results).Send()
+	if res.SplitMode {
+		out["sub_count"] = res.SubCount
+	}
+	web.OK(c).Data(out).Send()
 }
 
 func (h *EnrichHandler) BatchEnrich(c *gin.Context) {
 	var req struct {
-		IDs []string `json:"ids" binding:"required"`
+		IDs      []string `json:"ids"`
+		AssetIDs []string `json:"asset_ids"`
 	}
 	if !web.ValidationJson(c, &req) {
 		return
 	}
+	ids := req.IDs
+	if len(ids) == 0 {
+		ids = req.AssetIDs
+	}
+	if len(ids) == 0 {
+		web.Fail(c).Msg("请提供资产 id 列表（ids 或 asset_ids）").Send()
+		return
+	}
+	if h.scanDB == nil || h.scanScheduler == nil {
+		web.Fail(c).Msg("扫描调度器未初始化，无法提交富化任务").Send()
+		return
+	}
 
 	var assets []model.Asset
-	h.session().Where("id IN ?", req.IDs).Find(&assets)
+	h.session().Where("id IN ?", ids).Find(&assets)
 
-	type enrichResult struct {
-		ID      string
-		Updates map[string]interface{}
-	}
-
-	const workers = 5
-	jobs := make(chan model.Asset, len(assets))
-	results := make(chan enrichResult, len(assets))
-
-	for w := 0; w < workers; w++ {
-		go func() {
-			for asset := range jobs {
-				updates := make(map[string]interface{})
-				host := asset.Address
-				if asset.Domain != "" {
-					host = asset.Domain
-				}
-
-				if asset.IPv4 == "" {
-					if resolved := resolveIP(asset.Address); resolved != "" {
-						updates["ipv4"] = resolved
-					}
-				}
-
-				if sslInfo := checkSSL(host, asset.Port); sslInfo != nil {
-					if sslInfo["expires_at"] != nil {
-						updates["ssl_expires_at"] = sslInfo["expires_at"]
-					}
-				}
-
-				results <- enrichResult{ID: asset.ID, Updates: updates}
-			}
-		}()
-	}
-
-	for _, a := range assets {
-		jobs <- a
-	}
-	close(jobs)
-
-	enriched := 0
-	for i := 0; i < len(assets); i++ {
-		r := <-results
-		if len(r.Updates) > 0 {
-			h.session().Model(&model.Asset{}).Where("id = ?", r.ID).Updates(r.Updates)
-			enriched++
+	targets := make([]string, 0, len(assets))
+	assetIDs := make([]string, 0, len(assets))
+	for i := range assets {
+		t := scanTargetForAsset(&assets[i])
+		if t == "" {
+			continue
 		}
+		targets = append(targets, t)
+		assetIDs = append(assetIDs, assets[i].ID)
+	}
+	if len(targets) == 0 {
+		web.Fail(c).Msg("所选资产均无有效扫描目标").Send()
+		return
 	}
 
-	web.OK(c).Data(gin.H{"enriched": enriched, "total": len(req.IDs)}).Send()
-}
-
-func resolveIP(host string) string {
-	ips, err := net.LookupHost(host)
-	if err != nil || len(ips) == 0 {
-		return ""
+	user, _ := iamsdk.GetCurrentUser(c)
+	name := fmt.Sprintf("批量资产富化(%d)", len(targets))
+	res, err := scanrunner.LaunchScan(h.scanDB, h.scanScheduler, scanrunner.LaunchScanParams{
+		Name:       name,
+		Targets:    targets,
+		TemplateID: scanrunner.AssetEnrichTemplateID,
+		Priority:   6,
+		CreatedBy:  user.UserID,
+		OrganizeID: user.OrganizeID,
+		TaskType:   model.TaskTypeAssetEnrich,
+		Parameters: map[string]interface{}{"asset_ids": assetIDs},
+	})
+	if errors.Is(err, scanrunner.ErrTemplateNotFound) {
+		web.Fail(c).Msg("内置富化扫描模板不存在，请重启服务以同步模板").Send()
+		return
 	}
-	return ips[0]
-}
-
-func reverseDNS(ip string) string {
-	if ip == "" {
-		return ""
-	}
-	names, err := net.LookupAddr(ip)
-	if err != nil || len(names) == 0 {
-		return ""
-	}
-	return strings.TrimSuffix(names[0], ".")
-}
-
-func checkSSL(host string, port int) map[string]interface{} {
-	if port == 0 {
-		port = 443
-	}
-	addr := fmt.Sprintf("%s:%d", host, port)
-	conn, err := tls.DialWithDialer(&net.Dialer{Timeout: 5 * time.Second}, "tcp", addr, &tls.Config{InsecureSkipVerify: true})
 	if err != nil {
-		return nil
+		web.Fail(c).Msg("提交扫描任务失败: " + err.Error()).Send()
+		return
 	}
-	defer conn.Close()
-
-	certs := conn.ConnectionState().PeerCertificates
-	if len(certs) == 0 {
-		return nil
+	task := res.Task
+	out := gin.H{
+		"task_id":       task.ID,
+		"status":        task.Status,
+		"template":      task.TemplateName,
+		"target_count":  len(targets),
+		"skipped":       len(ids) - len(targets),
+		"split_mode":    res.SplitMode,
+		"engine_enrich": true,
 	}
-
-	cert := certs[0]
-	return map[string]interface{}{
-		"subject":    cert.Subject.CommonName,
-		"issuer":     cert.Issuer.CommonName,
-		"not_before": cert.NotBefore,
-		"expires_at": cert.NotAfter,
-		"dns_names":  cert.DNSNames,
-		"is_expired": time.Now().After(cert.NotAfter),
-		"days_left":  int(time.Until(cert.NotAfter).Hours() / 24),
+	if res.SplitMode {
+		out["sub_count"] = res.SubCount
 	}
+	web.OK(c).Data(out).Send()
 }
-
-// ── 风险评分 ──
 
 func (h *EnrichHandler) RecalcRisk(c *gin.Context) {
 	id := c.Param("id")

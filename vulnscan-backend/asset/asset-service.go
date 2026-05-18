@@ -25,11 +25,9 @@ func (s *serviceAsset) session() *gorm.DB {
 	return session
 }
 
-func (s *serviceAsset) List(query assetContract.AssetQuery, scopes ...func(*gorm.DB) *gorm.DB) ([]model.Asset, int64, error) {
-	var items []model.Asset
-	var count int64
-
-	tx := s.session().Model(&model.Asset{}).Scopes(scopes...)
+// buildAssetListQuery 与资产列表 List 使用相同的过滤条件（不含分页），供统计接口等复用。
+func buildAssetListQuery(sess *gorm.DB, query assetContract.AssetQuery, scopes ...func(*gorm.DB) *gorm.DB) *gorm.DB {
+	tx := sess.Model(&model.Asset{}).Scopes(scopes...)
 
 	if query.Keyword != "" {
 		tx = tx.Where("name LIKE ? OR address LIKE ?", "%"+query.Keyword+"%", "%"+query.Keyword+"%")
@@ -59,8 +57,16 @@ func (s *serviceAsset) List(query assetContract.AssetQuery, scopes ...func(*gorm
 		tx = tx.Where("data_source = ?", query.DataSource)
 	}
 	if query.AssetFamily != "" {
-		tx = tx.Where("asset_family = ?", query.AssetFamily)
+		tx = applyAssetFamilyFilter(tx, query.AssetFamily)
 	}
+	return tx
+}
+
+func (s *serviceAsset) List(query assetContract.AssetQuery, scopes ...func(*gorm.DB) *gorm.DB) ([]model.Asset, int64, error) {
+	var items []model.Asset
+	var count int64
+
+	tx := buildAssetListQuery(s.session(), query, scopes...)
 
 	if err := tx.Count(&count).Error; err != nil {
 		return nil, 0, err
@@ -78,6 +84,7 @@ func (s *serviceAsset) List(query assetContract.AssetQuery, scopes ...func(*gorm
 		return nil, 0, err
 	}
 
+	normalizeAssetFamilies(items)
 	return items, count, nil
 }
 
@@ -86,6 +93,7 @@ func (s *serviceAsset) GetByID(id string) (*model.Asset, error) {
 	if err := s.session().First(&item, "id = ?", id).Error; err != nil {
 		return nil, err
 	}
+	normalizeAssetFamily(&item)
 	return &item, nil
 }
 
@@ -93,7 +101,7 @@ func (s *serviceAsset) Create(item *model.Asset) error {
 	if err := s.session().Create(item).Error; err != nil {
 		return err
 	}
-	s.ensureVerifyTasks([]model.Asset{*item}, item.CreatedBy, "asset_create")
+	s.ensureVerifyTasks([]model.Asset{*item}, item.CreatedBy, string(model.DataSourceManual))
 	return nil
 }
 
@@ -186,7 +194,7 @@ func (s *serviceAsset) BatchImport(items []*model.Asset) (int, error) {
 			}
 			assets = append(assets, *item)
 		}
-		s.ensureVerifyTasks(assets, operator, "asset_import")
+		s.ensureVerifyTasks(assets, operator, string(model.DataSourceImport))
 	}
 	return int(result.RowsAffected), result.Error
 }

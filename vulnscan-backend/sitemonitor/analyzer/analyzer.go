@@ -11,6 +11,7 @@ type Input struct {
 	TaskID       string
 	URL          string
 	SnapshotJSON string
+	Config       map[string]any
 	Baseline     *model.MonitorBaseline
 }
 

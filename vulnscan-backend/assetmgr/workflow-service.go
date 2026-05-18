@@ -22,11 +22,11 @@ func (s *serviceWorkflow) session() *gorm.DB {
 	return sess
 }
 
-func (s *serviceWorkflow) List(req ac.WorkflowListReq) ([]model.Workflow, int64, error) {
+func (s *serviceWorkflow) List(req ac.WorkflowListReq, scopes ...func(*gorm.DB) *gorm.DB) ([]model.Workflow, int64, error) {
 	var items []model.Workflow
 	var count int64
 
-	q := s.session().Model(&model.Workflow{})
+	q := s.session().Model(&model.Workflow{}).Scopes(scopes...)
 	if req.Enabled != nil {
 		q = q.Where("enabled = ?", *req.Enabled)
 	}
@@ -60,11 +60,11 @@ func (s *serviceWorkflow) Delete(id string) error {
 	return s.session().Where("id = ?", id).Delete(&model.Workflow{}).Error
 }
 
-func (s *serviceWorkflow) ListExecutions(req ac.ExecutionListReq) ([]model.WorkflowExecution, int64, error) {
+func (s *serviceWorkflow) ListExecutions(req ac.ExecutionListReq, scopes ...func(*gorm.DB) *gorm.DB) ([]model.WorkflowExecution, int64, error) {
 	var items []model.WorkflowExecution
 	var count int64
 
-	q := s.session().Model(&model.WorkflowExecution{})
+	q := s.session().Model(&model.WorkflowExecution{}).Scopes(scopes...)
 	if req.WorkflowID != "" {
 		q = q.Where("workflow_id = ?", req.WorkflowID)
 	}

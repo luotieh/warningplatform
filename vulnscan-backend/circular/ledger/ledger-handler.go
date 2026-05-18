@@ -21,7 +21,7 @@ func (h *HandlerLedger) List(c *gin.Context) {
 	if !ok {
 		return
 	}
-	total, items, err := h.svc.List(c.Request.Context(), req)
+	total, items, err := h.svc.List(c, req)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
@@ -34,7 +34,7 @@ func (h *HandlerLedger) Detail(c *gin.Context) {
 	if !ok {
 		return
 	}
-	item, err := h.svc.Detail(c.Request.Context(), uri.Id)
+	item, err := h.svc.Detail(c, uri.Id)
 	if err != nil {
 		web.Err(c, web.NotFound).Send()
 		return

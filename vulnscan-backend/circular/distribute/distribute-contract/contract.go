@@ -1,7 +1,6 @@
 package distributeContract
 
 import (
-	"context"
 	"vulnscan-backend/model"
 
 	inputContract "vulnscan-backend/circular/input/input-contract"
@@ -27,6 +26,6 @@ type RedistributeReq struct {
 }
 
 type ServiceDistribute interface {
-	List(ctx context.Context, req inputContract.ListQuery) (int64, []inputContract.ListResp, error)
+	List(c *gin.Context, req inputContract.ListQuery) (int64, []inputContract.ListResp, error)
 	Distribute(c *gin.Context, req DistributeReq, userId string) error
 }

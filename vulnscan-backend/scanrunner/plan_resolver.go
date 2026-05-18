@@ -55,12 +55,9 @@ func DefaultTimeout(stages []stageGroup) time.Duration {
 		total += len(s.modules)
 	}
 	if total <= 4 {
-		return 1 * time.Minute
+		return 2 * time.Minute
 	}
-	if total <= 15 {
-		return 3 * time.Minute
-	}
-	return 2 * time.Minute
+	return time.Duration(total) * 30 * time.Second
 }
 
 func mergeConfig(base, overlay map[string]interface{}) map[string]interface{} {

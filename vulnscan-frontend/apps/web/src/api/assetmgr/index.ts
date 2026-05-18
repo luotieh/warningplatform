@@ -53,8 +53,17 @@ export interface Organize {
   unified_social_credit_code: string;
   industry_category: string;
   unit_type: string;
+  is_notification_member: boolean;
   address: string;
+  unit_detail_address: string;
+  leader_name: string;
+  leader_title: string;
+  responsible_department_name: string;
+  department_leader_name: string;
+  department_leader_title: string;
+  department_leader_phone: string;
   contact_name: string;
+  contact_title: string;
   contact_phone: string;
   asset_count: number;
 }
@@ -63,12 +72,16 @@ export function getOrganizeList(params?: Record<string, any>) {
   return baseRequestClient.get<any>('/organize/list', { params });
 }
 
+export function getOrganizeDetail(id: string) {
+  return requestClient.get(`/organize/${id}`);
+}
+
 export function getOrganizeTree() {
   return requestClient.get('/organize/tree');
 }
 
 export function getIamOrganizeTree() {
-  return requestClient.get<any[]>('/identity/organizes');
+  return requestClient.get<any[]>('/organize/iam-tree');
 }
 
 export function createOrganize(data: Partial<Organize>) {
@@ -85,6 +98,16 @@ export function deleteOrganize(id: string) {
 
 export function syncIamOrganizes() {
   return requestClient.post('/organize/sync-iam');
+}
+
+export interface EnsureOrganizeReq {
+  id: string;
+  name?: string;
+  parent_id?: string;
+}
+
+export function ensureOrganize(data: EnsureOrganizeReq) {
+  return requestClient.post<Organize>('/organize/ensure', data);
 }
 
 // ── 建设运维单位 ──
