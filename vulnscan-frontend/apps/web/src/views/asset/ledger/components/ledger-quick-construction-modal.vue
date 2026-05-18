@@ -1,4 +1,7 @@
 <script lang="ts" setup>
+import type { FormInst } from 'naive-ui';
+
+import { ref, watch } from 'vue';
 import {
   NButton,
   NCascader,
@@ -9,40 +12,55 @@ import {
   NInput,
   NModal,
   NSpace,
-  NSwitch,
 } from 'naive-ui';
 
+import { quickConstructionFormRules } from '#/utils/form-rules';
 import { regionOptions } from '#/utils/region';
 
 import type { LedgerConstructionForm } from '../types';
 
 defineOptions({ name: 'LedgerQuickConstructionModal' });
 
-defineProps<{
+const props = defineProps<{
   show: boolean;
   loading?: boolean;
   form: LedgerConstructionForm;
-  target: 'construction' | 'operation';
-  linkToBoth: boolean;
 }>();
 
 const emit = defineEmits<{
   close: [];
   submit: [];
   'update:show': [value: boolean];
-  'update:linkToBoth': [value: boolean];
 }>();
+
+const formRef = ref<FormInst | null>(null);
+
+watch(
+  () => props.show,
+  (visible) => {
+    if (!visible) formRef.value?.restoreValidation();
+  },
+);
+
+async function handleSubmit() {
+  try {
+    await formRef.value?.validate();
+    emit('submit');
+  } catch {
+    /* 校验未通过 */
+  }
+}
 </script>
 
 <template>
   <NModal
     :show="show"
     preset="card"
-    :title="target === 'construction' ? '快速新增建设单位' : '快速新增运维单位'"
+    title="快速新增运维单位"
     style="width: min(760px, calc(100vw - 32px))"
     @update:show="(value) => emit('update:show', value)"
   >
-    <NForm label-placement="top">
+    <NForm ref="formRef" :model="form" :rules="quickConstructionFormRules" label-placement="top">
       <NGrid :cols="2" :x-gap="16">
         <NGridItem>
           <NFormItem label="单位名称" required>
@@ -72,51 +90,27 @@ const emit = defineEmits<{
           </NFormItem>
         </NGridItem>
         <NGridItem>
-          <NFormItem label="联系电话">
-            <NInput v-model:value="form.charge_phone" placeholder="请输入联系电话" />
-          </NFormItem>
-        </NGridItem>
-        <NGridItem :span="2">
-          <NFormItem label="公网安备案号">
-            <NInput v-model:value="form.security_filing" placeholder="请输入公网安备案号" />
+          <NFormItem label="联系电话" path="charge_phone">
+            <NInput v-model:value="form.charge_phone" placeholder="11 位手机或固话" />
           </NFormItem>
         </NGridItem>
       </NGrid>
-
-      <div class="ledger-quick-construction__switch">
-        <NSwitch
-          :value="linkToBoth"
-          @update:value="(value) => emit('update:linkToBoth', value)"
-        />
-        <div>
-          <div>同时关联建设和运维单位</div>
-          <div class="ledger-quick-construction__hint">保存后会自动回填到当前资产表单</div>
-        </div>
-      </div>
+      <p class="ledger-quick-construction__hint">保存后将自动关联到当前资产的运维单位</p>
     </NForm>
 
     <template #footer>
       <NSpace justify="end">
         <NButton @click="emit('close')">取消</NButton>
-        <NButton type="primary" :loading="loading" @click="emit('submit')">确认新增</NButton>
+        <NButton type="primary" :loading="loading" @click="handleSubmit">确认新增</NButton>
       </NSpace>
     </template>
   </NModal>
 </template>
 
 <style scoped>
-.ledger-quick-construction__switch {
-  align-items: center;
-  border-top: 1px dashed var(--n-border-color);
-  display: flex;
-  gap: 12px;
-  margin-top: 8px;
-  padding-top: 16px;
-}
-
 .ledger-quick-construction__hint {
   color: var(--n-text-color-3);
   font-size: 12px;
-  margin-top: 4px;
+  margin: 12px 0 0;
 }
 </style>

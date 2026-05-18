@@ -8,7 +8,6 @@ import (
 
 type TokenBucket struct {
 	mu         sync.Mutex
-	cond       *sync.Cond
 	tokens     float64
 	maxTokens  float64
 	refillRate float64
@@ -34,42 +33,34 @@ func SetGlobalBucketRate(rps float64, burst float64) {
 	if b.tokens > burst {
 		b.tokens = burst
 	}
-	b.cond.Broadcast()
 }
 
 func NewTokenBucket(rps float64, burst float64) *TokenBucket {
-	tb := &TokenBucket{
+	return &TokenBucket{
 		tokens:     burst,
 		maxTokens:  burst,
 		refillRate: rps,
 		lastRefill: time.Now(),
 	}
-	tb.cond = sync.NewCond(&tb.mu)
-	return tb
 }
 
+// Wait 阻塞直到取得令牌或 ctx 取消。不在持锁状态下等待，避免与 sync.Cond 交叉导致重复 Unlock。
 func (tb *TokenBucket) Wait(ctx context.Context) error {
 	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if tb.tryTake() {
 			return nil
 		}
 
-		tb.mu.Lock()
-		waitDone := make(chan struct{})
-		go func() {
-			tb.cond.Wait()
-			close(waitDone)
-		}()
-
+		wait := tb.estimateWaitLocked()
+		timer := time.NewTimer(wait)
 		select {
 		case <-ctx.Done():
-			tb.cond.Broadcast()
-			tb.mu.Unlock()
+			timer.Stop()
 			return ctx.Err()
-		case <-waitDone:
-			tb.mu.Unlock()
-		case <-time.After(50 * time.Millisecond):
-			tb.mu.Unlock()
+		case <-timer.C:
 		}
 	}
 }
@@ -93,10 +84,35 @@ func (tb *TokenBucket) tryTake() bool {
 
 	if tb.tokens >= 1 {
 		tb.tokens--
-		tb.cond.Broadcast()
 		return true
 	}
 	return false
+}
+
+// estimateWaitLocked 估算距离下一枚令牌的大致等待时间（调用方未持锁）。
+func (tb *TokenBucket) estimateWaitLocked() time.Duration {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+
+	now := time.Now()
+	elapsed := now.Sub(tb.lastRefill).Seconds()
+	tokens := tb.tokens + elapsed*tb.refillRate
+	if tokens > tb.maxTokens {
+		tokens = tb.maxTokens
+	}
+	if tokens >= 1 || tb.refillRate <= 0 {
+		return time.Millisecond
+	}
+	need := 1 - tokens
+	sec := need / tb.refillRate
+	d := time.Duration(sec * float64(time.Second))
+	if d < time.Millisecond {
+		return time.Millisecond
+	}
+	if d > 50*time.Millisecond {
+		return 50 * time.Millisecond
+	}
+	return d
 }
 
 func (tb *TokenBucket) Stats() (tokens float64, rps float64, burst float64) {

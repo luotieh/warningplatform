@@ -1,6 +1,7 @@
 <script lang="ts" setup>
 import { h, onMounted, reactive, ref } from 'vue';
 import { getArchiveDetail, getArchiveList, getOrganizeTree, type AssetArchiveSnapshot } from '#/api/assetmgr';
+import { buildOrgTreeOptions } from './ledger/utils';
 import {
   NButton,
   NCard,
@@ -69,13 +70,6 @@ const columns = [
   },
 ];
 
-function normalizeTree(nodes: any[] = []): any[] {
-  return nodes.map((node) => ({
-    label: node.name || node.organize_name || node.label || node.id,
-    key: node.id || node.organize_id || node.key || node.value,
-    children: normalizeTree(node.children ?? []),
-  })).filter((node) => node.label && node.key);
-}
 
 async function fetchList() {
   loading.value = true;
@@ -111,7 +105,7 @@ async function loadOrganizeTree() {
   try {
     const res = await getOrganizeTree();
     const nodes = Array.isArray(res) ? res : ((res as any)?.data ?? (res as any)?.items ?? []);
-    organizeTreeOptions.value = normalizeTree(nodes);
+    organizeTreeOptions.value = buildOrgTreeOptions(nodes);
   } catch {
     organizeTreeOptions.value = [];
   }
@@ -187,11 +181,10 @@ onMounted(() => {
             { title: '内容', key: 'value', ellipsis: { tooltip: true } },
           ]"
           :data="[
-            { label: '备案编号', value: detail.snapshot.asset.filing_cert_number || '-' },
+            { label: '等保备案证明编号', value: detail.snapshot.asset.filing_cert_number || '-' },
             { label: 'ICP备案', value: detail.snapshot.asset.icp_filing_number || '-' },
             { label: '资产分类', value: detail.snapshot.asset.asset_family || '-' },
             { label: '等保等级', value: detail.snapshot.asset.security_protection_level || '-' },
-            { label: '建设单位', value: detail.snapshot.asset.construction_org_id || '-' },
             { label: '运维单位', value: detail.snapshot.asset.operation_org_id || '-' },
             { label: '负责人', value: detail.snapshot.asset.responsible_user_name || '-' },
           ]"

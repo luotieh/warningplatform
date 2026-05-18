@@ -76,6 +76,11 @@ watch(
         <NTreeSelect
           v-model:value="selectValue"
           filterable
+          clearable
+          default-expand-all
+          key-field="key"
+          label-field="label"
+          children-field="children"
           :options="orgTreeOptions"
           placeholder="请选择所属单位"
         />

@@ -36,6 +36,11 @@ const emit = defineEmits<{
         <NTreeSelect
           v-model:value="form.targetOrganizeId"
           filterable
+          clearable
+          default-expand-all
+          key-field="key"
+          label-field="label"
+          children-field="children"
           :options="orgTreeOptions"
           placeholder="请选择目标单位"
         />

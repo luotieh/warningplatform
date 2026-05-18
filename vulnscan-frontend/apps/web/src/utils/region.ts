@@ -26,6 +26,20 @@ export const regionOptions: AreaOption[] = Object.entries(provinceList).map(([pr
   return { label: provinceName, value: provinceCode, children: cities };
 });
 
+/** 江苏省 */
+export const JIANGSU_PROVINCE_CODE = '320000';
+/** 徐州市 */
+export const XUZHOU_CITY_CODE = '320300';
+
+function resolveDefaultRegionCode(): string {
+  const jiangsu = regionOptions.find((p) => p.value === JIANGSU_PROVINCE_CODE);
+  const xuzhou = jiangsu?.children?.find((c) => c.value === XUZHOU_CITY_CODE);
+  return xuzhou?.children?.[0]?.value ?? XUZHOU_CITY_CODE;
+}
+
+/** 新建表单时省市区默认：江苏省 / 徐州市（区县级，便于 Cascader 选中） */
+export const defaultRegionCode = resolveDefaultRegionCode();
+
 export function regionLabelFromCode(code?: null | string) {
   if (!code) return '';
 

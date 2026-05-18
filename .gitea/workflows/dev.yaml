@@ -12,6 +12,9 @@ env:
   APP_NAME: warning-platform
   MODE: dev
   WIRE: true
+  # Go / pnpm 缓存目录（复用 runner 工作区，加速重复构建）
+  GOMODCACHE: ${{ runner.temp }}/go/pkg/mod
+  GOCACHE: ${{ runner.temp }}/go/build
 
 jobs:
   building:
@@ -34,11 +37,17 @@ jobs:
           COMMIT_SHORT=$(git rev-parse --short=6 HEAD)
           echo "commit_short=${COMMIT_SHORT}" >> $GITHUB_OUTPUT
 
-          TAG="${MODE}.$(date +%Y%m%d).${COMMIT_SHORT}"
+          # 标签：dev.YYYYMMDD.HHMMSS —— 同日内按构建时间字典序递增，Docker 列表顺序正确
+          BUILD_DATE=$(date +%Y%m%d)
+          BUILD_SEQ=$(date +%H%M%S)
+          TAG="${MODE}.${BUILD_DATE}.${BUILD_SEQ}"
           echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "build_date=${BUILD_DATE}" >> $GITHUB_OUTPUT
 
-          IMAGE="code.yt-security.com/${ORGANIZE}/${APP_NAME}:${TAG}"
-          echo "image=${IMAGE}" >> $GITHUB_OUTPUT
+          REGISTRY="code.yt-security.com/${ORGANIZE}/${APP_NAME}"
+          echo "image=${REGISTRY}:${TAG}" >> $GITHUB_OUTPUT
+          echo "image_latest=${REGISTRY}:${MODE}.latest" >> $GITHUB_OUTPUT
+          echo "image_daily_latest=${REGISTRY}:${MODE}.${BUILD_DATE}.latest" >> $GITHUB_OUTPUT
 
           COMMIT_MSG=$(git log -1 --pretty=%B | head -n1 | sed 's/["'\''\\]//g')
           echo "commit_msg=${COMMIT_MSG}" >> $GITHUB_OUTPUT
@@ -46,8 +55,7 @@ jobs:
       - name: (3) 构建前端
         run: |
           cd vulnscan-frontend
-          rm -rf node_modules 2>/dev/null || true
-          pnpm install --config.fund=false
+          pnpm install --frozen-lockfile --config.fund=false
 
           export NODE_OPTIONS="--max-old-space-size=24576"
           export GENERATE_SOURCEMAP=false
@@ -62,7 +70,7 @@ jobs:
           cd vulnscan-backend
           BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           export PATH=$PATH:$(go env GOPATH)/bin
-          go mod tidy
+          go mod download
 
           # di/wire_gen.go 被 .gitignore 排除不会进仓库，必须在 CI 内生成（与 Makefile 一致：在 di 目录执行 wire）。
           if [ "$WIRE" = "true" ]; then
@@ -77,9 +85,13 @@ jobs:
           LDFLAGS+=" -X 'vulnscan-backend/boot.BuildCommit=${{ steps.meta.outputs.commit_msg }}'"
           LDFLAGS+=" -X 'vulnscan-backend/boot.ProductVersion=${{ steps.meta.outputs.tag }}'"
 
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="$LDFLAGS" -trimpath -o ../server-amd64 ./cmd/server
-          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="$LDFLAGS" -trimpath -o ../server-arm64 ./cmd/server
-          upx --best --lzma ../server-amd64 || true
+          # 双架构并行编译（已去除 UPX，避免压缩耗时且 arm64 不支持 UPX）
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="$LDFLAGS" -trimpath -o ../server-amd64 ./cmd/server &
+          pid_amd=$!
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="$LDFLAGS" -trimpath -o ../server-arm64 ./cmd/server &
+          pid_arm=$!
+          wait $pid_amd $pid_arm
+
           echo "✅ 后端构建完成（含嵌入前端）"
           ls -la ../server-*
 
@@ -106,15 +118,40 @@ jobs:
         id: build_push
         run: |
           IMAGE=${{ steps.meta.outputs.image }}
-          echo "构建并推送多架构镜像: ${IMAGE}"
-          docker buildx build --platform linux/amd64,linux/arm64 --build-arg MODE=${MODE} -t ${IMAGE} --push .
-          docker buildx imagetools inspect ${IMAGE}
+          IMAGE_LATEST=${{ steps.meta.outputs.image_latest }}
+          IMAGE_DAILY_LATEST=${{ steps.meta.outputs.image_daily_latest }}
+          COMMIT_SHORT=${{ steps.meta.outputs.commit_short }}
+
+          echo "构建并推送多架构镜像:"
+          echo "  - 版本: ${IMAGE}"
+          echo "  - 当日最新: ${IMAGE_DAILY_LATEST}"
+          echo "  - 环境最新: ${IMAGE_LATEST}"
+
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --build-arg MODE=${MODE} \
+            --label "org.opencontainers.image.revision=${COMMIT_SHORT}" \
+            --label "org.opencontainers.image.version=${{ steps.meta.outputs.tag }}" \
+            --provenance=false \
+            --sbom=false \
+            -t "${IMAGE}" \
+            -t "${IMAGE_DAILY_LATEST}" \
+            -t "${IMAGE_LATEST}" \
+            --push .
+
           echo "✅ 镜像构建和推送完成: ${IMAGE}"
+
+          # 并行导出各架构 tar（供 Generic Packages 上传）
           for arch in amd64 arm64; do
-            docker pull --platform linux/${arch} ${IMAGE}
-            docker save -o ${APP_NAME}-${arch}.tar ${IMAGE}
+            (
+              docker pull --platform "linux/${arch}" "${IMAGE}"
+              docker save -o "${APP_NAME}-${arch}.tar" "${IMAGE}"
+            ) &
           done
-          docker image prune -af
+          wait
+
+          # 仅清理悬空镜像，保留构建缓存以加速后续流水线
+          docker image prune -f
 
       - name: (7) 产物上传到 Gitea Packages
         env:

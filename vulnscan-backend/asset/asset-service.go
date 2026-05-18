@@ -59,6 +59,9 @@ func buildAssetListQuery(sess *gorm.DB, query assetContract.AssetQuery, scopes .
 	if query.AssetFamily != "" {
 		tx = applyAssetFamilyFilter(tx, query.AssetFamily)
 	}
+	if query.RegionCode != "" {
+		tx = tx.Where("region_code = ?", query.RegionCode)
+	}
 	return tx
 }
 

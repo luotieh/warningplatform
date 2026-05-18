@@ -1,6 +1,6 @@
 import type { PaginationProps, TreeOption, UploadFileInfo } from 'naive-ui';
 
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, nextTick, reactive, ref, watch } from 'vue';
 import { useMessage } from 'naive-ui';
 
 import {
@@ -15,10 +15,14 @@ import {
 } from '#/api/asset';
 import {
   createConstruction,
+  createOrganize,
   createVerifyTasks,
   getConstructionList,
+  getOrganizeDetail,
   getOrganizeTree,
+  updateOrganize,
   type ConstructionOrg,
+  type Organize,
 } from '#/api/assetmgr';
 import { dictItemsToOptions, getSystemDictItems } from '#/api/system/dict';
 import { createTask, getScanEnginePresets, type ScanEnginePreset } from '#/api/task';
@@ -33,15 +37,25 @@ import {
   type DynamicFormTemplate,
 } from '#/api/formdesign';
 import { regionLabelFromCode } from '#/utils/region';
+import {
+  validateCNPhone,
+  validateIPv4List,
+  validatePort,
+  validateUnitProfile,
+  validateUSCC,
+} from '#/utils/validators';
 
 import {
   BOOLEAN_FILTER_OPTIONS,
   DEFAULT_ASSET_FAMILY_OPTIONS,
+  DEFAULT_INDUSTRY_CATEGORY_OPTIONS,
   DEFAULT_SOURCE_OPTIONS,
+  DEFAULT_UNIT_TYPE_OPTIONS,
   EMPTY_LEDGER_EXTRA,
   EMPTY_LEDGER_FORM,
   EMPTY_LEDGER_STATS,
   EMPTY_QUICK_CONSTRUCTION_FORM,
+  EMPTY_QUICK_ORGANIZE_FORM,
   EMPTY_SCAN_FORM,
   EMPTY_VERIFY_FORM,
   VERIFY_SOURCE_OPTIONS,
@@ -57,7 +71,16 @@ import type {
   LedgerVerifyForm,
 } from '../types';
 import { downloadBlob } from '../file-utils';
-import { appendFallbackOption, assetIdentifier, flattenOrgTree, normalizeOrgTree, optionLabelOf } from '../utils';
+import {
+  appendFallbackOption,
+  assetIdentifier,
+  buildOrgTreeOptions,
+  flattenOrgTree,
+  mapOrganizeToUnitExtra,
+  mapUnitExtraToOrganizeUpdate,
+  optionLabelOf,
+  stripUnitProfileFromExtra,
+} from '../utils';
 import { useLedgerBatchEdit } from './use-ledger-batch-edit';
 import { useLedgerSideActions } from './use-ledger-side-actions';
 
@@ -74,6 +97,7 @@ export function useLedgerPage() {
   const importLoading = ref(false);
   const templateDownloading = ref(false);
   const quickConstructionLoading = ref(false);
+  const quickOrganizeLoading = ref(false);
   const creatingScanTask = ref(false);
   const submittingVerify = ref(false);
   const rows = ref<Asset[]>([]);
@@ -81,6 +105,8 @@ export function useLedgerPage() {
   const assetFamilyOptions = ref<LedgerOption[]>([...DEFAULT_ASSET_FAMILY_OPTIONS]);
   const sourceOptions = ref<LedgerOption[]>([...DEFAULT_SOURCE_OPTIONS]);
   const securityOptions = ref<LedgerOption[]>([]);
+  const unitTypeOptions = ref<LedgerOption[]>([...DEFAULT_UNIT_TYPE_OPTIONS]);
+  const industryCategoryOptions = ref<LedgerOption[]>([...DEFAULT_INDUSTRY_CATEGORY_OPTIONS]);
   const constructionOptions = ref<LedgerOption[]>([]);
   const orgTreeOptions = ref<TreeOption[]>([]);
   const orgNameMap = ref<Record<string, string>>({});
@@ -100,13 +126,13 @@ export function useLedgerPage() {
     assetFamily: undefined,
     securityLevel: undefined,
     dataSource: undefined,
-    regionCode: null,
     riskScoreMin: null,
     riskScoreMax: null,
     isKey: '',
   });
   const formModel = reactive<LedgerFormModel>(EMPTY_LEDGER_FORM());
   const quickConstructionForm = reactive<LedgerConstructionForm>(EMPTY_QUICK_CONSTRUCTION_FORM());
+  const quickOrganizeForm = reactive(EMPTY_QUICK_ORGANIZE_FORM());
   const scanForm = reactive<LedgerScanForm>(EMPTY_SCAN_FORM());
   const verifyForm = reactive<LedgerVerifyForm>(EMPTY_VERIFY_FORM());
   const showEditModal = ref(false);
@@ -114,13 +140,14 @@ export function useLedgerPage() {
   const showScanModal = ref(false);
   const showVerifyModal = ref(false);
   const showQuickConstructionModal = ref(false);
+  const showQuickOrganizeModal = ref(false);
   const showScanAdvanced = ref(false);
   const showScanModuleConfig = ref(false);
   const showAdvancedFilter = ref(false);
-  const quickConstructionTarget = ref<'construction' | 'operation'>('construction');
-  const linkQuickConstructionToBoth = ref(false);
   const editingId = ref<string | null>(null);
   const importFile = ref<File | null>(null);
+  const skipOrganizeExtraFill = ref(false);
+  let organizeExtraFillSeq = 0;
 
   const isEditing = computed(() => !!editingId.value);
   const selectedOrgName = computed(() =>
@@ -176,7 +203,10 @@ export function useLedgerPage() {
 
   function resetQuickConstructionForm() {
     Object.assign(quickConstructionForm, EMPTY_QUICK_CONSTRUCTION_FORM());
-    linkQuickConstructionToBoth.value = quickConstructionTarget.value === 'construction';
+  }
+
+  function resetQuickOrganizeForm() {
+    Object.assign(quickOrganizeForm, EMPTY_QUICK_ORGANIZE_FORM());
   }
 
   function resetScanForm() {
@@ -280,10 +310,18 @@ export function useLedgerPage() {
   }
 
   async function loadOptions() {
-    [assetFamilyOptions.value, sourceOptions.value, securityOptions.value] = await Promise.all([
+    [
+      assetFamilyOptions.value,
+      sourceOptions.value,
+      securityOptions.value,
+      unitTypeOptions.value,
+      industryCategoryOptions.value,
+    ] = await Promise.all([
       loadDictOptions('asset_family', DEFAULT_ASSET_FAMILY_OPTIONS, { label: '其他', value: 'other' }),
       loadDictOptions('asset_data_source', DEFAULT_SOURCE_OPTIONS, { label: '其他', value: 'other' }),
       loadDictOptions('asset_security_level'),
+      loadDictOptions('organize_unit_type', DEFAULT_UNIT_TYPE_OPTIONS, { label: '其他', value: '其他' }),
+      loadDictOptions('organize_industry_category', DEFAULT_INDUSTRY_CATEGORY_OPTIONS, { label: '其他', value: '其他' }),
     ]);
   }
 
@@ -291,7 +329,7 @@ export function useLedgerPage() {
     treeLoading.value = true;
     try {
       const tree = await getOrganizeTree();
-      const options = normalizeOrgTree(Array.isArray(tree) ? tree : []);
+      const options = buildOrgTreeOptions(Array.isArray(tree) ? tree : []);
       orgTreeOptions.value = options;
       orgNameMap.value = flattenOrgTree(options);
     } catch {
@@ -340,7 +378,6 @@ export function useLedgerPage() {
       asset_family: searchForm.assetFamily || undefined,
       security_protection_level: searchForm.securityLevel || undefined,
       data_source: searchForm.dataSource || undefined,
-      region_code: searchForm.regionCode || undefined,
       risk_score_min: searchForm.riskScoreMin ?? undefined,
       risk_score_max: searchForm.riskScoreMax ?? undefined,
       is_key: searchForm.isKey || undefined,
@@ -389,7 +426,6 @@ export function useLedgerPage() {
     searchForm.assetFamily = undefined;
     searchForm.securityLevel = undefined;
     searchForm.dataSource = undefined;
-    searchForm.regionCode = null;
     searchForm.riskScoreMin = null;
     searchForm.riskScoreMax = null;
     searchForm.isKey = '';
@@ -423,7 +459,34 @@ export function useLedgerPage() {
     showEditModal.value = true;
   }
 
+  async function syncOrganizeFromUnitExtra(organizeId: string) {
+    await updateOrganize(organizeId, mapUnitExtraToOrganizeUpdate(formModel.extra));
+  }
+
+  async function applyOrganizeToUnitExtra(organizeId: string) {
+    if (!organizeId) return;
+    const seq = ++organizeExtraFillSeq;
+    try {
+      const org = (await getOrganizeDetail(organizeId)) as Organize;
+      if (seq !== organizeExtraFillSeq) return;
+      Object.assign(formModel.extra, mapOrganizeToUnitExtra(org));
+    } catch {
+      if (seq === organizeExtraFillSeq) {
+        message.warning('未能加载单位档案，请手动填写单位信息');
+      }
+    }
+  }
+
+  watch(
+    () => formModel.organizeId,
+    (organizeId, prev) => {
+      if (skipOrganizeExtraFill.value || !organizeId || organizeId === prev) return;
+      void applyOrganizeToUnitExtra(organizeId);
+    },
+  );
+
   async function openEditModal(row: Asset) {
+    skipOrganizeExtraFill.value = true;
     editingId.value = row.id;
     Object.assign(formModel, {
       name: row.name ?? '',
@@ -433,7 +496,6 @@ export function useLedgerPage() {
       address: row.address ?? row.domain ?? '',
       ipv4: row.ipv4 ?? '',
       ipv6: row.ipv6 ?? '',
-      regionCode: row.region_code ?? (row.extra as Record<string, unknown> | undefined)?.region_code?.toString() ?? null,
       port: row.port ?? null,
       isOnline: row.is_online ?? true,
       isKey: row.is_key ?? false,
@@ -443,15 +505,19 @@ export function useLedgerPage() {
       filingCertNumber: row.filing_cert_number ?? '',
       icpFilingNumber: row.icp_filing_number ?? '',
       publicSecurityFiling: row.public_security_filing ?? '',
-      constructionOrgId: row.construction_org_id ?? '',
       operationOrgId: row.operation_org_id ?? '',
       remark: row.remark ?? '',
-      extra: { ...EMPTY_LEDGER_EXTRA(), ...(row.extra ?? {}) },
+      extra: { ...EMPTY_LEDGER_EXTRA() },
     });
     resetAssetDynamicForm();
     await loadAssetDynamicTemplate(formModel.assetFamily);
     await loadAssetDynamicSubmission(row.id);
     showEditModal.value = true;
+    await nextTick();
+    skipOrganizeExtraFill.value = false;
+    if (formModel.organizeId) {
+      await applyOrganizeToUnitExtra(formModel.organizeId);
+    }
   }
 
   /** 以域名/站点为主的分类：访问地址为主要目标，不要求 IPv4 */
@@ -472,16 +538,25 @@ export function useLedgerPage() {
       return message.warning('请填写访问地址或 IPv4（至少一项）');
     }
 
+    const ipv4Err = validateIPv4List(formModel.ipv4);
+    if (ipv4Err) return message.warning(ipv4Err);
+    const portErr = validatePort(formModel.port);
+    if (portErr) return message.warning(portErr);
+    const unitErr = validateUnitProfile(formModel.extra);
+    if (unitErr) return message.warning(unitErr);
+
     const address = resolvedAssetAddress();
 
     saving.value = true;
     try {
-      const extraPayload: Record<string, unknown> = { ...formModel.extra };
-      if (formModel.regionCode) {
-        extraPayload.region_code = formModel.regionCode;
-      } else {
-        delete extraPayload.region_code;
+      try {
+        await syncOrganizeFromUnitExtra(formModel.organizeId);
+      } catch {
+        message.error('单位信息同步到所属单位失败，请检查后重试');
+        return;
       }
+
+      const extraPayload = stripUnitProfileFromExtra(formModel.extra as Record<string, unknown>);
 
       const payload = {
         name: formModel.name.trim(),
@@ -499,11 +574,9 @@ export function useLedgerPage() {
         filing_cert_number: formModel.filingCertNumber.trim() || undefined,
         icp_filing_number: formModel.icpFilingNumber.trim() || undefined,
         public_security_filing: formModel.publicSecurityFiling.trim() || undefined,
-        responsible_user_name: formModel.responsibleUserName.trim() || undefined,
         data_source: formModel.dataSource,
-        construction_org_id: formModel.constructionOrgId || undefined,
         operation_org_id: formModel.operationOrgId || undefined,
-        extra: extraPayload,
+        extra: Object.keys(extraPayload).length > 0 ? extraPayload : undefined,
         remark: formModel.remark.trim() || undefined,
       };
       if (editingId.value) {
@@ -518,7 +591,7 @@ export function useLedgerPage() {
         message.success('资产已创建');
       }
       showEditModal.value = false;
-      await reload();
+      await Promise.all([reload(), loadOrgTree()]);
     } finally {
       saving.value = false;
     }
@@ -615,26 +688,46 @@ export function useLedgerPage() {
     }
   }
 
-  function openQuickConstruction(target: 'construction' | 'operation') {
-    quickConstructionTarget.value = target;
+  function openQuickOrganize() {
+    resetQuickOrganizeForm();
+    showQuickOrganizeModal.value = true;
+  }
+
+  async function submitQuickOrganize() {
+    if (!quickOrganizeForm.name.trim()) {
+      message.warning('请输入单位名称');
+      return;
+    }
+    const usccErr = validateUSCC(quickOrganizeForm.unifiedSocialCreditCode);
+    if (usccErr) return message.warning(usccErr);
+    quickOrganizeLoading.value = true;
+    try {
+      const created = await createOrganize({
+        name: quickOrganizeForm.name.trim(),
+        parent_id: quickOrganizeForm.parentId || undefined,
+        unified_social_credit_code: quickOrganizeForm.unifiedSocialCreditCode.trim() || undefined,
+      });
+      const body = ((created as any)?.data ?? created) as { id?: string };
+      const orgId = body?.id;
+      if (!orgId) {
+        message.error('创建成功但未返回单位 ID');
+        return;
+      }
+      await loadOrgTree();
+      formModel.organizeId = orgId;
+      await applyOrganizeToUnitExtra(orgId);
+      message.success('单位已创建并设为所属单位');
+      showQuickOrganizeModal.value = false;
+    } catch {
+      message.error('新增单位失败');
+    } finally {
+      quickOrganizeLoading.value = false;
+    }
+  }
+
+  function openQuickConstruction() {
     resetQuickConstructionForm();
     showQuickConstructionModal.value = true;
-  }
-
-  function useConstructionAsOperation() {
-    if (!formModel.constructionOrgId) {
-      message.warning('请先选择建设单位');
-      return;
-    }
-    formModel.operationOrgId = formModel.constructionOrgId;
-  }
-
-  function useOperationAsConstruction() {
-    if (!formModel.operationOrgId) {
-      message.warning('请先选择运维单位');
-      return;
-    }
-    formModel.constructionOrgId = formModel.operationOrgId;
   }
 
   async function submitQuickConstruction() {
@@ -642,6 +735,8 @@ export function useLedgerPage() {
       message.warning('请输入单位名称');
       return;
     }
+    const phoneErr = validateCNPhone(quickConstructionForm.charge_phone, '联系电话');
+    if (phoneErr) return message.warning(phoneErr);
 
     quickConstructionLoading.value = true;
     try {
@@ -651,19 +746,12 @@ export function useLedgerPage() {
         address: quickConstructionForm.address.trim(),
         charge_person: quickConstructionForm.charge_person.trim(),
         charge_phone: quickConstructionForm.charge_phone.trim(),
-        security_filing: quickConstructionForm.security_filing.trim(),
       };
       const created = await createConstruction(payload);
       const item = ((created as any)?.data ?? created) as ConstructionOrg;
       await loadConstructionOptions();
 
-      if (quickConstructionTarget.value === 'construction') {
-        formModel.constructionOrgId = item.id;
-        if (linkQuickConstructionToBoth.value) formModel.operationOrgId = item.id;
-      } else {
-        formModel.operationOrgId = item.id;
-        if (linkQuickConstructionToBoth.value) formModel.constructionOrgId = item.id;
-      }
+      formModel.operationOrgId = item.id;
 
       showQuickConstructionModal.value = false;
       message.success('单位已新增并关联到当前资产');
@@ -751,6 +839,7 @@ export function useLedgerPage() {
     importLoading,
     templateDownloading,
     quickConstructionLoading,
+    quickOrganizeLoading,
     creatingScanTask,
     submittingVerify,
     sendingToMonitor: sideActions.sendingToMonitor,
@@ -760,6 +849,8 @@ export function useLedgerPage() {
     assetFamilyOptions,
     sourceOptions,
     securityOptions,
+    unitTypeOptions,
+    industryCategoryOptions,
     constructionOptions,
     orgTreeOptions,
     selectedOrgKey,
@@ -773,6 +864,7 @@ export function useLedgerPage() {
     assetDynamicFormData,
     assetDynamicLoading,
     quickConstructionForm,
+    quickOrganizeForm,
     scanForm,
     verifyForm,
     batchEditForm: batchEdit.batchEditForm,
@@ -784,14 +876,13 @@ export function useLedgerPage() {
     showScanModal,
     showVerifyModal,
     showQuickConstructionModal,
+    showQuickOrganizeModal,
     showBatchEditModal: batchEdit.showBatchEditModal,
     showScanAdvanced,
     showScanModuleConfig,
     showAdvancedFilter,
     showMonitorResult: sideActions.showMonitorResult,
     monitorResult: sideActions.monitorResult,
-    quickConstructionTarget,
-    linkQuickConstructionToBoth,
     activeFamily,
     familyTabs: familyFilterOptions,
     isEditing,
@@ -815,10 +906,10 @@ export function useLedgerPage() {
     openBatchScanModal,
     openBatchEditModal: batchEdit.openBatchEditModal,
     openVerifyModal,
+    openQuickOrganize,
     openQuickConstruction,
+    submitQuickOrganize,
     openScanModalByRow,
-    useConstructionAsOperation,
-    useOperationAsConstruction,
     sendToMonitor: sideActions.sendToMonitor,
     updateScanTemplate,
     updateAssetDynamicFormData,

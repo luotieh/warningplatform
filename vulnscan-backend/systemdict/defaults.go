@@ -85,5 +85,35 @@ func defaultDicts() []defaultDict {
 				{Label: "外部集成", Value: "external"},
 			},
 		},
+		{
+			ID:          "organize_unit_type",
+			Name:        "单位类型",
+			Category:    "单位管理",
+			Description: "单位信息中的单位类型字段",
+			Items: []defaultDictItem{
+				{Label: "政府机关", Value: "政府机关"},
+				{Label: "事业单位", Value: "事业单位"},
+				{Label: "国有企业", Value: "国有企业"},
+				{Label: "企业", Value: "企业"},
+				{Label: "私营企业", Value: "私营企业"},
+				{Label: "其他", Value: "其他"},
+			},
+		},
+		{
+			ID:          "organize_industry_category",
+			Name:        "行业分类",
+			Category:    "单位管理",
+			Description: "单位信息中的行业分类字段",
+			Items: []defaultDictItem{
+				{Label: "政务", Value: "政务"},
+				{Label: "金融", Value: "金融"},
+				{Label: "教育", Value: "教育"},
+				{Label: "医疗", Value: "医疗"},
+				{Label: "能源", Value: "能源"},
+				{Label: "通信", Value: "通信"},
+				{Label: "交通", Value: "交通"},
+				{Label: "其他", Value: "其他"},
+			},
+		},
 	}
 }

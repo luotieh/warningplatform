@@ -1,6 +1,6 @@
 <script lang="ts" setup>
-import { computed, h, onMounted, reactive, ref } from 'vue';
-import type { DataTableColumns } from 'naive-ui';
+import { computed, h, onMounted, reactive, ref, watch } from 'vue';
+import type { DataTableColumns, FormInst } from 'naive-ui';
 import {
   NButton,
   NCard,
@@ -28,6 +28,10 @@ import {
   syncIamOrganizes,
   updateOrganize,
 } from '#/api/assetmgr';
+import { buildOrgTreeOptions, flattenOrganizeList, mergeUnitAddress } from './ledger/utils';
+import { organizeProfileFormRules } from '#/utils/form-rules';
+import { validateUnitProfile } from '#/utils/validators';
+import { dictItemsToOptions, getSystemDictItems } from '#/api/system/dict';
 
 defineOptions({ name: 'AssetOrganize' });
 
@@ -40,6 +44,7 @@ const organizeItems = ref<Organize[]>([]);
 const organizeTreeOptions = ref<any[]>([]);
 const showModal = ref(false);
 const editingId = ref<null | string>(null);
+const organizeFormRef = ref<FormInst | null>(null);
 
 const searchForm = reactive({ keyword: '' });
 
@@ -57,7 +62,6 @@ const formData = reactive({
   unit_type: '',
   is_notification_member: false,
   address: '',
-  unit_detail_address: '',
   leader_name: '',
   leader_title: '',
   responsible_department_name: '',
@@ -69,12 +73,33 @@ const formData = reactive({
   contact_phone: '',
 });
 
-const unitTypeOptions = [
+const unitTypeOptions = ref<{ label: string; value: string }[]>([
   { label: '政府机关', value: '政府机关' },
   { label: '事业单位', value: '事业单位' },
   { label: '企业', value: '企业' },
   { label: '其他', value: '其他' },
-];
+]);
+const industryCategoryOptions = ref<{ label: string; value: string }[]>([
+  { label: '政务', value: '政务' },
+  { label: '金融', value: '金融' },
+  { label: '教育', value: '教育' },
+  { label: '其他', value: '其他' },
+]);
+
+async function loadOrganizeDictOptions() {
+  try {
+    unitTypeOptions.value = dictItemsToOptions(await getSystemDictItems('organize_unit_type', true));
+  } catch {
+    /* keep fallback */
+  }
+  try {
+    industryCategoryOptions.value = dictItemsToOptions(
+      await getSystemDictItems('organize_industry_category', true),
+    );
+  } catch {
+    /* keep fallback */
+  }
+}
 
 const parentTreeOptions = computed(() => disableTreeNode(organizeTreeOptions.value, editingId.value));
 
@@ -248,48 +273,16 @@ async function fetchList() {
   try {
     const res = await getOrganizeTree();
     const body = (res as any)?.data ?? res;
-    organizeItems.value = (body?.data ?? body ?? []) as Organize[];
+    const raw = (body?.data ?? body ?? []) as Organize[];
+    const list = Array.isArray(raw) ? raw : [];
+    const hasNested = list.some((n) => Array.isArray((n as any).children) && (n as any).children.length > 0);
+    organizeItems.value = (hasNested ? flattenOrganizeList(list) : list) as Organize[];
     refreshTableData();
   } catch {
     message.error('加载单位列表失败');
   } finally {
     loading.value = false;
   }
-}
-
-function normalizeTree(nodes: any[] = []): any[] {
-  return nodes
-    .map((node) => ({
-      label: node.name || node.organize_name || node.label || node.id,
-      key: node.id || node.organize_id || node.key || node.value,
-      children: normalizeTree(node.children ?? []),
-    }))
-    .filter((node) => node.label && node.key);
-}
-
-function buildLocalTree(items: Organize[] = []): any[] {
-  const nodeMap = new Map<string, any>();
-  const roots: any[] = [];
-
-  items.forEach((item) => {
-    nodeMap.set(item.id, {
-      label: item.name || item.id,
-      key: item.id,
-      children: [],
-    });
-  });
-
-  items.forEach((item) => {
-    const node = nodeMap.get(item.id);
-    if (!node) return;
-    if (item.parent_id && nodeMap.has(item.parent_id)) {
-      nodeMap.get(item.parent_id).children.push(node);
-      return;
-    }
-    roots.push(node);
-  });
-
-  return roots;
 }
 
 function disableTreeNode(nodes: any[] = [], disabledValue: null | string): any[] {
@@ -303,13 +296,13 @@ function disableTreeNode(nodes: any[] = [], disabledValue: null | string): any[]
 async function loadOrganizeTree() {
   treeLoading.value = true;
   try {
-    organizeTreeOptions.value = normalizeTree(await getIamOrganizeTree());
+    organizeTreeOptions.value = buildOrgTreeOptions(await getIamOrganizeTree());
   } catch {
     try {
       const res = await getOrganizeTree();
       const body = (res as any)?.data ?? res;
       const items = (body?.data ?? body ?? []) as Organize[];
-      organizeTreeOptions.value = buildLocalTree(items);
+      organizeTreeOptions.value = buildOrgTreeOptions(items);
     } catch {
       organizeTreeOptions.value = [];
     }
@@ -327,7 +320,6 @@ function resetForm() {
     unit_type: '',
     is_notification_member: false,
     address: '',
-    unit_detail_address: '',
     leader_name: '',
     leader_title: '',
     responsible_department_name: '',
@@ -361,8 +353,7 @@ async function onEdit(row: Organize) {
     industry_category: row.industry_category,
     unit_type: row.unit_type,
     is_notification_member: row.is_notification_member ?? false,
-    address: row.address,
-    unit_detail_address: row.unit_detail_address,
+    address: mergeUnitAddress(row.address, row.unit_detail_address),
     leader_name: row.leader_name,
     leader_title: row.leader_title,
     responsible_department_name: row.responsible_department_name,
@@ -382,11 +373,22 @@ async function onSave() {
     return;
   }
   try {
+    await organizeFormRef.value?.validate();
+  } catch {
+    return;
+  }
+  const profileErr = validateUnitProfile(formData);
+  if (profileErr) {
+    message.warning(profileErr);
+    return;
+  }
+  try {
+    const payload = { ...formData, unit_detail_address: '' };
     if (editingId.value) {
-      await updateOrganize(editingId.value, formData);
+      await updateOrganize(editingId.value, payload);
       message.success('更新成功');
     } else {
-      await createOrganize(formData);
+      await createOrganize(payload);
       message.success('创建成功');
     }
     showModal.value = false;
@@ -421,7 +423,12 @@ async function onSyncIam() {
   }
 }
 
+watch(showModal, (visible) => {
+  if (!visible) organizeFormRef.value?.restoreValidation();
+});
+
 onMounted(() => {
+  void loadOrganizeDictOptions();
   fetchList();
   loadOrganizeTree();
 });
@@ -469,7 +476,14 @@ onMounted(() => {
     </NCard>
 
     <NModal v-model:show="showModal" preset="dialog" :title="editingId ? '编辑单位' : '新建单位'" style="width: 860px">
-      <NForm label-placement="left" label-width="120" style="margin-top: 16px">
+      <NForm
+        ref="organizeFormRef"
+        :model="formData"
+        :rules="organizeProfileFormRules"
+        label-placement="left"
+        label-width="120"
+        style="margin-top: 16px"
+      >
         <NGrid :cols="2" :x-gap="16">
           <NGridItem>
             <NFormItem label="单位名称" required>
@@ -490,8 +504,12 @@ onMounted(() => {
             </NFormItem>
           </NGridItem>
           <NGridItem>
-            <NFormItem label="统一社会信用代码">
-              <NInput v-model:value="formData.unified_social_credit_code" />
+            <NFormItem label="统一社会信用代码" path="unified_social_credit_code">
+              <NInput
+                v-model:value="formData.unified_social_credit_code"
+                placeholder="18 位，可选"
+                maxlength="18"
+              />
             </NFormItem>
           </NGridItem>
           <NGridItem>
@@ -501,7 +519,13 @@ onMounted(() => {
           </NGridItem>
           <NGridItem>
             <NFormItem label="行业分类">
-              <NInput v-model:value="formData.industry_category" />
+              <NSelect
+                v-model:value="formData.industry_category"
+                :options="industryCategoryOptions"
+                clearable
+                filterable
+                placeholder="请选择"
+              />
             </NFormItem>
           </NGridItem>
           <NGridItem>
@@ -509,14 +533,9 @@ onMounted(() => {
               <NSwitch v-model:value="formData.is_notification_member" />
             </NFormItem>
           </NGridItem>
-          <NGridItem>
-            <NFormItem label="地址">
-              <NInput v-model:value="formData.address" />
-            </NFormItem>
-          </NGridItem>
-          <NGridItem>
-            <NFormItem label="单位详细地址">
-              <NInput v-model:value="formData.unit_detail_address" />
+          <NGridItem :span="2">
+            <NFormItem label="单位地址">
+              <NInput v-model:value="formData.address" placeholder="省市区及街道门牌等完整地址" />
             </NFormItem>
           </NGridItem>
           <NGridItem>
@@ -545,8 +564,8 @@ onMounted(() => {
             </NFormItem>
           </NGridItem>
           <NGridItem>
-            <NFormItem label="部门负责人电话">
-              <NInput v-model:value="formData.department_leader_phone" />
+            <NFormItem label="部门负责人电话" path="department_leader_phone">
+              <NInput v-model:value="formData.department_leader_phone" placeholder="11 位手机或固话" />
             </NFormItem>
           </NGridItem>
           <NGridItem>
@@ -560,8 +579,8 @@ onMounted(() => {
             </NFormItem>
           </NGridItem>
           <NGridItem>
-            <NFormItem label="联系电话">
-              <NInput v-model:value="formData.contact_phone" />
+            <NFormItem label="联系电话" path="contact_phone">
+              <NInput v-model:value="formData.contact_phone" placeholder="11 位手机或固话" />
             </NFormItem>
           </NGridItem>
         </NGrid>

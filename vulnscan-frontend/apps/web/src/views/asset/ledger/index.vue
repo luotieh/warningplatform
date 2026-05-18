@@ -12,6 +12,7 @@ import LedgerImportModal from './components/ledger-import-modal.vue';
 import LedgerMonitorResultModal from './components/ledger-monitor-result-modal.vue';
 import LedgerOrgTree from './components/ledger-org-tree.vue';
 import LedgerQuickConstructionModal from './components/ledger-quick-construction-modal.vue';
+import LedgerQuickOrganizeModal from './components/ledger-quick-organize-modal.vue';
 import LedgerScanModal from './components/ledger-scan-modal.vue';
 import LedgerStatsGrid from './components/ledger-stats-grid.vue';
 import LedgerTableCard from './components/ledger-table-card.vue';
@@ -38,6 +39,8 @@ const {
   assetFamilyOptions,
   sourceOptions,
   securityOptions,
+  unitTypeOptions,
+  industryCategoryOptions,
   constructionOptions,
   orgTreeOptions,
   selectedOrgKey,
@@ -51,6 +54,7 @@ const {
   assetDynamicFormData,
   assetDynamicLoading,
   quickConstructionForm,
+  quickOrganizeForm,
   scanForm,
   verifyForm,
   batchEditForm,
@@ -62,14 +66,13 @@ const {
   showScanModal,
   showVerifyModal,
   showQuickConstructionModal,
+  showQuickOrganizeModal,
   showBatchEditModal,
   showScanAdvanced,
   showScanModuleConfig,
   showAdvancedFilter,
   showMonitorResult,
   monitorResult,
-  quickConstructionTarget,
-  linkQuickConstructionToBoth,
   activeFamily,
   familyTabs,
   isEditing,
@@ -77,6 +80,7 @@ const {
   verifySourceOptions,
   booleanFilterOptions,
   quickConstructionLoading,
+  quickOrganizeLoading,
   batchUpdating,
   batchEditFieldOptions,
   assetFamilyLabel,
@@ -94,10 +98,10 @@ const {
   openBatchScanModal,
   openBatchEditModal,
   openVerifyModal,
+  openQuickOrganize,
   openQuickConstruction,
+  submitQuickOrganize,
   openScanModalByRow,
-  useConstructionAsOperation,
-  useOperationAsConstruction,
   sendToMonitor,
   updateScanTemplate,
   updateAssetDynamicFormData,
@@ -206,14 +210,15 @@ onMounted(async () => {
       :dynamic-loading="assetDynamicLoading"
       :asset-family-options="assetFamilyOptions"
       :security-options="securityOptions"
+      :unit-type-options="unitTypeOptions"
+      :industry-category-options="industryCategoryOptions"
       :source-options="sourceOptions"
       :org-tree-options="orgTreeOptions"
       :construction-options="constructionOptions"
       @close="showEditModal = false"
+      @quick-organize="openQuickOrganize"
       @quick-construction="openQuickConstruction"
       @submit="submitForm"
-      @use-construction-as-operation="useConstructionAsOperation"
-      @use-operation-as-construction="useOperationAsConstruction"
       @update:dynamic-form-data="updateAssetDynamicFormData"
       @update:show="(value) => (showEditModal = value)"
     />
@@ -229,15 +234,22 @@ onMounted(async () => {
       @update:show="(value) => (showImportModal = value)"
     />
 
+    <LedgerQuickOrganizeModal
+      :show="showQuickOrganizeModal"
+      :loading="quickOrganizeLoading"
+      :form="quickOrganizeForm"
+      :org-tree-options="orgTreeOptions"
+      @close="showQuickOrganizeModal = false"
+      @submit="submitQuickOrganize"
+      @update:show="(value) => (showQuickOrganizeModal = value)"
+    />
+
     <LedgerQuickConstructionModal
       :show="showQuickConstructionModal"
       :loading="quickConstructionLoading"
       :form="quickConstructionForm"
-      :target="quickConstructionTarget"
-      :link-to-both="linkQuickConstructionToBoth"
       @close="showQuickConstructionModal = false"
       @submit="submitQuickConstruction"
-      @update:link-to-both="(value) => (linkQuickConstructionToBoth = value)"
       @update:show="(value) => (showQuickConstructionModal = value)"
     />
 

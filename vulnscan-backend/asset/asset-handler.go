@@ -7,6 +7,7 @@ import (
 
 	assetContract "vulnscan-backend/asset/asset-contract"
 	"vulnscan-backend/model"
+	"vulnscan-backend/pkg/assetextra"
 
 	"code.yt-security.com/public/core/v2/generate/qulid"
 	"code.yt-security.com/public/core/v2/web"
@@ -77,6 +78,10 @@ func (h *HandlerAsset) Create(c *gin.Context) {
 	if !web.ValidationJson(c, &req) {
 		return
 	}
+	if err := validateAssetNetworkFields(req.IPv4, req.Port); err != nil {
+		web.Fail(c).Msg(err.Error()).Send()
+		return
+	}
 
 	user, _ := iamsdk.GetCurrentUser(c)
 	item := model.Asset{
@@ -109,12 +114,13 @@ func (h *HandlerAsset) Create(c *gin.Context) {
 		FilingCertNumber:        req.FilingCertNumber,
 		IcpFilingNumber:         req.IcpFilingNumber,
 		PublicSecurityFiling:    req.PublicSecurityFiling,
+		RegionCode:              req.RegionCode,
 		ConstructionOrgID:       req.ConstructionOrgID,
 		OperationOrgID:          req.OperationOrgID,
+		Extra:                   assetextra.NormalizeMap(req.Extra),
 		DataSource:              model.DataSourceType(req.DataSource),
 		ResponsibleUserID:       req.ResponsibleUserID,
 		ResponsibleUserName:     req.ResponsibleUserName,
-		Extra:                   req.Extra,
 		Remark:                  req.Remark,
 	}
 
@@ -154,6 +160,7 @@ type updateAssetReq struct {
 	FilingCertNumber        *string        `json:"filing_cert_number"`
 	IcpFilingNumber         *string        `json:"icp_filing_number"`
 	PublicSecurityFiling    *string        `json:"public_security_filing"`
+	RegionCode              *string        `json:"region_code"`
 	ConstructionOrgID       *string        `json:"construction_org_id"`
 	OperationOrgID          *string        `json:"operation_org_id"`
 	DataSource              *string        `json:"data_source"`
@@ -178,6 +185,19 @@ func (h *HandlerAsset) Update(c *gin.Context) {
 	existing, err := h.svc.GetByID(id)
 	if err != nil {
 		web.Err(c, web.NotFound).Send()
+		return
+	}
+
+	ipv4 := existing.IPv4
+	if req.IPv4 != nil {
+		ipv4 = *req.IPv4
+	}
+	port := existing.Port
+	if req.Port != nil {
+		port = *req.Port
+	}
+	if err := validateAssetNetworkFields(ipv4, port); err != nil {
+		web.Fail(c).Msg(err.Error()).Send()
 		return
 	}
 
@@ -257,6 +277,9 @@ func (h *HandlerAsset) Update(c *gin.Context) {
 	if req.PublicSecurityFiling != nil {
 		updates["public_security_filing"] = *req.PublicSecurityFiling
 	}
+	if req.RegionCode != nil {
+		updates["region_code"] = *req.RegionCode
+	}
 	if req.ConstructionOrgID != nil {
 		updates["construction_org_id"] = *req.ConstructionOrgID
 	}
@@ -273,7 +296,8 @@ func (h *HandlerAsset) Update(c *gin.Context) {
 		updates["responsible_user_name"] = *req.ResponsibleUserName
 	}
 	if req.Extra != nil {
-		updates["extra"] = *req.Extra
+		normalized := assetextra.NormalizeMap(*req.Extra)
+		updates["extra"] = normalized
 	}
 	if req.Remark != nil {
 		updates["remark"] = *req.Remark
@@ -391,7 +415,7 @@ func (h *HandlerAsset) exportCSV(c *gin.Context, items []model.Asset) {
 	}
 	_ = writer.Write(header)
 	orgMap := h.constructionOrgMap(items)
-	organizeMap := h.organizeNameMap(items)
+	organizeMap := h.organizeProfileMap(items)
 	for _, a := range items {
 		_ = writer.Write(assetExportRow(a, columns, orgMap, organizeMap))
 	}
@@ -406,7 +430,7 @@ func (h *HandlerAsset) exportXLSX(c *gin.Context, items []model.Asset) {
 	columns := assetExportColumns()
 	writeGroupedAssetHeader(f, sheet, columns)
 	orgMap := h.constructionOrgMap(items)
-	organizeMap := h.organizeNameMap(items)
+	organizeMap := h.organizeProfileMap(items)
 	for r, item := range items {
 		row := assetExportRow(item, columns, orgMap, organizeMap)
 		for cidx, value := range row {
@@ -433,7 +457,7 @@ func (h *HandlerAsset) exportXLSX(c *gin.Context, items []model.Asset) {
 
 func assetExportColumns() []assetImportColumn {
 	columns := make([]assetImportColumn, 0, len(assetLedgerColumns)+4)
-	columns = append(columns, assetLedgerColumns...)
+	columns = append(columns, assetLedgerColumnsVisible()...)
 	columns = append(columns,
 		assetImportColumn{Field: "risk_score", Group: "导出统计信息", Title: "风险分"},
 		assetImportColumn{Field: "vuln_count", Group: "导出统计信息", Title: "漏洞数"},
@@ -443,7 +467,7 @@ func assetExportColumns() []assetImportColumn {
 	return columns
 }
 
-func assetExportRow(asset model.Asset, columns []assetImportColumn, orgMap map[string]model.ConstructionOrg, organizeMap map[string]string) []string {
+func assetExportRow(asset model.Asset, columns []assetImportColumn, orgMap map[string]model.ConstructionOrg, organizeMap map[string]model.Organize) []string {
 	row := make([]string, 0, len(columns))
 	for _, col := range columns {
 		row = append(row, assetExportValue(asset, col.Field, orgMap, organizeMap))
@@ -451,7 +475,7 @@ func assetExportRow(asset model.Asset, columns []assetImportColumn, orgMap map[s
 	return row
 }
 
-func assetExportValue(asset model.Asset, field string, orgMap map[string]model.ConstructionOrg, organizeMap map[string]string) string {
+func assetExportValue(asset model.Asset, field string, orgMap map[string]model.ConstructionOrg, organizeMap map[string]model.Organize) string {
 	switch field {
 	case "name":
 		return asset.Name
@@ -499,10 +523,40 @@ func assetExportValue(asset model.Asset, field string, orgMap map[string]model.C
 	case "organize_id":
 		return asset.OrganizeID
 	case "organize_name":
-		if name, ok := organizeMap[asset.OrganizeID]; ok {
-			return name
+		if org, ok := organizeMap[asset.OrganizeID]; ok && org.Name != "" {
+			return org.Name
 		}
 		return asset.OrganizeID
+	case "unit_type":
+		return organizeProfileValue(organizeMap, asset.OrganizeID, "unit_type")
+	case "industry_category":
+		return organizeProfileValue(organizeMap, asset.OrganizeID, "industry_category")
+	case "is_notification_member":
+		return organizeProfileBool(organizeMap, asset.OrganizeID, "is_notification_member")
+	case "unified_social_credit_code":
+		return organizeProfileValue(organizeMap, asset.OrganizeID, "unified_social_credit_code")
+	case "unit_location_code":
+		return ""
+	case "unit_address":
+		return organizeProfileAddress(organizeMap, asset.OrganizeID)
+	case "leader_name":
+		return organizeProfileValue(organizeMap, asset.OrganizeID, "leader_name")
+	case "leader_title":
+		return organizeProfileValue(organizeMap, asset.OrganizeID, "leader_title")
+	case "responsible_department_name":
+		return organizeProfileValue(organizeMap, asset.OrganizeID, "responsible_department_name")
+	case "department_leader_name":
+		return organizeProfileValue(organizeMap, asset.OrganizeID, "department_leader_name")
+	case "department_leader_title":
+		return organizeProfileValue(organizeMap, asset.OrganizeID, "department_leader_title")
+	case "department_leader_phone":
+		return organizeProfileValue(organizeMap, asset.OrganizeID, "department_leader_phone")
+	case "contact_name":
+		return organizeProfileValue(organizeMap, asset.OrganizeID, "contact_name")
+	case "contact_title":
+		return organizeProfileValue(organizeMap, asset.OrganizeID, "contact_title")
+	case "contact_phone":
+		return organizeProfileValue(organizeMap, asset.OrganizeID, "contact_phone")
 	case "construction_org":
 		return constructionOrgExportValue(orgMap, asset.ConstructionOrgID, "name")
 	case "construction_org_location":
@@ -544,9 +598,6 @@ func assetExportValue(asset model.Asset, field string, orgMap map[string]model.C
 	case "created_at":
 		return asset.CreatedAt.Format("2006-01-02 15:04:05")
 	default:
-		if assetExtraImportFields[field] {
-			return extraValue(asset.Extra, field)
-		}
 		return ""
 	}
 }
@@ -632,7 +683,7 @@ func (h *HandlerAsset) constructionOrgMap(items []model.Asset) map[string]model.
 	return result
 }
 
-func (h *HandlerAsset) organizeNameMap(items []model.Asset) map[string]string {
+func (h *HandlerAsset) organizeProfileMap(items []model.Asset) map[string]model.Organize {
 	ids := make([]string, 0)
 	seen := map[string]bool{}
 	for _, item := range items {
@@ -641,7 +692,7 @@ func (h *HandlerAsset) organizeNameMap(items []model.Asset) map[string]string {
 			ids = append(ids, item.OrganizeID)
 		}
 	}
-	result := map[string]string{}
+	result := map[string]model.Organize{}
 	if len(ids) == 0 {
 		return result
 	}
@@ -650,9 +701,80 @@ func (h *HandlerAsset) organizeNameMap(items []model.Asset) map[string]string {
 		return result
 	}
 	var orgs []model.Organize
-	_ = svc.session().Select("id, name").Where("id IN ?", ids).Find(&orgs).Error
+	_ = svc.session().Where("id IN ? AND deleted_at IS NULL", ids).Find(&orgs).Error
 	for _, org := range orgs {
-		result[org.ID] = org.Name
+		result[org.ID] = org
 	}
 	return result
+}
+
+func organizeProfileValue(organizeMap map[string]model.Organize, organizeID, field string) string {
+	if organizeID == "" {
+		return ""
+	}
+	org, ok := organizeMap[organizeID]
+	if !ok {
+		return ""
+	}
+	switch field {
+	case "unit_type":
+		return org.UnitType
+	case "industry_category":
+		return org.IndustryCategory
+	case "unified_social_credit_code":
+		return org.UnifiedSocialCreditCode
+	case "leader_name":
+		return org.LeaderName
+	case "leader_title":
+		return org.LeaderTitle
+	case "responsible_department_name":
+		return org.ResponsibleDepartmentName
+	case "department_leader_name":
+		return org.DepartmentLeaderName
+	case "department_leader_title":
+		return org.DepartmentLeaderTitle
+	case "department_leader_phone":
+		return org.DepartmentLeaderPhone
+	case "contact_name":
+		return org.ContactName
+	case "contact_title":
+		return org.ContactTitle
+	case "contact_phone":
+		return org.ContactPhone
+	default:
+		return ""
+	}
+}
+
+func organizeProfileBool(organizeMap map[string]model.Organize, organizeID, field string) string {
+	if organizeID == "" {
+		return ""
+	}
+	org, ok := organizeMap[organizeID]
+	if !ok {
+		return ""
+	}
+	if field == "is_notification_member" {
+		return formatBool(org.IsNotificationMember)
+	}
+	return ""
+}
+
+func organizeProfileAddress(organizeMap map[string]model.Organize, organizeID string) string {
+	if organizeID == "" {
+		return ""
+	}
+	org, ok := organizeMap[organizeID]
+	if !ok {
+		return ""
+	}
+	addr := strings.TrimSpace(org.Address)
+	detail := strings.TrimSpace(org.UnitDetailAddress)
+	if addr == "" {
+		return detail
+	}
+	if detail == "" || strings.Contains(addr, detail) {
+		return addr
+	}
+	return addr + " " + detail
 }

@@ -28,7 +28,6 @@ export type LedgerSearchForm = {
   assetFamily?: string;
   securityLevel?: string;
   dataSource?: string;
-  regionCode?: string | null;
   riskScoreMin?: number | null;
   riskScoreMax?: number | null;
   isKey?: string;
@@ -48,7 +47,7 @@ export type LedgerUnitExtra = {
   responsible_department_name: string;
   unified_social_credit_code: string;
   unit_address: string;
-  unit_detail_address: string;
+  unit_location_code: string | null;
   unit_type: string;
 };
 
@@ -60,7 +59,6 @@ export type LedgerFormModel = {
   address: string;
   ipv4: string;
   ipv6: string;
-  regionCode: string | null;
   port: number | null;
   isOnline: boolean;
   isKey: boolean;
@@ -70,7 +68,6 @@ export type LedgerFormModel = {
   filingCertNumber: string;
   icpFilingNumber: string;
   publicSecurityFiling: string;
-  constructionOrgId: string;
   operationOrgId: string;
   remark: string;
   extra: LedgerUnitExtra;
@@ -104,7 +101,12 @@ export type LedgerConstructionForm = {
   location: string;
   location_code: null | string;
   name: string;
-  security_filing: string;
+};
+
+export type LedgerQuickOrganizeForm = {
+  name: string;
+  parentId: string;
+  unifiedSocialCreditCode: string;
 };
 
 export type LedgerScanTemplate = ScanTemplate;

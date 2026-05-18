@@ -20,6 +20,7 @@ type AssetQuery struct {
 	SecurityProtectionLevel string `form:"security_protection_level"`
 	DataSource              string `form:"data_source"`
 	AssetFamily             string `form:"asset_family"`
+	RegionCode              string `form:"region_code"`
 }
 
 type CreateAssetReq struct {
@@ -49,6 +50,7 @@ type CreateAssetReq struct {
 	FilingCertNumber        string        `json:"filing_cert_number"`
 	IcpFilingNumber         string        `json:"icp_filing_number"`
 	PublicSecurityFiling    string        `json:"public_security_filing"`
+	RegionCode              string        `json:"region_code"`
 	ConstructionOrgID       string        `json:"construction_org_id"`
 	OperationOrgID          string        `json:"operation_org_id"`
 	DataSource              string        `json:"data_source"`

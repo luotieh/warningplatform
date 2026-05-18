@@ -19,6 +19,7 @@ import {
   type AssetVerifyOplog,
   type AssetVerifyTask,
 } from '#/api/assetmgr';
+import { buildOrgTreeOptions, flattenOrgTree } from './ledger/utils';
 import {
   NButton,
   NCard,
@@ -132,29 +133,6 @@ const sourceAliasMap: Record<string, string> = {
   external: 'external',
 };
 
-function normalizeTree(nodes: any[] = []): any[] {
-  return nodes
-    .map((node) => {
-      const key = String(node.id ?? node.organize_id ?? node.key ?? node.value ?? '');
-      const label = node.name ?? node.organize_name ?? node.label ?? key;
-      return {
-        label,
-        key,
-        children: normalizeTree(node.children ?? []),
-      };
-    })
-    .filter((node) => node.label && node.key);
-}
-
-function flattenTree(nodes: any[] = [], result: Record<string, string> = {}) {
-  nodes.forEach((node) => {
-    if (node.key) {
-      result[String(node.key)] = node.label;
-    }
-    flattenTree(node.children ?? [], result);
-  });
-  return result;
-}
 
 function parseListBody<T>(res: unknown): { count: number; data: T[] } {
   const body = (res as any)?.data ?? res;
@@ -323,9 +301,9 @@ async function loadOrganizeTree() {
   try {
     const res = await getOrganizeTree();
     const nodes = Array.isArray(res) ? res : ((res as any)?.data ?? (res as any)?.items ?? []);
-    const options = normalizeTree(nodes);
+    const options = buildOrgTreeOptions(nodes);
     organizeTreeOptions.value = options;
-    organizeNameMap.value = flattenTree(options);
+    organizeNameMap.value = flattenOrgTree(options);
   } catch {
     organizeTreeOptions.value = [];
     organizeNameMap.value = {};

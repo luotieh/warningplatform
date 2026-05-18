@@ -1,7 +1,6 @@
 <script lang="ts" setup>
 import {
   NButton,
-  NCascader,
   NCard,
   NCollapseTransition,
   NForm,
@@ -14,8 +13,6 @@ import {
   NSelect,
   NTag,
 } from 'naive-ui';
-
-import { regionOptions } from '#/utils/region';
 
 import type { LedgerOption, LedgerSearchForm } from '../types';
 
@@ -104,17 +101,6 @@ const emit = defineEmits<{
         class="ledger-filter-card__advanced"
       >
         <NGrid cols="1 s:2 m:3 l:4" responsive="screen" :x-gap="16" :y-gap="8">
-          <NGridItem>
-            <NFormItem label="所属区域">
-              <NCascader
-                v-model:value="form.regionCode"
-                clearable
-                filterable
-                size="small"
-                :options="regionOptions"
-              />
-            </NFormItem>
-          </NGridItem>
           <NGridItem>
             <NFormItem label="等保等级">
               <NSelect

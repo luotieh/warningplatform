@@ -1,7 +1,10 @@
+import { defaultRegionCode } from '#/utils/region';
+
 import type {
   LedgerBatchEditField,
   LedgerBatchEditForm,
   LedgerConstructionForm,
+  LedgerQuickOrganizeForm,
   LedgerFormModel,
   LedgerOption,
   LedgerScanForm,
@@ -30,6 +33,26 @@ export const DEFAULT_SOURCE_OPTIONS: LedgerOption[] = [
   { label: '其他', value: 'other' },
 ];
 
+export const DEFAULT_UNIT_TYPE_OPTIONS: LedgerOption[] = [
+  { label: '政府机关', value: '政府机关' },
+  { label: '事业单位', value: '事业单位' },
+  { label: '国有企业', value: '国有企业' },
+  { label: '企业', value: '企业' },
+  { label: '私营企业', value: '私营企业' },
+  { label: '其他', value: '其他' },
+];
+
+export const DEFAULT_INDUSTRY_CATEGORY_OPTIONS: LedgerOption[] = [
+  { label: '政务', value: '政务' },
+  { label: '金融', value: '金融' },
+  { label: '教育', value: '教育' },
+  { label: '医疗', value: '医疗' },
+  { label: '能源', value: '能源' },
+  { label: '通信', value: '通信' },
+  { label: '交通', value: '交通' },
+  { label: '其他', value: '其他' },
+];
+
 export const EMPTY_LEDGER_STATS = (): LedgerStats => ({
   total: 0,
   active: 0,
@@ -52,7 +75,7 @@ export const EMPTY_LEDGER_EXTRA = (): LedgerUnitExtra => ({
   responsible_department_name: '',
   unified_social_credit_code: '',
   unit_address: '',
-  unit_detail_address: '',
+  unit_location_code: defaultRegionCode,
   unit_type: '',
 });
 
@@ -64,7 +87,6 @@ export const EMPTY_LEDGER_FORM = (): LedgerFormModel => ({
   address: '',
   ipv4: '',
   ipv6: '',
-  regionCode: null,
   port: null,
   isOnline: true,
   isKey: false,
@@ -74,7 +96,6 @@ export const EMPTY_LEDGER_FORM = (): LedgerFormModel => ({
   filingCertNumber: '',
   icpFilingNumber: '',
   publicSecurityFiling: '',
-  constructionOrgId: '',
   operationOrgId: '',
   remark: '',
   extra: EMPTY_LEDGER_EXTRA(),
@@ -85,9 +106,14 @@ export const EMPTY_QUICK_CONSTRUCTION_FORM = (): LedgerConstructionForm => ({
   charge_person: '',
   charge_phone: '',
   location: '',
-  location_code: null,
+  location_code: defaultRegionCode,
   name: '',
-  security_filing: '',
+});
+
+export const EMPTY_QUICK_ORGANIZE_FORM = (): LedgerQuickOrganizeForm => ({
+  name: '',
+  parentId: '',
+  unifiedSocialCreditCode: '',
 });
 
 export const EMPTY_SCAN_FORM = (): LedgerScanForm => ({

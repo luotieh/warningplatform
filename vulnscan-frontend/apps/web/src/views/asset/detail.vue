@@ -15,7 +15,7 @@ import {
   getAssetRiskTrend,
   recalcAssetRisk,
 } from '#/api/asset';
-import { getAssetChangeLogs, getOrganizeDetail } from '#/api/assetmgr';
+import { getAssetChangeLogs, getConstructionList, getOrganizeDetail } from '#/api/assetmgr';
 import { createTask, getScanEnginePresets, type ScanEnginePreset } from '#/api/task';
 
 import {
@@ -61,6 +61,7 @@ const changeLogs = ref<any[]>([]);
 const changeLogsLoading = ref(false);
 /** 所属单位名称（接口仅返回 organize_id，名称需单独查组织） */
 const organizeName = ref('');
+const operationOrgName = ref('');
 
 const enginePresets = ref<ScanEnginePreset[]>([]);
 const scanEnginePreset = ref('');
@@ -268,6 +269,19 @@ async function fetchOrganizeName(orgId?: string) {
   }
 }
 
+async function fetchOperationOrgName(orgId?: string) {
+  operationOrgName.value = '';
+  if (!orgId) return;
+  try {
+    const res: any = await getConstructionList({ page: 1, page_size: 500 });
+    const body = res?.data ?? res;
+    const list = (body?.data ?? body ?? []) as Array<{ id: string; name?: string }>;
+    operationOrgName.value = list.find((item) => item.id === orgId)?.name?.trim() ?? '';
+  } catch {
+    operationOrgName.value = '';
+  }
+}
+
 async function syncTabTitleWithAsset() {
   const name = asset.value?.name?.trim();
   if (name) await setTabTitle(`资产 · ${name}`);
@@ -278,11 +292,16 @@ async function fetchDetail() {
   loading.value = true;
   try {
     asset.value = await getAssetDetail(assetId.value);
-    await Promise.all([fetchOrganizeName(asset.value?.organize_id), syncTabTitleWithAsset()]);
+    await Promise.all([
+      fetchOrganizeName(asset.value?.organize_id),
+      fetchOperationOrgName(asset.value?.operation_org_id),
+      syncTabTitleWithAsset(),
+    ]);
   } catch {
     message.error('获取资产详情失败');
     asset.value = null;
     organizeName.value = '';
+    operationOrgName.value = '';
     await syncTabTitleWithAsset();
   } finally {
     loading.value = false;
@@ -544,7 +563,11 @@ onBeforeUnmount(() => {
               </NDescriptionsItem>
               <NDescriptionsItem label="资产分类">{{ assetFamilyLabel }}</NDescriptionsItem>
               <NDescriptionsItem label="数据编号">{{ asset?.data_number || '-' }}</NDescriptionsItem>
-              <NDescriptionsItem label="地域">{{ asset?.region_name || '-' }}</NDescriptionsItem>
+              <NDescriptionsItem label="运维单位">
+                <template v-if="operationOrgName">{{ operationOrgName }}</template>
+                <span v-else-if="asset?.operation_org_id" class="asset-detail__mono">{{ asset.operation_org_id }}</span>
+                <template v-else>-</template>
+              </NDescriptionsItem>
               <NDescriptionsItem label="是否联网">
                 <NTag :type="asset?.is_online ? 'success' : 'default'" size="small">
                   {{ asset?.is_online ? '是' : '否' }}
@@ -556,7 +579,7 @@ onBeforeUnmount(() => {
                 </NTag>
               </NDescriptionsItem>
               <NDescriptionsItem label="安全保护等级">{{ asset?.security_protection_level || '-' }}</NDescriptionsItem>
-              <NDescriptionsItem label="备案证明编号">{{ asset?.filing_cert_number || '-' }}</NDescriptionsItem>
+              <NDescriptionsItem label="等保备案证明编号">{{ asset?.filing_cert_number || '-' }}</NDescriptionsItem>
               <NDescriptionsItem label="ICP备案号">{{ asset?.icp_filing_number || '-' }}</NDescriptionsItem>
               <NDescriptionsItem label="数据来源">{{ asset?.data_source || '-' }}</NDescriptionsItem>
               <NDescriptionsItem label="责任人">{{ asset?.responsible_user_name || '-' }}</NDescriptionsItem>

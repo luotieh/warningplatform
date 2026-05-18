@@ -3,12 +3,14 @@ package asset
 import (
 	"context"
 	"encoding/csv"
+	"fmt"
 	"io"
 	"path/filepath"
 	"strconv"
 	"strings"
 
 	"vulnscan-backend/model"
+	"vulnscan-backend/organize"
 
 	"code.yt-security.com/public/core/v2/generate/qulid"
 	"code.yt-security.com/public/core/v2/web"
@@ -38,7 +40,7 @@ var assetLedgerColumns = []assetImportColumn{
 	{Field: "address", Group: "系统基本信息", Title: "访问地址", Example: "https://oa.example.com", Required: true},
 	{Field: "is_key", Group: "系统基本信息", Title: "是否是关键信息基础设施", Example: "否", Required: true},
 	{Field: "security_protection_level", Group: "系统基本信息", Title: "安全保护等级", Example: "无", Required: true},
-	{Field: "filing_cert_number", Group: "系统基本信息", Title: "备案证明编号", Example: "CERT-2024-001"},
+	{Field: "filing_cert_number", Group: "系统基本信息", Title: "等保备案证明编号", Example: "CERT-2024-001"},
 	{Field: "icp_filing_number", Group: "系统基本信息", Title: "ICP备案号", Example: "京ICP备12345678号"},
 	{Field: "public_security_filing", Group: "系统基本信息", Title: "公网安备案号", Example: "京公网安备11010802000000号"},
 	{Field: "data_number", Group: "系统基本信息", Title: "数据编号", Example: "DN-2024-001"},
@@ -52,8 +54,8 @@ var assetLedgerColumns = []assetImportColumn{
 	{Field: "industry_category", Group: "单位基本信息", Title: "行业分类", Example: "政务"},
 	{Field: "is_notification_member", Group: "单位基本信息", Title: "通报机制成员单位", Example: "是"},
 	{Field: "unified_social_credit_code", Group: "单位基本信息", Title: "统一社会信用代码", Example: "91110000100000000X"},
-	{Field: "unit_address", Group: "单位基本信息", Title: "单位地址", Example: "北京市"},
-	{Field: "unit_detail_address", Group: "单位基本信息", Title: "单位详细地址", Example: "海淀区xx路1号"},
+	{Field: "unit_location_code", Group: "单位基本信息", Title: "单位省市区", Example: "江苏省/徐州市/云龙区"},
+	{Field: "unit_address", Group: "单位基本信息", Title: "详细地址", Example: "xx路1号"},
 	{Field: "leader_name", Group: "单位基本信息", Title: "分管领导姓名", Example: "李四"},
 	{Field: "leader_title", Group: "单位基本信息", Title: "分管领导职务/职称", Example: "副主任"},
 	{Field: "responsible_department_name", Group: "单位基本信息", Title: "责任部门名称", Example: "信息中心"},
@@ -63,12 +65,6 @@ var assetLedgerColumns = []assetImportColumn{
 	{Field: "contact_name", Group: "单位基本信息", Title: "联系人姓名", Example: "赵六"},
 	{Field: "contact_title", Group: "单位基本信息", Title: "联系人职务/职称", Example: "工程师"},
 	{Field: "contact_phone", Group: "单位基本信息", Title: "联系人电话", Example: "13900000000"},
-	{Field: "construction_org", Group: "系统建设单位基本情况", Title: "建设单位名称", Example: "某某建设单位"},
-	{Field: "construction_org_location", Group: "系统建设单位基本情况", Title: "所在地", Example: "北京市/海淀区"},
-	{Field: "construction_org_address", Group: "系统建设单位基本情况", Title: "详细地址", Example: "海淀区xx路1号"},
-	{Field: "construction_org_charge_person", Group: "系统建设单位基本情况", Title: "负责人及职务", Example: "张三/主任"},
-	{Field: "construction_org_charge_phone", Group: "系统建设单位基本情况", Title: "联系电话", Example: "13800000000"},
-	{Field: "construction_org_security_filing", Group: "系统建设单位基本情况", Title: "公网安备备案号", Example: "京公网安备11010802000000号"},
 	{Field: "operation_org", Group: "系统运维单位基本情况", Title: "运维单位名称", Example: "某某运维单位"},
 	{Field: "operation_org_location", Group: "系统运维单位基本情况", Title: "所在地", Example: "北京市/海淀区"},
 	{Field: "operation_org_address", Group: "系统运维单位基本情况", Title: "详细地址", Example: "海淀区xx路2号"},
@@ -95,14 +91,13 @@ var assetImportFields = []string{
 	"icp_filing_number",
 	"public_security_filing",
 	"domain",
-	"construction_org",
 	"operation_org",
 	"responsible_user_name",
 	"tags",
 	"remark",
 }
 
-var assetImportColumns = pickAssetColumns(assetLedgerColumns, assetImportFields)
+var assetImportColumns = pickAssetColumns(assetLedgerColumnsVisible(), assetImportFields)
 
 func pickAssetColumns(columns []assetImportColumn, fields []string) []assetImportColumn {
 	fieldMap := make(map[string]assetImportColumn, len(columns))
@@ -119,9 +114,10 @@ func pickAssetColumns(columns []assetImportColumn, fields []string) []assetImpor
 	return result
 }
 
-var assetExtraImportFields = map[string]bool{
+// assetOrganizeImportFields 导入时写入所属单位档案，不进入资产 extra。
+var assetOrganizeImportFields = map[string]bool{
 	"unit_type": true, "industry_category": true, "is_notification_member": true,
-	"unified_social_credit_code": true, "unit_address": true, "unit_detail_address": true,
+	"unified_social_credit_code": true, "unit_address": true, "unit_location_code": true,
 	"leader_name": true, "leader_title": true, "responsible_department_name": true,
 	"department_leader_name": true, "department_leader_title": true, "department_leader_phone": true,
 	"contact_name": true, "contact_title": true, "contact_phone": true,
@@ -167,7 +163,7 @@ func (h *HandlerAsset) ImportAssets(c *gin.Context) {
 	resolver := h.newAssetImportResolver(user.UserID, user.OrganizeID)
 
 	var items []*model.Asset
-	for _, row := range rows[dataStart:] {
+	for rowIdx, row := range rows[dataStart:] {
 		orgID := getCell(row, headerMap, "organize_id")
 		if orgID == "" {
 			orgID, err = resolver.resolveOrganizeName(c.Request.Context(), getCell(row, headerMap, "organize_name"))
@@ -210,14 +206,42 @@ func (h *HandlerAsset) ImportAssets(c *gin.Context) {
 		item.PublicSecurityFiling = getCell(row, headerMap, "public_security_filing")
 		item.IsOnline = parseBoolDefault(getCell(row, headerMap, "is_online"), true)
 		item.IsKey = parseBoolDefault(getCell(row, headerMap, "is_key"), false)
-		item.ConstructionOrgID = resolver.resolveConstructionOrg(buildConstructionOrgImport(row, headerMap, "construction_org"), user.UserID)
-		item.OperationOrgID = resolver.resolveConstructionOrg(buildConstructionOrgImport(row, headerMap, "operation_org"), user.UserID)
+		constructionInput := buildConstructionOrgImport(row, headerMap, "construction_org")
+		if constructionOrgImportHasData(constructionInput) {
+			if err := validateConstructionOrgImport(constructionInput); err != nil {
+				web.Fail(c).Msg(fmt.Sprintf("第 %d 行：%s", dataStart+rowIdx+1, err.Error())).Send()
+				return
+			}
+			item.ConstructionOrgID = resolver.resolveConstructionOrg(constructionInput, user.UserID)
+		}
+		opInput := buildConstructionOrgImport(row, headerMap, "operation_org")
+		if constructionOrgImportHasData(opInput) {
+			if err := validateConstructionOrgImport(opInput); err != nil {
+				web.Fail(c).Msg(fmt.Sprintf("第 %d 行：%s", dataStart+rowIdx+1, err.Error())).Send()
+				return
+			}
+			item.OperationOrgID = resolver.resolveConstructionOrg(opInput, user.UserID)
+		}
 		item.ResponsibleUserName = getCell(row, headerMap, "responsible_user_name")
 		item.Tags = splitTags(getCell(row, headerMap, "tags"))
-		item.Extra = buildAssetExtra(row, headerMap)
+		item.Extra = nil
 		item.Remark = getCell(row, headerMap, "remark")
+		if item.OrganizeID != "" {
+			if orgUpdates := buildOrganizeUpdatesFromImportRow(row, headerMap); orgUpdates != nil {
+				organize.NormalizeOrganizeUpdates(orgUpdates)
+				if err := organize.ValidateOrganizeProfileUpdates(orgUpdates); err != nil {
+					web.Fail(c).Msg(fmt.Sprintf("第 %d 行：%s", dataStart+rowIdx+1, err.Error())).Send()
+					return
+				}
+			}
+			resolver.syncOrganizeProfileFromImportRow(item.OrganizeID, row, headerMap)
+		}
 		if port, ok := parseInt(getCell(row, headerMap, "port")); ok {
 			item.Port = port
+		}
+		if err := validateAssetImportRow(dataStart+rowIdx+1, item.IPv4, item.Port); err != nil {
+			web.Fail(c).Msg(err.Error()).Send()
+			return
 		}
 
 		items = append(items, item)
@@ -295,7 +319,7 @@ func looksLikeGroupedAssetHeader(groupRow, fieldRow []string) bool {
 	groupCount := 0
 	for _, cell := range groupRow {
 		switch normalizeHeader(cell) {
-		case "系统基本信息", "单位基本信息", "系统建设单位基本情况", "系统运维单位基本情况", "资产管理信息", "导出统计信息":
+		case "系统基本信息", "单位基本信息", "系统运维单位基本情况", "资产管理信息", "导出统计信息":
 			groupCount++
 		}
 	}
@@ -411,7 +435,9 @@ func buildHeaderMap(headers []string) map[string]int {
 		"是否联网": "is_online", "is_online": "is_online",
 		"关键信息基础设施": "is_key", "是否关键资产": "is_key", "是否是关键信息基础设施": "is_key", "is_key": "is_key",
 		"保护等级": "security_protection_level", "安全保护等级": "security_protection_level", "security_protection_level": "security_protection_level", "等保等级": "security_protection_level",
-		"等保证号": "filing_cert_number", "备案证明编号": "filing_cert_number", "filing_cert_number": "filing_cert_number",
+		"等保证号": "filing_cert_number", "等保备案证明编号": "filing_cert_number",
+		"备案证明编号": "filing_cert_number", "filing_cert_number": "filing_cert_number",
+		"单位省市区": "unit_location_code", "unit_location_code": "unit_location_code",
 		"icp备案号": "icp_filing_number", "icp_filing_number": "icp_filing_number", "icp备案": "icp_filing_number",
 		"公网安备案号": "public_security_filing", "public_security_filing": "public_security_filing", "公网安备": "public_security_filing",
 		"资产所属单位id": "organize_id", "所属单位id": "organize_id", "organize_id": "organize_id",
@@ -436,7 +462,7 @@ func buildHeaderMap(headers []string) map[string]int {
 		"通报机制成员单位": "is_notification_member", "is_notification_member": "is_notification_member",
 		"统一社会信用代码": "unified_social_credit_code", "unified_social_credit_code": "unified_social_credit_code",
 		"单位地址": "unit_address", "unit_address": "unit_address",
-		"单位详细地址": "unit_detail_address", "unit_detail_address": "unit_detail_address",
+		"单位详细地址": "unit_address", "unit_detail_address": "unit_address",
 		"分管领导姓名": "leader_name", "leader_name": "leader_name",
 		"分管领导职务/职称": "leader_title", "leader_title": "leader_title",
 		"责任部门名称": "responsible_department_name", "responsible_department_name": "responsible_department_name",
@@ -511,23 +537,48 @@ func splitTags(value string) model.StringArray {
 	return model.StringArray(tags)
 }
 
-func buildAssetExtra(row []string, headerMap map[string]int) model.JSONMap {
-	extra := model.JSONMap{}
-	for field := range assetExtraImportFields {
+func (r *assetImportResolver) syncOrganizeProfileFromImportRow(orgID string, row []string, headerMap map[string]int) {
+	updates := buildOrganizeUpdatesFromImportRow(row, headerMap)
+	if len(updates) == 0 {
+		return
+	}
+	organize.NormalizeOrganizeUpdates(updates)
+	_ = r.db.Model(&model.Organize{}).Where("id = ? AND deleted_at IS NULL", orgID).Updates(updates).Error
+}
+
+func buildOrganizeUpdatesFromImportRow(row []string, headerMap map[string]int) map[string]interface{} {
+	updates := map[string]interface{}{}
+	for field := range assetOrganizeImportFields {
 		value := getCell(row, headerMap, field)
 		if value == "" {
 			continue
 		}
 		if field == "is_notification_member" {
-			extra[field] = parseBoolDefault(value, false)
-		} else {
-			extra[field] = value
+			updates[field] = parseBoolDefault(value, false)
+			continue
 		}
+		if field == "unit_location_code" {
+			continue
+		}
+		if field == "unit_address" {
+			updates["address"] = value
+			updates["unit_detail_address"] = ""
+			continue
+		}
+		updates[field] = value
 	}
-	if len(extra) == 0 {
+	if loc := getCell(row, headerMap, "unit_location_code"); loc != "" {
+		if addr, ok := updates["address"].(string); ok && addr != "" {
+			updates["address"] = strings.TrimSpace(loc + " " + addr)
+		} else {
+			updates["address"] = loc
+		}
+		updates["unit_detail_address"] = ""
+	}
+	if len(updates) == 0 {
 		return nil
 	}
-	return extra
+	return updates
 }
 
 type constructionOrgImport struct {
@@ -548,6 +599,15 @@ func buildConstructionOrgImport(row []string, headerMap map[string]int, prefix s
 		ChargePhone:    getCell(row, headerMap, prefix+"_charge_phone"),
 		SecurityFiling: getCell(row, headerMap, prefix+"_security_filing"),
 	}
+}
+
+func constructionOrgImportHasData(input constructionOrgImport) bool {
+	return strings.TrimSpace(input.Name) != "" ||
+		strings.TrimSpace(input.Location) != "" ||
+		strings.TrimSpace(input.Address) != "" ||
+		strings.TrimSpace(input.ChargePerson) != "" ||
+		strings.TrimSpace(input.ChargePhone) != "" ||
+		strings.TrimSpace(input.SecurityFiling) != ""
 }
 
 type assetImportResolver struct {

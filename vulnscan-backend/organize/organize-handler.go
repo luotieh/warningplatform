@@ -101,6 +101,11 @@ func (h *HandlerOrganize) Create(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
+	NormalizeOrganizeAddress(&item)
+	if err := validateOrganizeItem(&item); err != nil {
+		web.Fail(c).Msg(err.Error()).Send()
+		return
+	}
 	if err := h.svc.Create(&item); err != nil {
 		web.Fail(c).Err(err).Send()
 		return
@@ -127,6 +132,11 @@ func (h *HandlerOrganize) Update(c *gin.Context) {
 		return
 	}
 
+	NormalizeOrganizeUpdates(body)
+	if err := validateOrganizeUpdates(body); err != nil {
+		web.Fail(c).Msg(err.Error()).Send()
+		return
+	}
 	if err := h.svc.Update(uri.Id, body); err != nil {
 		web.Fail(c).Err(err).Send()
 		return
@@ -177,7 +187,8 @@ func (h *HandlerOrganize) Tree(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(h.filterOrganizesByPermission(c, items, true)).Send()
+	filtered := h.filterOrganizesByPermission(c, items, true)
+	web.OK(c).Data(buildOrganizeTreeFromFlat(filtered)).Send()
 }
 
 func (h *HandlerOrganize) IAMTree(c *gin.Context) {
@@ -656,6 +667,10 @@ func (h *HandlerConstruction) Create(c *gin.Context) {
 	}
 	user, _ := iamsdk.GetCurrentUser(c)
 	item.CreatedBy = user.UserID
+	if err := validateConstructionOrg(&item); err != nil {
+		web.Fail(c).Msg(err.Error()).Send()
+		return
+	}
 	if err := h.svc.Create(&item); err != nil {
 		web.Fail(c).Err(err).Send()
 		return
@@ -667,6 +682,10 @@ func (h *HandlerConstruction) Update(c *gin.Context) {
 	id := c.Param("id")
 	body, ok := web.BindJSON[map[string]interface{}](c)
 	if !ok {
+		return
+	}
+	if err := validateConstructionUpdates(body); err != nil {
+		web.Fail(c).Msg(err.Error()).Send()
 		return
 	}
 	if err := h.svc.Update(id, body); err != nil {

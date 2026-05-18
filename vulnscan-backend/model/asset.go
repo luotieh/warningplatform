@@ -86,6 +86,9 @@ type Asset struct {
 	IcpFilingNumber         string `gorm:"type:varchar(100)" json:"icp_filing_number"`
 	PublicSecurityFiling    string `gorm:"type:varchar(100)" json:"public_security_filing"`
 
+	// ── 地域（省市区县级编码，与 @vant/area-data 一致）──
+	RegionCode string `gorm:"type:varchar(12);index" json:"region_code"`
+
 	// ── 组织关联 ──
 	OrganizeID        string `gorm:"type:varchar(64);index" json:"organize_id"`
 	ConstructionOrgID string `gorm:"type:varchar(64)" json:"construction_org_id"`
