@@ -223,16 +223,16 @@ func (h *HandlerOrganize) fetchIAMOrganizeTree(c *gin.Context) ([]*identity.Orga
 	serviceCtx, serviceCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer serviceCancel()
 
-	nodes, err := h.iam.Organize.GetOrganizeTree(serviceCtx)
+	infos, err := listAllIAMOrganizes(serviceCtx, h.iam.Organize)
 	if err != nil && isIAMUnauthorized(err) {
 		userCtx, userCancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
 		defer userCancel()
-		nodes, err = h.iam.Organize.GetOrganizeTree(userCtx)
+		infos, err = listAllIAMOrganizes(userCtx, h.iam.Organize)
 	}
 	if err != nil {
 		return nil, err
 	}
-	return nodes, nil
+	return buildIAMOrganizeTree(infos), nil
 }
 
 func (h *HandlerOrganize) fetchIAMOrganizeInfos(ctx context.Context) ([]*identity.OrganizeInfo, error) {
