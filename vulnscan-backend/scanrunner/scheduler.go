@@ -239,22 +239,30 @@ func (s *Scheduler) recoverFromDB(ctx context.Context) {
 }
 
 func (s *Scheduler) CancelTask(taskID string) bool {
+	cancelled := false
 	if s.queue.Remove(taskID) {
-		s.db.Model(&model.ScanTask{}).Where("id = ?", taskID).
-			Update("status", model.TaskStatusCancelled)
-		return true
+		cancelled = true
 	}
 
 	s.mu.Lock()
 	runner, ok := s.runners[taskID]
 	s.mu.Unlock()
 
-	if !ok {
-		return false
+	if ok {
+		runner.Cancel()
+		cancelled = true
 	}
 
-	runner.Cancel()
-	return true
+	if cancelled && s.db != nil {
+		now := time.Now()
+		s.db.Model(&model.ScanTask{}).Where("id = ?", taskID).
+			Updates(map[string]interface{}{
+				"status":      model.TaskStatusCancelled,
+				"finished_at": &now,
+				"error_msg":   "用户取消",
+			})
+	}
+	return cancelled
 }
 
 func (s *Scheduler) GetProgress(taskID string) *TaskProgress {

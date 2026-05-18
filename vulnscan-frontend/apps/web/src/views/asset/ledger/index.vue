@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { computed, onMounted } from 'vue';
+import { computed, onActivated, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
 import ModuleConfigPanel from '#/views/scan/components/module-config-panel.vue';
@@ -60,9 +60,13 @@ const {
   batchEditForm,
   templateOptions,
   enginePresetOptions,
+  scanExecutorNodeOptions,
+  scanExecutorNodesLoading,
   moduleConfigs,
   showEditModal,
   showImportModal,
+  importErrorMessage,
+  clearImportError,
   showScanModal,
   showVerifyModal,
   showQuickConstructionModal,
@@ -133,8 +137,19 @@ const columns = computed(() =>
   }),
 );
 
+const skipNextActivatedProbe = ref(false);
+
 onMounted(async () => {
+  skipNextActivatedProbe.value = true;
   await init();
+  skipNextActivatedProbe.value = false;
+});
+
+onActivated(async () => {
+  if (skipNextActivatedProbe.value) {
+    return;
+  }
+  await page.probeReachabilityAndReload();
 });
 </script>
 
@@ -191,7 +206,12 @@ onMounted(async () => {
           :checked-row-keys="checkedRowKeys"
           @refresh="reload"
           @create="openCreateModal"
-          @import="showImportModal = true"
+          @import="
+            () => {
+              clearImportError();
+              showImportModal = true;
+            }
+          "
           @export="exportCurrentAssets"
           @batch-action="handleBatchAction"
           @update:checked-row-keys="handleCheckedRowKeys"
@@ -227,10 +247,16 @@ onMounted(async () => {
       :show="showImportModal"
       :loading="importLoading"
       :template-downloading="templateDownloading"
+      :error-message="importErrorMessage"
       @close="showImportModal = false"
       @submit="submitImport"
       @download-template="downloadImportTemplateFile"
-      @change="updateImportFile"
+      @change="
+        (payload) => {
+          clearImportError();
+          updateImportFile(payload);
+        }
+      "
       @update:show="(value) => (showImportModal = value)"
     />
 
@@ -275,6 +301,8 @@ onMounted(async () => {
       :assets="scanAssets"
       :template-options="templateOptions"
       :engine-preset-options="enginePresetOptions"
+      :executor-node-options="scanExecutorNodeOptions"
+      :executor-nodes-loading="scanExecutorNodesLoading"
       :module-config-count="Object.keys(moduleConfigs).length"
       @close="showScanModal = false"
       @submit="submitScanTask"
@@ -339,6 +367,14 @@ onMounted(async () => {
 
 :deep(.ledger-cell--muted) {
   color: var(--n-text-color-3);
+}
+
+:deep(.ledger-row-actions .ledger-row-action) {
+  padding: 0 6px;
+}
+
+:deep(.ledger-row-actions .ledger-row-action--emphasize) {
+  font-weight: 500;
 }
 
 @media (max-width: 1100px) {

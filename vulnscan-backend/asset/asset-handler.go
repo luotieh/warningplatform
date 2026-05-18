@@ -535,6 +535,15 @@ func assetExportValue(asset model.Asset, field string, orgMap map[string]model.C
 		return organizeProfileBool(organizeMap, asset.OrganizeID, "is_notification_member")
 	case "unified_social_credit_code":
 		return organizeProfileValue(organizeMap, asset.OrganizeID, "unified_social_credit_code")
+	case "parent_organize_name":
+		org, ok := organizeMap[asset.OrganizeID]
+		if !ok || org.ParentID == "" {
+			return ""
+		}
+		if parent, ok := organizeMap[org.ParentID]; ok {
+			return parent.Name
+		}
+		return org.ParentID
 	case "unit_location_code":
 		return ""
 	case "unit_address":
@@ -702,8 +711,20 @@ func (h *HandlerAsset) organizeProfileMap(items []model.Asset) map[string]model.
 	}
 	var orgs []model.Organize
 	_ = svc.session().Where("id IN ? AND deleted_at IS NULL", ids).Find(&orgs).Error
+	parentIDs := make([]string, 0)
 	for _, org := range orgs {
 		result[org.ID] = org
+		if org.ParentID != "" && !seen[org.ParentID] {
+			seen[org.ParentID] = true
+			parentIDs = append(parentIDs, org.ParentID)
+		}
+	}
+	if len(parentIDs) > 0 {
+		var parents []model.Organize
+		_ = svc.session().Where("id IN ? AND deleted_at IS NULL", parentIDs).Find(&parents).Error
+		for _, org := range parents {
+			result[org.ID] = org
+		}
 	}
 	return result
 }

@@ -61,7 +61,10 @@ func (a *NodeAPI) gdb() *gorm.DB {
 }
 
 func (a *NodeAPI) RegisterRoutes(e *gin.Engine, pathPrefix string) {
-	g := e.Group(pathPrefix + "/node-api")
+	base := pathPrefix + "/node-api"
+	e.GET(base+"/health", a.Health)
+
+	g := e.Group(base)
 	g.Use(a.authMiddleware())
 
 	g.POST("/heartbeat", a.Heartbeat)

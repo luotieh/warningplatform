@@ -33,6 +33,7 @@ func (m *Asset) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
 			Children: []authorize.Route{
 				{Name: "资产列表", Path: "list", Method: "GET", Handler: m.handler.List, Enabled: true},
 				{Name: "资产统计", Path: "stats", Method: "GET", Handler: m.enrichHandler.AssetStats, Enabled: true},
+				{Name: "同步在线状态", Path: "sync-online-status", Method: "POST", Handler: m.enrichHandler.SyncOnlineStatus, Enabled: true},
 				{Name: "资产聚合", Path: "aggregate", Method: "POST", Handler: m.enrichHandler.AggregateFromScans, Enabled: true},
 				{Name: "批量分组", Path: "batch-assign", Method: "POST", Handler: m.enrichHandler.BatchAssignGroup, Enabled: true},
 				{Name: "资产详情", Path: ":id", Method: "GET", Handler: m.handler.GetByID, Enabled: true},

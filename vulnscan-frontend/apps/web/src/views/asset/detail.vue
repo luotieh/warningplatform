@@ -454,8 +454,12 @@ onBeforeUnmount(() => {
               <div class="asset-detail__title-line">
                 <h2 class="asset-detail__title">{{ asset?.name || '资产详情' }}</h2>
                 <NTag v-if="asset?.is_key" type="warning" size="small">关键资产</NTag>
-                <NTag :type="asset?.is_online ? 'success' : 'default'" size="small">
-                  {{ asset?.is_online ? '在线' : '离线' }}
+                <NTag
+                  v-if="asset?.reachable_checked_at"
+                  :type="asset?.reachable ? 'success' : 'default'"
+                  size="small"
+                >
+                  {{ asset?.reachable ? '在线' : '离线' }}
                 </NTag>
               </div>
               <div v-if="asset" class="asset-detail__meta-line">
@@ -572,6 +576,17 @@ onBeforeUnmount(() => {
                 <NTag :type="asset?.is_online ? 'success' : 'default'" size="small">
                   {{ asset?.is_online ? '是' : '否' }}
                 </NTag>
+              </NDescriptionsItem>
+              <NDescriptionsItem label="在线状态（探测）">
+                <template v-if="asset?.reachable_checked_at">
+                  <NTag :type="asset?.reachable ? 'success' : 'default'" size="small">
+                    {{ asset?.reachable ? '在线' : '离线' }}
+                  </NTag>
+                  <span class="asset-detail__meta-k" style="margin-left: 8px">
+                    {{ formatDateTime(asset.reachable_checked_at) }}
+                  </span>
+                </template>
+                <template v-else>未检测</template>
               </NDescriptionsItem>
               <NDescriptionsItem label="是否关键资产">
                 <NTag :type="asset?.is_key ? 'warning' : 'default'" size="small">

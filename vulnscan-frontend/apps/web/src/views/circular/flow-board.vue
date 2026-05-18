@@ -1,9 +1,11 @@
 <script lang="ts" setup>
 import { h, onMounted, ref, computed } from 'vue';
+import dayjs from 'dayjs';
 import {
   NButton, NCard, NDataTable, NInput, NSpace, NTag,
-  NModal, NRadioGroup, NRadio, NFormItem, NForm, useMessage,
+  NModal, NRadioGroup, NRadio, NFormItem, NForm, NDatePicker, useMessage,
 } from 'naive-ui';
+import OrganizeTreeSelect from '#/components/organize/OrganizeTreeSelect.vue';
 import {
   getVerifyList, verifyCircular,
   getDistributeList, distributeCircular,
@@ -40,7 +42,8 @@ const currentId = ref('');
 const selectedIds = ref<string[]>([]);
 
 const verifyResult = ref('pass');
-const distForm = ref({ target_organize: '', processing_deadline: '', requirements: '' });
+const distForm = ref({ target_organize: null as string | null, requirements: '' });
+const processingDeadlineTs = ref<number | null>(null);
 const reviewForm = ref({ review: 'approve' as string, instructions: '' });
 
 const columns = computed(() => [
@@ -79,10 +82,19 @@ async function handleAction() {
       await verifyCircular({ circular_ids: selectedIds.value, result: verifyResult.value });
       message.success('核验完成');
     } else if (props.mode === 'distribute') {
-      if (!distForm.value.target_organize) { message.warning('请输入目标组织'); return; }
-      await distributeCircular({ circular_id: currentId.value, ...distForm.value });
+      if (!distForm.value.target_organize) { message.warning('请选择目标单位'); return; }
+      const processing_deadline = processingDeadlineTs.value
+        ? dayjs(processingDeadlineTs.value).format('YYYY-MM-DD HH:mm:ss')
+        : undefined;
+      await distributeCircular({
+        circular_id: currentId.value,
+        target_organize: distForm.value.target_organize,
+        processing_deadline,
+        requirements: distForm.value.requirements || undefined,
+      });
       message.success('派发成功');
-      distForm.value = { target_organize: '', processing_deadline: '', requirements: '' };
+      distForm.value = { target_organize: null, requirements: '' };
+      processingDeadlineTs.value = null;
     } else {
       await reviewCircular(currentId.value, reviewForm.value);
       message.success('审核完成');
@@ -129,10 +141,22 @@ onMounted(fetchData);
 
     <!-- 派发弹窗 -->
     <NModal v-if="mode === 'distribute'" v-model:show="showModal" preset="dialog" :title="titles[mode]" positive-text="确认派发" negative-text="取消" @positive-click="handleAction">
-      <NForm label-placement="left" label-width="80">
-        <NFormItem label="目标组织" required><NInput v-model:value="distForm.target_organize" placeholder="请输入目标组织" /></NFormItem>
-        <NFormItem label="处置期限"><NInput v-model:value="distForm.processing_deadline" placeholder="YYYY-MM-DD" /></NFormItem>
-        <NFormItem label="处置要求"><NInput v-model:value="distForm.requirements" type="textarea" placeholder="请输入处置要求" :rows="3" /></NFormItem>
+      <NForm label-placement="left" label-width="88">
+        <NFormItem label="目标单位" required>
+          <OrganizeTreeSelect v-model="distForm.target_organize" />
+        </NFormItem>
+        <NFormItem label="处置期限">
+          <NDatePicker
+            v-model:value="processingDeadlineTs"
+            type="datetime"
+            clearable
+            style="width: 100%"
+            placeholder="请选择处置期限"
+          />
+        </NFormItem>
+        <NFormItem label="处置要求">
+          <NInput v-model:value="distForm.requirements" type="textarea" placeholder="请输入处置要求" :rows="3" />
+        </NFormItem>
       </NForm>
     </NModal>
 

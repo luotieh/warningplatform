@@ -7,6 +7,7 @@ import (
 )
 
 var WireSet = wire.NewSet(
+	ProvideClusterConnectivity,
 	NewServiceCluster,
 	NewHandlerCluster,
 	NewCluster,

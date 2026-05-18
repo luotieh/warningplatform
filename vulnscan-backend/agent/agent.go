@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
-	"runtime"
 	"sync"
 	"time"
+
+	"vulnscan-backend/pkg/clusterconn"
+	"vulnscan-backend/pkg/nodecapacity"
 )
 
 type Agent struct {
@@ -22,6 +24,10 @@ type Agent struct {
 
 func New(cfg Config, executors ...Executor) *Agent {
 	cfg.defaults()
+	if cfg.MaxConcurrent <= 0 {
+		snap := nodecapacity.Compute(nodecapacity.DefaultConfig())
+		cfg.MaxConcurrent = snap.Capacity
+	}
 	client := NewClient(cfg.MasterURL, cfg.Token, cfg.Secret)
 	scheduler := NewScheduler(executors, cfg.MaxConcurrent, cfg.TaskTimeout)
 
@@ -34,6 +40,13 @@ func New(cfg Config, executors ...Executor) *Agent {
 }
 
 func (a *Agent) Start(ctx context.Context) error {
+	pingCtx, pingCancel := context.WithTimeout(ctx, 15*time.Second)
+	err := a.client.PingHealth(pingCtx)
+	pingCancel()
+	if err != nil {
+		return fmt.Errorf("无法连接主控 %s: %w（%s）", a.config.MasterURL, err, clusterconn.AgentConnectivityHint(a.config.Topology))
+	}
+
 	ctx, a.cancel = context.WithCancel(ctx)
 
 	for _, exec := range a.executors {
@@ -49,9 +62,15 @@ func (a *Agent) Start(ctx context.Context) error {
 	go a.taskPollLoop(ctx)
 	go a.commandPollLoop(ctx)
 
+	snap := nodecapacity.Compute(nodecapacity.DefaultConfig())
 	slog.Info("agent started",
 		"master", a.config.MasterURL,
+		"topology", a.config.Topology,
 		"concurrency", a.config.MaxConcurrent,
+		"capacity_cpus", snap.LogicalCPUs,
+		"capacity_reserve_ratio", snap.ReserveRatio,
+		"capacity_limit_cpu", snap.LimitByCPU,
+		"capacity_limit_mem", snap.LimitByMemory,
 		"version", Version)
 
 	return nil
@@ -88,15 +107,12 @@ func (a *Agent) heartbeatLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			var memStats runtime.MemStats
-			runtime.ReadMemStats(&memStats)
-
 			hb := &HeartbeatReq{
 				RunningTasks:  a.scheduler.RunningCount(),
 				QueuedTasks:   a.scheduler.QueuedCount(),
 				MaxConcurrent: a.scheduler.MaxConcurrent(),
-				CPUUsage:      float64(runtime.NumGoroutine()) / float64(runtime.GOMAXPROCS(0)*100) * 100,
-				MemoryUsage:   float64(memStats.Alloc) / 1024 / 1024,
+				CPUUsage:      nodecapacity.CPUUsagePercent(),
+				MemoryUsage:   nodecapacity.MemoryUsagePercent(),
 				Version:       Version,
 				IPAddress:     getLocalIP(),
 			}

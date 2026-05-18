@@ -72,6 +72,24 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body any) ([]b
 	return respBody, nil
 }
 
+// PingHealth 探测主控 node-api 是否可达（无需鉴权）。
+func (c *Client) PingHealth(ctx context.Context) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(c.baseURL, "/")+"/node-api/health", nil)
+	if err != nil {
+		return err
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
+	}
+	return nil
+}
+
 func (c *Client) Heartbeat(ctx context.Context, hb *HeartbeatReq) error {
 	_, err := c.doJSON(ctx, "POST", "/node-api/heartbeat", hb)
 	return err

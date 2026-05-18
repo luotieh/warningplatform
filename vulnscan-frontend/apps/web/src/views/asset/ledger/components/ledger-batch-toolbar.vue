@@ -27,7 +27,7 @@ const emit = defineEmits<{
         <NButton :disabled="selectedCount === 0" @click="emit('edit')">批量编辑</NButton>
         <NButton :disabled="selectedCount === 0" @click="emit('monitor')">发送监测</NButton>
         <NButton :disabled="selectedCount === 0" @click="emit('verify')">下发核验</NButton>
-        <NButton type="primary" :disabled="selectedCount === 0" @click="emit('scan')">批量扫描</NButton>
+        <NButton :disabled="selectedCount === 0" @click="emit('scan')">批量扫描</NButton>
       </NSpace>
     </div>
   </NCard>

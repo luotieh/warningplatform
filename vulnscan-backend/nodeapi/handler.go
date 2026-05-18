@@ -19,6 +19,10 @@ import (
 	"gorm.io/gorm"
 )
 
+func (a *NodeAPI) Health(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{"ok": true, "service": "node-api"})
+}
+
 func (a *NodeAPI) authMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token := c.GetHeader("X-Agent-Token")
@@ -196,6 +200,14 @@ func (a *NodeAPI) pollBothTaskTypes(nodeUUID string, batch int) []agent.TaskEnve
 		Order("priority DESC, created_at ASC").
 		Limit(scanBatch).
 		Find(&scanTasks)
+
+	claimable := make([]model.ScanTask, 0, len(scanTasks))
+	for _, st := range scanTasks {
+		if !model.ScanTaskLocalExecutorOnly(st.Parameters) {
+			claimable = append(claimable, st)
+		}
+	}
+	scanTasks = claimable
 
 	if len(scanTasks) > 0 {
 		scanIDs := make([]string, len(scanTasks))

@@ -2,6 +2,7 @@ package organize
 
 import (
 	"fmt"
+	"strings"
 
 	"vulnscan-backend/model"
 	oc "vulnscan-backend/organize/organize-contract"
@@ -60,10 +61,29 @@ func (s *serviceOrganize) Create(item *model.Organize) error {
 	if item.ID == "" {
 		item.ID = qulid.GenerateID()
 	}
-	return s.session().Omit("deleted_at").Create(item).Error
+	db := s.session().Omit("deleted_at")
+	if strings.TrimSpace(item.UnifiedSocialCreditCode) == "" {
+		db = db.Omit("unified_social_credit_code")
+	} else {
+		item.UnifiedSocialCreditCode = strings.TrimSpace(item.UnifiedSocialCreditCode)
+	}
+	return db.Create(item).Error
 }
 
 func (s *serviceOrganize) Update(id string, updates map[string]interface{}) error {
+	NormalizeOrganizeUpdates(updates)
+	if credit, ok := updates["unified_social_credit_code"].(string); ok {
+		conflict, err := s.findByUnifiedSocialCreditCode(credit)
+		if err != nil {
+			return err
+		}
+		if conflict != nil && conflict.ID != id {
+			return fmt.Errorf("统一社会信用代码「%s」已被单位「%s」使用", credit, conflict.Name)
+		}
+	}
+	if len(updates) == 0 {
+		return nil
+	}
 	return s.session().Model(&model.Organize{}).Where("id = ? AND deleted_at IS NULL", id).Updates(updates).Error
 }
 
@@ -74,7 +94,39 @@ func (s *serviceOrganize) Delete(id string) error {
 func (s *serviceOrganize) Tree() ([]model.Organize, error) {
 	var items []model.Organize
 	err := s.session().Where("deleted_at IS NULL").Order("created_at").Find(&items).Error
-	return items, err
+	if err != nil {
+		return nil, err
+	}
+	_ = s.enrichAssetCounts(items)
+	return items, nil
+}
+
+// enrichAssetCounts 按 organize_id 统计资产数量，填充 asset_count 列。
+func (s *serviceOrganize) enrichAssetCounts(items []model.Organize) error {
+	if len(items) == 0 {
+		return nil
+	}
+	type countRow struct {
+		OrganizeID string
+		Count      int64
+	}
+	var rows []countRow
+	err := s.session().Model(&model.Asset{}).
+		Select("organize_id, COUNT(*) as count").
+		Where("organize_id <> ''").
+		Group("organize_id").
+		Scan(&rows).Error
+	if err != nil {
+		return err
+	}
+	countMap := make(map[string]int64, len(rows))
+	for _, row := range rows {
+		countMap[row.OrganizeID] = row.Count
+	}
+	for i := range items {
+		items[i].AssetCount = countMap[items[i].ID]
+	}
+	return nil
 }
 
 func (s *serviceOrganize) SyncFromIAM(nodes []*oc.OrganizeNode) (int, error) {
@@ -95,7 +147,7 @@ func (s *serviceOrganize) SyncFromIAM(nodes []*oc.OrganizeNode) (int, error) {
 				"deleted_at": nil,
 			})
 		} else {
-			tx.Create(&model.Organize{
+			tx.Select("ID", "Name", "ParentID").Create(&model.Organize{
 				ID:       n.ID,
 				Name:     n.Name,
 				ParentID: n.ParentID,
@@ -133,12 +185,17 @@ func (s *serviceOrganize) Ensure(req oc.EnsureOrganizeReq) (*model.Organize, err
 	}
 
 	newOrg := model.Organize{
-		ID:                      req.ID,
-		Name:                    req.Name,
-		ParentID:                req.ParentID,
-		UnifiedSocialCreditCode: req.UnifiedSocialCreditCode,
+		ID:       req.ID,
+		Name:     req.Name,
+		ParentID: req.ParentID,
 	}
-	if err := s.session().Omit("deleted_at").Create(&newOrg).Error; err != nil {
+	db := s.session().Omit("deleted_at")
+	if credit := strings.TrimSpace(req.UnifiedSocialCreditCode); credit != "" {
+		newOrg.UnifiedSocialCreditCode = credit
+	} else {
+		db = db.Omit("unified_social_credit_code")
+	}
+	if err := db.Create(&newOrg).Error; err != nil {
 		return nil, fmt.Errorf("创建组织失败: %w", err)
 	}
 	return &newOrg, nil

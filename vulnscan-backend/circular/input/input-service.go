@@ -11,6 +11,7 @@ import (
 	"vulnscan-backend/model"
 
 	inputContract "vulnscan-backend/circular/input/input-contract"
+	"vulnscan-backend/formdesign"
 
 	"code.yt-security.com/public/core/v2/db"
 	"code.yt-security.com/public/core/v2/generate/qulid"
@@ -459,9 +460,10 @@ func (s *serviceInput) CommonTemplateDownload(c *gin.Context) {
 }
 
 func (s *serviceInput) getDefaultTemplateId(ctx context.Context) string {
-	sess := s.session()
-	var item model.DynamicFormTemplate
-	sess.WithContext(ctx).Where("business = ? AND is_default = ?", "circular", true).First(&item)
+	item, err := formdesign.ResolveCircularInputTemplate(s.session(), ctx)
+	if err != nil {
+		return ""
+	}
 	return item.ID
 }
 

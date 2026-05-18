@@ -172,11 +172,11 @@ type TaskShard struct {
 
 // ShardTask splits a task's targets across available workers, sorted by HealthScore.
 func (d *DistributedScheduler) ShardTask(ctx context.Context, task model.ScanTask) ([]TaskShard, error) {
-	return ShardScanTaskByWorkers(d.db, ctx, task)
+	return ShardScanTaskByWorkers(d.db, ctx, task, nil)
 }
 
-// ShardScanTaskByWorkers 按在线 Worker 健康度与容量将目标列表切分为多分片；无 Worker 或目标过少时返回单分片（WorkerID 为空，由任意节点或本机调度执行）。
-func ShardScanTaskByWorkers(db *gorm.DB, ctx context.Context, task model.ScanTask) ([]TaskShard, error) {
+// ShardScanTaskByWorkers 按在线 Worker 健康度与容量将目标列表切分为多分片；allowedWorkerIDs 非空时仅在指定远程节点间分片。
+func ShardScanTaskByWorkers(db *gorm.DB, ctx context.Context, task model.ScanTask, allowedWorkerIDs []string) ([]TaskShard, error) {
 	minTargets := workerShardMinTargets(task.Parameters)
 	var workers []model.WorkerNode
 	err := db.WithContext(ctx).
@@ -185,6 +185,7 @@ func ShardScanTaskByWorkers(db *gorm.DB, ctx context.Context, task model.ScanTas
 	if err != nil {
 		return nil, err
 	}
+	workers = filterWorkersByAllowed(workers, allowedWorkerIDs)
 
 	workerCount := len(workers)
 	if workerCount == 0 {

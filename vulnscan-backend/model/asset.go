@@ -75,16 +75,18 @@ type Asset struct {
 	OS       string `gorm:"type:varchar(100)" json:"os"`
 
 	// ── 台账字段（从资产系统迁移）──
-	DataNumber              string `gorm:"type:varchar(70);index" json:"data_number"`
-	SystemType              string `gorm:"type:varchar(50)" json:"system_type"`
-	AssetFamily             string `gorm:"type:varchar(50);index;default:''" json:"asset_family"`
-	AssetSubtype            string `gorm:"type:varchar(50);default:''" json:"asset_subtype"`
-	IsOnline                bool   `json:"is_online"`
-	IsKey                   bool   `json:"is_key"`
-	SecurityProtectionLevel string `gorm:"type:varchar(20)" json:"security_protection_level"`
-	FilingCertNumber        string `gorm:"type:varchar(100)" json:"filing_cert_number"`
-	IcpFilingNumber         string `gorm:"type:varchar(100)" json:"icp_filing_number"`
-	PublicSecurityFiling    string `gorm:"type:varchar(100)" json:"public_security_filing"`
+	DataNumber              string     `gorm:"type:varchar(70);index" json:"data_number"`
+	SystemType              string     `gorm:"type:varchar(50)" json:"system_type"`
+	AssetFamily             string     `gorm:"type:varchar(50);index;default:''" json:"asset_family"`
+	AssetSubtype            string     `gorm:"type:varchar(50);default:''" json:"asset_subtype"`
+	IsOnline                bool       `json:"is_online"`
+	Reachable               *bool      `json:"reachable"`
+	ReachableCheckedAt      *time.Time `json:"reachable_checked_at"`
+	IsKey                   bool       `json:"is_key"`
+	SecurityProtectionLevel string     `gorm:"type:varchar(20)" json:"security_protection_level"`
+	FilingCertNumber        string     `gorm:"type:varchar(100)" json:"filing_cert_number"`
+	IcpFilingNumber         string     `gorm:"type:varchar(100)" json:"icp_filing_number"`
+	PublicSecurityFiling    string     `gorm:"type:varchar(100)" json:"public_security_filing"`
 
 	// ── 地域（省市区县级编码，与 @vant/area-data 一致）──
 	RegionCode string `gorm:"type:varchar(12);index" json:"region_code"`

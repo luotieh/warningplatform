@@ -8,6 +8,7 @@ import (
 	"vulnscan-backend/model"
 
 	transferContract "vulnscan-backend/circular/transfer/transfer-contract"
+	"vulnscan-backend/formdesign"
 
 	"code.yt-security.com/public/core/v2/db"
 	"code.yt-security.com/public/core/v2/generate/qulid"
@@ -39,11 +40,9 @@ func (s *serviceTransfer) ReceiveIncident(ctx context.Context, req transferContr
 		return "", fmt.Errorf("该安全事件已流转，通报编号: %s", existing.Code)
 	}
 
-	var defaultTemplate model.DynamicFormTemplate
-	if err := sess.WithContext(ctx).Where("business = ? AND object_type = ? AND is_default = ?", "circular", "input", true).First(&defaultTemplate).Error; err != nil {
-		if err := sess.WithContext(ctx).Where("business = ? AND object_type = ?", "circular", "input").First(&defaultTemplate).Error; err != nil {
-			return "", fmt.Errorf("未找到录入模板，请先创建录入模板")
-		}
+	defaultTemplate, err := formdesign.ResolveCircularInputTemplate(sess, ctx)
+	if err != nil {
+		return "", err
 	}
 
 	circularData := buildCircularDataFromIncident(req)
@@ -60,7 +59,7 @@ func (s *serviceTransfer) ReceiveIncident(ctx context.Context, req transferContr
 	circular.CreatedAt = now
 	circular.UpdatedAt = now
 
-	err := sess.WithContext(ctx).Transaction(func(session *gorm.DB) error {
+	err = sess.WithContext(ctx).Transaction(func(session *gorm.DB) error {
 		if err := session.Create(&circular).Error; err != nil {
 			return err
 		}

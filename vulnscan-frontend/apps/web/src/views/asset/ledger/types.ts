@@ -81,6 +81,7 @@ export type LedgerScanForm = {
   enginePreset: string;
   priority: number;
   verificationLevel: string;
+  executorNodeIds: string[];
 };
 
 export type LedgerVerifyForm = {

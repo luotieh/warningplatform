@@ -314,7 +314,7 @@ func (r *Runner) Execute(ctx context.Context) {
 
 	r.executeDAG(ctx, stages, currentTargets, config, cb, engineOpts)
 
-	if r.progress.Get().Status == model.TaskStatusCancelled {
+	if taskAlreadyCancelled(r.db, r.task.ID) {
 		return
 	}
 
@@ -327,8 +327,10 @@ func (r *Runner) Execute(ctx context.Context) {
 			r.adaptive.Stats(),
 			r.circuit.Stats()),
 		"", "")
-	r.progress.FinishTask(model.TaskStatusCompleted, "")
-	r.publishEvent(NewDoneEvent(r.task.ID, model.TaskStatusCompleted, ""))
+	if !taskAlreadyCancelled(r.db, r.task.ID) {
+		r.progress.FinishTask(model.TaskStatusCompleted, "")
+		r.publishEvent(NewDoneEvent(r.task.ID, model.TaskStatusCompleted, ""))
+	}
 
 	slog.Info("[Runner] 任务执行完成",
 		"task_id", r.task.ID,

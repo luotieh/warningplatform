@@ -1,6 +1,8 @@
 import type { DataTableColumns } from 'naive-ui';
+import type { ButtonProps } from 'naive-ui';
 
 import { h } from 'vue';
+import { IconifyIcon } from '@vben/icons';
 import { NButton, NPopconfirm, NSpace, NTag } from 'naive-ui';
 
 import type { Asset } from '#/api/asset';
@@ -19,6 +21,43 @@ type UseLedgerColumnsOptions = {
 function renderText(value?: number | string) {
   const text = value === undefined || value === null || value === '' ? '-' : String(value);
   return h('span', { class: text === '-' ? 'ledger-cell ledger-cell--muted' : 'ledger-cell' }, text);
+}
+
+function rowActionButton(
+  label: string,
+  icon: string,
+  onClick?: () => void,
+  options?: { type?: ButtonProps['type']; emphasize?: boolean },
+) {
+  return h(
+    NButton,
+    {
+      text: true,
+      size: 'small',
+      type: options?.type ?? 'default',
+      class: options?.emphasize ? 'ledger-row-action ledger-row-action--emphasize' : 'ledger-row-action',
+      onClick: onClick ?? (() => undefined),
+    },
+    {
+      icon: () => h(IconifyIcon, { icon, class: 'text-sm' }),
+      default: () => label,
+    },
+  );
+}
+
+function renderReachableStatus(row: Asset) {
+  if (row.is_online === false) {
+    return h('span', { class: 'ledger-cell ledger-cell--muted' }, '—');
+  }
+  if (row.reachable_checked_at == null || row.reachable_checked_at === '') {
+    return h('span', { class: 'ledger-cell ledger-cell--muted' }, '检测中');
+  }
+  const online = row.reachable === true;
+  return h(
+    NTag,
+    { bordered: false, size: 'small', type: online ? 'success' : 'default' },
+    { default: () => (online ? '在线' : '离线') },
+  );
 }
 
 export function useLedgerColumns(options: UseLedgerColumnsOptions): DataTableColumns<Asset> {
@@ -52,15 +91,10 @@ export function useLedgerColumns(options: UseLedgerColumnsOptions): DataTableCol
     },
     {
       title: '在线状态',
-      key: 'is_online',
+      key: 'reachable',
       width: 96,
       align: 'center',
-      render: (row) =>
-        h(
-          NTag,
-          { bordered: false, size: 'small', type: row.is_online ? 'success' : 'default' },
-          { default: () => (row.is_online ? '在线' : '离线') },
-        ),
+      render: (row) => renderReachableStatus(row),
     },
     {
       title: '风险分',
@@ -85,39 +119,31 @@ export function useLedgerColumns(options: UseLedgerColumnsOptions): DataTableCol
     {
       title: '操作',
       key: 'actions',
-      width: 280,
+      width: 248,
       fixed: 'right',
+      align: 'center',
       render: (row) =>
-        h(NSpace, { size: 8, justify: 'center' }, () => [
-          h(
-            NButton,
-            { size: 'small', quaternary: true, type: 'info', onClick: () => options.onDetail(row) },
-            { default: () => '详情' },
-          ),
-          h(
-            NButton,
-            { size: 'small', quaternary: true, type: 'primary', onClick: () => options.onScan(row) },
-            { default: () => '扫描' },
-          ),
-          h(
-            NButton,
-            { size: 'small', quaternary: true, onClick: () => options.onEdit(row) },
-            { default: () => '编辑' },
-          ),
-          h(
-            NPopconfirm,
-            { onPositiveClick: () => options.onDelete(row.id) },
-            {
-              trigger: () =>
-                h(
-                  NButton,
-                  { size: 'small', quaternary: true, type: 'error' },
-                  { default: () => '删除' },
-                ),
-              default: () => '确认删除该资产？',
-            },
-          ),
-        ]),
+        h(
+          NSpace,
+          { size: 4, justify: 'center', wrap: false, class: 'ledger-row-actions' },
+          () => [
+            rowActionButton('详情', 'ri:eye-line', () => options.onDetail(row), { type: 'info' }),
+            rowActionButton('编辑', 'ri:edit-2-line', () => options.onEdit(row), {
+              type: 'primary',
+              emphasize: true,
+            }),
+            rowActionButton('扫描', 'ri:radar-line', () => options.onScan(row)),
+            h(
+              NPopconfirm,
+              { onPositiveClick: () => options.onDelete(row.id) },
+              {
+                trigger: () =>
+                  rowActionButton('删除', 'ri:delete-bin-line', () => undefined, { type: 'error' }),
+                default: () => '确认删除该资产？',
+              },
+            ),
+          ],
+        ),
     },
   ];
 }

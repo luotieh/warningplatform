@@ -13,6 +13,7 @@ import {
   updateAsset,
   type Asset,
 } from '#/api/asset';
+import { getRequestErrorMessage } from '#/api/helpers';
 import {
   createConstruction,
   createOrganize,
@@ -60,6 +61,7 @@ import {
   EMPTY_VERIFY_FORM,
   VERIFY_SOURCE_OPTIONS,
 } from '../constants';
+import { appendExecutorNodeParams, useScanExecutorNodes } from '../../scan/scan-executor';
 import { assetTarget, buildScanTaskName, resolveScanTemplate as resolveScanTemplateForAssets } from '../scan-utils';
 import type {
   LedgerConstructionForm,
@@ -70,6 +72,7 @@ import type {
   LedgerStats,
   LedgerVerifyForm,
 } from '../types';
+import { runAssetOnlineSync } from '../../composables/use-asset-online-sync';
 import { downloadBlob } from '../file-utils';
 import {
   appendFallbackOption,
@@ -79,6 +82,7 @@ import {
   mapOrganizeToUnitExtra,
   mapUnitExtraToOrganizeUpdate,
   optionLabelOf,
+  resolveLedgerFormAddress,
   stripUnitProfileFromExtra,
 } from '../utils';
 import { useLedgerBatchEdit } from './use-ledger-batch-edit';
@@ -134,9 +138,11 @@ export function useLedgerPage() {
   const quickConstructionForm = reactive<LedgerConstructionForm>(EMPTY_QUICK_CONSTRUCTION_FORM());
   const quickOrganizeForm = reactive(EMPTY_QUICK_ORGANIZE_FORM());
   const scanForm = reactive<LedgerScanForm>(EMPTY_SCAN_FORM());
+  const scanExecutor = useScanExecutorNodes();
   const verifyForm = reactive<LedgerVerifyForm>(EMPTY_VERIFY_FORM());
   const showEditModal = ref(false);
   const showImportModal = ref(false);
+  const importErrorMessage = ref('');
   const showScanModal = ref(false);
   const showVerifyModal = ref(false);
   const showQuickConstructionModal = ref(false);
@@ -493,7 +499,7 @@ export function useLedgerPage() {
       assetFamily: row.asset_family ?? assetFamilyOptions.value[0]?.value ?? 'ip',
       organizeId: row.organize_id ?? '',
       dataNumber: row.data_number ?? '',
-      address: row.address ?? row.domain ?? '',
+      address: resolveLedgerFormAddress(row),
       ipv4: row.ipv4 ?? '',
       ipv6: row.ipv6 ?? '',
       port: row.port ?? null,
@@ -551,8 +557,10 @@ export function useLedgerPage() {
     try {
       try {
         await syncOrganizeFromUnitExtra(formModel.organizeId);
-      } catch {
-        message.error('单位信息同步到所属单位失败，请检查后重试');
+      } catch (error) {
+        message.error(
+          getRequestErrorMessage(error, '单位信息同步到所属单位失败，请检查后重试'),
+        );
         return;
       }
 
@@ -613,6 +621,8 @@ export function useLedgerPage() {
     scanAssets.value = [...targetRows];
     scanForm.templateId = resolveScanTemplate(targetRows);
     scanForm.name = buildScanTaskName(targetRows);
+    scanForm.executorNodeIds = [...EMPTY_SCAN_FORM().executorNodeIds];
+    void scanExecutor.loadExecutorNodeOptions();
     showScanModal.value = true;
   }
 
@@ -647,11 +657,13 @@ export function useLedgerPage() {
       if (Object.keys(moduleConfigs.value).length > 0) parameters.module_configs = moduleConfigs.value;
       if (scanForm.verificationLevel !== 'both') parameters.verification_level = scanForm.verificationLevel;
       if (scanForm.enginePreset) parameters.engine_preset = scanForm.enginePreset;
+      appendExecutorNodeParams(parameters, scanForm.executorNodeIds);
       await createTask({
         name: scanForm.name || buildScanTaskName(scanAssets.value),
         targets,
         template_id: scanForm.templateId,
         priority: scanForm.priority,
+        executor_node_ids: scanForm.executorNodeIds,
         parameters: Object.keys(parameters).length > 0 ? parameters : undefined,
       });
       message.success('扫描任务已创建');
@@ -799,15 +811,41 @@ export function useLedgerPage() {
   async function submitImport() {
     if (!importFile.value) return message.warning('请先选择导入文件');
     importLoading.value = true;
+    importErrorMessage.value = '';
     try {
       await importAssets(importFile.value);
       message.success('导入成功');
       showImportModal.value = false;
       importFile.value = null;
-      await reload();
+      importErrorMessage.value = '';
+      pagination.page = 1;
+      await Promise.all([reload(), loadOrgTree()]);
+      void probeReachabilityAndReload();
+    } catch (error) {
+      importErrorMessage.value = getRequestErrorMessage(error, '导入失败，请检查文件内容后重试');
     } finally {
       importLoading.value = false;
     }
+  }
+
+  function clearImportError() {
+    importErrorMessage.value = '';
+  }
+
+  function buildProbeParams() {
+    const params = buildQueryParams();
+    delete (params as { page?: number }).page;
+    delete (params as { page_size?: number }).page_size;
+    return params;
+  }
+
+  async function probeReachabilityAndReload() {
+    const assetIds = rows.value
+      .filter((row) => row.is_online === true)
+      .map((row) => row.id)
+      .filter(Boolean);
+    await runAssetOnlineSync(buildProbeParams(), assetIds);
+    await fetchList();
   }
 
   async function init() {
@@ -820,6 +858,7 @@ export function useLedgerPage() {
     ]);
     resetForm();
     await reload();
+    void probeReachabilityAndReload();
   }
 
   watch(
@@ -870,9 +909,13 @@ export function useLedgerPage() {
     batchEditForm: batchEdit.batchEditForm,
     templateOptions,
     enginePresetOptions,
+    scanExecutorNodeOptions: scanExecutor.executorNodeOptions,
+    scanExecutorNodesLoading: scanExecutor.executorNodesLoading,
     moduleConfigs,
     showEditModal,
     showImportModal,
+    importErrorMessage,
+    clearImportError,
     showScanModal,
     showVerifyModal,
     showQuickConstructionModal,
@@ -926,5 +969,6 @@ export function useLedgerPage() {
     downloadImportTemplateFile,
     submitImport,
     init,
+    probeReachabilityAndReload,
   };
 }

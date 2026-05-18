@@ -10,28 +10,31 @@ import (
 	clusterContract "vulnscan-backend/cluster/cluster-contract"
 	fedSync "vulnscan-backend/federation/sync"
 	"vulnscan-backend/model"
+	"vulnscan-backend/pkg/clusterconn"
 
 	"code.yt-security.com/public/core/v2/db"
 	"gorm.io/gorm"
 )
 
 type serviceCluster struct {
-	db *db.DB
+	db   *db.DB
+	conn clusterconn.Options
 
 	pendingCmds map[string][]clusterContract.WorkerCommand
 	cmdMu       sync.Mutex
 }
 
-func NewServiceCluster(database *db.DB) *serviceCluster {
+func NewServiceCluster(database *db.DB, conn clusterconn.Options) *serviceCluster {
 	return &serviceCluster{
 		db:          database,
+		conn:        conn,
 		pendingCmds: make(map[string][]clusterContract.WorkerCommand),
 	}
 }
 
 // NewServiceClusterForWS creates a ServiceCluster for use by the WS Hub.
-func NewServiceClusterForWS(database *db.DB) clusterContract.ServiceCluster {
-	return NewServiceCluster(database)
+func NewServiceClusterForWS(database *db.DB, conn clusterconn.Options) clusterContract.ServiceCluster {
+	return NewServiceCluster(database, conn)
 }
 
 func (s *serviceCluster) session() *gorm.DB {
@@ -213,6 +216,9 @@ func (s *serviceCluster) PollTask(ctx context.Context, workerID string, slots in
 		}
 
 		task := &candidates[i]
+		if model.ScanTaskLocalExecutorOnly(task.Parameters) {
+			continue
+		}
 
 		result := s.session().WithContext(ctx).
 			Model(&model.ScanTask{}).

@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import type { UploadFileInfo } from 'naive-ui';
 
-import { NButton, NModal, NSpace, NUpload } from 'naive-ui';
+import { NAlert, NButton, NModal, NSpace, NUpload } from 'naive-ui';
 
 defineOptions({ name: 'LedgerImportModal' });
 
@@ -9,6 +9,7 @@ defineProps<{
   show: boolean;
   loading?: boolean;
   templateDownloading?: boolean;
+  errorMessage?: string;
 }>();
 
 const emit = defineEmits<{
@@ -29,6 +30,9 @@ const emit = defineEmits<{
     @update:show="(value) => emit('update:show', value)"
   >
     <NSpace vertical :size="16">
+      <NAlert v-if="errorMessage" type="error" :show-icon="true" title="导入失败">
+        {{ errorMessage }}
+      </NAlert>
       <div class="ledger-import__tip">
         模板已收敛为必要字段。像端口、协议、服务等可探测补全的信息，不再要求在模板里手工重复填写。
       </div>

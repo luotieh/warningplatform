@@ -3,6 +3,7 @@ import { NButton, NForm, NFormItem, NInput, NModal, NSelect, NSpace, NTag } from
 
 import type { Asset } from '#/api/asset';
 
+import type { ScanExecutorOption } from '../../scan/scan-executor';
 import type { LedgerOption, LedgerScanForm } from '../types';
 
 defineOptions({ name: 'LedgerScanModal' });
@@ -15,6 +16,8 @@ defineProps<{
   assets: Asset[];
   templateOptions: LedgerOption[];
   enginePresetOptions: LedgerOption[];
+  executorNodeOptions: ScanExecutorOption[];
+  executorNodesLoading?: boolean;
   moduleConfigCount: number;
 }>();
 
@@ -62,6 +65,18 @@ const verificationOptions = [
 
       <NFormItem label="任务名称">
         <NInput v-model:value="form.name" placeholder="请输入任务名称" />
+      </NFormItem>
+
+      <NFormItem label="执行节点" required>
+        <NSelect
+          v-model:value="form.executorNodeIds"
+          :options="executorNodeOptions"
+          :loading="executorNodesLoading"
+          multiple
+          filterable
+          placeholder="默认在本机执行引擎运行"
+          :max-tag-count="2"
+        />
       </NFormItem>
 
       <NFormItem :label="`扫描资产（${assets.length} 项）`">

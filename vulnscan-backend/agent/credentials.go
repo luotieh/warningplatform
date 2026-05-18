@@ -15,6 +15,7 @@ type CredentialsFile struct {
 	Secret    string `json:"secret"`
 	IssuedAt  string `json:"issued_at"`
 	Label     string `json:"label,omitempty"`
+	Topology  string `json:"topology,omitempty"`
 }
 
 // LoadCredentialsFile reads a credentials JSON file issued by the master.

@@ -71,11 +71,11 @@ export function mapUnitExtraToOrganizeUpdate(extra: LedgerUnitExtra): Partial<Or
     address = regionLabel;
   }
 
-  return {
+  const credit = String(extra.unified_social_credit_code ?? '').trim();
+  const payload: Partial<Organize> = {
     unit_type: extra.unit_type ?? '',
     industry_category: extra.industry_category ?? '',
     is_notification_member: extra.is_notification_member ?? false,
-    unified_social_credit_code: extra.unified_social_credit_code ?? '',
     address,
     unit_detail_address: '',
     leader_name: extra.leader_name ?? '',
@@ -88,6 +88,10 @@ export function mapUnitExtraToOrganizeUpdate(extra: LedgerUnitExtra): Partial<Or
     contact_title: extra.contact_title ?? '',
     contact_phone: extra.contact_phone ?? '',
   };
+  if (credit) {
+    payload.unified_social_credit_code = credit;
+  }
+  return payload;
 }
 
 export function mergeUnitAddress(primary?: string, secondary?: string): string {
@@ -213,7 +217,20 @@ export function flattenOrgTree(nodes: TreeOption[], map: Record<string, string> 
 }
 
 export function assetIdentifier(row: Partial<Asset>) {
-  return row.address || row.domain || row.ipv4 || row.ipv6 || '-';
+  return resolveLedgerFormAddress(row) || '-';
+}
+
+/** 编辑表单「访问地址」：与列表地址列展示逻辑一致 */
+export function resolveLedgerFormAddress(row: Partial<Asset>) {
+  const addr = String(row.address ?? '').trim();
+  if (addr) return addr;
+  const domain = String(row.domain ?? '').trim();
+  if (domain) return domain;
+  const ipv4 = String(row.ipv4 ?? '').trim();
+  if (ipv4) return ipv4;
+  const ipv6 = String(row.ipv6 ?? '').trim();
+  if (ipv6) return ipv6;
+  return '';
 }
 
 export function optionLabelOf(options: LedgerOption[], value?: string) {

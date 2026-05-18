@@ -49,6 +49,7 @@ export function createTask(data: {
   targets: string[];
   template_id?: string;
   parameters?: Record<string, any>;
+  executor_node_ids?: string[];
   priority?: number;
 }) {
   return requestClient.post('/scan/launch', {

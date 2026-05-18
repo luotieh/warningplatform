@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"vulnscan-backend/model"
 	taskContract "vulnscan-backend/task/task-contract"
@@ -86,16 +87,38 @@ func (s *serviceTask) Delete(id string) error {
 	if err := s.session().First(&task, "id = ?", id).Error; err != nil {
 		return err
 	}
-	if task.Status == model.TaskStatusRunning {
-		return fmt.Errorf("cannot delete running task")
+	if isActiveScanTaskStatus(task.Status) {
+		return fmt.Errorf("任务正在运行或排队中，请先取消后再删除")
+	}
+	if err := s.session().Where("parent_id = ?", id).Delete(&model.ScanTask{}).Error; err != nil {
+		return err
 	}
 	return s.session().Where("id = ?", id).Delete(&model.ScanTask{}).Error
 }
 
+func isActiveScanTaskStatus(status string) bool {
+	switch status {
+	case model.TaskStatusRunning, model.TaskStatusQueued, model.TaskStatusPending,
+		model.TaskStatusPaused, model.TaskStatusSplitting:
+		return true
+	default:
+		return false
+	}
+}
+
 func (s *serviceTask) Cancel(id string) error {
+	now := time.Now()
+	active := []string{
+		model.TaskStatusPending, model.TaskStatusQueued, model.TaskStatusRunning,
+		model.TaskStatusPaused, model.TaskStatusSplitting,
+	}
 	return s.session().Model(&model.ScanTask{}).
-		Where("id = ? AND status IN ?", id, []string{model.TaskStatusPending, model.TaskStatusQueued, model.TaskStatusRunning, model.TaskStatusPaused}).
-		Update("status", model.TaskStatusCancelled).Error
+		Where("(id = ? OR parent_id = ?) AND status IN ?", id, id, active).
+		Updates(map[string]interface{}{
+			"status":      model.TaskStatusCancelled,
+			"finished_at": &now,
+			"error_msg":   "用户取消",
+		}).Error
 }
 
 func (s *serviceTask) Pause(id string) error {

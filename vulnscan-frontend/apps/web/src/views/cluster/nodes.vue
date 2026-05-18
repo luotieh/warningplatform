@@ -14,6 +14,8 @@ import {
   NModal,
   NPopconfirm,
   NProgress,
+  NRadio,
+  NRadioGroup,
   NSelect,
   NSpace,
   NSpin,
@@ -24,9 +26,12 @@ import {
 } from 'naive-ui';
 
 import {
+  getClusterConnectivityModes,
   getNodeKnowledgeManifest,
   getUnifiedNodes,
   issueScanNodeCredentials,
+  type ConnectivityModeInfo,
+  type DeploymentTopology,
   unregisterWorker,
   type NodeKnowledgeManifest,
   type NodeSummary,
@@ -61,6 +66,8 @@ const km = ref<NodeKnowledgeManifest | null>(null);
 const showEnrollModal = ref(false);
 const enrollJson = ref('');
 const enrollMasterUrl = ref(`${apiBase.replace(/\/$/, '')}`);
+const enrollTopology = ref<DeploymentTopology>('master_public_node_private');
+const connectivityModes = ref<ConnectivityModeInfo[]>([]);
 const enrollLabel = ref('');
 const enrollSubmitting = ref(false);
 /** 签发结果：none | encrypted（仅 envelope）| plaintext（明文凭据 JSON） */
@@ -278,10 +285,35 @@ async function handleShutdownAgent(id: string) {
   }
 }
 
+const activeTopologyMode = computed(() =>
+  connectivityModes.value.find((m) => m.id === enrollTopology.value),
+);
+
+async function loadConnectivityModes() {
+  try {
+    const data = await getClusterConnectivityModes();
+    connectivityModes.value = data.modes ?? [];
+    if (data.default_mode) {
+      enrollTopology.value = data.default_mode;
+    }
+    onTopologyChange();
+  } catch {
+    connectivityModes.value = [];
+  }
+}
+
+function onTopologyChange() {
+  const mode = activeTopologyMode.value;
+  if (mode?.suggested_master_url) {
+    enrollMasterUrl.value = mode.suggested_master_url;
+  }
+}
+
 function openEnrollModal() {
   enrollResultMode.value = 'none';
   enrollResultMain.value = '';
   enrollDecryptHint.value = '';
+  void loadConnectivityModes();
   showEnrollModal.value = true;
 }
 
@@ -487,6 +519,7 @@ async function submitIssueScan() {
       enrollment,
       master_url: enrollMasterUrl.value || undefined,
       label: enrollLabel.value || undefined,
+      topology: enrollTopology.value,
     });
     if (data.encrypted && data.envelope) {
       enrollResultMode.value = 'encrypted';
@@ -752,7 +785,31 @@ onUnmounted(() => {
           />
         </div>
         <div>
-          <div class="enroll-field-label">节点访问主控的 API 根地址（须含 /api）</div>
+          <div class="enroll-field-label">部署拓扑与节点访问主控地址（须含 /api）</div>
+          <NRadioGroup v-model:value="enrollTopology" style="margin-bottom: 12px" @update:value="onTopologyChange">
+            <NSpace vertical :size="8">
+              <NRadio
+                v-for="mode in connectivityModes"
+                :key="mode.id"
+                :value="mode.id"
+                :disabled="!mode.supported"
+              >
+                {{ mode.title }}
+              </NRadio>
+            </NSpace>
+          </NRadioGroup>
+          <NAlert
+            v-if="activeTopologyMode"
+            type="info"
+            :bordered="false"
+            style="margin-bottom: 12px"
+            :title="activeTopologyMode.summary"
+          >
+            <div style="font-size: 12px; line-height: 1.6">
+              <p><strong>节点侧：</strong>{{ activeTopologyMode.node_requirement }}</p>
+              <p><strong>主控侧：</strong>{{ activeTopologyMode.master_requirement }}</p>
+            </div>
+          </NAlert>
           <NInput v-model:value="enrollMasterUrl" placeholder="例如：https://主控域名/api" />
         </div>
         <div>

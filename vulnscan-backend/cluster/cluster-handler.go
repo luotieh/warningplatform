@@ -4,17 +4,23 @@ import (
 	"time"
 
 	clusterContract "vulnscan-backend/cluster/cluster-contract"
+	"vulnscan-backend/pkg/clusterconn"
 
 	"code.yt-security.com/public/core/v2/web"
 	"github.com/gin-gonic/gin"
 )
 
 type HandlerCluster struct {
-	svc clusterContract.ServiceCluster
+	svc  clusterContract.ServiceCluster
+	conn clusterconn.Options
 }
 
-func NewHandlerCluster(svc clusterContract.ServiceCluster) *HandlerCluster {
-	return &HandlerCluster{svc: svc}
+func NewHandlerCluster(svc clusterContract.ServiceCluster, conn clusterconn.Options) *HandlerCluster {
+	return &HandlerCluster{svc: svc, conn: conn}
+}
+
+func (h *HandlerCluster) GetConnectivityModes(c *gin.Context) {
+	web.OK(c).Data(clusterconn.BuildConnectivityModes(h.conn)).Send()
 }
 
 func (h *HandlerCluster) IssueScanNodeCredentials(c *gin.Context) {

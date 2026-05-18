@@ -8,15 +8,14 @@ type Config struct {
 	MasterURL         string
 	Token             string
 	Secret            string
+	Topology          string // master_public_node_private | master_private_node_public
 	MaxConcurrent     int
 	TaskTimeout       time.Duration
 	HeartbeatInterval time.Duration
 }
 
 func (c *Config) defaults() {
-	if c.MaxConcurrent <= 0 {
-		c.MaxConcurrent = 10
-	}
+	// MaxConcurrent <= 0 表示由 nodecapacity 按本机资源自动计算（预留 10% 系统余量）
 	if c.TaskTimeout <= 0 {
 		c.TaskTimeout = 10 * time.Minute
 	}

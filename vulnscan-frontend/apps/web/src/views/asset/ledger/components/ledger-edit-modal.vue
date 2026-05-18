@@ -2,10 +2,11 @@
 import type { FormInst, TreeOption } from 'naive-ui';
 
 import { computed, ref, watch } from 'vue';
-import { useWindowSize } from '@vueuse/core';
+import { useLocalStorage, useWindowSize } from '@vueuse/core';
 import { IconifyIcon } from '@vben/icons';
 import {
   NButton,
+  NButtonGroup,
   NCascader,
   NDivider,
   NDrawer,
@@ -21,6 +22,7 @@ import {
   NSpin,
   NSwitch,
   NTag,
+  NTooltip,
   NTreeSelect,
 } from 'naive-ui';
 
@@ -32,6 +34,8 @@ import { regionOptions } from '#/utils/region';
 import type { LedgerFormModel, LedgerOption } from '../types';
 
 defineOptions({ name: 'LedgerEditModal' });
+
+type FormDensity = 'comfortable' | 'compact';
 
 const props = defineProps<{
   show: boolean;
@@ -75,7 +79,7 @@ const drawerWidth = computed(() => {
 
 const drawerBodyContentStyle = computed(() => ({
   boxSizing: 'border-box' as const,
-  padding: '0 12px 12px',
+  padding: isCompact.value ? '0 10px 10px' : '0 12px 12px',
 }));
 
 const modalTitle = computed(() => (props.editing ? '编辑资产' : '资产登记'));
@@ -103,6 +107,30 @@ const targetFieldHint = computed(() => {
 });
 
 const formRef = ref<FormInst | null>(null);
+
+/** 表单间距：标准 / 紧凑（本地记忆） */
+const formDensity = useLocalStorage<FormDensity>('vulnscan-ledger-edit-density', 'comfortable');
+const isCompact = computed(() => formDensity.value === 'compact');
+const formSize = computed(() => (isCompact.value ? 'small' : 'medium'));
+const labelWidth = computed(() => (isCompact.value ? 108 : 124));
+const gridXGap = computed(() => (isCompact.value ? 12 : 20));
+const gridYGap = computed(() => (isCompact.value ? 4 : 10));
+const remarkRows = computed(() => (isCompact.value ? 2 : 3));
+
+const formClass = computed(() => [
+  'ledger-edit-modal__form',
+  { 'ledger-edit-modal__form--compact': isCompact.value },
+]);
+
+const panelClass = computed(() => [
+  'ledger-edit-modal__panel',
+  { 'ledger-edit-modal__panel--compact': isCompact.value },
+]);
+
+const panelHeadClass = computed(() => [
+  'ledger-edit-modal__panel-head',
+  { 'ledger-edit-modal__panel-head--compact': isCompact.value },
+]);
 
 watch(
   () => props.show,
@@ -138,23 +166,51 @@ async function handleSubmit() {
     @update:show="handleDrawerUpdate"
   >
     <NDrawerContent
-      :title="modalTitle"
       closable
       :native-scrollbar="false"
       :body-content-style="drawerBodyContentStyle"
     >
+      <template #header>
+        <div class="ledger-edit-drawer__header">
+          <span class="ledger-edit-drawer__title">{{ modalTitle }}</span>
+          <NTooltip>
+            <template #trigger>
+              <NButtonGroup size="small" class="ledger-edit-drawer__density">
+                <NButton
+                  :type="!isCompact ? 'primary' : 'default'"
+                  :focusable="false"
+                  @click="formDensity = 'comfortable'"
+                >
+                  <IconifyIcon icon="mdi:format-line-spacing" class="ledger-edit-drawer__density-icon" />
+                  标准
+                </NButton>
+                <NButton
+                  :type="isCompact ? 'primary' : 'default'"
+                  :focusable="false"
+                  @click="formDensity = 'compact'"
+                >
+                  <IconifyIcon icon="mdi:unfold-less-vertical" class="ledger-edit-drawer__density-icon" />
+                  紧凑
+                </NButton>
+              </NButtonGroup>
+            </template>
+            切换表单行距与控件大小，设置会自动保存
+          </NTooltip>
+        </div>
+      </template>
+
       <NForm
         ref="formRef"
         :model="form"
         :rules="formRules"
         label-placement="left"
-        label-width="124"
-        size="medium"
-        class="ledger-edit-modal__form"
+        :label-width="labelWidth"
+        :size="formSize"
+        :class="formClass"
       >
         <!-- 资产信息 -->
-        <div class="ledger-edit-modal__panel">
-          <div class="ledger-edit-modal__panel-head">
+        <div :class="panelClass">
+          <div :class="panelHeadClass">
             <div class="ledger-edit-modal__panel-head-left">
               <IconifyIcon icon="ri:information-line" class="ledger-edit-modal__panel-icon" />
               <span class="ledger-edit-modal__panel-title">资产信息</span>
@@ -162,7 +218,7 @@ async function handleSubmit() {
             <span class="ledger-edit-modal__panel-hint">带 * 为必填</span>
           </div>
 
-          <NGrid cols="1 s:2" responsive="screen" :x-gap="20" :y-gap="10">
+          <NGrid cols="1 s:2" responsive="screen" :x-gap="gridXGap" :y-gap="gridYGap">
             <NGridItem>
               <NFormItem label="系统名称" required>
                 <NInput v-model:value="form.name" placeholder="请输入" />
@@ -274,22 +330,22 @@ async function handleSubmit() {
 
             <NGridItem :span="2">
               <NFormItem label="备注">
-                <NInput v-model:value="form.remark" type="textarea" :rows="3" placeholder="请输入" />
+                <NInput v-model:value="form.remark" type="textarea" :rows="remarkRows" placeholder="请输入" />
               </NFormItem>
             </NGridItem>
           </NGrid>
         </div>
 
         <!-- 单位信息 -->
-        <div class="ledger-edit-modal__panel">
-          <div class="ledger-edit-modal__panel-head">
+        <div :class="panelClass">
+          <div :class="panelHeadClass">
             <div class="ledger-edit-modal__panel-head-left">
               <IconifyIcon icon="ri:building-2-line" class="ledger-edit-modal__panel-icon" />
               <span class="ledger-edit-modal__panel-title">单位信息</span>
             </div>
           </div>
 
-          <NGrid cols="1 s:2" responsive="screen" :x-gap="20" :y-gap="10">
+          <NGrid cols="1 s:2" responsive="screen" :x-gap="gridXGap" :y-gap="gridYGap">
             <NGridItem :span="2">
               <NFormItem label="所属单位" required>
                 <NSpace vertical :size="8" style="width: 100%">
@@ -359,12 +415,16 @@ async function handleSubmit() {
                 <NInput v-model:value="form.extra.unit_address" placeholder="街道、门牌号等" />
               </NFormItem>
             </NGridItem>
-            <NGridItem><NFormItem label="分管领导姓名"><NInput v-model:value="form.extra.leader_name" /></NFormItem></NGridItem>
+            <NGridItem>
+              <NFormItem label="网络安全分管领导"><NInput v-model:value="form.extra.leader_name" /></NFormItem>
+            </NGridItem>
             <NGridItem>
               <NFormItem label="分管领导职务 / 职称"><NInput v-model:value="form.extra.leader_title" /></NFormItem>
             </NGridItem>
             <NGridItem>
-              <NFormItem label="责任部门名称"><NInput v-model:value="form.extra.responsible_department_name" /></NFormItem>
+              <NFormItem label="网络安全责任部门">
+                <NInput v-model:value="form.extra.responsible_department_name" />
+              </NFormItem>
             </NGridItem>
             <NGridItem>
               <NFormItem label="责任部门负责人姓名">
@@ -428,6 +488,57 @@ async function handleSubmit() {
 </template>
 
 <style scoped>
+.ledger-edit-drawer__header {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding-right: 28px;
+  width: 100%;
+}
+
+.ledger-edit-drawer__title {
+  color: var(--n-text-color-1);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.ledger-edit-drawer__density-icon {
+  font-size: 14px;
+  margin-right: 2px;
+  vertical-align: -2px;
+}
+
+.ledger-edit-modal__form--compact :deep(.n-form-item) {
+  margin-bottom: 8px;
+}
+
+.ledger-edit-modal__form--compact :deep(.n-form-item-label) {
+  min-height: 22px;
+}
+
+.ledger-edit-modal__form--compact :deep(.n-form-item-feedback-wrapper) {
+  min-height: 18px;
+  padding-top: 0;
+}
+
+.ledger-edit-modal__panel--compact {
+  margin-bottom: 10px;
+  padding: 10px 12px 2px;
+}
+
+.ledger-edit-modal__panel-head--compact {
+  margin-bottom: 6px;
+}
+
+.ledger-edit-modal__panel--compact .ledger-edit-modal__panel-title {
+  font-size: 13px;
+}
+
+.ledger-edit-modal__form--compact .ledger-edit-modal__switch-item :deep(.n-form-item-blank) {
+  min-height: 24px;
+}
+
 .ledger-edit-modal__panel-head-left {
   align-items: center;
   display: flex;

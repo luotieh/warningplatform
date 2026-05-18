@@ -32,6 +32,11 @@ import {
 import { getTemplateList, type ScanTemplate } from '#/api/template';
 import { taskStatusLabels, taskStatusTypes } from '#/constants/status';
 import ModuleConfigPanel from '../components/module-config-panel.vue';
+import {
+  appendExecutorNodeParams,
+  EXECUTOR_LOCAL_ID,
+  useScanExecutorNodes,
+} from '../scan-executor';
 
 defineOptions({ name: 'ScanTaskList' });
 
@@ -54,6 +59,8 @@ const moduleConfigs = ref<Record<string, Record<string, any>>>({});
 const templates = ref<ScanTemplate[]>([]);
 const enginePresets = ref<ScanEnginePreset[]>([]);
 const selectedTemplateId = ref('');
+const scanExecutor = useScanExecutorNodes();
+
 const form = ref<{
   name: string;
   targets: string;
@@ -61,7 +68,16 @@ const form = ref<{
   priority: number;
   verification_level: string;
   engine_preset: string;
-}>({ name: '', targets: '', template_id: '', priority: 5, verification_level: 'both', engine_preset: '' });
+  executor_node_ids: string[];
+}>({
+  name: '',
+  targets: '',
+  template_id: '',
+  priority: 5,
+  verification_level: 'both',
+  engine_preset: '',
+  executor_node_ids: [EXECUTOR_LOCAL_ID],
+});
 
 const verificationOptions = [
   { label: '全部 — 原理验证+实际利用', value: 'both' },
@@ -203,6 +219,12 @@ const columns = [
   },
 ];
 
+function openCreateModal() {
+  form.value.executor_node_ids = [EXECUTOR_LOCAL_ID];
+  void scanExecutor.loadExecutorNodeOptions();
+  showCreate.value = true;
+}
+
 async function fetchData() {
   loading.value = true;
   try {
@@ -246,6 +268,8 @@ async function handleCreate() {
     if (form.value.engine_preset) {
       params.engine_preset = form.value.engine_preset;
     }
+    appendExecutorNodeParams(params, form.value.executor_node_ids);
+    payload.executor_node_ids = form.value.executor_node_ids;
     if (Object.keys(params).length > 0) {
       payload.parameters = params;
     }
@@ -254,7 +278,15 @@ async function handleCreate() {
     showCreate.value = false;
     showAdvanced.value = false;
     selectedTemplateId.value = '';
-    form.value = { name: '', targets: '', template_id: '', priority: 5, verification_level: 'both', engine_preset: '' };
+    form.value = {
+      name: '',
+      targets: '',
+      template_id: '',
+      priority: 5,
+      verification_level: 'both',
+      engine_preset: '',
+      executor_node_ids: [EXECUTOR_LOCAL_ID],
+    };
     await fetchData();
   } catch (e: any) {
     message.error(e?.message || '创建失败');
@@ -383,7 +415,7 @@ onUnmounted(() => {
       <!-- Toolbar -->
       <div class="toolbar">
         <div class="toolbar-left">
-          <NButton type="primary" @click="showCreate = true">
+          <NButton type="primary" @click="openCreateModal">
             <template #icon><span style="font-size: 16px; line-height: 1">+</span></template>
             新建任务
           </NButton>
@@ -462,6 +494,18 @@ onUnmounted(() => {
         <!-- Task Name -->
         <NFormItem label="任务名称">
           <NInput v-model:value="form.name" placeholder="留空将自动生成名称" />
+        </NFormItem>
+
+        <NFormItem label="执行节点" required>
+          <NSelect
+            v-model:value="form.executor_node_ids"
+            :options="scanExecutor.executorNodeOptions.value"
+            :loading="scanExecutor.executorNodesLoading.value"
+            multiple
+            filterable
+            placeholder="默认在本机执行引擎运行"
+            :max-tag-count="2"
+          />
         </NFormItem>
 
         <!-- Targets -->

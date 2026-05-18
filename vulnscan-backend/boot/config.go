@@ -44,6 +44,14 @@ type FederationUpstreamConfig struct {
 	OfflineGraceDays int    `json:"offline_grace_days"`
 }
 
+// ClusterConfig 扫描节点与主控连通性（两种拓扑均使用节点出站拉取控制面）。
+type ClusterConfig struct {
+	// PublicMasterURL 节点访问主控的对外基址（含 IAM path_prefix），如 https://scan.example.com/api
+	PublicMasterURL string `json:"public_master_url" toml:"public_master_url"`
+	// InternalMasterURL 主控内网地址（可选，仅管理端展示/文档）
+	InternalMasterURL string `json:"internal_master_url" toml:"internal_master_url"`
+}
+
 type NatsConfig struct {
 	URL            string `json:"url" toml:"url"`
 	Token          string `json:"token" toml:"token"`
@@ -62,12 +70,13 @@ type NatsConfig struct {
 }
 
 type Config struct {
-	Web   web.Config  `json:"web" toml:"web"`
-	DB    db.Config   `json:"db" toml:"db"`
-	Cache CacheConfig `json:"cache" toml:"cache"`
-	IAM   IAMConfig   `json:"iam" toml:"iam"`
-	SSO   SSOConfig   `json:"sso" toml:"sso"`
-	Nats  NatsConfig  `json:"nats" toml:"nats"`
+	Web     web.Config    `json:"web" toml:"web"`
+	DB      db.Config     `json:"db" toml:"db"`
+	Cache   CacheConfig   `json:"cache" toml:"cache"`
+	IAM     IAMConfig     `json:"iam" toml:"iam"`
+	SSO     SSOConfig     `json:"sso" toml:"sso"`
+	Nats    NatsConfig    `json:"nats" toml:"nats"`
+	Cluster ClusterConfig `json:"cluster" toml:"cluster"`
 }
 
 func LoadConfig() *Config {

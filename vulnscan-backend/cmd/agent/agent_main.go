@@ -30,6 +30,7 @@ func runAgentMain() {
 
 	token := os.Getenv("AGENT_TOKEN")
 	secret := strings.TrimSpace(os.Getenv("AGENT_SECRET"))
+	topology := strings.TrimSpace(os.Getenv("AGENT_TOPOLOGY"))
 
 	if credPath := strings.TrimSpace(os.Getenv("AGENT_CREDENTIALS_FILE")); credPath != "" {
 		cred, err := agent.LoadCredentialsFile(credPath)
@@ -42,6 +43,9 @@ func runAgentMain() {
 		}
 		token = cred.NodeUUID
 		secret = cred.Secret
+		if cred.Topology != "" {
+			topology = cred.Topology
+		}
 	}
 
 	if token == "" {
@@ -49,9 +53,10 @@ func runAgentMain() {
 		token = fmt.Sprintf("agent-%s-%d", hostname, os.Getpid())
 	}
 
-	maxConcurrent := 10
+	// 0 = 按本机 CPU/内存自动计算并发（预留 10% 系统余量）；MAX_CONCURRENT>0 为手动上限
+	maxConcurrent := 0
 	if v := os.Getenv("MAX_CONCURRENT"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
 			maxConcurrent = n
 		}
 	}
@@ -60,6 +65,7 @@ func runAgentMain() {
 		MasterURL:         masterURL,
 		Token:             token,
 		Secret:            secret,
+		Topology:          topology,
 		MaxConcurrent:     maxConcurrent,
 		TaskTimeout:       10 * time.Minute,
 		HeartbeatInterval: 10 * time.Second,

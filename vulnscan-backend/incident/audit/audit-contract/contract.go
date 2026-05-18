@@ -11,8 +11,15 @@ type ServiceAudit interface {
 }
 
 type ManualAuditReq struct {
-	ID          string `json:"id" binding:"required"`
-	AuditResult string `json:"audit_result" binding:"required,oneof=success fail"`
+	ID          string `json:"id"`
+	AuditResult string `json:"audit_result"`
+	Opinion     string `json:"opinion"`
+}
+
+// ManualAuditBody 人工复核请求体（事件 ID 来自路径 :id）。
+type ManualAuditBody struct {
+	AuditResult string `json:"audit_result"`
+	Passed      *bool  `json:"passed"`
 	Opinion     string `json:"opinion"`
 }
 

@@ -138,7 +138,7 @@ func (h *HandlerOrganize) Update(c *gin.Context) {
 		return
 	}
 	if err := h.svc.Update(uri.Id, body); err != nil {
-		web.Fail(c).Err(err).Send()
+		web.Fail(c).Msg(userFacingOrganizeError(err)).Send()
 		return
 	}
 	web.OK(c).Send()
@@ -231,17 +231,23 @@ func (h *HandlerOrganize) fetchIAMOrganizeTree(c *gin.Context) ([]*identity.Orga
 	if h.iam == nil {
 		return nil, fmt.Errorf("iam client not initialized")
 	}
-	serviceCtx, serviceCancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer serviceCancel()
+	userCtx, userCancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+	defer userCancel()
 
-	infos, err := listAllIAMOrganizes(serviceCtx, h.iam.Organize)
+	infos, err := listAllIAMOrganizes(userCtx, h.iam.Organize)
 	if err != nil && isIAMUnauthorized(err) {
-		userCtx, userCancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
-		defer userCancel()
-		infos, err = listAllIAMOrganizes(userCtx, h.iam.Organize)
+		serviceCtx, serviceCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer serviceCancel()
+		infos, err = listAllIAMOrganizes(serviceCtx, h.iam.Organize)
 	}
 	if err != nil {
 		return nil, err
+	}
+	if len(infos) == 0 {
+		infos, err = h.fetchIAMOrganizeInfos(userCtx)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return buildIAMOrganizeTree(infos), nil
 }
@@ -336,8 +342,9 @@ func resolveVisibleOrganizeIDs(c *gin.Context, items []model.Organize) map[strin
 
 	scope, hasScope := iamsdk.GetDataScope(c)
 	if !hasScope || scope == nil {
+		// 单位管理页需展示完整组织树；未配置数据范围时默认可见全部（与资产数据权限分离）。
 		scope = &iamsdk_middleware.DataScope{
-			Scope:       permission.ScopeSelf,
+			Scope:       permission.ScopeAll,
 			OrganizeIDs: nil,
 		}
 	}
@@ -472,21 +479,11 @@ func (h *HandlerOrganize) findIAMOrganizeByName(c *gin.Context, name string) (*i
 	if h.iam == nil || name == "" {
 		return nil, nil
 	}
-	options, err := h.iam.Organize.GetOrganizeOptions(c.Request.Context(), name)
+	info, err := FindIAMOrganizeByExactName(c.Request.Context(), h.iam.Organize, name)
 	if err != nil {
 		return nil, fmt.Errorf("query IAM organize failed: %w", err)
 	}
-	for _, option := range options {
-		if option.Name != name {
-			continue
-		}
-		info, err := h.iam.Organize.GetOrganize(c.Request.Context(), option.ID)
-		if err != nil {
-			return nil, fmt.Errorf("get IAM organize failed: %w", err)
-		}
-		return info, nil
-	}
-	return nil, nil
+	return info, nil
 }
 
 func (h *HandlerOrganize) organizeFromIAM(c *gin.Context, id string) *model.Organize {

@@ -5,6 +5,7 @@ import {
   buildOrgTreeOptions,
   mapOrganizeToUnitExtra,
   mapUnitExtraToOrganizeUpdate,
+  resolveLedgerFormAddress,
 } from './utils';
 
 describe('mapOrganizeToUnitExtra', () => {
@@ -35,6 +36,12 @@ describe('mapOrganizeToUnitExtra', () => {
     expect(extra.unit_address).toContain('海淀区1号');
     expect(extra.leader_name).toBe('张三');
     expect(extra.contact_phone).toBe('13900000000');
+  });
+});
+
+describe('resolveLedgerFormAddress', () => {
+  it('falls back to ipv4 when address is empty', () => {
+    expect(resolveLedgerFormAddress({ address: '', ipv4: '223.5.5.5' })).toBe('223.5.5.5');
   });
 });
 

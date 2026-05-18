@@ -1,5 +1,7 @@
 import { defaultRegionCode } from '#/utils/region';
 
+import { EXECUTOR_LOCAL_ID } from '../../scan/scan-executor';
+
 import type {
   LedgerBatchEditField,
   LedgerBatchEditForm,
@@ -122,6 +124,7 @@ export const EMPTY_SCAN_FORM = (): LedgerScanForm => ({
   enginePreset: '',
   priority: 5,
   verificationLevel: 'both',
+  executorNodeIds: [EXECUTOR_LOCAL_ID],
 });
 
 export const EMPTY_VERIFY_FORM = (): LedgerVerifyForm => ({
@@ -166,7 +169,7 @@ export const BATCH_EDIT_FIELD_OPTIONS: Array<{
   { label: '等保等级', value: 'security_protection_level' },
   { label: '责任人', value: 'responsible_user_name' },
   { label: '重点资产', value: 'is_key' },
-  { label: '在线状态', value: 'is_online' },
+  { label: '是否联网', value: 'is_online' },
   { label: '备注', value: 'remark' },
 ];
 

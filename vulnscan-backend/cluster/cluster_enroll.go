@@ -9,6 +9,7 @@ import (
 
 	clusterContract "vulnscan-backend/cluster/cluster-contract"
 	"vulnscan-backend/model"
+	"vulnscan-backend/pkg/clusterconn"
 	"vulnscan-backend/pkg/nodeauth"
 	"vulnscan-backend/pkg/nodeenroll"
 
@@ -45,6 +46,15 @@ func (s *serviceCluster) IssueScanNodeCredentials(ctx context.Context, req *clus
 		return nil, err
 	}
 
+	masterURL, err := clusterconn.ResolveMasterURL(req.Topology, req.MasterURL, s.conn)
+	if err != nil {
+		return nil, err
+	}
+	topology := strings.TrimSpace(req.Topology)
+	if topology == "" {
+		topology = clusterconn.TopologyMasterPublicNodePrivate
+	}
+
 	nodeUUID := qulid.GenerateID()
 	mac := strings.TrimSpace(req.Enrollment.PrimaryMAC)
 	if len(mac) > 20 {
@@ -60,7 +70,8 @@ func (s *serviceCluster) IssueScanNodeCredentials(ctx context.Context, req *clus
 		Hostname:           strings.TrimSpace(req.Enrollment.Hostname),
 		MacAddress:         mac,
 		Label:              strings.TrimSpace(req.Label),
-		MaxConcurrent:      10,
+		DeploymentTopology: topology,
+		MaxConcurrent:      0,
 		Version:            "",
 		IPAddress:          "",
 		CPUUsage:           0,
@@ -77,11 +88,12 @@ func (s *serviceCluster) IssueScanNodeCredentials(ctx context.Context, req *clus
 
 	cred := &clusterContract.NodeAgentCredentialsFile{
 		Version:   clusterContract.NodeAgentCredentialsVersion,
-		MasterURL: strings.TrimSpace(req.MasterURL),
+		MasterURL: masterURL,
 		NodeUUID:  nodeUUID,
 		Secret:    plainSecret,
 		IssuedAt:  time.Now().UTC().Format(time.RFC3339),
 		Label:     strings.TrimSpace(req.Label),
+		Topology:  topology,
 	}
 
 	if strings.TrimSpace(req.Enrollment.PublicKeyPEM) != "" {

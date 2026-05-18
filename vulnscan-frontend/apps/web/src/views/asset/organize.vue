@@ -121,7 +121,7 @@ const columns: DataTableColumns<OrganizeRow> = [
     width: 100,
     render: (row: Organize) => (row.is_notification_member ? '是' : '否'),
   },
-  { title: '负责部门', key: 'responsible_department_name', width: 160, ellipsis: { tooltip: true } },
+  { title: '网络安全责任部门', key: 'responsible_department_name', width: 160, ellipsis: { tooltip: true } },
   { title: '联系人', key: 'contact_name', width: 120 },
   { title: '联系人职务', key: 'contact_title', width: 140, ellipsis: { tooltip: true } },
   { title: '联系电话', key: 'contact_phone', width: 140 },
@@ -414,10 +414,10 @@ async function onSyncIam() {
     const res: any = await syncIamOrganizes();
     const synced = Number(res?.synced ?? 0);
     const total = Number(res?.total ?? synced);
-    message.success('Sync success: added ' + synced + ', IAM total ' + total);
+    message.success(`IAM 同步完成：新增 ${synced} 个单位，共 ${total} 个`);
     await Promise.all([fetchList(), loadOrganizeTree()]);
   } catch {
-    message.error('Sync failed');
+    message.error('IAM 同步失败，请确认已登录且 IAM 服务可用');
   } finally {
     syncLoading.value = false;
   }
@@ -539,7 +539,7 @@ onMounted(() => {
             </NFormItem>
           </NGridItem>
           <NGridItem>
-            <NFormItem label="单位负责人姓名">
+            <NFormItem label="网络安全分管领导">
               <NInput v-model:value="formData.leader_name" />
             </NFormItem>
           </NGridItem>
@@ -549,7 +549,7 @@ onMounted(() => {
             </NFormItem>
           </NGridItem>
           <NGridItem>
-            <NFormItem label="负责部门名称">
+            <NFormItem label="网络安全责任部门">
               <NInput v-model:value="formData.responsible_department_name" />
             </NFormItem>
           </NGridItem>

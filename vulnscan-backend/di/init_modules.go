@@ -20,6 +20,7 @@ import (
 	"vulnscan-backend/knowledge/poc"
 	"vulnscan-backend/model"
 	"vulnscan-backend/nodeapi"
+	"vulnscan-backend/pkg/clusterconn"
 	"vulnscan-backend/pkg/payload"
 	"vulnscan-backend/scan/module/cyberspace"
 	"vulnscan-backend/scanrunner"
@@ -199,7 +200,7 @@ func (h *Handlers) initWebSocket(apiGroup *gin.RouterGroup) {
 }
 
 func (h *Handlers) initWSHub() *ws.Hub {
-	svc := cluster.NewServiceClusterForWS(h.DB)
+	svc := cluster.NewServiceClusterForWS(h.DB, clusterconn.OptionsFromConfig(h.Config))
 	hub := ws.NewHub(svc)
 	go hub.Run()
 	return hub

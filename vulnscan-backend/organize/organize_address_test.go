@@ -19,3 +19,14 @@ func TestNormalizeOrganizeAddress(t *testing.T) {
 		t.Fatalf("concat: %q", item2.Address)
 	}
 }
+
+func TestNormalizeOrganizeUpdatesOmitsEmptyUSCC(t *testing.T) {
+	updates := map[string]interface{}{
+		"unified_social_credit_code": "",
+		"address":                    "北京市",
+	}
+	NormalizeOrganizeUpdates(updates)
+	if _, ok := updates["unified_social_credit_code"]; ok {
+		t.Fatalf("empty USCC should be removed, got %v", updates)
+	}
+}

@@ -117,3 +117,18 @@ func defaultDicts() []defaultDict {
 		},
 	}
 }
+
+// DefaultDictLabels 返回内置字典项展示名（数据库无配置时用于导入模板等）。
+func DefaultDictLabels(dictID string) []string {
+	for _, d := range defaultDicts() {
+		if d.ID != dictID {
+			continue
+		}
+		labels := make([]string, 0, len(d.Items))
+		for _, item := range d.Items {
+			labels = append(labels, item.Label)
+		}
+		return labels
+	}
+	return nil
+}

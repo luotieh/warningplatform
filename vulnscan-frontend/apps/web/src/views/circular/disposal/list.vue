@@ -1,6 +1,8 @@
 <script lang="ts" setup>
 import { h, onMounted, ref, computed } from 'vue';
-import { NButton, NCard, NDataTable, NSpace, NTag, NModal, NForm, NFormItem, NInput, useMessage } from 'naive-ui';
+import dayjs from 'dayjs';
+import { NButton, NCard, NDataTable, NSpace, NTag, NModal, NForm, NFormItem, NInput, NDatePicker, useMessage } from 'naive-ui';
+import OrganizeTreeSelect from '#/components/organize/OrganizeTreeSelect.vue';
 import { useRouter } from 'vue-router';
 import { getDisposalList, redistributeCircular, type CircularItem, CircularStatusLabels, CircularStatusTypes } from '#/api/circular';
 
@@ -14,7 +16,7 @@ const total = ref(0);
 const page = ref(1);
 const pageSize = ref(20);
 const showRedist = ref(false);
-const redistForm = ref({ circular_id: '', target_organize: '' });
+const redistForm = ref({ circular_id: '', target_organize: null as string | null, processing_deadline: null as number | null });
 
 const columns = computed(() => [
   { title: '通报编号', key: 'code', width: 160 },
@@ -34,12 +36,20 @@ async function fetchData() {
 }
 
 async function handleRedistribute() {
-  if (!redistForm.value.target_organize) { message.warning('请输入目标组织'); return; }
+  if (!redistForm.value.target_organize) { message.warning('请选择目标单位'); return; }
   try {
-    await redistributeCircular({ circular_id: redistForm.value.circular_id, distribution_id: '', target_organize: redistForm.value.target_organize });
+    const processing_deadline = redistForm.value.processing_deadline
+      ? dayjs(redistForm.value.processing_deadline).format('YYYY-MM-DD HH:mm:ss')
+      : undefined;
+    await redistributeCircular({
+      circular_id: redistForm.value.circular_id,
+      distribution_id: '',
+      target_organize: redistForm.value.target_organize,
+      processing_deadline,
+    });
     message.success('转派成功');
     showRedist.value = false;
-    redistForm.value = { circular_id: '', target_organize: '' };
+    redistForm.value = { circular_id: '', target_organize: null, processing_deadline: null };
     await fetchData();
   }
   catch (e: any) { message.error(e?.message || '转派失败'); }
@@ -55,8 +65,19 @@ onMounted(fetchData);
         :pagination="{ page, pageSize, itemCount: total, showSizePicker: true, pageSizes: [20,50,100], onUpdatePage:(p:number)=>{page=p;fetchData()}, onUpdatePageSize:(s:number)=>{pageSize=s;page=1;fetchData()} }" />
     </NCard>
     <NModal v-model:show="showRedist" preset="dialog" title="转派通报" positive-text="确认" negative-text="取消" @positive-click="handleRedistribute">
-      <NForm label-placement="left" label-width="80">
-        <NFormItem label="目标组织" required><NInput v-model:value="redistForm.target_organize" placeholder="请输入目标组织" /></NFormItem>
+      <NForm label-placement="left" label-width="88">
+        <NFormItem label="目标单位" required>
+          <OrganizeTreeSelect v-model="redistForm.target_organize" />
+        </NFormItem>
+        <NFormItem label="处置期限">
+          <NDatePicker
+            v-model:value="redistForm.processing_deadline"
+            type="datetime"
+            clearable
+            style="width: 100%"
+            placeholder="请选择处置期限"
+          />
+        </NFormItem>
       </NForm>
     </NModal>
   </div>

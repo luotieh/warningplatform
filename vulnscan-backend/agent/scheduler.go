@@ -21,7 +21,7 @@ type Scheduler struct {
 
 func NewScheduler(executors []Executor, maxConcurrent int, taskTimeout time.Duration) *Scheduler {
 	if maxConcurrent <= 0 {
-		maxConcurrent = 10
+		maxConcurrent = 1
 	}
 	if taskTimeout <= 0 {
 		taskTimeout = 10 * time.Minute

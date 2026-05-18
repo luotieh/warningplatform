@@ -45,12 +45,13 @@ func (a *API) RoutesWithGroup(group *gin.RouterGroup) []authorize.BackendItem {
 }
 
 type LaunchRequest struct {
-	Name       string                 `json:"name" binding:"required"`
-	Targets    []string               `json:"targets" binding:"required,min=1"`
-	TemplateID string                 `json:"template_id" binding:"required"`
-	Parameters map[string]interface{} `json:"parameters"`
-	Priority   int                    `json:"priority"`
-	ScheduleID string                 `json:"schedule_id"`
+	Name            string                 `json:"name" binding:"required"`
+	Targets         []string               `json:"targets" binding:"required,min=1"`
+	TemplateID      string                 `json:"template_id" binding:"required"`
+	Parameters      map[string]interface{} `json:"parameters"`
+	ExecutorNodeIDs []string               `json:"executor_node_ids"`
+	Priority        int                    `json:"priority"`
+	ScheduleID      string                 `json:"schedule_id"`
 }
 
 func (a *API) Launch(c *gin.Context) {
@@ -59,13 +60,27 @@ func (a *API) Launch(c *gin.Context) {
 		return
 	}
 
+	executorIDs := req.ExecutorNodeIDs
+	if len(executorIDs) == 0 && req.Parameters != nil {
+		if raw, ok := req.Parameters["executor_node_ids"]; ok {
+			switch v := raw.(type) {
+			case []string:
+				executorIDs = v
+			case []interface{}:
+				for _, item := range v {
+					executorIDs = append(executorIDs, fmt.Sprint(item))
+				}
+			}
+		}
+	}
 	res, err := LaunchScan(a.db, a.scheduler, LaunchScanParams{
-		Name:       req.Name,
-		Targets:    req.Targets,
-		TemplateID: req.TemplateID,
-		Parameters: req.Parameters,
-		Priority:   req.Priority,
-		ScheduleID: req.ScheduleID,
+		Name:            req.Name,
+		Targets:         req.Targets,
+		TemplateID:      req.TemplateID,
+		Parameters:      req.Parameters,
+		ExecutorNodeIDs: executorIDs,
+		Priority:        req.Priority,
+		ScheduleID:      req.ScheduleID,
 	})
 	if errors.Is(err, ErrTemplateNotFound) {
 		web.Fail(c).Msg("模板不存在或已禁用").Send()
@@ -136,15 +151,7 @@ func (a *API) Cancel(c *gin.Context) {
 		return
 	}
 
-	if a.scheduler.CancelTask(id) {
-		web.OK(c).Send()
-		return
-	}
-
-	a.db.Model(&model.ScanTask{}).Where("id = ? AND status IN ?", id,
-		[]string{model.TaskStatusQueued, model.TaskStatusPending}).
-		Update("status", model.TaskStatusCancelled)
-
+	CancelScanTask(a.db, a.scheduler, id)
 	web.OK(c).Send()
 }
 

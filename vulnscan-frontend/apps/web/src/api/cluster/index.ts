@@ -58,10 +58,38 @@ export interface IssueScanNodeResponse {
   envelope?: CredentialEnvelope;
 }
 
+export type DeploymentTopology =
+  | 'master_public_node_private'
+  | 'master_private_node_public';
+
+export interface ConnectivityModeInfo {
+  id: DeploymentTopology;
+  title: string;
+  summary: string;
+  suggested_master_url: string;
+  node_requirement: string;
+  master_requirement: string;
+  firewall_notes: string[];
+  supported: boolean;
+}
+
+export interface ConnectivityModesResponse {
+  modes: ConnectivityModeInfo[];
+  default_mode: DeploymentTopology;
+  public_master_url: string;
+  internal_master_url: string;
+  control_plane: string;
+}
+
+export function getClusterConnectivityModes() {
+  return requestClient.get<ConnectivityModesResponse>('/cluster/connectivity-modes');
+}
+
 export function issueScanNodeCredentials(body: {
   enrollment: Record<string, unknown>;
   master_url?: string;
   label?: string;
+  topology?: DeploymentTopology;
 }) {
   return requestClient.post<IssueScanNodeResponse>('/cluster/scan-nodes/enroll', body);
 }

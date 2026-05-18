@@ -1,6 +1,7 @@
 package organize
 
 import (
+	"fmt"
 	"strings"
 
 	"vulnscan-backend/model"
@@ -39,4 +40,22 @@ func NormalizeOrganizeUpdates(updates map[string]interface{}) {
 		}
 	}
 	updates["unit_detail_address"] = ""
+	sanitizeOrganizeCreditCodeInUpdates(updates)
+}
+
+// sanitizeOrganizeCreditCodeInUpdates 空信用代码不参与更新，避免将 ” 写入触发 UNIQUE。
+func sanitizeOrganizeCreditCodeInUpdates(updates map[string]interface{}) {
+	if updates == nil {
+		return
+	}
+	v, ok := updates["unified_social_credit_code"]
+	if !ok {
+		return
+	}
+	code := strings.TrimSpace(fmt.Sprint(v))
+	if code == "" {
+		delete(updates, "unified_social_credit_code")
+		return
+	}
+	updates["unified_social_credit_code"] = code
 }

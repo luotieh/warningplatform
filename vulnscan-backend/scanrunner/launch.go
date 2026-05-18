@@ -22,16 +22,17 @@ var ErrTemplateNotFound = errors.New("scan template not found or disabled")
 
 // LaunchScanParams 与 HTTP Launch 等价，供资产富化等内部调用。
 type LaunchScanParams struct {
-	Name         string
-	Targets      []string
-	TemplateID   string
-	Parameters   map[string]interface{}
-	Priority     int
-	ScheduleID   string
-	CreatedBy    string
-	OrganizeID   string
-	TaskType     string
-	ParentTaskID string
+	Name            string
+	Targets         []string
+	TemplateID      string
+	Parameters      map[string]interface{}
+	ExecutorNodeIDs []string
+	Priority        int
+	ScheduleID      string
+	CreatedBy       string
+	OrganizeID      string
+	TaskType        string
+	ParentTaskID    string
 }
 
 // LaunchScanResult 单次启动扫描的结果。
@@ -67,13 +68,25 @@ func LaunchScan(db *gorm.DB, sched *Scheduler, p LaunchScanParams) (*LaunchScanR
 	for k, v := range p.Parameters {
 		params[k] = v
 	}
+	executorIDs := NormalizeExecutorNodeIDs(p.ExecutorNodeIDs)
+	ApplyExecutorNodeParams(params, executorIDs)
+
+	if pinned := SinglePinnedWorkerID(executorIDs); pinned != "" {
+		return launchPinnedWorkerScan(db, sched, p, tmpl, params, priority, pinned)
+	}
 
 	splitter := NewTaskSplitter(db)
 
+	remoteWorkers := RemoteWorkerIDs(executorIDs)
+	autoShard := len(remoteWorkers) > 1
+	if autoShard {
+		params["worker_target_sharding"] = true
+	}
+
 	// 多 Worker 目标分片：子任务 worker_id 非空时仅由对应 Worker Poll 领取，不进入本机内存队列。
-	if workerTargetShardingEnabled(params) {
+	if workerTargetShardingEnabled(params) || autoShard {
 		probe := model.ScanTask{Targets: p.Targets, Parameters: params}
-		shards, err := ShardScanTaskByWorkers(db, context.Background(), probe)
+		shards, err := ShardScanTaskByWorkers(db, context.Background(), probe, remoteWorkers)
 		if err != nil {
 			return nil, fmt.Errorf("worker target shard: %w", err)
 		}
@@ -199,6 +212,34 @@ func LaunchScan(db *gorm.DB, sched *Scheduler, p LaunchScanParams) (*LaunchScanR
 	}
 
 	sched.Enqueue(&task)
-	slog.Info("[LaunchScan] 任务已入队", "task_id", task.ID, "template", tmpl.ID, "targets", len(p.Targets))
+	slog.Info("[LaunchScan] 任务已入队", "task_id", task.ID, "template", tmpl.ID, "targets", len(p.Targets), "executor", executorIDs)
+	return &LaunchScanResult{Task: &task}, nil
+}
+
+func launchPinnedWorkerScan(db *gorm.DB, sched *Scheduler, p LaunchScanParams, tmpl model.ScanTemplate, params model.JSONMap, priority int, workerID string) (*LaunchScanResult, error) {
+	now := time.Now()
+	task := model.ScanTask{
+		ID:           qulid.GenerateID(),
+		Name:         p.Name,
+		TemplateID:   tmpl.ID,
+		TemplateName: tmpl.Name,
+		Targets:      p.Targets,
+		Parameters:   params,
+		Priority:     priority,
+		Status:       model.TaskStatusQueued,
+		TotalTargets: len(p.Targets),
+		ScheduleID:   p.ScheduleID,
+		CreatedBy:    p.CreatedBy,
+		OrganizeID:   p.OrganizeID,
+		Type:         p.TaskType,
+		ParentID:     p.ParentTaskID,
+		WorkerID:     workerID,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	if err := db.Create(&task).Error; err != nil {
+		return nil, fmt.Errorf("create pinned worker task: %w", err)
+	}
+	slog.Info("[LaunchScan] 任务已绑定远程节点", "task_id", task.ID, "worker_id", workerID)
 	return &LaunchScanResult{Task: &task}, nil
 }

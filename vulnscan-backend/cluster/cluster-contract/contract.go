@@ -86,6 +86,8 @@ type NodeEnrollmentIssueRequest struct {
 	Enrollment nodeenroll.EnrollmentFile `json:"enrollment"`
 	MasterURL  string                    `json:"master_url"`
 	Label      string                    `json:"label"`
+	// Topology: master_public_node_private | master_private_node_public
+	Topology string `json:"topology"`
 }
 
 // NodeAgentCredentialsFile is returned to the operator once; the agent loads it via AGENT_CREDENTIALS_FILE.
@@ -96,6 +98,7 @@ type NodeAgentCredentialsFile struct {
 	Secret    string `json:"secret"`
 	IssuedAt  string `json:"issued_at"`
 	Label     string `json:"label,omitempty"`
+	Topology  string `json:"topology,omitempty"`
 }
 
 const NodeAgentCredentialsVersion = 1
@@ -132,3 +135,5 @@ type ServiceCluster interface {
 	// IssueScanNodeCredentials validates enrollment.json, creates vs_nodes row, returns plaintext or RSA-wrapped credentials.
 	IssueScanNodeCredentials(ctx context.Context, req *NodeEnrollmentIssueRequest) (*NodeEnrollmentIssueResponse, error)
 }
+
+// ConnectivityModesResponse 见 pkg/clusterconn.ConnectivityModesResponse（避免循环依赖时由 handler 直接返回 clusterconn 类型）。

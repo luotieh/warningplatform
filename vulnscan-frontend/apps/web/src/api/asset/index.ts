@@ -25,6 +25,9 @@ export interface Asset {
   os?: string;
   data_number?: string;
   is_online?: boolean;
+  /** 实时探测是否可达（与登记字段 is_online/是否联网 无关） */
+  reachable?: boolean | null;
+  reachable_checked_at?: string | null;
   is_key?: boolean;
   security_protection_level?: string;
   filing_cert_number?: string;
@@ -74,6 +77,21 @@ export function updateAsset(id: string, data: Partial<Asset>) {
 
 export function deleteAsset(id: string) {
   return requestClient.delete(`/asset/${id}`);
+}
+
+/** 轻量可用性探测并刷新 reachable（仅当前页 assetIds 时最快）。 */
+export function syncAssetOnlineStatus(
+  params?: Record<string, unknown>,
+  assetIds?: string[],
+) {
+  const body = assetIds?.length ? { asset_ids: assetIds } : undefined;
+  return requestClient.post<{
+    checked: number;
+    offline: number;
+    online: number;
+    skipped: number;
+    duration_ms?: number;
+  }>('/asset/sync-online-status', body, { params });
 }
 
 export function getAssetGroups(params?: Record<string, any>) {

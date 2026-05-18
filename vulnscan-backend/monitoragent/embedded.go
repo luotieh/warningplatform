@@ -13,6 +13,7 @@ import (
 	"vulnscan-backend/agent"
 	"vulnscan-backend/model"
 	"vulnscan-backend/pkg/nodeauth"
+	"vulnscan-backend/pkg/nodecapacity"
 	"vulnscan-backend/sitemonitor"
 
 	"code.yt-security.com/public/core/v2/db"
@@ -42,8 +43,8 @@ func (e *EmbeddedAgent) Start() {
 		return
 	}
 
-	// Register in both legacy and new node tables
-	e.registerNode(session)
+	capSnap := nodecapacity.Compute(nodecapacity.DefaultConfig())
+	e.registerNode(session, capSnap.Capacity)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	e.cancel = cancel
@@ -57,7 +58,7 @@ func (e *EmbeddedAgent) Start() {
 
 	e.scheduler = agent.NewSchedulerOnly(
 		[]agent.Executor{e.executor},
-		5,
+		capSnap.Capacity,
 		5*time.Minute,
 	)
 	e.scheduler.SetResultCallback(func(result *agent.TaskResult) {
@@ -67,10 +68,13 @@ func (e *EmbeddedAgent) Start() {
 	e.wg.Add(1)
 	go e.runDirectLoop(ctx, session)
 
-	slog.Info("embedded agent started", "uuid", e.agentUUID, "concurrency", 5)
+	slog.Info("embedded agent started", "uuid", e.agentUUID, "concurrency", capSnap.Capacity)
 }
 
-func (e *EmbeddedAgent) registerNode(session *gorm.DB) {
+func (e *EmbeddedAgent) registerNode(session *gorm.DB, maxConcurrent int) {
+	if maxConcurrent <= 0 {
+		maxConcurrent = 1
+	}
 	var existing model.MonitorAgent
 	err := session.Where("uuid = ?", e.agentUUID).First(&existing).Error
 	if err != nil {
@@ -80,7 +84,7 @@ func (e *EmbeddedAgent) registerNode(session *gorm.DB) {
 			Version:       agent.Version,
 			MacAddress:    "local",
 			IPAddress:     "127.0.0.1",
-			MaxConcurrent: 5,
+			MaxConcurrent: maxConcurrent,
 			MaxQueue:      100,
 		}
 		ma.ID = e.agentUUID
@@ -92,7 +96,7 @@ func (e *EmbeddedAgent) registerNode(session *gorm.DB) {
 				"status":         "online",
 				"version":        agent.Version,
 				"last_heartbeat": time.Now(),
-				"max_concurrent": 5,
+				"max_concurrent": maxConcurrent,
 				"max_queue":      100,
 			})
 	}
@@ -131,7 +135,7 @@ func (e *EmbeddedAgent) registerNode(session *gorm.DB) {
 				IPAddress:       "127.0.0.1",
 				MacAddress:      "local",
 				Hostname:        "embedded",
-				MaxConcurrent:   5,
+				MaxConcurrent:   maxConcurrent,
 			})
 		} else {
 			session.Model(&model.Node{}).
