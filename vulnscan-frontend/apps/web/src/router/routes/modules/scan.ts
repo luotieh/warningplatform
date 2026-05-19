@@ -56,15 +56,6 @@ const routes: RouteRecordRaw[] = [
         meta: { hideInMenu: true, title: '报告中心' },
       },
       {
-        name: 'ScanCompare',
-        path: 'compare',
-        component: () => import('#/views/dashboard/compare.vue'),
-        meta: {
-          icon: 'lucide:git-compare',
-          title: '任务对比',
-        },
-      },
-      {
         name: 'ScanExclusions',
         path: 'exclusions',
         component: () => import('#/views/scan/exclusions/list.vue'),

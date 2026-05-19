@@ -1,5 +1,29 @@
-import { normalizePagedResponse } from '#/api/helpers';
+import {
+  type ImportFailedRowPayload,
+  type ImportIssuePayload,
+  normalizePagedResponse,
+  parseImportFailureBody,
+} from '#/api/helpers';
 import { baseRequestClient, requestClient } from '#/api/request';
+
+export class AssetImportError extends Error {
+  readonly issues: ImportIssuePayload[];
+  readonly failedRows: ImportFailedRowPayload[];
+  readonly errorCount: number;
+
+  constructor(
+    message: string,
+    issues: ImportIssuePayload[],
+    errorCount?: number,
+    failedRows?: ImportFailedRowPayload[],
+  ) {
+    super(message);
+    this.name = 'AssetImportError';
+    this.issues = issues;
+    this.failedRows = failedRows ?? [];
+    this.errorCount = errorCount ?? issues.length;
+  }
+}
 
 export interface Asset {
   id: string;
@@ -144,6 +168,18 @@ export async function getAssetStats(params?: Record<string, any>) {
   return (body as { data?: AssetStats }).data;
 }
 
+export type AssetRegionScopeItem = {
+  region_code: string;
+  count: number;
+};
+
+export async function getAssetRegionScope() {
+  const res = await baseRequestClient.get<any>('/asset/region-scope');
+  const body = (res as Record<string, unknown>).data ?? res;
+  const data = (body as { data?: AssetRegionScopeItem[] }).data ?? body;
+  return Array.isArray(data) ? data : [];
+}
+
 export function aggregateAssets() {
   return requestClient.post('/asset/aggregate');
 }
@@ -160,12 +196,61 @@ export function batchDeleteAssets(ids: string[]) {
   return requestClient.post<{ affected: number }>('/asset/batch-delete', { ids });
 }
 
-export function importAssets(file: File) {
+export interface AssetImportResult {
+  imported: number;
+  total: number;
+}
+
+export async function importAssets(file: File): Promise<AssetImportResult> {
   const formData = new FormData();
   formData.append('file', file);
-  return requestClient.post('/asset/import', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  });
+  try {
+    const res = await baseRequestClient.post<{
+      code: number;
+      msg?: string;
+      data?: AssetImportResult & {
+        errors?: ImportIssuePayload[];
+        error_count?: number;
+        failed_rows?: ImportFailedRowPayload[];
+      };
+    }>('/asset/import', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    const body = res.data;
+    if (body?.code === 2000) {
+      return (body.data ?? { imported: 0, total: 0 }) as AssetImportResult;
+    }
+    const failed = parseImportFailureBody(body);
+    if (failed) {
+      throw new AssetImportError(
+        failed.message,
+        failed.issues,
+        failed.errorCount,
+        failed.failedRows,
+      );
+    }
+    throw new AssetImportError(body?.msg || '导入失败', [], 0);
+  } catch (error: unknown) {
+    if (error instanceof AssetImportError) {
+      throw error;
+    }
+    const failed = parseImportFailureBody(
+      (error as { response?: { data?: unknown } })?.response?.data as {
+        code?: number;
+        msg?: string;
+        data?: Record<string, unknown>;
+      },
+    );
+    if (failed) {
+      throw new AssetImportError(
+        failed.message,
+        failed.issues,
+        failed.errorCount,
+        failed.failedRows,
+      );
+    }
+    throw error;
+  }
 }
 
 function blobFromAxiosResponse(res: { data?: unknown }): Blob {

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"vulnscan-backend/model"
 )
@@ -32,28 +33,52 @@ func (a *TamperAnalyzer) Analyze(ctx context.Context, input *Input) (*Output, er
 		return output, nil
 	}
 
-	if input.Baseline == nil {
+	if needsBaselineInit(input.Baseline) {
+		bodyText := tamperCompareText(snap)
+		textLen := utf8.RuneCountInString(bodyText)
 		output.BaselineUpdate = &model.MonitorBaselineUpdate{
 			ContentHash:       snap.ContentHash,
 			DomStructureHash:  fmt.Sprintf("%x", md5.Sum([]byte(extractDOMStructure(snap.RenderedHTML)))),
 			Title:             snap.Title,
 			StatusCode:        snap.StatusCode,
-			VisibleTextLength: len(snap.VisibleText),
+			VisibleTextLength: textLen,
+			BodyText:          bodyText,
 			Action:            "init",
 		}
+		evidence := buildTamperFirstRunEvidence(bodyText)
+		detailJSON, _ := json.Marshal(map[string]any{
+			"is_first_run":        true,
+			"title":               snap.Title,
+			"status_code":         snap.StatusCode,
+			"content_hash":        snap.ContentHash,
+			"visible_text_length": textLen,
+			"url":                 firstNonEmptyStr(snap.URL),
+			"evidence":            evidence,
+		})
+		output.DetailsJSON = string(detailJSON)
 		return output, nil
 	}
 
+	currentText := tamperCompareText(snap)
 	diffs := a.compareWithBaseline(snap, input.Baseline)
+	evidence := buildTamperCompareEvidence(input.Baseline.BodyText, currentText)
+
 	if len(diffs) > 0 {
 		output.HasIssue = true
 		output.Severity = classifyTamperSeverity(diffs)
+		textLen := utf8.RuneCountInString(currentText)
 		detailJSON, _ := json.Marshal(map[string]any{
 			"diffs":               diffs,
 			"title":               snap.Title,
 			"status_code":         snap.StatusCode,
 			"content_hash":        snap.ContentHash,
-			"visible_text_length": len(snap.VisibleText),
+			"visible_text_length": textLen,
+			"evidence":            evidence,
+		})
+		output.DetailsJSON = string(detailJSON)
+	} else if evidence.BaselineHTML != "" || evidence.CurrentHTML != "" {
+		detailJSON, _ := json.Marshal(map[string]any{
+			"evidence": evidence,
 		})
 		output.DetailsJSON = string(detailJSON)
 	}
@@ -186,6 +211,25 @@ func extractDOMStructure(htmlStr string) string {
 		}
 	}
 	return buf.String()
+}
+
+// needsBaselineInit 无基线或仅有历史 hash、无正文时，只建基线，不做篡改判定。
+func needsBaselineInit(b *model.MonitorBaseline) bool {
+	if b == nil {
+		return true
+	}
+	if strings.TrimSpace(b.BodyText) == "" {
+		return true
+	}
+	return strings.TrimSpace(b.ContentHash) == "" &&
+		strings.TrimSpace(b.Title) == "" &&
+		b.StatusCode == 0 &&
+		b.VisibleTextLength == 0 &&
+		strings.TrimSpace(b.DomStructureHash) == ""
+}
+
+func isEmptyBaseline(b *model.MonitorBaseline) bool {
+	return needsBaselineInit(b)
 }
 
 func classifyTamperSeverity(diffs []map[string]any) string {

@@ -23,6 +23,9 @@ export type LedgerStats = {
   withVulns: number;
 };
 
+/** 左侧筛选维度（互斥，默认组织） */
+export type LedgerScopeDimension = 'asset_family' | 'industry' | 'organize' | 'region';
+
 export type LedgerSearchForm = {
   keyword: string;
   assetFamily?: string;

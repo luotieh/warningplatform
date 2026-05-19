@@ -22,12 +22,6 @@ const routes: RouteRecordRaw[] = [
         redirect: '/reports/scan',
         meta: { hideInMenu: true, title: '报告中心' },
       },
-      {
-        name: 'DashboardCompareCompat',
-        path: 'compare',
-        redirect: '/scan/compare',
-        meta: { hideInMenu: true, title: '任务对比' },
-      },
     ],
   },
 ];

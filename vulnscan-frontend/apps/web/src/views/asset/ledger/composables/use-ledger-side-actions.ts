@@ -70,6 +70,8 @@ export function useLedgerSideActions(options: {
     try {
       monitorResult.value = await createTasksFromAssets(assets.map((item) => item.id));
       showMonitorResult.value = true;
+    } catch (error: unknown) {
+      message.error(getRequestErrorMessage(error, '发送监测失败'));
     } finally {
       sendingToMonitor.value = false;
     }

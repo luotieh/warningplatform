@@ -76,11 +76,16 @@ func BuildConnectivityModes(opts Options) *ConnectivityModesResponse {
 	pub := strings.TrimRight(strings.TrimSpace(opts.PublicMasterURL), "/")
 	internal := strings.TrimRight(strings.TrimSpace(opts.InternalMasterURL), "/")
 
+	suggestedPublic := pub
+	if suggestedPublic == "" && internal != "" {
+		suggestedPublic = internal
+	}
+
 	masterPublic := ModeInfo{
 		ID:                TopologyMasterPublicNodePrivate,
 		Title:             "主控公网 · 节点内网",
 		Summary:           "扫描节点位于内网或 NAT 后，通过出站 HTTPS 连接公网主控；无需节点开放入站端口。",
-		SuggestedURL:      pub,
+		SuggestedURL:      suggestedPublic,
 		NodeRequirement:   "节点需能访问主控公网地址（出站 443/80）",
 		MasterRequirement: "主控暴露 node-api / WebSocket 入口（公网 IP、负载均衡或反向代理）",
 		FirewallNotes: []string{
@@ -88,14 +93,14 @@ func BuildConnectivityModes(opts Options) *ConnectivityModesResponse {
 			"主控侧：放行入站 HTTPS（及 WSS）到 API 网关",
 			"凭据中的 master_url 填写节点可达的公网地址（含 /api 等前缀）",
 		},
-		Supported: pub != "",
+		Supported: pub != "" || internal != "",
 	}
 
 	masterPrivate := ModeInfo{
 		ID:                TopologyMasterPrivateNodePublic,
 		Title:             "主控内网 · 节点公网",
 		Summary:           "主控仅在内网，公网扫描节点通过 DMZ/边界反向代理访问主控对外入口；仍为节点主动拉取任务。",
-		SuggestedURL:      pub,
+		SuggestedURL:      suggestedPublic,
 		NodeRequirement:   "公网节点需能访问「主控对外入口」URL（与内网主控通过网关打通）",
 		MasterRequirement: "在内网部署主控，并在边界配置反向代理/端口映射，将 /node-api 暴露给外网节点",
 		FirewallNotes: []string{
@@ -103,7 +108,7 @@ func BuildConnectivityModes(opts Options) *ConnectivityModesResponse {
 			"边界设备将请求转发至内网主控，禁止依赖主控主动连接节点",
 			"若无公网入口，需在边界部署 HTTPS 反代将 /node-api 转发至内网主控",
 		},
-		Supported: pub != "",
+		Supported: pub != "" || internal != "",
 	}
 
 	defaultMode := TopologyMasterPublicNodePrivate
@@ -123,15 +128,22 @@ func BuildConnectivityModes(opts Options) *ConnectivityModesResponse {
 // ResolveMasterURL 根据拓扑与配置解析签发凭据用的 master_url。
 func ResolveMasterURL(topology, requestURL string, opts Options) (string, error) {
 	if u := strings.TrimRight(strings.TrimSpace(requestURL), "/"); u != "" {
+		if err := ValidateMasterURL(u); err != nil {
+			return "", fmt.Errorf("master_url: %w", err)
+		}
 		return u, nil
 	}
 	pub := strings.TrimRight(strings.TrimSpace(opts.PublicMasterURL), "/")
+	internal := strings.TrimRight(strings.TrimSpace(opts.InternalMasterURL), "/")
 	switch strings.TrimSpace(topology) {
 	case "", TopologyMasterPublicNodePrivate, TopologyMasterPrivateNodePublic:
-		if pub == "" {
-			return "", fmt.Errorf("请填写 master_url，或在配置中设置 cluster.public_master_url（节点访问主控的对外地址）")
+		if pub != "" {
+			return pub, nil
 		}
-		return pub, nil
+		if internal != "" {
+			return internal, nil
+		}
+		return "", fmt.Errorf("请填写完整 master_url（如 http://127.0.0.1:8090/api），或在主控配置 cluster.public_master_url / cluster.internal_master_url")
 	default:
 		return "", fmt.Errorf("未知部署拓扑: %s", topology)
 	}
@@ -143,8 +155,8 @@ func AgentConnectivityHint(topology string) string {
 	case TopologyMasterPrivateNodePublic:
 		return "当前为「主控内网·节点公网」：请确认 master_url 为边界反代/网关地址，且已转发 /node-api（无需 VPN）"
 	case TopologyMasterPublicNodePrivate:
-		return "当前为「主控公网·节点内网」：请确认节点出站可访问 master_url，且主控已暴露 HTTPS"
+		return "当前为「主控公网·节点内网」：本地开发请使用 http://127.0.0.1:端口/api；须为完整 URL，不能仅为 /api"
 	default:
-		return "请确认 master_url 可从本机访问（含 /api 前缀），并检查防火墙与反向代理"
+		return "请确认 master_url 为完整地址（如 http://127.0.0.1:8090/api），可从本机 curl /node-api/health"
 	}
 }

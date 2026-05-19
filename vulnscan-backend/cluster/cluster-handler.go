@@ -86,3 +86,31 @@ func (h *HandlerCluster) CheckStale(c *gin.Context) {
 
 	web.OK(c).Data(stale).Send()
 }
+
+func (h *HandlerCluster) UnregisterWorker(c *gin.Context) {
+	uri, ok := web.BindUri[struct {
+		ID string `uri:"id"`
+	}](c)
+	if !ok {
+		return
+	}
+	if err := h.svc.UnregisterWorker(c.Request.Context(), uri.ID); err != nil {
+		web.Fail(c).Err(err).Send()
+		return
+	}
+	web.OK(c).Send()
+}
+
+func (h *HandlerCluster) DeleteScanNode(c *gin.Context) {
+	uri, ok := web.BindUri[struct {
+		UUID string `uri:"uuid"`
+	}](c)
+	if !ok {
+		return
+	}
+	if err := h.svc.DeleteScanNode(c.Request.Context(), uri.UUID); err != nil {
+		web.Fail(c).Err(err).Send()
+		return
+	}
+	web.OK(c).Send()
+}

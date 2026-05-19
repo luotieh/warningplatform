@@ -17,6 +17,10 @@ func NewHandlerTransfer(svc transferContract.ServiceTransfer) *HandlerTransfer {
 	return &HandlerTransfer{svc: svc}
 }
 
+func (h *HandlerTransfer) TransferService() transferContract.ServiceTransfer {
+	return h.svc
+}
+
 func (h *HandlerTransfer) ReceiveIncident(c *gin.Context) {
 	req, ok := web.BindJSON[transferContract.TransferIncidentReq](c)
 	if !ok {

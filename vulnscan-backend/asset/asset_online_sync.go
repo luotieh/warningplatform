@@ -96,7 +96,7 @@ func (h *EnrichHandler) SyncOnlineStatus(c *gin.Context) {
 	toProbe, skippedRecent := filterAssetsForProbeCooldown(assets)
 	result.SkippedRecent = skippedRecent
 
-	taskByAsset := loadMonitorTasksByAssetID(sess, toProbe)
+	taskByAsset := loadMonitorPathTasksByAssetID(sess, toProbe)
 	ctx, cancel := context.WithTimeout(c.Request.Context(), assetOnlineSyncOverallBudget)
 	defer cancel()
 
@@ -111,8 +111,8 @@ func (h *EnrichHandler) SyncOnlineStatus(c *gin.Context) {
 	web.OK(c).Data(result).Send()
 }
 
-func loadMonitorTasksByAssetID(sess *gorm.DB, assets []model.Asset) map[string]*model.MonitorTask {
-	out := map[string]*model.MonitorTask{}
+func loadMonitorPathTasksByAssetID(sess *gorm.DB, assets []model.Asset) map[string]*model.MonitorPathTask {
+	out := map[string]*model.MonitorPathTask{}
 	if sess == nil || len(assets) == 0 {
 		return out
 	}
@@ -125,14 +125,14 @@ func loadMonitorTasksByAssetID(sess *gorm.DB, assets []model.Asset) map[string]*
 	if len(ids) == 0 {
 		return out
 	}
-	var tasks []model.MonitorTask
+	var tasks []model.MonitorPathTask
 	_ = sess.Where("asset_id IN ? AND enabled = ?", ids, true).Find(&tasks).Error
 	for i := range tasks {
 		t := tasks[i]
 		if t.AssetID == "" {
 			continue
 		}
-		if cur, ok := out[t.AssetID]; !ok || preferMonitorTask(&t, cur) {
+		if cur, ok := out[t.AssetID]; !ok || preferMonitorPathTask(&t, cur) {
 			copy := t
 			out[t.AssetID] = &copy
 		}
@@ -140,7 +140,7 @@ func loadMonitorTasksByAssetID(sess *gorm.DB, assets []model.Asset) map[string]*
 	return out
 }
 
-func preferMonitorTask(candidate, current *model.MonitorTask) bool {
+func preferMonitorPathTask(candidate, current *model.MonitorPathTask) bool {
 	if current == nil {
 		return true
 	}
@@ -164,7 +164,7 @@ func filterAssetsForProbeCooldown(assets []model.Asset) ([]model.Asset, int) {
 	return out, skipped
 }
 
-func monitorAvailabilityEnabled(task *model.MonitorTask) bool {
+func monitorAvailabilityEnabled(task *model.MonitorPathTask) bool {
 	if task == nil {
 		return false
 	}
@@ -178,7 +178,7 @@ func monitorAvailabilityEnabled(task *model.MonitorTask) bool {
 	return true
 }
 
-func runAssetOnlineSync(ctx context.Context, sess *gorm.DB, assets []model.Asset, taskByAsset map[string]*model.MonitorTask) assetOnlineSyncResult {
+func runAssetOnlineSync(ctx context.Context, sess *gorm.DB, assets []model.Asset, taskByAsset map[string]*model.MonitorPathTask) assetOnlineSyncResult {
 	result := assetOnlineSyncResult{}
 	if len(assets) == 0 {
 		return result
@@ -234,9 +234,9 @@ func runAssetOnlineSync(ctx context.Context, sess *gorm.DB, assets []model.Asset
 	return result
 }
 
-func buildAssetOnlineProbe(asset model.Asset, task *model.MonitorTask) (assetOnlineProbe, bool) {
-	if task != nil && strings.TrimSpace(task.TargetHomepage) != "" && monitorAvailabilityEnabled(task) {
-		if url := normalizeAssetProbeHTTPURL(task.TargetHomepage); url != "" {
+func buildAssetOnlineProbe(asset model.Asset, task *model.MonitorPathTask) (assetOnlineProbe, bool) {
+	if task != nil && strings.TrimSpace(task.URLOverride) != "" && monitorAvailabilityEnabled(task) {
+		if url := normalizeAssetProbeHTTPURL(task.URLOverride); url != "" {
 			return assetOnlineProbe{assetID: asset.ID, mode: "http", target: url}, true
 		}
 	}

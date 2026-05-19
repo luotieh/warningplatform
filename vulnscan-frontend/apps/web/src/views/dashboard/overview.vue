@@ -141,16 +141,24 @@ const monitorCards = computed(() => [
   {
     color: '#2080f0',
     label: '监控任务',
-    route: '/monitor/tasks',
+    route: '/monitor/targets',
     sub: '已接入站点监控',
-    value: monitorStats.value.total_tasks ?? 0,
+    value:
+      monitorStats.value.total_path_tasks ??
+      monitorStats.value.total_tasks ??
+      monitorStats.value.total_targets ??
+      0,
   },
   {
     color: '#18a058',
     label: '启用中',
-    route: '/monitor/tasks',
+    route: '/monitor/targets',
     sub: '当前生效任务',
-    value: monitorStats.value.enabled_tasks ?? 0,
+    value:
+      monitorStats.value.enabled_path_tasks ??
+      monitorStats.value.enabled_tasks ??
+      monitorStats.value.enabled_targets ??
+      0,
   },
   {
     color: '#f0a020',

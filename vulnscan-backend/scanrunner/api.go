@@ -49,6 +49,7 @@ type LaunchRequest struct {
 	Targets         []string               `json:"targets" binding:"required,min=1"`
 	TemplateID      string                 `json:"template_id" binding:"required"`
 	Parameters      map[string]interface{} `json:"parameters"`
+	AssetIDs        []string               `json:"asset_ids"`
 	ExecutorNodeIDs []string               `json:"executor_node_ids"`
 	Priority        int                    `json:"priority"`
 	ScheduleID      string                 `json:"schedule_id"`
@@ -78,6 +79,7 @@ func (a *API) Launch(c *gin.Context) {
 		Targets:         req.Targets,
 		TemplateID:      req.TemplateID,
 		Parameters:      req.Parameters,
+		AssetIDs:        req.AssetIDs,
 		ExecutorNodeIDs: executorIDs,
 		Priority:        req.Priority,
 		ScheduleID:      req.ScheduleID,

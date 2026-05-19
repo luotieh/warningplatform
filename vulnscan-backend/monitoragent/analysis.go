@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
 	"vulnscan-backend/model"
+	"vulnscan-backend/sitemonitor"
 	"vulnscan-backend/sitemonitor/analyzer"
 
 	"gorm.io/gorm"
@@ -176,14 +178,22 @@ func (e *AnalysisEngine) Analyze(ctx context.Context, dimension, snapshotJSON, u
 		return snapshotJSON, nil
 	}
 
+	scopeID := task.PathTaskID
+	if scopeID == "" {
+		scopeID = task.TargetID
+	}
 	input := &analyzer.Input{
 		ExecutionID:  task.ExecutionID,
-		TaskID:       task.TaskID,
+		TaskID:       scopeID,
 		URL:          url,
 		SnapshotJSON: snapshotJSON,
 		Config:       task.Config,
 	}
-	if task.Baseline != nil {
+	if dimension == "tamper" && e.gormDB != nil && strings.TrimSpace(url) != "" {
+		if bl, err := sitemonitor.GetActiveBaseline(ctx, e.gormDB, url); err == nil && bl != nil {
+			input.Baseline = bl
+		}
+	} else if task.Baseline != nil && strings.TrimSpace(task.Baseline.ContentHash) != "" {
 		input.Baseline = &model.MonitorBaseline{
 			Version:           task.Baseline.Version,
 			Simhash:           task.Baseline.Simhash,
@@ -201,46 +211,13 @@ func (e *AnalysisEngine) Analyze(ctx context.Context, dimension, snapshotJSON, u
 		return "", fmt.Errorf("analyze %s: %w", dimension, err)
 	}
 
-	return e.formatResult(dimension, output, snapshotJSON), nil
+	return e.formatResult(dimension, output, snapshotJSON, url), nil
 }
 
-func (e *AnalysisEngine) formatResult(dimension string, output *analyzer.Output, snapshotJSON string) string {
+func (e *AnalysisEngine) formatResult(dimension string, output *analyzer.Output, snapshotJSON, pageURL string) string {
 	switch dimension {
 	case "sensitive_word":
-		result := map[string]any{
-			"has_hit":       output.HasIssue,
-			"total_matches": 0,
-			"matches":       []any{},
-		}
-		if output.DetailsJSON != "" {
-			var details struct {
-				Matches      []map[string]any `json:"matches"`
-				TotalMatches int              `json:"total_matches"`
-				TextLength   int              `json:"text_length"`
-			}
-			if err := json.Unmarshal([]byte(output.DetailsJSON), &details); err == nil {
-				result["total_matches"] = details.TotalMatches
-				result["preprocessing"] = map[string]any{"text_length": details.TextLength}
-				matches := make([]map[string]any, 0, len(details.Matches))
-				for _, m := range details.Matches {
-					ctx, _ := m["context"].(string)
-					contexts := []string{}
-					if ctx != "" {
-						contexts = []string{ctx}
-					}
-					matches = append(matches, map[string]any{
-						"word":     m["word"],
-						"category": m["category"],
-						"severity": m["severity"],
-						"count":    m["count"],
-						"contexts": contexts,
-					})
-				}
-				result["matches"] = matches
-			}
-		}
-		raw, _ := json.Marshal(result)
-		return string(raw)
+		return BuildSensitiveWordResultJSON(snapshotJSON, output)
 
 	case "blacklink":
 		result := map[string]any{"has_black": output.HasIssue}
@@ -256,25 +233,7 @@ func (e *AnalysisEngine) formatResult(dimension string, output *analyzer.Output,
 		return string(raw)
 
 	case "availability":
-		result := map[string]any{"available": !output.HasIssue}
-		if output.DetailsJSON != "" {
-			var details map[string]any
-			if err := json.Unmarshal([]byte(output.DetailsJSON), &details); err == nil {
-				for k, v := range details {
-					result[k] = v
-				}
-			}
-		}
-		var snap map[string]any
-		if err := json.Unmarshal([]byte(snapshotJSON), &snap); err == nil {
-			for _, key := range []string{"dns_ms", "tcp_connect_ms", "tls_handshake_ms", "ttfb_ms", "total_ms", "status_code"} {
-				if v, ok := snap[key]; ok {
-					result[key] = v
-				}
-			}
-		}
-		raw, _ := json.Marshal(result)
-		return string(raw)
+		return BuildAvailabilityResultJSON(snapshotJSON, output)
 
 	case "domain_hijack":
 		result := map[string]any{"hijacked": output.HasIssue}
@@ -290,19 +249,7 @@ func (e *AnalysisEngine) formatResult(dimension string, output *analyzer.Output,
 		return string(raw)
 
 	case "tamper":
-		tr := model.MonitorTamperResult{
-			Tampered:       output.HasIssue,
-			Severity:       output.Severity,
-			BaselineUpdate: output.BaselineUpdate,
-		}
-		if output.DetailsJSON != "" {
-			var details map[string]any
-			if err := json.Unmarshal([]byte(output.DetailsJSON), &details); err == nil {
-				tr.Diff = details
-			}
-		}
-		raw, _ := json.Marshal(tr)
-		return string(raw)
+		return BuildTamperResultJSON(snapshotJSON, output, pageURL)
 
 	case "sensitive_file":
 		if output.DetailsJSON != "" {

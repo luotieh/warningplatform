@@ -4,7 +4,6 @@ import type {
   DimensionConfig,
   FileLibrary,
   MonitorDefaultConfig,
-  WordLibrary,
 } from '#/api/sitemonitor';
 
 import { onMounted, reactive, ref } from 'vue';
@@ -33,7 +32,6 @@ import {
   getAlertConfig,
   getDefaultConfigList,
   getFileLibraryList,
-  getWordLibraryList,
   updateAlertConfig,
   updateDefaultConfig,
 } from '#/api/sitemonitor';
@@ -70,7 +68,6 @@ const dimensionMeta: Record<string, string> = {
 const dimensionKeys = Object.keys(dimensionMeta);
 
 const configs = reactive<Record<string, DimensionConfig>>({});
-const wordLibraries = ref<WordLibrary[]>([]);
 const fileLibraries = ref<FileLibrary[]>([]);
 
 const cycleTypeOptions = [
@@ -96,11 +93,7 @@ async function loadConfigs() {
 
 async function loadLibraries() {
   try {
-    const [wRes, fRes] = await Promise.all([
-      getWordLibraryList({ size: 100 }),
-      getFileLibraryList({ size: 100 }),
-    ]);
-    wordLibraries.value = wRes?.data || [];
+    const fRes = await getFileLibraryList({ size: 100 });
     fileLibraries.value = fRes?.data || [];
   } catch {
     /* ignore */
@@ -297,17 +290,10 @@ onMounted(() => {
 
               <!-- 敏感词专属 -->
               <template v-if="dim === 'sensitive_word'">
-                <NFormItem label="默认词库">
-                  <NSelect
-                    multiple
-                    placeholder="请选择词库"
-                    :value="getField(dim, 'word_library_ids', [])"
-                    :options="wordLibraries.map((l) => ({ label: l.name, value: l.id }))"
-                    @update:value="(v: string[]) => setField(dim, 'word_library_ids', v)"
-                  />
-                  <div class="text-muted-foreground mt-1 text-xs">
-                    未配置词库的任务将跳过敏感词检测
-                  </div>
+                <NFormItem label="敏感词库">
+                  <span class="text-muted-foreground text-sm">
+                    自动加载系统内全部敏感词库，无需单独选择
+                  </span>
                 </NFormItem>
               </template>
 
@@ -340,6 +326,91 @@ onMounted(() => {
                     </span>
                   </NSpace>
                 </NFormItem>
+              </template>
+
+              <NDivider title-placement="left">安全事件</NDivider>
+              <NFormItem label="自动转安全事件">
+                <NSpace align="center" vertical>
+                  <NSwitch
+                    :value="getField(dim, 'incident_auto_enabled', false)"
+                    @update:value="(v: boolean) => setField(dim, 'incident_auto_enabled', v)"
+                  />
+                  <span class="text-muted-foreground text-xs">
+                    开启后，监测发现问题且满足下方条件时将自动创建安全事件；否则仅记录问题，可在执行记录中手动转事件
+                  </span>
+                </NSpace>
+              </NFormItem>
+              <template v-if="getField(dim, 'incident_auto_enabled', false)">
+                <template v-if="dim === 'availability'">
+                  <NFormItem label="不可用即转事件">
+                    <NSwitch
+                      :value="getField(dim, 'incident_on_unavailable', true)"
+                      @update:value="(v: boolean) => setField(dim, 'incident_on_unavailable', v)"
+                    />
+                  </NFormItem>
+                  <NFormItem label="响应时间阈值(ms)">
+                    <NSpace align="center">
+                      <NInputNumber
+                        :value="getField(dim, 'incident_max_response_time_ms', 0)"
+                        :min="0"
+                        :max="600000"
+                        placeholder="0 表示不启用"
+                        @update:value="(v: number | null) => setField(dim, 'incident_max_response_time_ms', v ?? 0)"
+                      />
+                      <span class="text-muted-foreground text-xs">
+                        响应时间超过该值时也自动转事件（可与不可用条件同时生效）
+                      </span>
+                    </NSpace>
+                  </NFormItem>
+                </template>
+                <template v-else-if="dim === 'sensitive_word'">
+                  <NFormItem label="最少命中条数">
+                    <NInputNumber
+                      :value="getField(dim, 'incident_min_match_count', 1)"
+                      :min="1"
+                      :max="9999"
+                      @update:value="(v: number | null) => setField(dim, 'incident_min_match_count', v ?? 1)"
+                    />
+                  </NFormItem>
+                </template>
+                <template v-else-if="dim === 'sensitive_file'">
+                  <NFormItem label="最少发现文件数">
+                    <NInputNumber
+                      :value="getField(dim, 'incident_min_file_count', 1)"
+                      :min="1"
+                      :max="9999"
+                      @update:value="(v: number | null) => setField(dim, 'incident_min_file_count', v ?? 1)"
+                    />
+                  </NFormItem>
+                </template>
+                <template v-else-if="dim === 'tamper'">
+                  <NFormItem label="最少差异处数">
+                    <NInputNumber
+                      :value="getField(dim, 'incident_min_diff_count', 1)"
+                      :min="1"
+                      :max="9999"
+                      @update:value="(v: number | null) => setField(dim, 'incident_min_diff_count', v ?? 1)"
+                    />
+                  </NFormItem>
+                </template>
+                <template v-else-if="dim === 'blacklink'">
+                  <NFormItem label="最少发现条数">
+                    <NInputNumber
+                      :value="getField(dim, 'incident_min_blacklink_count', 1)"
+                      :min="1"
+                      :max="9999"
+                      @update:value="(v: number | null) => setField(dim, 'incident_min_blacklink_count', v ?? 1)"
+                    />
+                  </NFormItem>
+                </template>
+                <template v-else-if="dim === 'domain_hijack'">
+                  <NFormItem label="劫持即转事件">
+                    <NSwitch
+                      :value="getField(dim, 'incident_on_hijack', true)"
+                      @update:value="(v: boolean) => setField(dim, 'incident_on_hijack', v)"
+                    />
+                  </NFormItem>
+                </template>
               </template>
 
               <NFormItem class="mt-4">

@@ -68,6 +68,7 @@ func (a *NodeAPI) RegisterRoutes(e *gin.Engine, pathPrefix string) {
 	g.Use(a.authMiddleware())
 
 	g.POST("/heartbeat", a.Heartbeat)
+	g.POST("/shutdown", a.Shutdown)
 	g.GET("/tasks/poll", a.PollTasks)
 	g.POST("/tasks/result", a.ReportResult)
 	g.GET("/rules", a.GetRules)

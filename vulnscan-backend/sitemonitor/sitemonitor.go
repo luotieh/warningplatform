@@ -86,26 +86,33 @@ func (m *Monitor) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
 			{Name: "更新默认配置", Path: "default-configs/:dimension", Method: "PUT", Handler: m.handler.UpdateDefaultConfig, Enabled: true},
 			// Dashboard
 			{Name: "仪表盘统计", Path: "dashboard/stats", Method: "GET", Handler: m.handler.GetDashboardStats, Enabled: true},
-			{Name: "执行统计", Path: "tasks/execution-stats", Method: "GET", Handler: m.handler.GetTaskExecutionStats, Enabled: true},
-			// 任务
-			{Name: "任务列表", Path: "tasks", Method: "GET", Handler: m.handler.ListTasks, Enabled: true},
-			{Name: "创建任务", Path: "tasks", Method: "POST", Handler: m.handleCreateTask, Enabled: true},
-			{Name: "从资产创建任务", Path: "tasks/from-assets", Method: "POST", Handler: m.handleCreateFromAssets, Enabled: true},
-			{Name: "任务详情", Path: "tasks/:id", Method: "GET", Handler: m.handler.GetTask, Enabled: true},
-			{Name: "任务趋势", Path: "tasks/:id/trend", Method: "GET", Handler: m.handler.GetTaskTrend, Enabled: true},
-			{Name: "更新任务", Path: "tasks/:id", Method: "PUT", Handler: m.handleUpdateTask, Enabled: true},
-			{Name: "删除任务", Path: "tasks/:id", Method: "DELETE", Handler: m.handleDeleteTask, Enabled: true},
-			{Name: "获取页面meta", Path: "tasks/fetch-meta", Method: "GET", Handler: m.handler.FetchTaskMeta, Enabled: true},
-			{Name: "手动执行任务", Path: "tasks/run/:id", Method: "POST", Handler: m.handler.RunTask, Enabled: true},
-			{Name: "批量切换启用", Path: "tasks/batch/toggle-enabled", Method: "PUT", Handler: m.handleBatchToggleEnabled, Enabled: true},
-			{Name: "批量更新配置", Path: "tasks/batch/update-configs", Method: "PUT", Handler: m.handleBatchUpdateConfigs, Enabled: true},
-			{Name: "批量同步名称", Path: "tasks/batch/sync-names", Method: "PUT", Handler: m.handler.BatchSyncNames, Enabled: true},
-			{Name: "批量删除任务", Path: "tasks/batch/delete", Method: "DELETE", Handler: m.handler.BatchDeleteTasks, Enabled: true},
-			// 导入
-			{Name: "下载导入模板", Path: "tasks/import/template", Method: "GET", Handler: m.handler.DownloadImportTemplate, Enabled: true},
-			{Name: "导入任务", Path: "tasks/import", Method: "POST", Handler: m.handler.ImportTasks, Enabled: true},
-			{Name: "导入结果", Path: "tasks/import/result/:importId", Method: "GET", Handler: m.handler.GetImportResult, Enabled: true},
-			{Name: "导出导入结果", Path: "tasks/import/result/:importId/export", Method: "GET", Handler: m.handler.ExportImportResult, Enabled: true},
+			{Name: "执行统计", Path: "execution-stats", Method: "GET", Handler: m.handler.GetTaskExecutionStats, Enabled: true},
+			// 监测目标
+			{Name: "目标列表", Path: "targets", Method: "GET", Handler: m.handler.ListTargets, Enabled: true},
+			{Name: "创建目标", Path: "targets", Method: "POST", Handler: m.handleCreateTarget, Enabled: true},
+			{Name: "从资产创建监测", Path: "targets/from-assets", Method: "POST", Handler: m.handleCreateTasksFromAssets, Enabled: true},
+			{Name: "目标详情", Path: "targets/:id", Method: "GET", Handler: m.handler.GetTarget, Enabled: true},
+			{Name: "更新目标", Path: "targets/:id", Method: "PUT", Handler: m.handleUpdateTarget, Enabled: true},
+			{Name: "删除目标", Path: "targets/:id", Method: "DELETE", Handler: m.handleDeleteTarget, Enabled: true},
+			{Name: "执行目标维度", Path: "targets/run/:id", Method: "POST", Handler: m.handler.RunTarget, Enabled: true},
+			{Name: "更新目标调度", Path: "targets/:id/schedule", Method: "PUT", Handler: m.handleUpdateTargetSchedule, Enabled: true},
+			{Name: "启动爬虫", Path: "targets/:id/crawl", Method: "POST", Handler: m.handler.StartCrawl, Enabled: true},
+			{Name: "获取页面meta", Path: "fetch-meta", Method: "GET", Handler: m.handler.FetchTaskMeta, Enabled: true},
+			// 路径任务
+			{Name: "路径任务列表", Path: "path-tasks", Method: "GET", Handler: m.handler.ListPathTasks, Enabled: true},
+			{Name: "创建路径任务", Path: "path-tasks", Method: "POST", Handler: m.handleCreatePathTask, Enabled: true},
+			{Name: "路径任务详情", Path: "path-tasks/:id", Method: "GET", Handler: m.handler.GetPathTask, Enabled: true},
+			{Name: "更新路径任务", Path: "path-tasks/:id", Method: "PUT", Handler: m.handleUpdatePathTask, Enabled: true},
+			{Name: "删除路径任务", Path: "path-tasks/:id", Method: "DELETE", Handler: m.handleDeletePathTask, Enabled: true},
+			{Name: "执行路径任务", Path: "path-tasks/run/:id", Method: "POST", Handler: m.handler.RunPathTask, Enabled: true},
+			{Name: "路径任务趋势", Path: "path-tasks/:id/trend", Method: "GET", Handler: m.handler.GetTaskTrend, Enabled: true},
+			{Name: "更新路径调度", Path: "path-tasks/:id/schedule", Method: "PUT", Handler: m.handleUpdatePathTaskSchedule, Enabled: true},
+			{Name: "批量删除路径任务", Path: "path-tasks/batch/delete", Method: "DELETE", Handler: m.handler.BatchDeletePathTasks, Enabled: true},
+			// 爬虫
+			{Name: "爬虫任务详情", Path: "crawl-jobs/:jobId", Method: "GET", Handler: m.handler.GetCrawlJob, Enabled: true},
+			{Name: "应用爬虫路径", Path: "crawl-jobs/:jobId/apply", Method: "POST", Handler: m.handler.ApplyCrawlPaths, Enabled: true},
+			{Name: "下载导入模板", Path: "import/template", Method: "GET", Handler: m.handler.DownloadImportTemplate, Enabled: true},
+			{Name: "导入监测", Path: "import", Method: "POST", Handler: m.handler.ImportTasks, Enabled: true},
 			// 执行记录
 			{Name: "执行记录列表", Path: "executions", Method: "GET", Handler: m.handler.ListExecutions, Enabled: true},
 			{Name: "执行记录详情", Path: "executions/:id", Method: "GET", Handler: m.handler.GetExecutionDetail, Enabled: true},
@@ -118,6 +125,7 @@ func (m *Monitor) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
 			{Name: "Agent列表", Path: "agents", Method: "GET", Handler: m.handler.ListAgents, Enabled: true},
 			{Name: "同步Agent规则", Path: "agents/:uuid/sync-rules", Method: "POST", Handler: m.handler.SyncAgentRules, Enabled: true},
 			{Name: "关闭Agent", Path: "agents/:uuid/shutdown", Method: "POST", Handler: m.handler.ShutdownAgent, Enabled: true},
+			{Name: "删除Agent", Path: "agents/:uuid", Method: "DELETE", Handler: m.handler.DeleteAgent, Enabled: true},
 			// 规则数据
 			{Name: "规则数据列表", Path: "rule-data", Method: "GET", Handler: m.handler.ListRuleDataSummary, Enabled: true},
 			{Name: "规则数据详情", Path: "rule-data/:moduleKey", Method: "GET", Handler: m.handler.GetRuleData, Enabled: true},
@@ -128,9 +136,6 @@ func (m *Monitor) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
 			// 告警配置
 			{Name: "告警配置详情", Path: "alert-config", Method: "GET", Handler: m.handler.GetAlertConfig, Enabled: true},
 			{Name: "更新告警配置", Path: "alert-config", Method: "PUT", Handler: m.handler.UpdateAlertConfig, Enabled: true},
-			// 调度
-			{Name: "更新任务调度", Path: "tasks/:id/schedule", Method: "PUT", Handler: m.handleUpdateSchedule, Enabled: true},
-			{Name: "批量更新调度", Path: "tasks/batch/update-schedule", Method: "PUT", Handler: m.handleBatchUpdateSchedule, Enabled: true},
 			{Name: "调度概览", Path: "schedule/overview", Method: "GET", Handler: m.handleScheduleOverview, Enabled: true},
 			// 报告
 			{Name: "生成报告", Path: "reports/generate", Method: "POST", Handler: m.handleGenerateReport, Enabled: true},
@@ -160,62 +165,79 @@ func (m *Monitor) GetScheduler() *CronScheduler {
 	return m.scheduler
 }
 
-func (m *Monitor) handleCreateTask(c *gin.Context) {
-	m.handler.CreateTask(c)
+func (m *Monitor) handleCreateTarget(c *gin.Context) {
+	m.handler.CreateTarget(c)
 	if c.Writer.Status() < 300 {
-		if v, ok := c.Get("_created_task_id"); ok {
-			m.scheduler.SyncTaskFromDB(v.(string))
+		if v, ok := c.Get("_created_target_id"); ok {
+			m.scheduler.SyncTargetFromDB(v.(string))
 		}
 	}
 }
 
-func (m *Monitor) handleCreateFromAssets(c *gin.Context) {
+func (m *Monitor) handleCreateTasksFromAssets(c *gin.Context) {
 	m.handler.CreateTasksFromAssets(c)
 	if c.Writer.Status() < 300 {
-		m.scheduler.ReloadAll()
+		if v, ok := c.Get("_created_path_task_ids"); ok {
+			if ids, ok2 := v.([]string); ok2 {
+				for _, id := range ids {
+					m.scheduler.SyncPathTaskFromDB(id)
+				}
+			}
+		}
 	}
 }
 
-func (m *Monitor) handleUpdateTask(c *gin.Context) {
-	m.handler.UpdateTask(c)
+func (m *Monitor) handleUpdateTarget(c *gin.Context) {
+	m.handler.UpdateTarget(c)
 	if c.Writer.Status() < 300 {
-		taskID := c.Param("id")
-		m.scheduler.SyncTaskFromDB(taskID)
+		m.scheduler.SyncTargetFromDB(c.Param("id"))
 	}
 }
 
-func (m *Monitor) handleDeleteTask(c *gin.Context) {
-	taskID := c.Param("id")
-	m.handler.DeleteTask(c)
+func (m *Monitor) handleDeleteTarget(c *gin.Context) {
+	id := c.Param("id")
+	m.handler.DeleteTarget(c)
 	if c.Writer.Status() < 300 {
-		m.scheduler.RemoveTask(taskID)
+		m.scheduler.RemoveTarget(id)
 	}
 }
 
-func (m *Monitor) handleBatchToggleEnabled(c *gin.Context) {
-	m.handler.BatchToggleEnabled(c)
+func (m *Monitor) handleCreatePathTask(c *gin.Context) {
+	m.handler.CreatePathTask(c)
 	if c.Writer.Status() < 300 {
-		m.scheduler.ReloadAll()
+		if v, ok := c.Get("_created_path_task_id"); ok {
+			m.scheduler.SyncPathTaskFromDB(v.(string))
+		}
 	}
 }
 
-func (m *Monitor) handleBatchUpdateConfigs(c *gin.Context) {
-	m.handler.BatchUpdateConfigs(c)
+func (m *Monitor) handleUpdatePathTask(c *gin.Context) {
+	m.handler.UpdatePathTask(c)
 	if c.Writer.Status() < 300 {
-		m.scheduler.ReloadAll()
+		m.scheduler.SyncPathTaskFromDB(c.Param("id"))
 	}
 }
 
-func (m *Monitor) handleUpdateSchedule(c *gin.Context) {
-	m.handler.UpdateSchedule(c)
+func (m *Monitor) handleDeletePathTask(c *gin.Context) {
+	id := c.Param("id")
+	m.handler.DeletePathTask(c)
 	if c.Writer.Status() < 300 {
-		taskID := c.Param("id")
-		m.scheduler.SyncTaskFromDB(taskID)
+		m.scheduler.RemovePathTask(id)
 	}
 }
 
-func (m *Monitor) handleBatchUpdateSchedule(c *gin.Context) {
-	m.handler.BatchUpdateSchedule(c)
+func (m *Monitor) handleUpdateTargetSchedule(c *gin.Context) {
+	m.handler.UpdateTargetSchedule(c)
+	if c.Writer.Status() < 300 {
+		m.scheduler.SyncTargetFromDB(c.Param("id"))
+	}
+}
+
+func (m *Monitor) handleUpdatePathTaskSchedule(c *gin.Context) {
+	m.handler.UpdatePathTaskSchedule(c)
+	if c.Writer.Status() < 300 {
+		m.scheduler.SyncPathTaskFromDB(c.Param("id"))
+	}
 }
 
 type generateReportReq struct {
@@ -264,8 +286,8 @@ func (m *Monitor) handleGenerateReport(c *gin.Context) {
 func (m *Monitor) handleScheduleOverview(c *gin.Context) {
 	info := m.scheduler.GetScheduleInfo()
 	web.OK(c).Data(gin.H{
-		"active_tasks": m.scheduler.ActiveCount(),
-		"entries":      info,
+		"active_entries": m.scheduler.ActiveCount(),
+		"entries":        info,
 	}).Send()
 }
 

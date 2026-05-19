@@ -45,6 +45,11 @@ import {
 
 import { createIncident, type CreateIncidentReq } from '#/api/incident';
 import { retestFindingFromScan } from '#/api/vuln';
+
+import {
+  buildScanIncidentDescription,
+  classifyScanIncidentType,
+} from '../scan-incident-description';
 import { taskStatusLabels, taskStatusTypes } from '#/constants/status';
 import TopologyGraph from '../components/topology-graph.vue';
 
@@ -247,43 +252,11 @@ async function handleMarkFP(finding: ScanFinding) {
 
 async function convertFindingToIncident(finding: ScanFinding) {
   const severityToLevel: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1, info: 1 };
-  const moduleToType: Record<string, string> = {
-    sqli: 'SQL注入', sql: 'SQL注入',
-    xss: 'XSS漏洞',
-    cmdi: '命令注入', rce: '远程代码执行', command: '远程代码执行',
-    lfi: '文件包含', ssti: '模板注入', xxe: 'XXE注入',
-    ssrf: 'SSRF服务端请求伪造',
-    nosqli: 'NoSQL注入',
-    jwt_sec: 'JWT安全缺陷', jwt: 'JWT安全缺陷',
-    weak_pass: '弱口令', brute: '爆破',
-    cert_check: '证书安全', cert: '证书安全',
-    info_leak: '信息泄露', dir_scan: '信息泄露',
-    poc: '已知漏洞利用',
-  };
-
-  function classifyIncidentType(moduleId: string): string {
-    if (!moduleId) return moduleToType[finding.type] || '漏洞';
-    for (const [key, label] of Object.entries(moduleToType)) {
-      if (moduleId.includes(key)) return label;
-    }
-    return moduleToType[finding.type] || '漏洞';
-  }
 
   const d = finding.data || {};
   const target = cleanTarget(finding.target);
   const ip = d.ip || d.site_ip || '';
   const url = d.url || d.matched_at || (finding.port > 0 ? `${target}:${finding.port}` : target);
-
-  const descParts: string[] = [];
-  if (finding.description) descParts.push(finding.description);
-  if (finding.evidence) descParts.push(`证据: ${finding.evidence}`);
-  if (d.service) descParts.push(`服务: ${d.service}${d.version ? ' ' + d.version : ''}`);
-  if (finding.port > 0) descParts.push(`端口: ${finding.port}/${finding.protocol || 'tcp'}`);
-  if (d.banner) descParts.push(`Banner: ${String(d.banner).slice(0, 200)}`);
-  if (finding.verification_level) descParts.push(`验证级别: ${finding.verification_level === 'exploit' ? '实际利用' : '原理验证'}`);
-  if (finding.verification_detail) descParts.push(`验证方式: ${finding.verification_detail}`);
-  if (finding.confidence) descParts.push(`置信度: ${finding.confidence}%`);
-  if (finding.module_id) descParts.push(`检测模块: ${moduleLabels[finding.module_id] ?? finding.module_id}`);
 
   let cvssScore: number | undefined;
   if (d.cvss_score != null) {
@@ -296,7 +269,7 @@ async function convertFindingToIncident(finding: ScanFinding) {
   else if (finding.verification_level === 'principle') exploitDiff = '中';
 
   const req: CreateIncidentReq = {
-    name: finding.title || `${classifyIncidentType(finding.module_id)} - ${target}`,
+    name: finding.title || `${classifyScanIncidentType(finding)} - ${target}`,
     level: severityToLevel[finding.severity] ?? 2,
     source: 2,
     report_time: finding.created_at || undefined,
@@ -307,8 +280,8 @@ async function convertFindingToIncident(finding: ScanFinding) {
       system_name: d.hostname || d.server || target,
     },
     metadata: {
-      incident_type: classifyIncidentType(finding.module_id),
-      incident_description: descParts.join('\n'),
+      incident_type: classifyScanIncidentType(finding),
+      incident_description: buildScanIncidentDescription(finding),
       incident_url: url,
       discovery_time: finding.created_at || undefined,
       cve_id: d.cve_id || d.cve || '',

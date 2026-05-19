@@ -15,8 +15,23 @@ import {
 const props = defineProps<{ executionId?: string; result: any }>();
 
 const r = computed(() => props.result || {});
-const diffs = computed(() => r.value.diffs || []);
+const diffs = computed(
+  () => r.value.diffs || r.value.diff?.diffs || [],
+);
 const baselineUpdate = computed(() => r.value.baseline_update || null);
+const isFirstRun = computed(
+  () =>
+    r.value.is_first_run === true ||
+    baselineUpdate.value?.action === 'init',
+);
+
+const evidence = computed(() => r.value.evidence || null);
+
+const showCompareEvidence = computed(() => {
+  const ev = evidence.value;
+  if (!ev) return false;
+  return Boolean(ev.baseline_html || ev.current_html);
+});
 
 type TagType = 'default' | 'error' | 'info' | 'primary' | 'success' | 'warning';
 
@@ -153,7 +168,47 @@ const injectedCols: DataTableColumns<any> = [
       </NDescriptions>
     </NCard>
 
-    <NCard v-if="r.is_first_run" size="small" title="首次运行">
+    <NCard
+      v-if="showCompareEvidence"
+      size="small"
+      :title="isFirstRun ? '基线内容（首次建立）' : '篡改对比证据'"
+    >
+      <p v-if="!isFirstRun" class="mb-2 text-xs text-gray-500">
+        左侧为上一次基线内容（<span class="text-red-600">删除</span> 标记为本次移除部分）；
+        右侧为本次抓取内容（<span class="text-green-600">新增</span> 标记为本次新增部分）。
+      </p>
+      <p v-else class="mb-2 text-xs text-gray-500">
+        首次运行已保存以下全文作为后续篡改对比基线。
+      </p>
+      <p v-if="evidence?.truncated" class="mb-2 text-xs text-amber-600">
+        内容较长，展示已截断。
+      </p>
+      <div
+        class="grid gap-3"
+        :class="isFirstRun ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'"
+      >
+        <div v-if="!isFirstRun || evidence?.baseline_html">
+          <div class="mb-1 text-xs font-medium text-gray-600">
+            {{ isFirstRun ? '基线全文' : '上一次（基线）' }}
+          </div>
+          <div
+            class="tp-evidence-scroll tp-evidence rounded border border-gray-200 bg-gray-50 p-3 text-sm leading-relaxed text-gray-800"
+            v-html="evidence?.baseline_html || ''"
+          />
+        </div>
+        <div v-if="!isFirstRun">
+          <div class="mb-1 text-xs font-medium text-gray-600">
+            这一次（当前）
+          </div>
+          <div
+            class="tp-evidence-scroll tp-evidence rounded border border-gray-200 bg-gray-50 p-3 text-sm leading-relaxed text-gray-800"
+            v-html="evidence?.current_html || ''"
+          />
+        </div>
+      </div>
+    </NCard>
+
+    <NCard v-if="isFirstRun && !showCompareEvidence" size="small" title="首次运行">
       <div class="text-sm text-gray-500">
         首次运行，已建立基线。后续监测将以此为基准进行对比。
       </div>
@@ -208,9 +263,30 @@ const injectedCols: DataTableColumns<any> = [
     </NCard>
 
     <NEmpty
-      v-if="!r.tampered && !r.is_first_run && diffs.length === 0"
+      v-if="!r.tampered && !isFirstRun && diffs.length === 0"
       description="未检测到篡改"
       class="py-8"
     />
   </div>
 </template>
+
+<style scoped>
+.tp-evidence-scroll {
+  max-height: min(70vh, 520px);
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.tp-evidence :deep(.tp-del) {
+  background: #fee2e2;
+  color: #b91c1c;
+  text-decoration: line-through;
+}
+
+.tp-evidence :deep(.tp-ins) {
+  background: #dcfce7;
+  color: #15803d;
+  font-weight: 600;
+}
+</style>

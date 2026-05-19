@@ -31,6 +31,10 @@ export function unregisterWorker(id: string) {
   return requestClient.post(`/cluster/workers/${id}/unregister`);
 }
 
+export function deleteScanNode(uuid: string) {
+  return requestClient.delete(`/cluster/scan-nodes/${uuid}`);
+}
+
 export function checkStaleWorkers() {
   return requestClient.post('/cluster/workers/check-stale');
 }
@@ -101,7 +105,7 @@ export function getClusterStats() {
 export interface UnifiedNode {
   id: string;
   name: string;
-  type: 'worker' | 'agent' | 'local';
+  type: 'worker' | 'agent' | 'local' | 'scan';
   ip: string;
   status: string;
   version: string;

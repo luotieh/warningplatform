@@ -21,6 +21,9 @@ type AssetQuery struct {
 	DataSource              string `form:"data_source"`
 	AssetFamily             string `form:"asset_family"`
 	RegionCode              string `form:"region_code"`
+	RegionPrefix            string `form:"region_prefix"`
+	IndustryCategory        string `form:"industry_category"`
+	UnitType                string `form:"unit_type"`
 }
 
 type CreateAssetReq struct {

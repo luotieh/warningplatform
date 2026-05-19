@@ -1,8 +1,9 @@
 <script lang="ts" setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import { Page } from '@vben/common-ui';
+import { useTabs } from '@vben/hooks';
 
 import dayjs from 'dayjs';
 import {
@@ -23,6 +24,8 @@ import { message } from '#/adapter/naive';
 import { getExecutionDetail } from '#/api/sitemonitor';
 import { createIncident, type CreateIncidentReq } from '#/api/incident';
 
+import { buildMonitorIncidentDescription } from '../monitor-incident-description';
+
 import AvailabilityDetail from './components/AvailabilityDetail.vue';
 import BlacklinkDetail from './components/BlacklinkDetail.vue';
 import DomainHijackDetail from './components/DomainHijackDetail.vue';
@@ -34,7 +37,10 @@ defineOptions({ name: 'ExecutionDetail' });
 
 const route = useRoute();
 const router = useRouter();
+const { setTabTitle, resetTabTitle } = useTabs();
 const execId = route.params.id as string;
+const returnTaskId = computed(() => String(route.query.taskId ?? '').trim());
+const returnTaskName = computed(() => String(route.query.taskName ?? '').trim());
 const loading = ref(false);
 const detail = ref<any>(null);
 
@@ -118,71 +124,6 @@ const dimensionToLevel: Record<string, number> = {
   availability: 3,
 };
 
-function buildMonitorDescription(d: any, result: any): string {
-  const parts: string[] = [];
-  const dim = d.dimension;
-  const dimLabel = dimensionOptions[dim] || dim;
-
-  parts.push(`监测维度: ${dimLabel}`);
-  parts.push(`目标URL: ${d.url}`);
-  if (d.agent_id) parts.push(`Agent: ${d.agent_id}`);
-  if (d.started_at) parts.push(`检测时间: ${formatTime(d.started_at)}`);
-  if (durationSec.value) parts.push(`耗时: ${durationSec.value}秒`);
-
-  if (!result) return parts.join('\n');
-
-  if (dim === 'tamper' && result.diffs?.length) {
-    parts.push(`\n篡改详情 (${result.diffs.length}处变更):`);
-    for (const diff of result.diffs.slice(0, 5)) {
-      parts.push(`  - [${diff.severity || '未知'}] ${diff.type || '内容变更'}${diff.selector ? ' (' + diff.selector + ')' : ''}`);
-    }
-    if (result.diffs.length > 5) parts.push(`  ... 共${result.diffs.length}处`);
-  } else if (dim === 'blacklink') {
-    const links = result.blacklink_matches || [];
-    const backdoors = result.backdoor_findings || [];
-    if (links.length) {
-      parts.push(`\n暗链 (${links.length}个):`);
-      for (const l of links.slice(0, 5)) {
-        parts.push(`  - ${l.url || l.domain || '未知链接'}${l.hidden ? ' [隐藏]' : ''}`);
-      }
-    }
-    if (backdoors.length) {
-      parts.push(`\n后门 (${backdoors.length}个):`);
-      for (const b of backdoors.slice(0, 3)) {
-        parts.push(`  - ${b.path || b.url || '未知路径'}`);
-      }
-    }
-  } else if (dim === 'sensitive_word') {
-    const matches = result.matches || [];
-    if (matches.length) {
-      parts.push(`\n敏感词命中 (${matches.length}处):`);
-      for (const m of matches.slice(0, 5)) {
-        parts.push(`  - [${m.severity || ''}] "${m.keyword || m.word || ''}" ${m.context ? '上下文: ' + String(m.context).slice(0, 80) : ''}`);
-      }
-    }
-  } else if (dim === 'sensitive_file') {
-    const files = result.files || result.matches || [];
-    if (files.length) {
-      parts.push(`\n敏感文件 (${files.length}个):`);
-      for (const f of files.slice(0, 5)) {
-        parts.push(`  - ${f.path || f.url || f.filename || '未知文件'}`);
-      }
-    }
-  } else if (dim === 'domain_hijack') {
-    if (result.hijacked) parts.push('\n状态: 检测到域名劫持');
-    if (result.resolved_ip) parts.push(`解析IP: ${result.resolved_ip}`);
-    if (result.expected_ip) parts.push(`预期IP: ${result.expected_ip}`);
-    if (result.dns_provider) parts.push(`DNS: ${result.dns_provider}`);
-  } else if (dim === 'availability') {
-    if (result.available === false) parts.push('\n状态: 站点不可用');
-    if (result.status_code) parts.push(`HTTP状态码: ${result.status_code}`);
-    if (result.response_time_ms) parts.push(`响应时间: ${result.response_time_ms}ms`);
-    if (result.error) parts.push(`错误: ${result.error}`);
-  }
-
-  return parts.join('\n');
-}
-
 async function convertToIncident() {
   if (!detail.value) return;
   const d = detail.value;
@@ -200,7 +141,7 @@ async function convertToIncident() {
     },
     metadata: {
       incident_type: dimensionToIncidentType[d.dimension] ?? 'other',
-      incident_description: buildMonitorDescription(d, result),
+      incident_description: buildMonitorIncidentDescription(d, result, formatTime),
       incident_url: d.url,
       discovery_time: d.started_at || d.created_at || undefined,
     },
@@ -217,11 +158,45 @@ async function convertToIncident() {
   }
 }
 
+watch(
+  () => detail.value?.dimension,
+  (dim) => {
+    if (!dim) return;
+    const label = dimensionOptions[dim] || dim;
+    setTabTitle(`监测详情 — ${label}`);
+  },
+);
+
+function goBack() {
+  if (returnTaskId.value) {
+    router.push({
+      path: '/monitor/targets',
+      query: { taskId: returnTaskId.value },
+    });
+    return;
+  }
+  router.back();
+}
+
 onMounted(() => fetchDetail());
+onBeforeUnmount(() => resetTabTitle());
 </script>
 
 <template>
-  <Page title="执行详情">
+  <Page
+    :title="
+      detail
+        ? `监测详情 — ${dimensionOptions[detail.dimension] || detail.dimension}`
+        : '监测详情'
+    "
+    :description="
+      returnTaskName
+        ? `任务：${returnTaskName}`
+        : returnTaskId
+          ? '返回监测记录列表'
+          : undefined
+    "
+  >
     <template #extra>
       <NSpace>
         <NButton
@@ -232,7 +207,9 @@ onMounted(() => fetchDetail());
         >
           转为安全事件
         </NButton>
-        <NButton @click="router.back()">返回</NButton>
+        <NButton @click="goBack">
+          {{ returnTaskId ? '返回监测记录' : '返回' }}
+        </NButton>
       </NSpace>
     </template>
 

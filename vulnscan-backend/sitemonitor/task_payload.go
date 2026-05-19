@@ -10,28 +10,43 @@ import (
 	"gorm.io/gorm"
 )
 
-// BuildMonitorTaskMessage 构造下发给 Agent/嵌入式执行器的任务载荷（含维度配置与篡改基线）。
-func BuildMonitorTaskMessage(ctx context.Context, db *gorm.DB, exec *model.MonitorExecution, task *model.MonitorTask) (*model.MonitorTaskMessage, error) {
-	cfgMap := task.GetDimensionConfig(exec.Dimension)
-	if cfgMap == nil {
-		cfgMap = model.JSONMap{}
+// BuildMonitorTaskMessage 构造下发给 Agent 的任务载荷。
+func BuildMonitorTaskMessage(ctx context.Context, db *gorm.DB, exec *model.MonitorExecution) (*model.MonitorTaskMessage, error) {
+	runCtx, err := loadMonitorRunContext(db.WithContext(ctx), exec)
+	if err != nil {
+		return nil, err
 	}
-	agentCfg, err := buildAgentConfigForDimension(ctx, db, task, exec.Dimension, cfgMap)
+
+	var cfg model.JSONMap
+	if runCtx.PathTask != nil {
+		cfg, err = pathConfigForRun(runCtx.PathTask, exec.Dimension)
+	} else {
+		cfg, err = targetConfigForRun(runCtx.Target, exec.Dimension)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	agentCfg, err := buildAgentConfigForDimension(ctx, db, runCtx, exec.Dimension, cfg)
 	if err != nil {
 		return nil, err
 	}
 
 	msg := &model.MonitorTaskMessage{
 		ExecutionID: exec.ID,
-		TaskID:      task.ID,
+		TargetID:    runCtx.Target.ID,
 		Dimension:   exec.Dimension,
-		URL:         task.TargetHomepage,
+		URL:         runCtx.Endpoint.RequestURL,
+		RequestHost: runCtx.Endpoint.RequestHost,
 		Config:      agentCfg,
+	}
+	if runCtx.PathTask != nil {
+		msg.PathTaskID = runCtx.PathTask.ID
 	}
 
 	if exec.Dimension == "tamper" {
-		bl, err := GetActiveBaseline(ctx, db, task.TargetHomepage)
-		if err == nil {
+		bl, err := GetActiveBaseline(ctx, db, runCtx.Endpoint.DisplayURL)
+		if err == nil && bl != nil && strings.TrimSpace(bl.BodyText) != "" {
 			msg.Baseline = baselineToMetadata(bl)
 		}
 	}
@@ -39,8 +54,9 @@ func BuildMonitorTaskMessage(ctx context.Context, db *gorm.DB, exec *model.Monit
 	return msg, nil
 }
 
-func buildAgentConfigForDimension(ctx context.Context, db *gorm.DB, task *model.MonitorTask, dimension string, cfg map[string]any) (map[string]any, error) {
+func buildAgentConfigForDimension(ctx context.Context, db *gorm.DB, runCtx *MonitorRunContext, dimension string, cfg map[string]any) (map[string]any, error) {
 	agentCfg := make(map[string]any)
+	target := runCtx.Target
 
 	switch dimension {
 	case "availability":
@@ -56,12 +72,12 @@ func buildAgentConfigForDimension(ctx context.Context, db *gorm.DB, task *model.
 			}
 			agentCfg["exclude_codes"] = intCodes
 		}
-		if task.TargetIps != "" {
-			agentCfg["expected_ips"] = strings.Split(task.TargetIps, ",")
+		if target.ExpectedIPs != "" {
+			agentCfg["expected_ips"] = strings.Split(target.ExpectedIPs, ",")
 		}
 	case "domain_hijack":
-		if task.TargetIps != "" {
-			ips := strings.Split(task.TargetIps, ",")
+		if target.ExpectedIPs != "" {
+			ips := strings.Split(target.ExpectedIPs, ",")
 			agentCfg["expected_ip"] = strings.TrimSpace(ips[0])
 		}
 	case "tamper":
@@ -71,6 +87,15 @@ func buildAgentConfigForDimension(ctx context.Context, db *gorm.DB, task *model.
 		agentCfg["update_baseline"] = false
 	case "sensitive_word":
 		wlIDs := extractStringSlice(cfg, "word_library_ids")
+		if len(wlIDs) == 0 {
+			var libs []model.MonitorWordLibrary
+			if err := db.WithContext(ctx).Find(&libs).Error; err == nil {
+				wlIDs = make([]string, 0, len(libs))
+				for _, lib := range libs {
+					wlIDs = append(wlIDs, lib.ID)
+				}
+			}
+		}
 		agentCfg["word_library_ids"] = wlIDs
 		var categories []model.MonitorWordCategory
 		if err := db.WithContext(ctx).Where("library_id IN ?", wlIDs).Find(&categories).Error; err == nil {

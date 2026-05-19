@@ -3,10 +3,12 @@ package nodeapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"vulnscan-backend/agent"
@@ -42,6 +44,12 @@ func (a *NodeAPI) authMiddleware() gin.HandlerFunc {
 		var node model.Node
 		err := a.gdb().Where("uuid = ? AND status != ?", token, "disabled").First(&node).Error
 		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+					"error": "unknown agent token (主控中无此 node_uuid，请确认凭据由当前主控签发且未删节点)",
+				})
+				return
+			}
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid agent credentials"})
 			return
 		}
@@ -57,7 +65,9 @@ func (a *NodeAPI) authMiddleware() gin.HandlerFunc {
 				return
 			}
 			if !nodeauth.VerifySecret(secret, node.AgentSecretHash) {
-				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid agent credentials"})
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+					"error": "invalid agent secret (X-Agent-Secret 与主控记录不一致，请重新签发或解密最新凭据文件)",
+				})
 				return
 			}
 		}
@@ -95,6 +105,64 @@ func (a *NodeAPI) Heartbeat(c *gin.Context) {
 
 	a.gdb().Model(&model.Node{}).Where("uuid = ?", nodeUUID).Updates(updates)
 	web.OK(c).Send()
+}
+
+// Shutdown 扫描节点优雅退出时主动通知主控，立即标离线并回收未完成任务。
+func (a *NodeAPI) Shutdown(c *gin.Context) {
+	nodeUUID := c.GetString("node_uuid")
+
+	var req agent.ShutdownReq
+	if err := c.ShouldBindJSON(&req); err != nil && c.Request.ContentLength > 0 {
+		web.Fail(c).Msg("invalid request").Send()
+		return
+	}
+
+	now := time.Now()
+	session := a.gdb()
+	session.Model(&model.Node{}).Where("uuid = ?", nodeUUID).Updates(map[string]any{
+		"status":         model.NodeStatusOffline,
+		"running_tasks":  req.RunningTasks,
+		"queued_tasks":   req.QueuedTasks,
+		"last_heartbeat": now,
+	})
+	a.recoverNodeWorkload(session, nodeUUID, req.Reason)
+
+	reason := strings.TrimSpace(req.Reason)
+	if reason == "" {
+		reason = "graceful"
+	}
+	slog.Info("[NodeAPI] 扫描节点主动下线",
+		"node_uuid", nodeUUID,
+		"reason", reason,
+		"running_tasks", req.RunningTasks,
+		"queued_tasks", req.QueuedTasks,
+	)
+	web.OK(c).Send()
+}
+
+func (a *NodeAPI) recoverNodeWorkload(session *gorm.DB, nodeUUID, reason string) {
+	if nodeUUID == "" {
+		return
+	}
+	msg := "节点已停止运行，任务重新排队"
+	if r := strings.TrimSpace(reason); r != "" && r != "graceful" {
+		msg = fmt.Sprintf("节点已停止运行（%s），任务重新排队", r)
+	}
+
+	session.Model(&model.ScanTask{}).
+		Where("worker_id = ? AND status = ?", nodeUUID, model.TaskStatusRunning).
+		Updates(map[string]any{
+			"status":    model.TaskStatusQueued,
+			"worker_id": "",
+			"error_msg": msg,
+		})
+
+	session.Model(&model.MonitorExecution{}).
+		Where("agent_id = ? AND status = ?", nodeUUID, "running").
+		Updates(map[string]any{
+			"status":   "pending",
+			"agent_id": "",
+		})
 }
 
 func (a *NodeAPI) PollTasks(c *gin.Context) {
@@ -165,12 +233,7 @@ func (a *NodeAPI) pollBothTaskTypes(nodeUUID string, batch int) []agent.TaskEnve
 		if res.RowsAffected > 0 {
 			session.Where("id IN ? AND agent_id = ?", ids, nodeUUID).Find(&executions)
 			for _, exec := range executions {
-				var task model.MonitorTask
-				if err := session.First(&task, "id = ?", exec.TaskID).Error; err != nil {
-					continue
-				}
-
-				msg, err := sitemonitor.BuildMonitorTaskMessage(context.Background(), session, &exec, &task)
+				msg, err := sitemonitor.BuildMonitorTaskMessage(context.Background(), session, &exec)
 				if err != nil {
 					continue
 				}
@@ -302,8 +365,8 @@ func (a *NodeAPI) GetRules(c *gin.Context) {
 
 	ruleMap := make(map[string]json.RawMessage, len(rules))
 	for _, r := range rules {
-		if r.Data != "" {
-			ruleMap[r.ModuleKey] = json.RawMessage(r.Data)
+		if raw, ok := validRuleJSONRaw(r.Data); ok {
+			ruleMap[r.ModuleKey] = raw
 		}
 	}
 
@@ -359,7 +422,28 @@ func (a *NodeAPI) GetRules(c *gin.Context) {
 		ruleMap[key] = raw
 	}
 
-	c.JSON(http.StatusOK, gin.H{"rules": ruleMap})
+	payload, err := json.Marshal(struct {
+		Rules map[string]json.RawMessage `json:"rules"`
+	}{Rules: ruleMap})
+	if err != nil {
+		slog.Error("node-api rules marshal failed", "error", err)
+		web.Fail(c).Err(fmt.Errorf("规则数据序列化失败: %w", err)).Send()
+		return
+	}
+	c.Data(http.StatusOK, "application/json; charset=utf-8", payload)
+}
+
+// validRuleJSONRaw 跳过空/空白或非法 JSON，避免 json.RawMessage 序列化导致响应体为空。
+func validRuleJSONRaw(data string) (json.RawMessage, bool) {
+	trimmed := strings.TrimSpace(data)
+	if trimmed == "" {
+		return nil, false
+	}
+	raw := json.RawMessage(trimmed)
+	if !json.Valid(raw) {
+		return nil, false
+	}
+	return raw, true
 }
 
 func (a *NodeAPI) PollCommands(c *gin.Context) {

@@ -47,6 +47,7 @@ export default defineConfig(async () => {
           'naive-ui/es/tree-select',
           'naive-ui/es/upload',
           'axios',
+          'monaco-editor',
         ],
       },
       server: {

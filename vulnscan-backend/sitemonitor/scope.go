@@ -9,7 +9,7 @@ var monitorFieldMapping = permission.FieldMapping{
 }
 
 var monitorExecutionFieldMapping = permission.FieldMapping{
-	UserIDColumn:       "monitor_tasks.created_by",
-	OrganizeIDColumn:   "monitor_tasks.organize_id",
+	UserIDColumn:       "monitor_targets.created_by",
+	OrganizeIDColumn:   "monitor_targets.organize_id",
 	DepartmentIDColumn: "",
 }

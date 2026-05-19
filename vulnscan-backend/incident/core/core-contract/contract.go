@@ -19,6 +19,7 @@ type ServiceCore interface {
 
 	GetDashboardStats(ctx context.Context) (*DashboardStatsResp, error)
 	GetChartByType(ctx context.Context) ([]ChartTypeItem, error)
+	GetChartByLevel(ctx context.Context) ([]ChartLevelItem, error)
 	GetChartByTrend(ctx context.Context, rangeType string) ([]ChartTrendItem, error)
 
 	GetOplogsByIncidentId(ctx context.Context, incidentId string) ([]OplogItem, error)
@@ -115,10 +116,14 @@ type IncidentDetailResp struct {
 }
 
 type DashboardStatsResp struct {
+	Total           int64   `json:"total"`
+	PendingAudit    int64   `json:"pending_audit"`
+	InRemediation   int64   `json:"in_remediation"`
+	Closed          int64   `json:"closed"`
+	Overdue         int64   `json:"overdue"`
 	TodayTotal      int64   `json:"today_total"`
 	UrgentCount     int64   `json:"urgent_count"`
 	DispatchCount   int64   `json:"dispatched_count"`
-	PendingAudit    int64   `json:"pending_audit"`
 	RemediatingCnt  int64   `json:"remediating_count"`
 	OverdueCnt      int64   `json:"overdue_count"`
 	ClosedCnt       int64   `json:"closed_count"`
@@ -126,14 +131,25 @@ type DashboardStatsResp struct {
 }
 
 type ChartTypeItem struct {
-	Level int    `json:"level"`
-	Label string `json:"label"`
-	Count int64  `json:"count"`
+	Type       string `json:"type"`
+	Count      int64  `json:"count"`
+	Percentage string `json:"percentage"`
+}
+
+type ChartLevelItem struct {
+	Level      int    `json:"level"`
+	Label      string `json:"label"`
+	Count      int64  `json:"count"`
+	Percentage string `json:"percentage"`
 }
 
 type ChartTrendItem struct {
-	Date  string `json:"date"`
-	Count int64  `json:"count"`
+	Period  string `json:"period"`
+	Date    string `json:"date"`
+	Created int64  `json:"created"`
+	Closed  int64  `json:"closed"`
+	Pending int64  `json:"pending"`
+	Count   int64  `json:"count"`
 }
 
 type OplogItem struct {

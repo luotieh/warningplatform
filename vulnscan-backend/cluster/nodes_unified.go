@@ -1,6 +1,7 @@
 package cluster
 
 import (
+	"math"
 	"os"
 	"runtime"
 	"time"
@@ -57,9 +58,19 @@ func RegisterUnifiedNodeRoutes(g *gin.RouterGroup, db *gorm.DB, scheduler LocalS
 	g.GET("/nodes", api.List)
 }
 
+func sanitizeFloat(v float64) float64 {
+	if math.IsNaN(v) || math.IsInf(v, 0) {
+		return 0
+	}
+	return v
+}
+
 func (a *nodesAPI) List(c *gin.Context) {
 	nodeType := c.Query("type")
 	status := c.Query("status")
+
+	a.markStaleScanNodes()
+	a.markStaleWorkerNodes()
 
 	var nodes []UnifiedNode
 
@@ -77,6 +88,9 @@ func (a *nodesAPI) List(c *gin.Context) {
 	if nodeType == "" || nodeType == "agent" {
 		nodes = append(nodes, a.loadAgentNodes(status)...)
 	}
+	if nodeType == "" || nodeType == "scan" {
+		nodes = append(nodes, a.loadScanNodes(status)...)
+	}
 
 	summary := computeNodeSummary(nodes)
 
@@ -87,6 +101,14 @@ func (a *nodesAPI) List(c *gin.Context) {
 }
 
 const embeddedAgentUUID = "embedded-default"
+
+// 与 agent 默认心跳间隔对齐（默认 10s，见 agent heartbeat_interval）。
+const defaultAgentHeartbeatInterval = 10 * time.Second
+
+const scanNodeOfflineGracePeriods = 3
+
+// scanNodeOfflineTimeout：3 个心跳周期无上报则标为离线（崩溃/强杀等未走 /node-api/shutdown 的场景）。
+const scanNodeOfflineTimeout = scanNodeOfflineGracePeriods * defaultAgentHeartbeatInterval
 
 func (a *nodesAPI) buildLocalNode() *UnifiedNode {
 	if a.scheduler == nil {
@@ -142,11 +164,11 @@ func (a *nodesAPI) buildLocalNode() *UnifiedNode {
 		IP:            "127.0.0.1",
 		Status:        nodeStatus,
 		Version:       runtime.Version(),
-		CPUUsage:      cpuPct,
-		MemUsage:      memPct,
+		CPUUsage:      sanitizeFloat(cpuPct),
+		MemUsage:      sanitizeFloat(memPct),
 		ActiveTasks:   activeTasks,
 		Capacity:      capacity,
-		HealthScore:   score,
+		HealthScore:   sanitizeFloat(score),
 		LastHeartbeat: time.Now().Format(time.RFC3339),
 		Hostname:      hostname,
 		QueuedTasks:   queueLen,
@@ -170,21 +192,109 @@ func (a *nodesAPI) loadWorkerNodes(status string) []UnifiedNode {
 			IP:            w.IP,
 			Status:        w.Status,
 			Version:       w.Version,
-			CPUUsage:      w.CPUUsage,
-			MemUsage:      w.MemUsage,
+			CPUUsage:      sanitizeFloat(w.CPUUsage),
+			MemUsage:      sanitizeFloat(w.MemUsage),
 			ActiveTasks:   w.ActiveTasks,
 			Capacity:      w.Capacity,
-			HealthScore:   w.HealthScore(),
+			HealthScore:   sanitizeFloat(w.HealthScore()),
 			LastHeartbeat: formatNodeTime(w.LastHeartbeat),
 			RegisteredAt:  formatNodeTime(w.RegisteredAt),
 			Hostname:      w.Hostname,
-			BandwidthMbps: w.BandwidthMbps,
-			AvgLatencyMs:  w.AvgLatencyMs,
+			BandwidthMbps: sanitizeFloat(w.BandwidthMbps),
+			AvgLatencyMs:  sanitizeFloat(w.AvgLatencyMs),
 			SuccessTasks:  w.SuccessTaskCount,
 			FailedTasks:   w.FailedTaskCount,
 		})
 	}
 	return nodes
+}
+
+func (a *nodesAPI) markStaleScanNodes() {
+	cutoff := time.Now().Add(-scanNodeOfflineTimeout)
+	a.db.Model(&model.Node{}).
+		Where("uuid != ?", embeddedAgentUUID).
+		Where("status = ?", model.NodeStatusOnline).
+		Where("last_heartbeat IS NULL OR last_heartbeat < ?", cutoff).
+		Updates(map[string]any{
+			"status":        model.NodeStatusOffline,
+			"running_tasks": 0,
+			"queued_tasks":  0,
+		})
+}
+
+func (a *nodesAPI) markStaleWorkerNodes() {
+	cutoff := time.Now().Add(-scanNodeOfflineGracePeriods * defaultAgentHeartbeatInterval)
+	a.db.Model(&model.WorkerNode{}).
+		Where("status = ? AND (last_heartbeat IS NULL OR last_heartbeat < ?)", model.WorkerStatusOnline, cutoff).
+		Updates(map[string]any{
+			"status":       model.WorkerStatusOffline,
+			"active_tasks": 0,
+		})
+}
+
+func (a *nodesAPI) loadScanNodes(status string) []UnifiedNode {
+	var rows []model.Node
+	// embedded-default 为主控内置监测执行引擎在 vs_nodes 的登记，统计已合并进 buildLocalNode，不在此重复展示
+	q := a.db.Model(&model.Node{}).Where("uuid != ?", embeddedAgentUUID)
+	if status != "" {
+		q = q.Where("status = ?", status)
+	}
+	q.Order("updated_at DESC").Find(&rows)
+
+	nodes := make([]UnifiedNode, 0, len(rows))
+	for _, n := range rows {
+		name := n.Label
+		if name == "" {
+			name = n.Hostname
+		}
+		if name == "" {
+			name = n.UUID
+		}
+		var hb string
+		if n.LastHeartbeat != nil {
+			hb = n.LastHeartbeat.Format(time.RFC3339)
+		}
+		nodes = append(nodes, UnifiedNode{
+			ID:             n.UUID,
+			Name:           name,
+			Type:           "scan",
+			IP:             n.IPAddress,
+			Status:         n.Status,
+			Version:        n.Version,
+			CPUUsage:       sanitizeFloat(n.CPUUsage),
+			MemUsage:       sanitizeFloat(n.MemoryUsage),
+			ActiveTasks:    n.RunningTasks,
+			Capacity:       n.MaxConcurrent,
+			HealthScore:    sanitizeFloat(computeScanNodeHealth(n)),
+			Region:         n.Region,
+			Label:          n.Label,
+			LastHeartbeat:  hb,
+			RegisteredAt:   n.CreatedAt.Format(time.RFC3339),
+			QueuedTasks:    n.QueuedTasks,
+			TasksCompleted: n.TasksCompleted,
+		})
+	}
+	return nodes
+}
+
+func computeScanNodeHealth(n model.Node) float64 {
+	if n.Status == model.NodeStatusOffline {
+		return 0
+	}
+	score := 100.0
+	if n.MaxConcurrent > 0 {
+		score -= float64(n.RunningTasks) / float64(n.MaxConcurrent) * 30
+	}
+	if n.CPUUsage > 50 {
+		score -= (n.CPUUsage - 50) * 0.4
+	}
+	if n.MemoryUsage > 50 {
+		score -= (n.MemoryUsage - 50) * 0.3
+	}
+	if score < 0 {
+		score = 0
+	}
+	return sanitizeFloat(score)
 }
 
 func (a *nodesAPI) loadAgentNodes(status string) []UnifiedNode {
@@ -214,11 +324,11 @@ func (a *nodesAPI) loadAgentNodes(status string) []UnifiedNode {
 			IP:             ag.IPAddress,
 			Status:         ag.Status,
 			Version:        ag.Version,
-			CPUUsage:       ag.CPUUsage,
-			MemUsage:       ag.MemoryUsage,
+			CPUUsage:       sanitizeFloat(ag.CPUUsage),
+			MemUsage:       sanitizeFloat(ag.MemoryUsage),
 			ActiveTasks:    ag.RunningTasks,
 			Capacity:       ag.MaxConcurrent,
-			HealthScore:    computeAgentHealth(ag),
+			HealthScore:    sanitizeFloat(computeAgentHealth(ag)),
 			Region:         ag.Region,
 			Label:          ag.Label,
 			LastHeartbeat:  hb,
@@ -247,7 +357,7 @@ func computeAgentHealth(a model.MonitorAgent) float64 {
 	if score < 0 {
 		score = 0
 	}
-	return score
+	return sanitizeFloat(score)
 }
 
 type NodeSummary struct {
@@ -268,6 +378,8 @@ func computeNodeSummary(nodes []UnifiedNode) NodeSummary {
 			s.WorkerCount++
 		case "agent":
 			s.AgentCount++
+		case "scan":
+			s.WorkerCount++
 		}
 		if n.Status == "online" || n.Status == "busy" {
 			s.OnlineNodes++

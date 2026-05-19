@@ -60,8 +60,18 @@ const tokenTheme = computed(() => {
 });
 
 const themeOverrides = computed((): GlobalThemeOverrides => {
+  const fontFamily = getComputedStyle(document.documentElement)
+    .getPropertyValue('--font-family')
+    .trim();
   return {
-    common: commonTokens,
+    common: {
+      ...commonTokens,
+      ...(fontFamily ? { fontFamily } : {}),
+      fontFamilyMono:
+        getComputedStyle(document.documentElement)
+          .getPropertyValue('--font-family-mono')
+          .trim() || undefined,
+    },
   };
 });
 </script>

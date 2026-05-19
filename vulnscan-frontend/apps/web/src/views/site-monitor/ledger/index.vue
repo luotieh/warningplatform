@@ -11,14 +11,8 @@ import dayjs from 'dayjs';
 import {
   NButton,
   NCard,
-  NCollapse,
-  NCollapseItem,
   NDataTable,
   NDatePicker,
-  NDescriptions,
-  NDescriptionsItem,
-  NDrawer,
-  NDrawerContent,
   NEmpty,
   NForm,
   NFormItem,
@@ -29,7 +23,6 @@ import {
   NRadioGroup,
   NSelect,
   NSpace,
-  NSpin,
   NTag,
 } from 'naive-ui';
 
@@ -37,7 +30,6 @@ import { dialog, message } from '#/adapter/naive';
 import {
   batchDeleteExecutions,
   deleteExecution,
-  getExecutionDetail,
   getExecutionList,
   getTaskExecutionStats,
   getTaskList,
@@ -45,14 +37,11 @@ import {
   updateDisposition,
 } from '#/api/sitemonitor';
 
-import AvailabilityDetail from '../executions/components/AvailabilityDetail.vue';
-import BlacklinkDetail from '../executions/components/BlacklinkDetail.vue';
-import DomainHijackDetail from '../executions/components/DomainHijackDetail.vue';
-import SensitiveFileDetail from '../executions/components/SensitiveFileDetail.vue';
-import SensitiveWordDetail from '../executions/components/SensitiveWordDetail.vue';
-import TamperDetail from '../executions/components/TamperDetail.vue';
+import { useMonitorRecordDetail } from '../composables/useMonitorRecordDetail';
 
 defineOptions({ name: 'MonitorLedger' });
+
+const { openRecordDetail } = useMonitorRecordDetail();
 
 type TagType = 'default' | 'error' | 'info' | 'primary' | 'success' | 'warning';
 
@@ -68,7 +57,7 @@ const dataList = ref<MonitorTask[]>([]);
 const safeDataList = computed(() =>
   Array.isArray(dataList.value) ? dataList.value : [],
 );
-const form = reactive({ enabled: '', name: '' });
+const form = reactive({ enabled: '', name: '', target_homepage: '' });
 const pagination = reactive({
   page: 1,
   pageCount: 1,
@@ -119,6 +108,7 @@ async function onSearch() {
         enabled: form.enabled,
         index: pagination.page,
         name: form.name,
+        target_homepage: form.target_homepage,
         size: pagination.pageSize,
       }),
       getTaskExecutionStats(),
@@ -598,34 +588,11 @@ async function submitDisposition() {
   }
 }
 
-// ── 详情抽屉 ──
-const detailVisible = ref(false);
-const detailLoading = ref(false);
-const detailData = ref<any>(null);
-const detailExecId = ref('');
-
-const detailParsedResult = computed(() => {
-  if (!detailData.value?.result_json) return null;
-  try {
-    return JSON.parse(detailData.value.result_json);
-  } catch {
-    return null;
-  }
-});
-
-async function openDetailDrawer(row: MonitorExecution) {
-  detailData.value = null;
-  detailExecId.value = row.id;
-  detailVisible.value = true;
-  detailLoading.value = true;
-  try {
-    const res: any = await getExecutionDetail(row.id);
-    detailData.value = res?.data ?? res;
-  } catch (e: any) {
-    message.error(e?.msg || '加载详情失败');
-  } finally {
-    detailLoading.value = false;
-  }
+function openDetailDrawer(row: MonitorExecution) {
+  openRecordDetail(row.id, {
+    taskId: row.task_id,
+    from: 'tasks',
+  });
 }
 
 onMounted(() => onSearch());
@@ -639,9 +606,16 @@ onMounted(() => onSearch());
         <span>系统名称</span>
         <NInput
           v-model:value="form.name"
-          placeholder="请输入系统名称"
+          placeholder="模糊搜索系统名称"
           clearable
-          style="width: 200px"
+          style="width: 180px"
+        />
+        <span>首页URL</span>
+        <NInput
+          v-model:value="form.target_homepage"
+          placeholder="模糊搜索首页 URL"
+          clearable
+          style="width: 220px"
         />
         <span>状态</span>
         <NSelect
@@ -669,6 +643,7 @@ onMounted(() => onSearch());
           @click="
             () => {
               form.name = '';
+              form.target_homepage = '';
               form.enabled = '';
               pagination.page = 1;
               onSearch();
@@ -800,140 +775,6 @@ onMounted(() => onSearch());
       />
     </NModal>
 
-    <!-- 详情抽屉 -->
-    <NDrawer v-model:show="detailVisible" :width="900" placement="right">
-      <NDrawerContent
-        :title="
-          detailData
-            ? `监测详情 — ${dimLabelMap[detailData.dimension] || detailData.dimension}`
-            : '监测详情'
-        "
-        closable
-      >
-        <NSpin :show="detailLoading">
-          <template v-if="detailData">
-            <NCard size="small" class="mb-3">
-              <NDescriptions :column="2" bordered size="small">
-                <NDescriptionsItem label="监测ID" :span="2">
-                  <span class="font-mono text-xs">{{ detailData.id }}</span>
-                </NDescriptionsItem>
-                <NDescriptionsItem label="状态">
-                  <NTag
-                    :type="execStatusType(detailData.status)"
-                    size="small"
-                    :bordered="false"
-                  >
-                    {{ execStatusLabel(detailData.status) }}
-                  </NTag>
-                </NDescriptionsItem>
-                <NDescriptionsItem label="安全问题">
-                  <NTag
-                    :type="detailData.has_issue ? 'error' : 'success'"
-                    size="small"
-                    :bordered="false"
-                  >
-                    {{ detailData.has_issue ? '⚠ 发现问题' : '无' }}
-                  </NTag>
-                </NDescriptionsItem>
-                <NDescriptionsItem label="目标URL" :span="2">
-                  <span class="font-mono break-all text-xs">
-                    {{ detailData.url }}
-                  </span>
-                </NDescriptionsItem>
-                <NDescriptionsItem label="开始时间">
-                  {{ fmtTime(detailData.started_at) }}
-                </NDescriptionsItem>
-                <NDescriptionsItem label="结束时间">
-                  {{ fmtTime(detailData.finished_at) }}
-                </NDescriptionsItem>
-                <NDescriptionsItem label="创建时间">
-                  {{ fmtTime(detailData.created_at) }}
-                </NDescriptionsItem>
-                <NDescriptionsItem
-                  v-if="detailData.error"
-                  label="错误信息"
-                  :span="2"
-                >
-                  <span class="text-error font-mono text-sm">
-                    {{ detailData.error }}
-                  </span>
-                </NDescriptionsItem>
-              </NDescriptions>
-            </NCard>
-
-            <template v-if="detailParsedResult">
-              <AvailabilityDetail
-                v-if="detailData.dimension === 'availability'"
-                :result="detailParsedResult"
-                class="mb-3"
-              />
-              <TamperDetail
-                v-else-if="detailData.dimension === 'tamper'"
-                :result="detailParsedResult"
-                :execution-id="detailExecId"
-                class="mb-3"
-              />
-              <BlacklinkDetail
-                v-else-if="detailData.dimension === 'blacklink'"
-                :result="detailParsedResult"
-                class="mb-3"
-              />
-              <SensitiveWordDetail
-                v-else-if="detailData.dimension === 'sensitive_word'"
-                :result="detailParsedResult"
-                class="mb-3"
-              />
-              <SensitiveFileDetail
-                v-else-if="detailData.dimension === 'sensitive_file'"
-                :result="detailParsedResult"
-                class="mb-3"
-              />
-              <DomainHijackDetail
-                v-else-if="detailData.dimension === 'domain_hijack'"
-                :result="detailParsedResult"
-                class="mb-3"
-              />
-            </template>
-
-            <NCard
-              v-else-if="detailData.status === 'failed'"
-              size="small"
-              class="mb-3"
-            >
-              <NEmpty description="监测失败，无结果数据">
-                <template #extra>
-                  <div class="text-error mt-2 text-sm">
-                    {{ detailData.error || '监测异常，未返回结果' }}
-                  </div>
-                </template>
-              </NEmpty>
-            </NCard>
-
-            <NCard
-              v-if="detailData.result_json"
-              size="small"
-              class="mb-3"
-            >
-              <NCollapse>
-                <NCollapseItem
-                  title="原始 result_json（调试用）"
-                  name="raw"
-                >
-                  <NInput
-                    type="textarea"
-                    :value="JSON.stringify(detailParsedResult, null, 2)"
-                    readonly
-                    :rows="16"
-                    class="font-mono"
-                  />
-                </NCollapseItem>
-              </NCollapse>
-            </NCard>
-          </template>
-          <NEmpty v-else-if="!detailLoading" description="暂无数据" />
-        </NSpin>
-      </NDrawerContent>
-    </NDrawer>
 
     <!-- 处置弹窗 -->
     <NModal

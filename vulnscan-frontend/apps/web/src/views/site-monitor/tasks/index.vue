@@ -5,36 +5,13 @@ import type {
   DimensionConfig,
   FileLibrary,
   ImportResult,
-  MonitorExecution,
   MonitorTask,
-  WordLibrary,
 } from '#/api/sitemonitor';
 
 import { computed, h, onMounted, reactive, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { useOpenTaskRecordsTab } from '../composables/useOpenTaskRecordsTab';
 
 import { Page } from '@vben/common-ui';
-
-import { BarChart, LineChart } from 'echarts/charts';
-import {
-  DataZoomComponent,
-  GridComponent,
-  LegendComponent,
-  TooltipComponent,
-} from 'echarts/components';
-import { use } from 'echarts/core';
-import { CanvasRenderer } from 'echarts/renderers';
-import VChart from 'vue-echarts';
-
-use([
-  CanvasRenderer,
-  LineChart,
-  BarChart,
-  GridComponent,
-  TooltipComponent,
-  LegendComponent,
-  DataZoomComponent,
-]);
 
 import dayjs from 'dayjs';
 import {
@@ -42,12 +19,7 @@ import {
   NButton,
   NCard,
   NCol,
-  NCollapse,
-  NCollapseItem,
   NDataTable,
-  NDatePicker,
-  NDescriptions,
-  NDescriptionsItem,
   NDivider,
   NDrawer,
   NDrawerContent,
@@ -63,7 +35,6 @@ import {
   NRow,
   NSelect,
   NSpace,
-  NSpin,
   NStatistic,
   NSwitch,
   NTag,
@@ -74,41 +45,29 @@ import {
 import { dialog, message } from '#/adapter/naive';
 import { useErrorHandler } from '#/composables/useErrorHandler';
 import {
-  batchDeleteExecutions,
   batchDeleteTasks,
   batchSyncNames,
   batchToggleEnabled,
   batchUpdateConfigs,
   createTask,
-  deleteExecution,
   deleteTask,
   downloadImportTemplate,
   exportImportResultUrl,
   fetchTaskMeta,
   getDefaultConfigList,
-  getExecutionDetail,
-  getExecutionList,
   getFileLibraryList,
+  getTaskExecutionStats,
   getTaskList,
-  getTaskTrend,
-  getWordLibraryList,
   importTasks,
   runTask,
-  updateDisposition,
   updateTask,
 } from '#/api/sitemonitor';
 
-import AvailabilityDetail from '../executions/components/AvailabilityDetail.vue';
-import BlacklinkDetail from '../executions/components/BlacklinkDetail.vue';
-import DomainHijackDetail from '../executions/components/DomainHijackDetail.vue';
-import SensitiveFileDetail from '../executions/components/SensitiveFileDetail.vue';
-import SensitiveWordDetail from '../executions/components/SensitiveWordDetail.vue';
-import TamperDetail from '../executions/components/TamperDetail.vue';
 import DimensionConfigForm from './components/DimensionConfigForm.vue';
 
 defineOptions({ name: 'MonitorTasks' });
 
-const router = useRouter();
+const { openTaskRecordsTab } = useOpenTaskRecordsTab();
 const { handleError } = useErrorHandler();
 const loading = ref(false);
 const dataList = ref<MonitorTask[]>([]);
@@ -117,7 +76,22 @@ const safeDataList = computed(() =>
 );
 const checkedRowKeys = ref<string[]>([]);
 
-const form = reactive({ enabled: '', name: '' });
+const statsMap = ref<
+  Record<
+    string,
+    Record<
+      string,
+      {
+        total: number;
+        issue_count: number;
+        pending_count?: number;
+        valid_count?: number;
+      }
+    >
+  >
+>({});
+
+const form = reactive({ enabled: '', name: '', target_homepage: '' });
 
 const pagination = reactive({
   itemCount: 0,
@@ -145,23 +119,6 @@ const dimLabelMap: Record<string, string> = {
   tamper: '篡改监测',
 };
 
-type TagType = 'default' | 'error' | 'info' | 'primary' | 'success' | 'warning';
-
-const execStatusType = (s: string): TagType => {
-  if (s === 'success') return 'success';
-  if (s === 'failed') return 'error';
-  if (s === 'running') return 'warning';
-  return 'info';
-};
-
-const execStatusLabel = (s: string) =>
-  ({
-    failed: '失败',
-    pending: '等待中',
-    running: '运行中',
-    success: '成功',
-  })[s] || s;
-
 const cycleRender = (row: MonitorTask, dimKey: string) => {
   const cfg = row[`config_${dimKey}` as keyof MonitorTask] as
     | DimensionConfig
@@ -181,6 +138,72 @@ const cycleRender = (row: MonitorTask, dimKey: string) => {
   }
   return h('span', { class: 'font-medium text-success' }, text);
 };
+
+function dimStatRender(dimKey: string) {
+  return (row: MonitorTask) => {
+    const cfg = row[`config_${dimKey}` as keyof MonitorTask] as
+      | DimensionConfig
+      | undefined;
+    if (!cfg?.enabled) {
+      return h('span', { class: 'text-muted-foreground' }, '-');
+    }
+    const stat = statsMap.value[row.id]?.[dimKey];
+    const total = stat?.total ?? 0;
+    const pendingCount = stat?.pending_count ?? 0;
+    const validCount = stat?.valid_count ?? 0;
+    return h(
+      'div',
+      {
+        style: {
+          alignItems: 'center',
+          display: 'flex',
+          gap: '2px',
+          justifyContent: 'center',
+        },
+      },
+      [
+        h(
+          'span',
+          {
+            class: pendingCount > 0 ? 'text-error font-medium cursor-pointer' : 'text-muted-foreground cursor-pointer',
+            title: '点击查看未处置的问题记录',
+            onClick: (e: Event) => {
+              e.stopPropagation();
+              openRecordsWithFilter(row, dimKey, 'true', 'pending');
+            },
+          },
+          String(pendingCount),
+        ),
+        h('span', { class: 'text-muted-foreground', style: { margin: '0 1px' } }, '/'),
+        h(
+          'span',
+          {
+            class: validCount > 0 ? 'text-warning font-medium cursor-pointer' : 'text-muted-foreground cursor-pointer',
+            title: '点击查看有效问题记录',
+            onClick: (e: Event) => {
+              e.stopPropagation();
+              openRecordsWithFilter(row, dimKey, 'true', 'valid');
+            },
+          },
+          String(validCount),
+        ),
+        h('span', { class: 'text-muted-foreground', style: { margin: '0 1px' } }, '/'),
+        h(
+          'span',
+          {
+            class: 'text-primary cursor-pointer font-medium',
+            title: '点击查看全部监测记录',
+            onClick: (e: Event) => {
+              e.stopPropagation();
+              openRecordsWithFilter(row, dimKey, '', '');
+            },
+          },
+          String(total),
+        ),
+      ],
+    );
+  };
+}
 
 const columns = computed<DataTableColumns<MonitorTask>>(() => [
   { type: 'selection' },
@@ -223,6 +246,18 @@ const columns = computed<DataTableColumns<MonitorTask>>(() => [
       width: 80,
     })),
   },
+  {
+    key: 'stats',
+    title: '未处置 / 问题 / 总检测',
+    align: 'center',
+    children: dimensions.map((dim) => ({
+      key: `stat_${dim.key}`,
+      title: dim.label,
+      width: 108,
+      align: 'center' as const,
+      render: dimStatRender(dim.key),
+    })),
+  } as any,
   {
     key: 'enabled',
     title: '状态',
@@ -279,9 +314,7 @@ const columns = computed<DataTableColumns<MonitorTask>>(() => [
             text: true,
             type: 'info',
             size: 'small',
-            onClick: () => {
-              router.push(`/monitor/records/${row.id}`);
-            },
+            onClick: () => openRecordsDrawer(row),
           },
           { default: () => '记录' },
         ),
@@ -339,14 +372,20 @@ const columns = computed<DataTableColumns<MonitorTask>>(() => [
 async function onSearch() {
   loading.value = true;
   try {
-    const res = await getTaskList({
-      enabled: form.enabled,
-      index: pagination.page,
-      name: form.name,
-      size: pagination.pageSize,
-    });
+    const [taskRes, statsRes] = await Promise.all([
+      getTaskList({
+        enabled: form.enabled,
+        index: pagination.page,
+        name: form.name,
+        target_homepage: form.target_homepage,
+        size: pagination.pageSize,
+      }),
+      getTaskExecutionStats(),
+    ]);
+    const res = taskRes;
     dataList.value = res.data || [];
     pagination.itemCount = (res as any).count || 0;
+    statsMap.value = (statsRes as any)?.data ?? statsRes ?? {};
   } catch (e) {
     handleError(e, '获取列表失败');
     dataList.value = [];
@@ -357,6 +396,7 @@ async function onSearch() {
 
 function resetForm() {
   form.name = '';
+  form.target_homepage = '';
   form.enabled = '';
   pagination.page = 1;
   onSearch();
@@ -449,7 +489,6 @@ async function handleFetchTitle() {
 }
 
 const defaultConfigs = ref<Record<string, DimensionConfig>>({});
-const wordLibraries = ref<WordLibrary[]>([]);
 const fileLibraries = ref<FileLibrary[]>([]);
 
 async function loadDefaultConfigs() {
@@ -466,11 +505,7 @@ async function loadDefaultConfigs() {
 
 async function loadLibraries() {
   try {
-    const [wRes, fRes] = await Promise.all([
-      getWordLibraryList({ size: 100 }),
-      getFileLibraryList({ size: 100 }),
-    ]);
-    wordLibraries.value = wRes?.data || [];
+    const fRes = await getFileLibraryList({ size: 100 });
     fileLibraries.value = fRes?.data || [];
   } catch {
     // ignore
@@ -553,13 +588,7 @@ function openDrawer(row: MonitorTask) {
 }
 
 async function handleDrawerSave() {
-  const payload: any = {
-    schedule_cron: drawerTask.schedule_cron,
-    schedule_enabled: drawerTask.schedule_enabled,
-    target_domain: drawerTask.target_domain,
-    target_ips: drawerTask.target_ips,
-    task_name: drawerTask.task_name,
-  };
+  const payload: any = {};
   for (const d of dimensions) {
     const cfg = { ...(drawerTask.configs[d.key] || {}) };
     const cronSel = drawerTask.dimCrons[d.key];
@@ -594,8 +623,25 @@ async function handleRun(row: MonitorTask) {
   try {
     const res = await runTask(row.id);
     const runRes = (res as any)?.data ?? res;
+    const skipped = runRes?.skipped || [];
     if (runRes?.execution_ids?.length) {
-      message.success(`已触发 ${runRes.execution_ids.length} 个维度`);
+      let msg = `已触发 ${runRes.execution_ids.length} 个维度`;
+      if (skipped.length) {
+        const detail = skipped
+          .map((s: { dimension: string; reason: string }) =>
+            `${dimLabelMap[s.dimension] || s.dimension}: ${s.reason}`,
+          )
+          .join('；');
+        msg += `；未触发 ${skipped.length} 项（${detail}）`;
+      }
+      message.success(msg, { duration: skipped.length ? 8000 : 3000 });
+    } else if (skipped.length) {
+      const detail = skipped
+        .map((s: { dimension: string; reason: string }) =>
+          `${dimLabelMap[s.dimension] || s.dimension}: ${s.reason}`,
+        )
+        .join('；');
+      message.warning(`无可监测维度：${detail}`);
     } else {
       message.warning((res as any)?.msg || '无可监测维度');
     }
@@ -773,442 +819,51 @@ function handleImportMenuCommand(key: string) {
   else if (key === 'upload') importDialogVisible.value = true;
 }
 
-const recordsTask = ref<MonitorTask | null>(null);
-const recordsVisible = ref(false);
-const recordsLoading = ref(false);
-const recordsList = ref<MonitorExecution[]>([]);
-const safeRecordsList = computed(() =>
-  Array.isArray(recordsList.value) ? recordsList.value : [],
-);
-const recordsPagination = reactive({
-  itemCount: 0,
-  page: 1,
-  pageSize: 15,
-  pageSizes: [15, 30, 50, 100],
-  showSizePicker: true,
-});
-const recordsFilter = reactive<{
-  dateRange: [number, number] | null;
-  dimension: string;
-  disposition: string;
-  hasIssue: string;
-}>({
-  dateRange: null,
-  dimension: '',
-  disposition: '',
-  hasIssue: '',
-});
-
-const dispositionOptions = [
-  { label: '未处置', value: 'pending' },
-  { label: '有效', value: 'valid' },
-  { label: '无效', value: 'invalid' },
-  { label: '误报', value: 'false_positive' },
-];
-const dispositionLabelMap: Record<string, string> = {
-  false_positive: '误报',
-  invalid: '无效',
-  pending: '未处置',
-  valid: '有效',
-};
-const dispositionTagType: Record<string, TagType> = {
-  false_positive: 'default',
-  invalid: 'default',
-  pending: 'warning',
-  valid: 'success',
-};
-
-const recordsColumns = computed<DataTableColumns<MonitorExecution>>(() => [
-  {
-    key: 'dimension',
-    title: '维度',
-    width: 100,
-    align: 'center',
-    render: (row) =>
-      dimLabelMap[row.dimension] || row.dimension || '-',
-  },
-  {
-    key: 'status',
-    title: '状态',
-    width: 80,
-    align: 'center',
-    render: (row) =>
-      h(
-        NTag,
-        {
-          type: execStatusType(row.status),
-          size: 'small',
-          bordered: false,
-        },
-        { default: () => execStatusLabel(row.status) },
-      ),
-  },
-  {
-    key: 'has_issue',
-    title: '安全问题',
-    width: 90,
-    align: 'center',
-    render: (row) =>
-      h(
-        'span',
-        {
-          class: row.has_issue
-            ? 'text-error font-medium'
-            : 'text-success',
-        },
-        row.has_issue ? '⚠ 问题' : '正常',
-      ),
-  },
-  {
-    key: 'disposition',
-    title: '处置',
-    width: 80,
-    align: 'center',
-    render: (row) => {
-      const d = row.disposition || 'pending';
-      return h(
-        NTag,
-        {
-          type: dispositionTagType[d] || 'default',
-          size: 'small',
-          bordered: false,
-        },
-        { default: () => dispositionLabelMap[d] || d },
-      );
-    },
-  },
-  { key: 'url', title: 'URL', minWidth: 180, ellipsis: { tooltip: true } },
-  {
-    key: 'created_at',
-    title: '创建时间',
-    width: 160,
-    align: 'center',
-    render: (row) =>
-      row.created_at
-        ? dayjs(row.created_at).format('YYYY-MM-DD HH:mm:ss')
-        : '-',
-  },
-  {
-    key: 'op',
-    title: '操作',
-    width: 200,
-    align: 'center',
-    fixed: 'right',
-    render: (row) =>
-      h(NSpace, { size: 'small', justify: 'center' }, () => [
-        row.has_issue
-          ? h(
-              NButton,
-              {
-                text: true,
-                type: 'warning',
-                size: 'small',
-                onClick: () => openDispDialog(row),
-              },
-              { default: () => '处置' },
-            )
-          : null,
-        h(
-          NButton,
-          {
-            text: true,
-            type: 'primary',
-            size: 'small',
-            onClick: () => openDetailDialog(row),
-          },
-          { default: () => '详情' },
-        ),
-        h(
-          NPopconfirm,
-          { onPositiveClick: () => handleDeleteExecution(row) },
-          {
-            trigger: () =>
-              h(
-                NButton,
-                { text: true, type: 'error', size: 'small' },
-                { default: () => '删除' },
-              ),
-            default: () => '确认删除该条记录及相关证据文件？',
-          },
-        ),
-      ]),
-  },
-]);
-
-const trendData = ref<any>(null);
-const trendLoading = ref(false);
-const trendHours = ref(24);
-
-const trendHoursOptions = [
-  { label: '近24小时', value: 24 },
-  { label: '近3天', value: 72 },
-  { label: '近7天', value: 168 },
-  { label: '近30天', value: 720 },
-];
-
-async function loadTrend(taskId: string) {
-  trendLoading.value = true;
-  try {
-    const res: any = await getTaskTrend(taskId, trendHours.value);
-    trendData.value = res?.data ?? res;
-  } catch {
-    trendData.value = null;
-  } finally {
-    trendLoading.value = false;
-  }
+function openRecordsWithFilter(
+  row: MonitorTask,
+  dimension: string,
+  hasIssue: string,
+  disposition = '',
+) {
+  openTaskRecordsTab(row, { dimension, hasIssue, disposition });
 }
 
-const trendChartOption = computed(() => {
-  const pts = trendData.value?.points || [];
-  if (!pts.length) return null;
-  const times = pts.map((p: any) => p.time);
-  const totalMs = pts.map((p: any) => p.total_ms ?? 0);
-  const dnsMs = pts.map((p: any) => p.dns_ms ?? 0);
-  const tcpMs = pts.map((p: any) => p.tcp_connect_ms ?? 0);
-  const tlsMs = pts.map((p: any) => p.tls_handshake_ms ?? 0);
-  const ttfbMs = pts.map((p: any) => p.ttfb_ms ?? 0);
-  return {
-    tooltip: {
-      trigger: 'axis',
-      formatter: (params: any) => {
-        const p = params[0]?.axisValueLabel || '';
-        let html = `<div style="font-weight:600;margin-bottom:4px">${p}</div>`;
-        for (const s of params) {
-          html += `<div>${s.marker} ${s.seriesName}: <b>${s.value?.toFixed(0) ?? '-'}</b> ms</div>`;
-        }
-        const idx = params[0]?.dataIndex;
-        if (idx != null && pts[idx]) {
-          const avail = pts[idx].available;
-          html += `<div style="margin-top:4px">${avail ? '✅ 可用' : '❌ 不可用'}</div>`;
-        }
-        return html;
-      },
-    },
-    legend: { data: ['总耗时', 'DNS', 'TCP', 'TLS', 'TTFB'], bottom: 0, textStyle: { fontSize: 11 } },
-    grid: { left: 50, right: 16, top: 16, bottom: 36 },
-    xAxis: { type: 'category', data: times, axisLabel: { fontSize: 10, rotate: pts.length > 30 ? 45 : 0 } },
-    yAxis: { type: 'value', name: 'ms', axisLabel: { fontSize: 10 } },
-    dataZoom: pts.length > 60 ? [{ type: 'inside', start: 80, end: 100 }] : [],
-    series: [
-      { name: '总耗时', type: 'line', data: totalMs, smooth: true, lineStyle: { width: 2 }, areaStyle: { opacity: 0.1 }, itemStyle: { color: '#3b82f6' } },
-      { name: 'DNS', type: 'line', data: dnsMs, smooth: true, lineStyle: { width: 1 }, itemStyle: { color: '#22c55e' } },
-      { name: 'TCP', type: 'line', data: tcpMs, smooth: true, lineStyle: { width: 1 }, itemStyle: { color: '#f59e0b' } },
-      { name: 'TLS', type: 'line', data: tlsMs, smooth: true, lineStyle: { width: 1 }, itemStyle: { color: '#a855f7' } },
-      { name: 'TTFB', type: 'line', data: ttfbMs, smooth: true, lineStyle: { width: 1 }, itemStyle: { color: '#ef4444' } },
-    ],
-  };
-});
-
-const availBarOption = computed(() => {
-  const pts = trendData.value?.points || [];
-  if (!pts.length) return null;
-  return {
-    tooltip: { trigger: 'axis' },
-    grid: { left: 50, right: 16, top: 8, bottom: 4 },
-    xAxis: { type: 'category', data: pts.map((p: any) => p.time), show: false },
-    yAxis: { type: 'value', show: false, max: 1 },
-    series: [{
-      type: 'bar',
-      data: pts.map((p: any) => ({
-        value: 1,
-        itemStyle: { color: p.available ? (p.has_issue ? '#f59e0b' : '#22c55e') : '#ef4444' },
-      })),
-      barGap: '0%',
-      barCategoryGap: '10%',
-    }],
-  };
-});
-
-async function loadRecords() {
-  if (!recordsTask.value) return;
-  recordsLoading.value = true;
-  try {
-    const params: any = {
-      index: recordsPagination.page,
-      size: recordsPagination.pageSize,
-      task_id: recordsTask.value.id,
-    };
-    if (recordsFilter.dimension) params.dimension = recordsFilter.dimension;
-    if (recordsFilter.hasIssue) params.has_issue = recordsFilter.hasIssue;
-    if (recordsFilter.disposition)
-      params.disposition = recordsFilter.disposition;
-    if (recordsFilter.dateRange?.[0])
-      params.time_start = dayjs(recordsFilter.dateRange[0]).format(
-        'YYYY-MM-DD HH:mm:ss',
-      );
-    if (recordsFilter.dateRange?.[1])
-      params.time_end = dayjs(recordsFilter.dateRange[1]).format(
-        'YYYY-MM-DD HH:mm:ss',
-      );
-    const res = await getExecutionList(params);
-    recordsList.value = res.data || [];
-    recordsPagination.itemCount = (res as any).count || 0;
-  } catch (e) {
-    handleError(e, '加载监测记录失败');
-    recordsList.value = [];
-  } finally {
-    recordsLoading.value = false;
-  }
+function openRecordsDrawer(row: MonitorTask) {
+  openTaskRecordsTab(row);
 }
-
-function resetRecordsFilter() {
-  recordsFilter.dimension = '';
-  recordsFilter.hasIssue = '';
-  recordsFilter.disposition = '';
-  recordsFilter.dateRange = null;
-  recordsPagination.page = 1;
-  loadRecords();
-}
-
-const dispDialogVisible = ref(false);
-const dispTarget = ref<MonitorExecution | null>(null);
-const dispForm = reactive({ disposition: 'valid', remark: '' });
-const dispLoading = ref(false);
-
-function openDispDialog(row: MonitorExecution) {
-  dispTarget.value = row;
-  dispForm.disposition = row.disposition || 'pending';
-  dispForm.remark = (row as any).disposition_remark || '';
-  dispDialogVisible.value = true;
-}
-
-async function submitDisposition() {
-  if (!dispTarget.value) return;
-  if (!dispForm.disposition) {
-    message.warning('请选择处置状态');
-    return;
-  }
-  dispLoading.value = true;
-  try {
-    await updateDisposition(
-      dispTarget.value.id,
-      dispForm.disposition,
-      dispForm.remark,
-    );
-    message.success('处置成功');
-    dispDialogVisible.value = false;
-    loadRecords();
-  } catch (e) {
-    handleError(e, '处置失败');
-  } finally {
-    dispLoading.value = false;
-  }
-}
-
-async function handleDeleteExecution(row: MonitorExecution) {
-  try {
-    await deleteExecution(row.id);
-    message.success('删除成功');
-    loadRecords();
-  } catch (e) {
-    handleError(e, '删除失败');
-  }
-}
-
-function handleDeleteAllExecutions() {
-  if (!recordsPagination.itemCount) {
-    message.warning('当前列表无记录');
-    return;
-  }
-  dialog.error({
-    title: '危险操作',
-    content: `确认删除任务「${recordsTask.value?.task_name}」当前筛选结果共 ${recordsPagination.itemCount} 条？同时清除相关证据文件，不可恢复！`,
-    positiveText: '确认删除',
-    negativeText: '取消',
-    onPositiveClick: async () => {
-      try {
-        const params: any = {
-          index: 1,
-          size: 500,
-          task_id: recordsTask.value!.id,
-        };
-        if (recordsFilter.dimension) params.dimension = recordsFilter.dimension;
-        if (recordsFilter.hasIssue) params.has_issue = recordsFilter.hasIssue;
-        if (recordsFilter.dateRange?.[0])
-          params.time_start = dayjs(recordsFilter.dateRange[0]).format(
-            'YYYY-MM-DD HH:mm:ss',
-          );
-        if (recordsFilter.dateRange?.[1])
-          params.time_end = dayjs(recordsFilter.dateRange[1]).format(
-            'YYYY-MM-DD HH:mm:ss',
-          );
-        const res = await getExecutionList(params);
-        const ids = (res.data || []).map((r) => r.id);
-        if (!ids.length) return;
-        await batchDeleteExecutions(ids);
-        message.success(`已删除 ${ids.length} 条记录`);
-        loadRecords();
-      } catch (e) {
-        handleError(e, '批量删除失败');
-      }
-    },
-  });
-}
-
-const detailVisible = ref(false);
-const detailLoading = ref(false);
-const detailData = ref<any>(null);
-const detailExecId = ref('');
-
-const detailParsedResult = computed(() => {
-  if (!detailData.value?.result_json) return null;
-  try {
-    return JSON.parse(detailData.value.result_json);
-  } catch {
-    return null;
-  }
-});
-
-async function openDetailDialog(row: MonitorExecution) {
-  detailData.value = null;
-  detailExecId.value = row.id;
-  detailVisible.value = true;
-  detailLoading.value = true;
-  try {
-    const res: any = await getExecutionDetail(row.id);
-    detailData.value = res?.data ?? res;
-  } catch (e) {
-    handleError(e, '加载详情失败');
-  } finally {
-    detailLoading.value = false;
-  }
-}
-
-const dimensionFilterOptions = dimensions.map((d) => ({
-  label: d.label,
-  value: d.key,
-}));
-
-const hasIssueOptions = [
-  { label: '有问题', value: 'true' },
-  { label: '正常', value: 'false' },
-];
 
 const enabledOptions = [
   { label: '启用', value: 'true' },
   { label: '停止', value: 'false' },
 ];
 
-const fmtTime = (t: string) =>
-  t ? dayjs(t).format('YYYY-MM-DD HH:mm:ss') : '-';
-
-onMounted(() => {
+onMounted(async () => {
   loadDefaultConfigs();
   loadLibraries();
-  onSearch();
+  await onSearch();
 });
 </script>
 
 <template>
-  <Page title="监测任务" description="网站监测任务的增删改查、批量配置、导入导出">
+  <Page
+    title="网站监测"
+    description="任务配置与启停、六维监测统计（未处置/问题/总检测），点击数字可查看记录并处置"
+  >
     <NCard size="small" class="mb-3">
       <NSpace align="center" wrap>
         <span>系统名称</span>
         <NInput
           v-model:value="form.name"
-          placeholder="请输入系统名称"
+          placeholder="模糊搜索系统名称"
           clearable
           style="width: 180px"
+        />
+        <span>首页URL</span>
+        <NInput
+          v-model:value="form.target_homepage"
+          placeholder="模糊搜索首页 URL"
+          clearable
+          style="width: 220px"
         />
         <span>状态</span>
         <NSelect
@@ -1225,7 +880,7 @@ onMounted(() => {
       </NSpace>
     </NCard>
 
-    <NCard title="监测任务">
+    <NCard title="监测列表">
       <template #header-extra>
         <NSpace size="small">
           <NButton
@@ -1284,7 +939,7 @@ onMounted(() => {
         :row-key="(r: MonitorTask) => r.id"
         remote
         size="small"
-        scroll-x="1500"
+        scroll-x="2200"
         @update:page="
           (p: number) => {
             pagination.page = p;
@@ -1381,74 +1036,20 @@ onMounted(() => {
       </template>
     </NModal>
 
-    <!-- 配置抽屉 -->
-    <NDrawer v-model:show="drawerVisible" :width="860" placement="right">
+    <!-- 配置抽屉（仅点击「配置」时从右侧弹出） -->
+    <NDrawer
+      v-model:show="drawerVisible"
+      :width="860"
+      placement="right"
+      :trap-focus="false"
+    >
       <NDrawerContent title="任务参数配置" closable>
-        <div class="mb-4">
-          <div class="mb-3 text-base font-bold">基本信息</div>
-          <NForm :model="drawerTask" label-width="80px" label-placement="left">
-            <NRow :gutter="16">
-              <NCol :span="12">
-                <NFormItem label="系统名称">
-                  <NInput v-model:value="drawerTask.task_name" />
-                </NFormItem>
-              </NCol>
-              <NCol :span="12">
-                <NFormItem label="域名">
-                  <NInput v-model:value="drawerTask.target_domain" />
-                </NFormItem>
-              </NCol>
-              <NCol :span="12">
-                <NFormItem label="IP">
-                  <NInput v-model:value="drawerTask.target_ips" />
-                </NFormItem>
-              </NCol>
-              <NCol :span="12">
-                <NFormItem label="URL">
-                  <NInput :value="drawerTask.target_homepage" disabled />
-                </NFormItem>
-              </NCol>
-            </NRow>
-          </NForm>
-        </div>
-        <NDivider />
-        <div class="mb-3 text-base font-bold">定时调度</div>
-        <NForm label-width="80px" label-placement="left" class="mb-4">
-          <NFormItem label="启用调度">
-            <NSwitch v-model:value="drawerTask.schedule_enabled" />
-          </NFormItem>
-          <template v-if="drawerTask.schedule_enabled">
-            <div
-              v-for="dim in dimensions"
-              :key="dim.key"
-              class="mb-2 flex items-center gap-3 pl-2"
-            >
-              <span class="w-20 text-sm">{{ dim.label }}</span>
-              <NSelect
-                v-model:value="drawerTask.dimCrons[dim.key]"
-                :options="highFreqPresets"
-                size="small"
-                style="width: 150px"
-              />
-              <NInput
-                v-if="drawerTask.dimCrons[dim.key] === 'custom'"
-                v-model:value="drawerTask.customCrons[dim.key]"
-                placeholder="秒 分 时 日 月 周"
-                size="small"
-                style="width: 180px"
-              />
-            </div>
-          </template>
-        </NForm>
-        <NDivider />
-        <div class="mb-3 text-base font-bold">任务参数</div>
         <NAlert type="info" class="mb-4">
           敏感词/文件/黑链/挂马扫描会进行全站页面爬虫，建议错开"网站遍扫"、"敏感词/文件/黑链/挂马"的周期扫描时间。
         </NAlert>
         <DimensionConfigForm
           :configs="drawerTask.configs"
           :dimensions="dimensions"
-          :word-libraries="wordLibraries"
           :file-libraries="fileLibraries"
         />
         <template #footer>
@@ -1473,7 +1074,6 @@ onMounted(() => {
       <DimensionConfigForm
         :configs="batchConfigs"
         :dimensions="dimensions"
-        :word-libraries="wordLibraries"
         :file-libraries="fileLibraries"
       />
       <template #footer>
@@ -1485,309 +1085,6 @@ onMounted(() => {
         </NSpace>
       </template>
     </NModal>
-
-    <!-- 监测记录弹窗 -->
-    <NModal
-      v-model:show="recordsVisible"
-      preset="card"
-      :title="`监测记录 — ${recordsTask?.task_name || ''}`"
-      style="width: 1200px"
-    >
-      <!-- 趋势概览 -->
-      <NSpin :show="trendLoading" size="small">
-        <template v-if="trendData">
-          <div class="mb-3">
-            <div class="mb-2 flex items-center justify-between">
-              <span class="text-base font-bold">可用性概览</span>
-              <NSelect
-                v-model:value="trendHours"
-                :options="trendHoursOptions"
-                size="small"
-                style="width: 120px"
-                @update:value="() => recordsTask && loadTrend(recordsTask.id)"
-              />
-            </div>
-            <NRow :gutter="12" class="mb-3">
-              <NCol :span="4">
-                <NStatistic label="可用率" tabular-nums>
-                  <span :class="(trendData.summary?.availability_pct ?? 0) >= 99 ? 'text-green-500' : (trendData.summary?.availability_pct ?? 0) >= 95 ? 'text-yellow-500' : 'text-red-500'" class="text-xl font-bold">
-                    {{ (trendData.summary?.availability_pct ?? 0).toFixed(1) }}%
-                  </span>
-                </NStatistic>
-              </NCol>
-              <NCol :span="4">
-                <NStatistic label="检测次数" :value="trendData.summary?.total_checks ?? 0" tabular-nums />
-              </NCol>
-              <NCol :span="4">
-                <NStatistic label="平均耗时" tabular-nums>
-                  <span class="font-mono">{{ (trendData.summary?.avg_response_ms ?? 0).toFixed(0) }} ms</span>
-                </NStatistic>
-              </NCol>
-              <NCol :span="4">
-                <NStatistic label="最大耗时" tabular-nums>
-                  <span class="font-mono">{{ (trendData.summary?.max_response_ms ?? 0).toFixed(0) }} ms</span>
-                </NStatistic>
-              </NCol>
-              <NCol :span="4">
-                <NStatistic label="最小耗时" tabular-nums>
-                  <span class="font-mono">{{ (trendData.summary?.min_response_ms ?? 0).toFixed(0) }} ms</span>
-                </NStatistic>
-              </NCol>
-              <NCol :span="4">
-                <NStatistic label="发现问题" tabular-nums>
-                  <span :class="(trendData.summary?.issue_count ?? 0) > 0 ? 'text-red-500 font-bold' : 'text-green-500'">
-                    {{ trendData.summary?.issue_count ?? 0 }}
-                  </span>
-                </NStatistic>
-              </NCol>
-            </NRow>
-
-            <!-- 可用性状态条 -->
-            <div v-if="availBarOption" class="mb-2">
-              <div class="text-muted-foreground mb-1 text-xs">可用性状态（绿=正常 黄=有问题 红=不可用）</div>
-              <VChart :option="availBarOption" style="height: 28px; width: 100%" autoresize />
-            </div>
-
-            <!-- 响应时间趋势折线图 -->
-            <div v-if="trendChartOption" class="mb-3">
-              <div class="text-muted-foreground mb-1 text-xs">响应时间趋势</div>
-              <VChart :option="trendChartOption" style="height: 220px; width: 100%" autoresize />
-            </div>
-
-            <!-- 各维度概要 -->
-            <div v-if="(trendData.dimensions || []).length" class="mb-3">
-              <div class="text-muted-foreground mb-1 text-xs">各维度状态</div>
-              <div class="flex flex-wrap gap-2">
-                <NTag
-                  v-for="dim in trendData.dimensions"
-                  :key="dim.dimension"
-                  :type="dim.issue_count > 0 ? 'error' : dim.total > 0 ? 'success' : 'default'"
-                  size="small"
-                  :bordered="false"
-                >
-                  {{ dimLabelMap[dim.dimension] || dim.dimension }}：{{ dim.total }} 次
-                  <template v-if="dim.issue_count > 0">（{{ dim.issue_count }} 问题）</template>
-                </NTag>
-              </div>
-            </div>
-          </div>
-          <NDivider style="margin: 8px 0" />
-        </template>
-      </NSpin>
-
-      <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <NSpace align="center" wrap>
-          <NSelect
-            v-model:value="recordsFilter.dimension"
-            placeholder="维度类型"
-            clearable
-            :options="dimensionFilterOptions"
-            style="width: 130px"
-          />
-          <NSelect
-            v-model:value="recordsFilter.hasIssue"
-            placeholder="安全问题"
-            clearable
-            :options="hasIssueOptions"
-            style="width: 110px"
-          />
-          <NSelect
-            v-model:value="recordsFilter.disposition"
-            placeholder="处置状态"
-            clearable
-            :options="dispositionOptions"
-            style="width: 110px"
-          />
-          <NDatePicker
-            v-model:value="recordsFilter.dateRange"
-            type="datetimerange"
-            clearable
-            style="width: 360px"
-          />
-          <NButton
-            type="primary"
-            @click="
-              () => {
-                recordsPagination.page = 1;
-                loadRecords();
-              }
-            "
-          >
-            查询
-          </NButton>
-          <NButton @click="resetRecordsFilter">重置</NButton>
-        </NSpace>
-        <NSpace size="small">
-          <NButton type="error" @click="handleDeleteAllExecutions">
-            全部删除
-          </NButton>
-          <NButton circle @click="loadRecords">↻</NButton>
-        </NSpace>
-      </div>
-
-      <NDataTable
-        :columns="recordsColumns"
-        :data="safeRecordsList"
-        :loading="recordsLoading"
-        :pagination="
-          recordsPagination.itemCount > 0 ? recordsPagination : false
-        "
-        :row-key="(r: MonitorExecution) => r.id"
-        remote
-        size="small"
-        @update:page="
-          (p: number) => {
-            recordsPagination.page = p;
-            loadRecords();
-          }
-        "
-        @update:page-size="
-          (s: number) => {
-            recordsPagination.pageSize = s;
-            recordsPagination.page = 1;
-            loadRecords();
-          }
-        "
-      />
-    </NModal>
-
-    <!-- 监测详情抽屉 -->
-    <NDrawer v-model:show="detailVisible" :width="900" placement="right">
-      <NDrawerContent
-        :title="
-          detailData
-            ? `监测详情 — ${dimLabelMap[detailData.dimension] || detailData.dimension}`
-            : '监测详情'
-        "
-        closable
-      >
-        <NSpin :show="detailLoading">
-          <template v-if="detailData">
-            <NCard size="small" class="mb-3">
-              <NDescriptions :column="2" bordered size="small">
-                <NDescriptionsItem label="监测ID" :span="2">
-                  <span class="font-mono text-xs">{{ detailData.id }}</span>
-                </NDescriptionsItem>
-                <NDescriptionsItem label="状态">
-                  <NTag
-                    :type="execStatusType(detailData.status)"
-                    size="small"
-                    :bordered="false"
-                  >
-                    {{ execStatusLabel(detailData.status) }}
-                  </NTag>
-                </NDescriptionsItem>
-                <NDescriptionsItem label="安全问题">
-                  <NTag
-                    :type="detailData.has_issue ? 'error' : 'success'"
-                    size="small"
-                    :bordered="false"
-                  >
-                    {{ detailData.has_issue ? '⚠ 发现问题' : '无' }}
-                  </NTag>
-                </NDescriptionsItem>
-                <NDescriptionsItem label="目标URL" :span="2">
-                  <span class="font-mono break-all text-xs">
-                    {{ detailData.url }}
-                  </span>
-                </NDescriptionsItem>
-                <NDescriptionsItem label="开始时间">
-                  {{ fmtTime(detailData.started_at) }}
-                </NDescriptionsItem>
-                <NDescriptionsItem label="结束时间">
-                  {{ fmtTime(detailData.finished_at) }}
-                </NDescriptionsItem>
-                <NDescriptionsItem label="创建时间">
-                  {{ fmtTime(detailData.created_at) }}
-                </NDescriptionsItem>
-                <NDescriptionsItem
-                  v-if="detailData.error"
-                  label="错误信息"
-                  :span="2"
-                >
-                  <span class="text-error font-mono text-sm">
-                    {{ detailData.error }}
-                  </span>
-                </NDescriptionsItem>
-              </NDescriptions>
-            </NCard>
-
-            <template v-if="detailParsedResult">
-              <AvailabilityDetail
-                v-if="detailData.dimension === 'availability'"
-                :result="detailParsedResult"
-                class="mb-3"
-              />
-              <TamperDetail
-                v-else-if="detailData.dimension === 'tamper'"
-                :result="detailParsedResult"
-                :execution-id="detailExecId"
-                class="mb-3"
-              />
-              <BlacklinkDetail
-                v-else-if="detailData.dimension === 'blacklink'"
-                :result="detailParsedResult"
-                class="mb-3"
-              />
-              <SensitiveWordDetail
-                v-else-if="detailData.dimension === 'sensitive_word'"
-                :result="detailParsedResult"
-                class="mb-3"
-              />
-              <SensitiveFileDetail
-                v-else-if="detailData.dimension === 'sensitive_file'"
-                :result="detailParsedResult"
-                class="mb-3"
-              />
-              <DomainHijackDetail
-                v-else-if="detailData.dimension === 'domain_hijack'"
-                :result="detailParsedResult"
-                class="mb-3"
-              />
-            </template>
-
-            <NCard
-              v-else-if="detailData.status === 'failed'"
-              size="small"
-              class="mb-3"
-            >
-              <NEmpty description="监测失败，无结果数据">
-                <template #extra>
-                  <div class="text-error mt-2 text-sm">
-                    {{ detailData.error || '监测异常，未返回结果' }}
-                  </div>
-                </template>
-              </NEmpty>
-            </NCard>
-
-            <NCard
-              v-if="detailData.result_json"
-              size="small"
-              class="mb-3"
-            >
-              <NCollapse>
-                <NCollapseItem
-                  title="原始 result_json（调试用）"
-                  name="raw"
-                >
-                  <NInput
-                    type="textarea"
-                    :value="JSON.stringify(detailParsedResult, null, 2)"
-                    readonly
-                    :rows="16"
-                    class="font-mono"
-                  />
-                </NCollapseItem>
-              </NCollapse>
-            </NCard>
-          </template>
-          <NEmpty
-            v-else-if="!detailLoading"
-            description="暂无数据"
-          />
-        </NSpin>
-      </NDrawerContent>
-    </NDrawer>
 
     <!-- 导入上传弹窗 -->
     <NModal
@@ -1881,42 +1178,5 @@ onMounted(() => {
       </template>
     </NModal>
 
-    <!-- 处置弹窗 -->
-    <NModal
-      v-model:show="dispDialogVisible"
-      preset="card"
-      title="问题处置"
-      style="width: 480px"
-    >
-      <NForm label-width="80px" label-placement="left">
-        <NFormItem label="处置状态">
-          <NRadioGroup v-model:value="dispForm.disposition">
-            <NRadio value="valid">有效</NRadio>
-            <NRadio value="invalid">无效</NRadio>
-            <NRadio value="false_positive">误报</NRadio>
-          </NRadioGroup>
-        </NFormItem>
-        <NFormItem label="处置备注">
-          <NInput
-            v-model:value="dispForm.remark"
-            type="textarea"
-            :rows="3"
-            placeholder="请输入处置备注（可选）"
-          />
-        </NFormItem>
-      </NForm>
-      <template #footer>
-        <NSpace justify="end">
-          <NButton @click="dispDialogVisible = false">取消</NButton>
-          <NButton
-            type="primary"
-            :loading="dispLoading"
-            @click="submitDisposition"
-          >
-            确认处置
-          </NButton>
-        </NSpace>
-      </template>
-    </NModal>
   </Page>
 </template>

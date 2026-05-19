@@ -1,9 +1,5 @@
 <script lang="ts" setup>
-import type {
-  DimensionConfig,
-  FileLibrary,
-  WordLibrary,
-} from '#/api/sitemonitor';
+import type { DimensionConfig, FileLibrary } from '#/api/sitemonitor';
 
 import {
   NInputNumber,
@@ -21,7 +17,6 @@ const props = defineProps<{
   configs: Record<string, DimensionConfig>;
   dimensions: DimensionMeta[];
   fileLibraries: FileLibrary[];
-  wordLibraries: WordLibrary[];
 }>();
 
 function getField(dim: string, field: string, fallback: any = undefined) {
@@ -31,6 +26,19 @@ function getField(dim: string, field: string, fallback: any = undefined) {
 function setField(dim: string, field: string, val: any) {
   if (!props.configs[dim]) props.configs[dim] = {};
   props.configs[dim][field] = val;
+}
+
+function setCycleMinutes(dim: string, minutes: number | null) {
+  const m = Math.max(1, Math.min(1440, minutes || 1));
+  setField(dim, 'cycle_minutes', m);
+  const cronMin = m > 59 ? 59 : m;
+  setField(dim, 'cron', `0 */${cronMin} * * * *`);
+  const c = props.configs[dim];
+  if (c) {
+    delete c.cycle_type;
+    delete c.cycle_time;
+    delete c.run_once;
+  }
 }
 
 const cycleTypeOptions = [
@@ -43,199 +51,293 @@ const cycleTypeOptions = [
 </script>
 
 <template>
-  <div class="space-y-4">
-    <div
+  <div class="dim-form">
+    <section
       v-for="dim in dimensions"
       :key="dim.key"
-      class="rounded border p-3"
+      class="dim-card"
     >
-      <div class="mb-2 flex items-center gap-4">
-        <span class="w-[80px] font-medium">{{ dim.label }}</span>
-        <div class="flex items-center gap-1">
-          <span class="text-muted-foreground text-xs">监测开关</span>
+      <div class="dim-card__head">
+        <span class="dim-card__title">{{ dim.label }}</span>
+        <label class="dim-inline">
+          <span class="dim-inline__label">监测开关</span>
           <NSwitch
             :value="getField(dim.key, 'enabled', false)"
+            size="small"
             @update:value="(v: boolean) => setField(dim.key, 'enabled', v)"
           />
-        </div>
-        <div class="flex items-center gap-1">
-          <span class="text-muted-foreground text-xs">发送告警</span>
+        </label>
+        <label class="dim-inline">
+          <span class="dim-inline__label">发送告警</span>
           <NSwitch
             :value="getField(dim.key, 'alert_enabled', false)"
-            @update:value="
-              (v: boolean) => setField(dim.key, 'alert_enabled', v)
-            "
+            size="small"
+            @update:value="(v: boolean) => setField(dim.key, 'alert_enabled', v)"
           />
+        </label>
+      </div>
+
+      <div class="dim-card__body">
+        <!-- 固定周期：可用性 / 篡改 / 域名劫持 -->
+        <div
+          v-if="['availability', 'domain_hijack', 'tamper'].includes(dim.key)"
+          class="dim-row"
+        >
+          <label class="dim-inline">
+            <span class="dim-inline__label">周期</span>
+            <NInputNumber
+              :value="getField(dim.key, 'cycle_minutes', 1)"
+              :min="1"
+              :max="1440"
+              size="small"
+              class="dim-num"
+              @update:value="(v: null | number) => setCycleMinutes(dim.key, v)"
+            />
+            <span class="dim-inline__suffix">分钟/次</span>
+          </label>
+
+          <label v-if="dim.key === 'availability'" class="dim-inline">
+            <span class="dim-inline__label">访问超时</span>
+            <NInputNumber
+              :value="getField(dim.key, 'timeout_seconds', 60)"
+              :min="5"
+              :max="300"
+              size="small"
+              class="dim-num dim-num--sm"
+              @update:value="
+                (v: null | number) => setField(dim.key, 'timeout_seconds', v ?? 60)
+              "
+            />
+            <span class="dim-inline__suffix">秒</span>
+          </label>
+
+          <label v-if="dim.key === 'tamper'" class="dim-inline">
+            <span class="dim-inline__label">搜索引擎 UA</span>
+            <NSwitch
+              :value="getField(dim.key, 'search_engine_ua', false)"
+              size="small"
+              @update:value="
+                (v: boolean) => setField(dim.key, 'search_engine_ua', v)
+              "
+            />
+          </label>
         </div>
-      </div>
 
-      <div
-        class="ml-[84px] flex flex-wrap items-center gap-3 text-sm"
-      >
-        <template
-          v-if="
-            ['availability', 'domain_hijack', 'tamper'].includes(dim.key)
-          "
-        >
-          <span class="text-muted-foreground">周　期：</span>
-          <NInputNumber
-            :value="getField(dim.key, 'cycle_minutes', 1)"
-            :min="1"
-            :max="1440"
-            size="small"
-            style="width: 100px"
-            @update:value="
-              (v: null | number) =>
-                setField(dim.key, 'cycle_minutes', v ?? 1)
-            "
-          />
-          <span class="text-muted-foreground">分钟/次</span>
-        </template>
-
-        <template v-if="dim.key === 'availability'">
-          <span class="text-muted-foreground ml-4">访问超时：</span>
-          <NInputNumber
-            :value="getField(dim.key, 'timeout_seconds', 60)"
-            :min="5"
-            :max="300"
-            size="small"
-            style="width: 100px"
-            @update:value="
-              (v: null | number) =>
-                setField(dim.key, 'timeout_seconds', v ?? 60)
-            "
-          />
-          <span class="text-muted-foreground">秒</span>
-          <span class="text-muted-foreground ml-4">免检时段：</span>
-          <NSwitch
-            :value="getField(dim.key, 'exclude_time_enabled', false)"
-            size="small"
-            @update:value="
-              (v: boolean) =>
-                setField(dim.key, 'exclude_time_enabled', v)
-            "
-          />
+        <!-- 可用性：免检时段单独一行 -->
+        <div v-if="dim.key === 'availability'" class="dim-row">
+          <label class="dim-inline">
+            <span class="dim-inline__label">免检时段</span>
+            <NSwitch
+              :value="getField(dim.key, 'exclude_time_enabled', false)"
+              size="small"
+              @update:value="
+                (v: boolean) => setField(dim.key, 'exclude_time_enabled', v)
+              "
+            />
+          </label>
           <template v-if="getField(dim.key, 'exclude_time_enabled', false)">
-            <NTimePicker
-              :formatted-value="
-                getField(dim.key, 'exclude_time_start', '00:00')
-              "
-              format="HH:mm"
-              size="small"
-              style="width: 100px"
-              @update:formatted-value="
-                (v: null | string) =>
-                  setField(dim.key, 'exclude_time_start', v ?? '00:00')
-              "
-            />
-            <span class="text-muted-foreground">至</span>
-            <NTimePicker
-              :formatted-value="
-                getField(dim.key, 'exclude_time_end', '06:00')
-              "
-              format="HH:mm"
-              size="small"
-              style="width: 100px"
-              @update:formatted-value="
-                (v: null | string) =>
-                  setField(dim.key, 'exclude_time_end', v ?? '06:00')
-              "
-            />
+            <label class="dim-inline">
+              <NTimePicker
+                :formatted-value="getField(dim.key, 'exclude_time_start', '00:00')"
+                format="HH:mm"
+                size="small"
+                class="dim-time"
+                @update:formatted-value="
+                  (v: null | string) =>
+                    setField(dim.key, 'exclude_time_start', v ?? '00:00')
+                "
+              />
+              <span class="dim-inline__suffix">至</span>
+              <NTimePicker
+                :formatted-value="getField(dim.key, 'exclude_time_end', '06:00')"
+                format="HH:mm"
+                size="small"
+                class="dim-time"
+                @update:formatted-value="
+                  (v: null | string) =>
+                    setField(dim.key, 'exclude_time_end', v ?? '06:00')
+                "
+              />
+            </label>
           </template>
-        </template>
+        </div>
 
-        <template v-if="dim.key === 'tamper'">
-          <span class="text-muted-foreground ml-4">搜索引擎UA</span>
-          <NSwitch
-            :value="getField(dim.key, 'search_engine_ua', false)"
-            size="small"
-            @update:value="
-              (v: boolean) => setField(dim.key, 'search_engine_ua', v)
-            "
-          />
-        </template>
-
-        <template
-          v-if="
-            ['blacklink', 'sensitive_file', 'sensitive_word'].includes(
-              dim.key,
-            )
-          "
+        <!-- 敏感词 / 黑链 -->
+        <div
+          v-if="['sensitive_word', 'blacklink'].includes(dim.key)"
+          class="dim-row"
         >
-          <span class="text-muted-foreground">周　期：</span>
-          <NSelect
-            :value="getField(dim.key, 'cycle_type', 'daily')"
-            :options="cycleTypeOptions"
-            size="small"
-            style="width: 120px"
-            @update:value="
-              (v: string) => setField(dim.key, 'cycle_type', v)
-            "
-          />
-          <NTimePicker
-            :formatted-value="getField(dim.key, 'cycle_time', '02:00')"
-            format="HH:mm"
-            size="small"
-            style="width: 100px"
-            @update:formatted-value="
-              (v: null | string) =>
-                setField(dim.key, 'cycle_time', v ?? '02:00')
-            "
-          />
-          <span class="text-muted-foreground ml-2">仅运行一次</span>
-          <NSwitch
-            :value="getField(dim.key, 'run_once', false)"
-            size="small"
-            @update:value="
-              (v: boolean) => setField(dim.key, 'run_once', v)
-            "
-          />
-        </template>
+          <label class="dim-inline">
+            <span class="dim-inline__label">周期</span>
+            <NInputNumber
+              :value="getField(dim.key, 'cycle_minutes', 1)"
+              :min="1"
+              :max="1440"
+              size="small"
+              class="dim-num"
+              @update:value="(v: null | number) => setCycleMinutes(dim.key, v)"
+            />
+            <span class="dim-inline__suffix">分钟/次</span>
+          </label>
+          <span v-if="dim.key === 'sensitive_word'" class="dim-hint">
+            词库：自动使用系统敏感词库
+          </span>
+        </div>
 
-        <template v-if="dim.key === 'sensitive_word'">
-          <span class="text-muted-foreground ml-4">词库：</span>
-          <NSelect
-            :value="getField(dim.key, 'word_library_ids', [])"
-            multiple
-            max-tag-count="responsive"
-            placeholder="请选择词库"
-            size="small"
-            style="width: 320px"
-            :options="
-              wordLibraries.map((lib) => ({
-                label: lib.name,
-                value: lib.id,
-              }))
-            "
-            @update:value="
-              (v: string[]) =>
-                setField(dim.key, 'word_library_ids', v)
-            "
-          />
-        </template>
-
+        <!-- 敏感文件（目标级） -->
         <template v-if="dim.key === 'sensitive_file'">
-          <span class="text-muted-foreground ml-4">文件库：</span>
-          <NSelect
-            :value="getField(dim.key, 'file_library_ids', [])"
-            multiple
-            max-tag-count="responsive"
-            placeholder="请选择文件库"
-            size="small"
-            style="width: 320px"
-            :options="
-              fileLibraries.map((lib) => ({
-                label: lib.name,
-                value: lib.id,
-              }))
-            "
-            @update:value="
-              (v: string[]) =>
-                setField(dim.key, 'file_library_ids', v)
-            "
-          />
+          <div class="dim-row">
+            <label class="dim-inline">
+              <span class="dim-inline__label">周期</span>
+              <NSelect
+                :value="getField(dim.key, 'cycle_type', 'daily')"
+                :options="cycleTypeOptions"
+                size="small"
+                class="dim-select"
+                @update:value="(v: string) => setField(dim.key, 'cycle_type', v)"
+              />
+            </label>
+            <label class="dim-inline">
+              <span class="dim-inline__label">执行时间</span>
+              <NTimePicker
+                :formatted-value="getField(dim.key, 'cycle_time', '02:00')"
+                format="HH:mm"
+                size="small"
+                class="dim-time"
+                @update:formatted-value="
+                  (v: null | string) => setField(dim.key, 'cycle_time', v ?? '02:00')
+                "
+              />
+            </label>
+            <label class="dim-inline">
+              <span class="dim-inline__label">仅运行一次</span>
+              <NSwitch
+                :value="getField(dim.key, 'run_once', false)"
+                size="small"
+                @update:value="(v: boolean) => setField(dim.key, 'run_once', v)"
+              />
+            </label>
+          </div>
+          <div class="dim-row">
+            <label class="dim-inline dim-inline--grow">
+              <span class="dim-inline__label">文件库</span>
+              <NSelect
+                :value="getField(dim.key, 'file_library_ids', [])"
+                multiple
+                max-tag-count="responsive"
+                placeholder="请选择文件库"
+                size="small"
+                class="dim-select--wide"
+                :options="
+                  fileLibraries.map((lib) => ({
+                    label: lib.name,
+                    value: lib.id,
+                  }))
+                "
+                @update:value="(v: string[]) => setField(dim.key, 'file_library_ids', v)"
+              />
+            </label>
+          </div>
         </template>
       </div>
-    </div>
+    </section>
   </div>
 </template>
+
+<style scoped>
+.dim-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dim-card {
+  border: 1px solid var(--n-border-color);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.dim-card__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+}
+
+.dim-card__title {
+  flex: 0 0 auto;
+  min-width: 56px;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.dim-card__body {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--n-border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dim-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+}
+
+/* 标签与控件成组，避免换行拆开 */
+.dim-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.dim-inline--grow {
+  flex: 1 1 100%;
+  min-width: 0;
+  white-space: normal;
+}
+
+.dim-inline__label {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--n-text-color-3);
+}
+
+.dim-inline__suffix {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--n-text-color-3);
+}
+
+.dim-num {
+  width: 88px;
+}
+
+.dim-num--sm {
+  width: 72px;
+}
+
+.dim-time {
+  width: 96px;
+}
+
+.dim-select {
+  width: 112px;
+}
+
+.dim-select--wide {
+  flex: 1;
+  min-width: 160px;
+}
+
+.dim-hint {
+  font-size: 12px;
+  color: var(--n-text-color-3);
+}
+</style>

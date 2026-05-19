@@ -19,14 +19,8 @@ import dayjs from 'dayjs';
 import {
   NButton,
   NCard,
-  NCollapse,
-  NCollapseItem,
   NDataTable,
   NDatePicker,
-  NDescriptions,
-  NDescriptionsItem,
-  NDrawer,
-  NDrawerContent,
   NEmpty,
   NForm,
   NFormItem,
@@ -40,7 +34,6 @@ import {
   NRadioGroup,
   NSelect,
   NSpace,
-  NSpin,
   NSwitch,
   NTabPane,
   NTabs,
@@ -53,7 +46,6 @@ import {
   deleteExecution,
   getAgentList,
   getDashboardStats,
-  getExecutionDetail,
   getExecutionList,
   getTaskExecutionStats,
   getTaskList,
@@ -61,17 +53,14 @@ import {
   updateDisposition,
 } from '#/api/sitemonitor';
 import { useAutoRefresh } from '#/composables/useAutoRefresh';
-
-import AvailabilityDetail from './executions/components/AvailabilityDetail.vue';
-import BlacklinkDetail from './executions/components/BlacklinkDetail.vue';
-import DomainHijackDetail from './executions/components/DomainHijackDetail.vue';
-import SensitiveFileDetail from './executions/components/SensitiveFileDetail.vue';
-import SensitiveWordDetail from './executions/components/SensitiveWordDetail.vue';
-import TamperDetail from './executions/components/TamperDetail.vue';
+import { useMonitorRecordDetail } from './composables/useMonitorRecordDetail';
+import { useOpenTaskRecordsTab } from './composables/useOpenTaskRecordsTab';
 
 defineOptions({ name: 'MonitorCenter' });
 
 const router = useRouter();
+const { openRecordDetail } = useMonitorRecordDetail();
+const { openTaskRecordsTab } = useOpenTaskRecordsTab();
 const tabbarStore = useTabbarStore();
 const loading = ref(false);
 
@@ -177,8 +166,10 @@ async function fetchDashboardStats() {
       getTaskExecutionStats(),
     ]);
     const overview = ((statsRes as any)?.data ?? statsRes ?? {}) as DashboardStats;
-    stats.totalTasks = overview.total_tasks || 0;
-    stats.enabledTasks = overview.enabled_tasks || 0;
+    stats.totalTasks =
+      overview.total_path_tasks ?? (overview as any).total_tasks ?? overview.total_targets ?? 0;
+    stats.enabledTasks =
+      overview.enabled_path_tasks ?? (overview as any).enabled_tasks ?? overview.enabled_targets ?? 0;
     stats.totalExecutions = overview.total_executions || 0;
     stats.issueExecutions = overview.issue_executions || 0;
     stats.onlineAgents = overview.online_agents || 0;
@@ -193,7 +184,7 @@ async function fetchDashboardStats() {
 }
 
 async function refreshAll() {
-  await Promise.all([fetchDashboardStats(), fetchTaskList()]);
+  await fetchDashboardStats();
 }
 
 const refreshIntervalOptions = [
@@ -211,8 +202,7 @@ const { enabled: autoRefreshEnabled, interval: autoRefreshInterval } =
     runOnMount: true,
   });
 
-const goExecDetail = (row: MonitorExecution) =>
-  router.push(`/monitor/tasks/executions/detail/${row.id}`);
+const goExecDetail = (row: MonitorExecution) => openRecordDetail(row.id);
 
 // ── Agent 状态表格 ──
 const agentColumns: DataTableColumns<MonitorAgent> = [
@@ -429,7 +419,7 @@ const previewExecutionColumns: DataTableColumns<MonitorExecution> = [
 // ── 监测任务表格 ──
 const taskLoading = ref(false);
 const taskDataList = ref<MonitorTask[]>([]);
-const taskForm = reactive({ enabled: '', name: '' });
+const taskForm = reactive({ enabled: '', name: '', target_homepage: '' });
 const taskPagination = reactive({
   page: 1,
   pageCount: 1,
@@ -456,6 +446,7 @@ async function fetchTaskList() {
         enabled: taskForm.enabled,
         index: taskPagination.page,
         name: taskForm.name,
+        target_homepage: taskForm.target_homepage,
         size: taskPagination.pageSize,
       }),
       getTaskExecutionStats(),
@@ -626,18 +617,11 @@ const taskColumns = computed<DataTableColumns<MonitorTask>>(() => [
             text: true,
             type: 'info',
             size: 'small',
-            onClick: () => {
-              const tabPath = `/monitor/records/${row.id}`;
-              tabbarStore.addTab({
-                path: tabPath,
-                name: `MonitorRecords_${row.id}`,
-                meta: {
-                  title: `${row.name} - 监测记录`,
-                  hideInMenu: true,
-                },
-              });
-              router.push(tabPath);
-            },
+            onClick: () =>
+              openTaskRecordsTab({
+                id: row.id,
+                task_name: row.task_name,
+              }),
           },
           { default: () => '记录' },
         ),
@@ -984,34 +968,11 @@ async function submitDisposition() {
   }
 }
 
-// ── 详情抽屉 ──
-const detailVisible = ref(false);
-const detailLoading = ref(false);
-const detailData = ref<any>(null);
-const detailExecId = ref('');
-
-const detailParsedResult = computed(() => {
-  if (!detailData.value?.result_json) return null;
-  try {
-    return JSON.parse(detailData.value.result_json);
-  } catch {
-    return null;
-  }
-});
-
-async function openDetailDrawer(row: MonitorExecution) {
-  detailData.value = null;
-  detailExecId.value = row.id;
-  detailVisible.value = true;
-  detailLoading.value = true;
-  try {
-    const res: any = await getExecutionDetail(row.id);
-    detailData.value = res?.data ?? res;
-  } catch (e: any) {
-    message.error(e?.msg || '加载详情失败');
-  } finally {
-    detailLoading.value = false;
-  }
+function openDetailDrawer(row: MonitorExecution) {
+  openRecordDetail(row.id, {
+    taskId: row.task_id,
+    from: 'tasks',
+  });
 }
 
 function execStatusType(s: string) {
@@ -1192,86 +1153,13 @@ function execStatusType(s: string) {
 
     <NCard class="mt-4">
       <NTabs type="line" v-model:value="activeTab" class="tab-container">
-        <NTabPane name="tasks" tab="监测任务">
-          <!-- 搜索栏 -->
-          <div class="filter-bar">
-            <NSpace align="center" wrap>
-              <NFormItem label="系统名称" label-width="70">
-                <NInput
-                  v-model:value="taskForm.name"
-                  placeholder="请输入系统名称"
-                  clearable
-                  style="width: 200px"
-                />
-              </NFormItem>
-              <NFormItem label="状态" label-width="40">
-                <NSelect
-                  v-model:value="taskForm.enabled"
-                  placeholder="全部"
-                  clearable
-                  style="width: 120px"
-                  :options="[
-                    { label: '启用', value: 'true' },
-                    { label: '停止', value: 'false' },
-                  ]"
-                />
-              </NFormItem>
-              <NSpace :size="8">
-                <NButton
-                  type="primary"
-                  size="small"
-                  @click="
-                    () => {
-                      taskPagination.page = 1;
-                      fetchTaskList();
-                    }
-                  "
-                >
-                  查询
-                </NButton>
-                <NButton
-                  size="small"
-                  @click="
-                    () => {
-                      taskForm.name = '';
-                      taskForm.enabled = '';
-                      taskPagination.page = 1;
-                      fetchTaskList();
-                    }
-                  "
-                >
-                  重置
-                </NButton>
-                <NButton size="small" @click="fetchTaskList">刷新</NButton>
-              </NSpace>
-            </NSpace>
+        <NTabPane name="tasks" tab="网站监测">
+          <div class="monitor-center-task-hint">
+            <p>任务配置、六维统计与记录处置已合并至「网站监测」页。</p>
+            <NButton type="primary" @click="router.push('/monitor/targets')">
+              前往网站监测
+            </NButton>
           </div>
-
-          <!-- 任务表格 -->
-          <NDataTable
-            :columns="taskColumns"
-            :data="taskDataList"
-            :loading="taskLoading"
-            :pagination="taskPagination"
-            :row-key="(r: MonitorTask) => r.id"
-            remote
-            size="small"
-            :scroll-x="1600"
-            class="task-table"
-            @update:page="
-              (p: number) => {
-                taskPagination.page = p;
-                fetchTaskList();
-              }
-            "
-            @update:page-size="
-              (s: number) => {
-                taskPagination.pageSize = s;
-                taskPagination.page = 1;
-                fetchTaskList();
-              }
-            "
-          />
         </NTabPane>
 
         <NTabPane name="executions" tab="执行记录">
@@ -1442,141 +1330,6 @@ function execStatusType(s: string) {
         "
       />
     </NModal>
-
-    <!-- 详情抽屉 -->
-    <NDrawer v-model:show="detailVisible" :width="900" placement="right">
-      <NDrawerContent
-        :title="
-          detailData
-            ? `监测详情 — ${dimLabelMap[detailData.dimension] || detailData.dimension}`
-            : '监测详情'
-        "
-        closable
-      >
-        <NSpin :show="detailLoading">
-          <template v-if="detailData">
-            <NCard size="small" class="mb-3">
-              <NDescriptions :column="2" bordered size="small">
-                <NDescriptionsItem label="监测ID" :span="2">
-                  <span class="font-mono text-xs">{{ detailData.id }}</span>
-                </NDescriptionsItem>
-                <NDescriptionsItem label="状态">
-                  <NTag
-                    :type="execStatusType(detailData.status)"
-                    size="small"
-                    :bordered="false"
-                  >
-                    {{ statusLabel(detailData.status) }}
-                  </NTag>
-                </NDescriptionsItem>
-                <NDescriptionsItem label="安全问题">
-                  <NTag
-                    :type="detailData.has_issue ? 'error' : 'success'"
-                    size="small"
-                    :bordered="false"
-                  >
-                    {{ detailData.has_issue ? '⚠ 发现问题' : '无' }}
-                  </NTag>
-                </NDescriptionsItem>
-                <NDescriptionsItem label="目标URL" :span="2">
-                  <span class="font-mono break-all text-xs">
-                    {{ detailData.url }}
-                  </span>
-                </NDescriptionsItem>
-                <NDescriptionsItem label="开始时间">
-                  {{ fmtTime(detailData.started_at) }}
-                </NDescriptionsItem>
-                <NDescriptionsItem label="结束时间">
-                  {{ fmtTime(detailData.finished_at) }}
-                </NDescriptionsItem>
-                <NDescriptionsItem label="创建时间">
-                  {{ fmtTime(detailData.created_at) }}
-                </NDescriptionsItem>
-                <NDescriptionsItem
-                  v-if="detailData.error"
-                  label="错误信息"
-                  :span="2"
-                >
-                  <span class="text-error font-mono text-sm">
-                    {{ detailData.error }}
-                  </span>
-                </NDescriptionsItem>
-              </NDescriptions>
-            </NCard>
-
-            <template v-if="detailParsedResult">
-              <AvailabilityDetail
-                v-if="detailData.dimension === 'availability'"
-                :result="detailParsedResult"
-                class="mb-3"
-              />
-              <TamperDetail
-                v-else-if="detailData.dimension === 'tamper'"
-                :result="detailParsedResult"
-                :execution-id="detailExecId"
-                class="mb-3"
-              />
-              <BlacklinkDetail
-                v-else-if="detailData.dimension === 'blacklink'"
-                :result="detailParsedResult"
-                class="mb-3"
-              />
-              <SensitiveWordDetail
-                v-else-if="detailData.dimension === 'sensitive_word'"
-                :result="detailParsedResult"
-                class="mb-3"
-              />
-              <SensitiveFileDetail
-                v-else-if="detailData.dimension === 'sensitive_file'"
-                :result="detailParsedResult"
-                class="mb-3"
-              />
-              <DomainHijackDetail
-                v-else-if="detailData.dimension === 'domain_hijack'"
-                :result="detailParsedResult"
-                class="mb-3"
-              />
-            </template>
-
-            <NCard
-              v-else-if="detailData.status === 'failed'"
-              size="small"
-              class="mb-3"
-            >
-              <NEmpty description="监测失败，无结果数据">
-                <template #extra>
-                  <div class="text-error mt-2 text-sm">
-                    {{ detailData.error || '监测异常，未返回结果' }}
-                  </div>
-                </template>
-              </NEmpty>
-            </NCard>
-
-            <NCard
-              v-if="detailData.result_json"
-              size="small"
-              class="mb-3"
-            >
-              <NCollapse>
-                <NCollapseItem
-                  title="原始 result_json（调试用）"
-                  name="raw"
-                >
-                  <NInput
-                    type="textarea"
-                    :value="JSON.stringify(detailParsedResult, null, 2)"
-                    readonly
-                    :rows="16"
-                    class="font-mono"
-                  />
-                </NCollapseItem>
-              </NCollapse>
-            </NCard>
-          </template>
-          <NEmpty v-else-if="!detailLoading" description="暂无数据" />
-        </NSpin>
-      </NDrawerContent>
-    </NDrawer>
 
     <!-- 处置弹窗 -->
     <NModal
@@ -1836,6 +1589,16 @@ function execStatusType(s: string) {
   --n-tab-color: var(--n-text-color-3);
   --n-tab-color-active: var(--n-primary-color);
   --n-tab-bottom-border-color-active: var(--n-primary-color);
+}
+
+.monitor-center-task-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 32px 16px;
+  color: var(--n-text-color-3);
+  text-align: center;
 }
 
 .filter-bar {

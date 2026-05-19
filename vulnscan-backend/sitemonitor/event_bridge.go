@@ -57,15 +57,40 @@ func (b *MonitorEventBridge) OnIssueDetected(ctx context.Context, exec *model.Mo
 		return
 	}
 
-	dedupeKey := fmt.Sprintf("%s:%s:%s", exec.TaskID, exec.Dimension, exec.URL)
+	cfg := ResolveIncidentConfig(ctx, b.db, exec)
+	if !ShouldAutoCreateIncident(exec, cfg) {
+		return
+	}
+
+	scopeID := exec.PathTaskID
+	if scopeID == "" {
+		scopeID = exec.TargetID
+	}
+	dedupeKey := fmt.Sprintf("%s:%s:%s", scopeID, exec.Dimension, exec.URL)
 	if b.isDuplicate(dedupeKey) {
 		return
 	}
 
-	var task model.MonitorTask
-	if err := b.db.Where("id = ?", exec.TaskID).First(&task).Error; err != nil {
-		slog.Warn("[MonitorBridge] 任务不存在", "task_id", exec.TaskID)
-		return
+	displayName := exec.URL
+	organizeID := ""
+	assetID := ""
+	if exec.PathTaskID != "" {
+		var pt model.MonitorPathTask
+		if err := b.db.Where("id = ?", exec.PathTaskID).First(&pt).Error; err == nil {
+			displayName = pt.Name
+			assetID = pt.AssetID
+		}
+	}
+	if exec.TargetID != "" {
+		var t model.MonitorTarget
+		if err := b.db.Where("id = ?", exec.TargetID).First(&t).Error; err == nil {
+			if displayName == exec.URL {
+				displayName = t.Name
+			}
+			if assetID == "" {
+				assetID = t.AssetID
+			}
+		}
 	}
 
 	incidentType := dimensionIncidentType[exec.Dimension]
@@ -78,35 +103,73 @@ func (b *MonitorEventBridge) OnIssueDetected(ctx context.Context, exec *model.Mo
 		level = 3
 	}
 
-	name := fmt.Sprintf("[%s] %s", incidentType, task.TaskName)
-	if exec.URL != "" {
-		name = fmt.Sprintf("[%s] %s", incidentType, exec.URL)
+	name := fmt.Sprintf("[%s] %s", incidentType, displayName)
+
+	reportTime := time.Now()
+	if exec.StartedAt != nil {
+		reportTime = *exec.StartedAt
 	}
+	discoveryTime := reportTime
+	if exec.FinishedAt != nil {
+		discoveryTime = *exec.FinishedAt
+	}
+
+	assetReq := coreContract.IncidentAssetReq{
+		AssetName: displayName,
+		DomainIP:  exec.URL,
+	}
+	b.enrichAssetFromID(assetID, &assetReq, &organizeID)
 
 	req := coreContract.IncidentCreateReq{
 		Name:       name,
 		Level:      level,
-		Source:     2,
-		ReportTime: time.Now(),
-		Asset: coreContract.IncidentAssetReq{
-			AssetName: task.TaskName,
-			DomainIP:  exec.URL,
-		},
+		Source:     model.IncidentSourceSiteMonitor,
+		ReportTime: reportTime,
+		Asset:      assetReq,
 		Metadata: coreContract.IncidentMetaReq{
 			IncidentType:        incidentType,
 			IncidentURL:         exec.URL,
-			DiscoveryTime:       time.Now(),
-			IncidentDescription: fmt.Sprintf("站点监测发现%s问题，维度: %s，目标: %s", incidentType, exec.Dimension, exec.URL),
+			DiscoveryTime:       discoveryTime,
+			IncidentDescription: buildMonitorIncidentDescription(exec, incidentType),
 		},
 	}
 
-	if err := b.incidentSvc.CreateIncident(ctx, req, "system", task.OrganizeID); err != nil {
+	if err := b.incidentSvc.CreateIncident(ctx, req, "system", organizeID); err != nil {
 		slog.Error("[MonitorBridge] 创建事件失败", "error", err, "url", exec.URL, "dimension", exec.Dimension)
 		return
 	}
 
 	slog.Info("[MonitorBridge] 监测问题已创建事件",
-		"task", task.TaskName, "dimension", exec.Dimension, "url", exec.URL, "level", level)
+		"name", displayName, "dimension", exec.Dimension, "url", exec.URL, "level", level)
+}
+
+func (b *MonitorEventBridge) enrichAssetFromID(assetID string, asset *coreContract.IncidentAssetReq, organizeID *string) {
+	if assetID == "" || b.db == nil {
+		return
+	}
+	var a model.Asset
+	if err := b.db.Where("id = ?", assetID).First(&a).Error; err != nil {
+		return
+	}
+	if a.Name != "" {
+		asset.AssetName = a.Name
+		asset.SystemName = a.Name
+	}
+	if a.Domain != "" {
+		asset.DomainIP = a.Domain
+	}
+	if a.IPv4 != "" {
+		asset.SiteIP = a.IPv4
+	}
+	if a.OrganizeID != "" {
+		if organizeID != nil && *organizeID == "" {
+			*organizeID = a.OrganizeID
+		}
+		var org model.Organize
+		if err := b.db.Select("name").Where("id = ?", a.OrganizeID).First(&org).Error; err == nil {
+			asset.Unit = org.Name
+		}
+	}
 }
 
 func (b *MonitorEventBridge) isDuplicate(key string) bool {

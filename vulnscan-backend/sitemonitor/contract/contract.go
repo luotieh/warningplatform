@@ -86,8 +86,9 @@ type TaskUpdateReq struct {
 }
 
 type TaskListReq struct {
-	Name    string `form:"name"`
-	Enabled string `form:"enabled"`
+	Name           string `form:"name"`
+	TargetHomepage string `form:"target_homepage"`
+	Enabled        string `form:"enabled"`
 	PageReq
 }
 
@@ -102,7 +103,8 @@ type BatchUpdateConfigsReq struct {
 }
 
 type ExecutionListReq struct {
-	TaskID      string `form:"task_id"`
+	TargetID    string `form:"target_id"`
+	PathTaskID  string `form:"path_task_id"`
 	Dimension   string `form:"dimension"`
 	Status      string `form:"status"`
 	HasIssue    string `form:"has_issue"`
@@ -129,12 +131,14 @@ type TaskDimStat struct {
 }
 
 type DashboardStats struct {
-	TotalTasks      int64 `json:"total_tasks"`
-	EnabledTasks    int64 `json:"enabled_tasks"`
-	TotalExecutions int64 `json:"total_executions"`
-	IssueExecutions int64 `json:"issue_executions"`
-	OnlineAgents    int64 `json:"online_agents"`
-	TotalAgents     int64 `json:"total_agents"`
+	TotalTargets     int64 `json:"total_targets"`
+	EnabledTargets   int64 `json:"enabled_targets"`
+	TotalPathTasks   int64 `json:"total_path_tasks"`
+	EnabledPathTasks int64 `json:"enabled_path_tasks"`
+	TotalExecutions  int64 `json:"total_executions"`
+	IssueExecutions  int64 `json:"issue_executions"`
+	OnlineAgents     int64 `json:"online_agents"`
+	TotalAgents      int64 `json:"total_agents"`
 }
 
 type RuleDataSummary struct {
@@ -165,15 +169,29 @@ type ImportResult struct {
 }
 
 type TaskTrendPoint struct {
-	Time       string  `json:"time"`
-	Available  bool    `json:"available"`
-	StatusCode int     `json:"status_code"`
-	TotalMS    float64 `json:"total_ms"`
-	DNSMS      float64 `json:"dns_ms"`
-	TCPMS      float64 `json:"tcp_connect_ms"`
-	TLSMS      float64 `json:"tls_handshake_ms"`
-	TTFBMS     float64 `json:"ttfb_ms"`
-	HasIssue   bool    `json:"has_issue"`
+	Time        string  `json:"time"`
+	Dimension   string  `json:"dimension,omitempty"`
+	Status      string  `json:"status,omitempty"`
+	Disposition string  `json:"disposition,omitempty"`
+	Available   bool    `json:"available"`
+	StatusCode  int     `json:"status_code"`
+	TotalMS     float64 `json:"total_ms"`
+	DNSMS       float64 `json:"dns_ms"`
+	TCPMS       float64 `json:"tcp_connect_ms"`
+	TLSMS       float64 `json:"tls_handshake_ms"`
+	TTFBMS      float64 `json:"ttfb_ms"`
+	HasIssue    bool    `json:"has_issue"`
+}
+
+// TaskTrendQuery 路径任务趋势查询（支持按维度与筛选条件）。
+type TaskTrendQuery struct {
+	Hours       int
+	Dimension   string
+	HasIssue    string
+	Disposition string
+	Status      string
+	TimeStart   string
+	TimeEnd     string
 }
 
 type TaskTrendResp struct {
@@ -186,14 +204,18 @@ type TaskTrendResp struct {
 }
 
 type TaskTrendSummary struct {
-	TotalChecks      int64   `json:"total_checks"`
-	AvailableCount   int64   `json:"available_count"`
-	UnavailableCount int64   `json:"unavailable_count"`
-	AvailabilityPct  float64 `json:"availability_pct"`
-	AvgResponseMS    float64 `json:"avg_response_ms"`
-	MaxResponseMS    float64 `json:"max_response_ms"`
-	MinResponseMS    float64 `json:"min_response_ms"`
-	IssueCount       int64   `json:"issue_count"`
+	TotalChecks        int64   `json:"total_checks"`
+	SuccessCount       int64   `json:"success_count"`
+	FailedCount        int64   `json:"failed_count"`
+	AvailableCount     int64   `json:"available_count"`
+	UnavailableCount   int64   `json:"unavailable_count"`
+	AvailabilityPct    float64 `json:"availability_pct"`
+	AvgResponseMS      float64 `json:"avg_response_ms"`
+	MaxResponseMS      float64 `json:"max_response_ms"`
+	MinResponseMS      float64 `json:"min_response_ms"`
+	IssueCount         int64   `json:"issue_count"`
+	NormalCount        int64   `json:"normal_count"`
+	PendingDisposition int64   `json:"pending_disposition"`
 }
 
 type TaskDimBrief struct {
@@ -204,6 +226,16 @@ type TaskDimBrief struct {
 	IssueCount   int64  `json:"issue_count"`
 	LastStatus   string `json:"last_status"`
 	LastTime     string `json:"last_time"`
+}
+
+type RunTaskSkip struct {
+	Dimension string `json:"dimension"`
+	Reason    string `json:"reason"`
+}
+
+type RunTaskOutcome struct {
+	ExecutionIDs []string      `json:"execution_ids"`
+	Skipped      []RunTaskSkip `json:"skipped,omitempty"`
 }
 
 type ServiceMonitor interface {
@@ -237,16 +269,24 @@ type ServiceMonitor interface {
 	GetDefaultConfig(ctx context.Context, dimension string) (*model.MonitorDefaultConfig, error)
 	UpdateDefaultConfig(ctx context.Context, dimension string, configJSON map[string]any) error
 
-	CreateTask(ctx context.Context, task *model.MonitorTask) error
-	UpdateTask(ctx context.Context, id string, req TaskUpdateReq) error
-	DeleteTask(ctx context.Context, id string) error
-	GetTask(ctx context.Context, id string) (*model.MonitorTask, error)
-	ListTasks(ctx context.Context, req TaskListReq, scopes ...func(*gorm.DB) *gorm.DB) (int64, []model.MonitorTask, error)
-	RunTask(ctx context.Context, id string, dimensions []string) ([]string, error)
-	BatchToggleEnabled(ctx context.Context, ids []string) error
-	BatchUpdateConfigs(ctx context.Context, req BatchUpdateConfigsReq) error
-	BatchSyncNames(ctx context.Context, ids []string) (int, error)
-	BatchDeleteTasks(ctx context.Context, ids []string) error
+	CreateTarget(ctx context.Context, t *model.MonitorTarget) error
+	UpdateTarget(ctx context.Context, id string, req TargetUpdateReq) error
+	DeleteTarget(ctx context.Context, id string) error
+	GetTarget(ctx context.Context, id string) (*model.MonitorTarget, error)
+	ListTargets(ctx context.Context, req TargetListReq, scopes ...func(*gorm.DB) *gorm.DB) (int64, []model.MonitorTarget, error)
+	RunTarget(ctx context.Context, targetID string, dimensions []string) (*RunTaskOutcome, error)
+	CreateTasksFromAssets(ctx context.Context, assetIDs []string) (*CreateTasksFromAssetsResp, []string, error)
+	StartCrawl(ctx context.Context, targetID string, req CrawlStartReq) (*model.MonitorCrawlJob, error)
+	GetCrawlJob(ctx context.Context, id string) (*model.MonitorCrawlJob, error)
+	ApplyCrawlPaths(ctx context.Context, jobID string, req CrawlApplyReq) (int, error)
+
+	CreatePathTask(ctx context.Context, pt *model.MonitorPathTask) error
+	UpdatePathTask(ctx context.Context, id string, req PathTaskUpdateReq) error
+	DeletePathTask(ctx context.Context, id string) error
+	GetPathTask(ctx context.Context, id string) (*model.MonitorPathTask, error)
+	ListPathTasks(ctx context.Context, req PathTaskListReq, scopes ...func(*gorm.DB) *gorm.DB) (int64, []model.MonitorPathTask, error)
+	RunPathTask(ctx context.Context, id string, dimensions []string) (*RunTaskOutcome, error)
+	BatchDeletePathTasks(ctx context.Context, ids []string) error
 
 	ListExecutions(ctx context.Context, req ExecutionListReq, scopes ...func(*gorm.DB) *gorm.DB) (int64, []model.MonitorExecution, error)
 	GetExecutionDetail(ctx context.Context, id string) (*ExecutionDetail, error)
@@ -257,11 +297,12 @@ type ServiceMonitor interface {
 	BatchUpdateDisposition(ctx context.Context, ids []string, disposition, remark, username string) error
 	GetDashboardStats(ctx context.Context) (*DashboardStats, error)
 	GetTaskExecutionStats(ctx context.Context) (map[string]map[string]*TaskDimStat, error)
-	GetTaskTrend(ctx context.Context, taskID string, hours int) (*TaskTrendResp, error)
+	GetTaskTrend(ctx context.Context, taskID string, q TaskTrendQuery) (*TaskTrendResp, error)
 
 	ListAgents(ctx context.Context, scopes ...func(*gorm.DB) *gorm.DB) ([]model.MonitorAgent, error)
 	SyncAgentRules(ctx context.Context, agentUUID string) (map[string]any, error)
 	ShutdownAgent(ctx context.Context, agentUUID string) (map[string]any, error)
+	DeleteAgent(ctx context.Context, agentUUID string) error
 
 	GetAlertConfig(ctx context.Context) (*model.MonitorAlertConfig, error)
 	UpdateAlertConfig(ctx context.Context, cfg *model.MonitorAlertConfig) error
@@ -278,9 +319,6 @@ type ServiceMonitor interface {
 	GetDB() *db.DB
 
 	FetchTaskMeta(ctx context.Context, url string) (title string, finalURL string, err error)
-
-	UpdateTaskFields(ctx context.Context, id string, fields map[string]any) error
-	BatchUpdateTaskFields(ctx context.Context, ids []string, fields map[string]any) error
 }
 
 type NatsService interface {
@@ -307,6 +345,8 @@ type NatsService interface {
 }
 
 type SchedulerSync interface {
-	SyncTaskFromDB(taskID string)
-	RemoveTask(taskID string)
+	SyncTargetFromDB(targetID string)
+	SyncPathTaskFromDB(pathTaskID string)
+	RemoveTarget(targetID string)
+	RemovePathTask(pathTaskID string)
 }

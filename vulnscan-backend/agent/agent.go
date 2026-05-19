@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"vulnscan-backend/pkg/clusterconn"
 	"vulnscan-backend/pkg/nodecapacity"
 )
 
@@ -44,7 +43,7 @@ func (a *Agent) Start(ctx context.Context) error {
 	err := a.client.PingHealth(pingCtx)
 	pingCancel()
 	if err != nil {
-		return fmt.Errorf("无法连接主控 %s: %w（%s）", a.config.MasterURL, err, clusterconn.AgentConnectivityHint(a.config.Topology))
+		return FormatMasterConnectError(a.config.MasterURL, err, a.config.Topology)
 	}
 
 	ctx, a.cancel = context.WithCancel(ctx)
@@ -63,7 +62,7 @@ func (a *Agent) Start(ctx context.Context) error {
 	go a.commandPollLoop(ctx)
 
 	snap := nodecapacity.Compute(nodecapacity.DefaultConfig())
-	slog.Info("agent started",
+	slog.Info("Agent 已启动",
 		"master", a.config.MasterURL,
 		"topology", a.config.Topology,
 		"concurrency", a.config.MaxConcurrent,
@@ -84,8 +83,25 @@ func (a *Agent) Stop() {
 	for _, exec := range a.executors {
 		exec.Close()
 	}
+	a.notifyShutdown()
 	a.wg.Wait()
 	slog.Info("agent stopped")
+}
+
+func (a *Agent) notifyShutdown() {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	req := &ShutdownReq{
+		Reason:       "graceful",
+		RunningTasks: a.scheduler.RunningCount(),
+		QueuedTasks:  a.scheduler.QueuedCount(),
+		Version:      Version,
+	}
+	if err := a.client.Shutdown(ctx, req); err != nil {
+		slog.Warn("shutdown notify failed", "error", err)
+		return
+	}
+	slog.Info("shutdown notified to master")
 }
 
 func (a *Agent) handleResult(result *TaskResult) {

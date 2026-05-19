@@ -630,10 +630,10 @@ func (s *serviceStats) GetAssetProfile(ctx context.Context, req statsContract.As
 	}
 
 	// Level distribution
-	levelDistro := make([]coreContract.ChartTypeItem, 0)
+	levelDistro := make([]coreContract.ChartLevelItem, 0)
 	for level := model.IncidentLevelLow; level <= model.IncidentLevelUrgent; level++ {
 		if cnt, ok := levelMap[level]; ok {
-			levelDistro = append(levelDistro, coreContract.ChartTypeItem{
+			levelDistro = append(levelDistro, coreContract.ChartLevelItem{
 				Level: level,
 				Label: model.IncidentLevelText[level],
 				Count: cnt,

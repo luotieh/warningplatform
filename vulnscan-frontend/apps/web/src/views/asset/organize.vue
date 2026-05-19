@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { computed, h, onMounted, reactive, ref, watch } from 'vue';
+import { h, onMounted, reactive, ref, watch } from 'vue';
 import type { DataTableColumns, FormInst } from 'naive-ui';
 import {
   NButton,
@@ -15,7 +15,6 @@ import {
   NSelect,
   NSpace,
   NSwitch,
-  NTreeSelect,
   useMessage,
 } from 'naive-ui';
 
@@ -23,12 +22,12 @@ import type { Organize } from '#/api/assetmgr';
 import {
   createOrganize,
   deleteOrganize,
-  getIamOrganizeTree,
   getOrganizeTree,
   syncIamOrganizes,
   updateOrganize,
 } from '#/api/assetmgr';
-import { buildOrgTreeOptions, flattenOrganizeList, mergeUnitAddress } from './ledger/utils';
+import OrganizeTreeSelect from '#/components/organize/OrganizeTreeSelect.vue';
+import { flattenOrganizeList, mergeUnitAddress } from './ledger/utils';
 import { organizeProfileFormRules } from '#/utils/form-rules';
 import { validateUnitProfile } from '#/utils/validators';
 import { dictItemsToOptions, getSystemDictItems } from '#/api/system/dict';
@@ -38,10 +37,8 @@ defineOptions({ name: 'AssetOrganize' });
 const message = useMessage();
 const loading = ref(false);
 const syncLoading = ref(false);
-const treeLoading = ref(false);
 const data = ref<OrganizeRow[]>([]);
 const organizeItems = ref<Organize[]>([]);
-const organizeTreeOptions = ref<any[]>([]);
 const showModal = ref(false);
 const editingId = ref<null | string>(null);
 const organizeFormRef = ref<FormInst | null>(null);
@@ -100,8 +97,6 @@ async function loadOrganizeDictOptions() {
     /* keep fallback */
   }
 }
-
-const parentTreeOptions = computed(() => disableTreeNode(organizeTreeOptions.value, editingId.value));
 
 const columns: DataTableColumns<OrganizeRow> = [
   {
@@ -285,32 +280,6 @@ async function fetchList() {
   }
 }
 
-function disableTreeNode(nodes: any[] = [], disabledValue: null | string): any[] {
-  return nodes.map((node) => ({
-    ...node,
-    disabled: !!disabledValue && node.key === disabledValue,
-    children: disableTreeNode(node.children ?? [], disabledValue),
-  }));
-}
-
-async function loadOrganizeTree() {
-  treeLoading.value = true;
-  try {
-    organizeTreeOptions.value = buildOrgTreeOptions(await getIamOrganizeTree());
-  } catch {
-    try {
-      const res = await getOrganizeTree();
-      const body = (res as any)?.data ?? res;
-      const items = (body?.data ?? body ?? []) as Organize[];
-      organizeTreeOptions.value = buildOrgTreeOptions(items);
-    } catch {
-      organizeTreeOptions.value = [];
-    }
-  } finally {
-    treeLoading.value = false;
-  }
-}
-
 function resetForm() {
   Object.assign(formData, {
     name: '',
@@ -332,20 +301,14 @@ function resetForm() {
   });
 }
 
-async function onAdd() {
+function onAdd() {
   editingId.value = null;
   resetForm();
-  if (!organizeTreeOptions.value.length) {
-    await loadOrganizeTree();
-  }
   showModal.value = true;
 }
 
-async function onEdit(row: Organize) {
+function onEdit(row: Organize) {
   editingId.value = row.id;
-  if (!organizeTreeOptions.value.length) {
-    await loadOrganizeTree();
-  }
   Object.assign(formData, {
     name: row.name,
     parent_id: row.parent_id,
@@ -392,7 +355,7 @@ async function onSave() {
       message.success('创建成功');
     }
     showModal.value = false;
-    await Promise.all([fetchList(), loadOrganizeTree()]);
+    await fetchList();
   } catch {
     message.error('操作失败');
   }
@@ -415,7 +378,7 @@ async function onSyncIam() {
     const synced = Number(res?.synced ?? 0);
     const total = Number(res?.total ?? synced);
     message.success(`IAM 同步完成：新增 ${synced} 个单位，共 ${total} 个`);
-    await Promise.all([fetchList(), loadOrganizeTree()]);
+    await fetchList();
   } catch {
     message.error('IAM 同步失败，请确认已登录且 IAM 服务可用');
   } finally {
@@ -430,7 +393,6 @@ watch(showModal, (visible) => {
 onMounted(() => {
   void loadOrganizeDictOptions();
   fetchList();
-  loadOrganizeTree();
 });
 </script>
 
@@ -492,14 +454,10 @@ onMounted(() => {
           </NGridItem>
           <NGridItem>
             <NFormItem label="上级单位">
-              <NTreeSelect
-                v-model:value="formData.parent_id"
-                :options="parentTreeOptions"
-                :loading="treeLoading"
-                clearable
-                filterable
-                default-expand-all
-                placeholder="请选择上级单位"
+              <OrganizeTreeSelect
+                v-model="formData.parent_id"
+                :exclude-id="editingId"
+                placeholder="请选择上级单位（可搜索）"
               />
             </NFormItem>
           </NGridItem>

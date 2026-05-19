@@ -94,7 +94,7 @@ type AssetProfileResp struct {
 	OpenIncidents   int64                           `json:"open_incidents"`
 	ClosedIncidents int64                           `json:"closed_incidents"`
 	OverdueCount    int64                           `json:"overdue_count"`
-	LevelDistro     []coreContract.ChartTypeItem    `json:"level_distribution"`
+	LevelDistro     []coreContract.ChartLevelItem   `json:"level_distribution"`
 	RecentIncidents []coreContract.IncidentListItem `json:"recent_incidents"`
 	RiskScore       float64                         `json:"risk_score"`
 	Timeline        []AssetTimelineItem             `json:"timeline"`

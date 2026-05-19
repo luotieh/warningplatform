@@ -13,7 +13,59 @@ import {
 
 const props = defineProps<{ result: any }>();
 
-const r = computed(() => props.result || {});
+/** 兼容旧版扁平 result_json（timing/dns/http 在根级）与新版嵌套结构 */
+function normalizeAvailabilityResult(raw: Record<string, any> | null | undefined) {
+  const src = { ...(raw || {}) };
+  const timing: Record<string, any> = { ...(src.timing || {}) };
+  for (const key of [
+    'dns_ms',
+    'tcp_connect_ms',
+    'tls_handshake_ms',
+    'ttfb_ms',
+    'total_ms',
+  ] as const) {
+    if (timing[key] == null && src[key] != null) {
+      timing[key] = src[key];
+    }
+  }
+
+  const dns: Record<string, any> = { ...(src.dns || {}) };
+  if (!dns.resolved_ips?.length && Array.isArray(src.resolved_ips)) {
+    dns.resolved_ips = src.resolved_ips;
+  }
+
+  const http: Record<string, any> = { ...(src.http || {}) };
+  if (!http.method) http.method = src.method || 'GET';
+  if (!http.final_url) http.final_url = src.final_url || src.url;
+  if (http.content_length == null && src.content_length != null) {
+    http.content_length = src.content_length;
+  }
+  if (!http.response_headers && src.headers) {
+    http.response_headers = src.headers;
+  }
+
+  const ssl: Record<string, any> = { ...(src.ssl || {}) };
+  if (ssl.enabled === undefined) {
+    const url = String(src.url || src.final_url || http.final_url || '');
+    ssl.enabled =
+      url.startsWith('https://') ||
+      Boolean(src.ssl_issuer || src.ssl_protocol || ssl.issuer || ssl.protocol_version);
+  }
+
+  if (!src.url) {
+    src.url = src.final_url || http.final_url;
+  }
+
+  return {
+    ...src,
+    timing,
+    dns,
+    http,
+    ssl,
+  };
+}
+
+const r = computed(() => normalizeAvailabilityResult(props.result));
 const dns = computed(() => r.value.dns || {});
 const httpInfo = computed(() => r.value.http || {});
 const ssl = computed(() => r.value.ssl || {});

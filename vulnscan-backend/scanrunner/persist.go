@@ -35,7 +35,7 @@ func (r *Runner) persistFindings() {
 		}
 	}
 
-	assetCache := r.buildAssetCache()
+	assetResolver := BuildAssetIDResolver(&r.task)
 
 	var records []model.ScanFinding
 	reconCount, vulnCount := 0, 0
@@ -57,7 +57,7 @@ func (r *Runner) persistFindings() {
 		r.persistedKeys[dedupKey] = struct{}{}
 
 		rec := findingToRecord(r.task, f)
-		rec.AssetID = r.resolveAssetID(assetCache, rec.Target, rec.Port)
+		rec.AssetID = assetResolver.Resolve(rec.Target, rec.Port)
 		records = append(records, rec)
 		r.persistedFindingCount.Add(1)
 
@@ -82,42 +82,6 @@ func (r *Runner) persistFindings() {
 		"vuln", vulnCount,
 		"created", created,
 	)
-}
-
-func (r *Runner) buildAssetCache() map[string]string {
-	cache := make(map[string]string)
-	var assets []model.Asset
-	if err := r.db.Select("id, address, ipv4, domain, port").Find(&assets).Error; err != nil {
-		return cache
-	}
-	for _, a := range assets {
-		if a.Address != "" {
-			cache[fmt.Sprintf("%s:%d", a.Address, a.Port)] = a.ID
-			cache[a.Address] = a.ID
-		}
-		if a.IPv4 != "" {
-			cache[a.IPv4] = a.ID
-		}
-		if a.Domain != "" {
-			cache[a.Domain] = a.ID
-		}
-	}
-	return cache
-}
-
-func (r *Runner) resolveAssetID(cache map[string]string, target string, port int) string {
-	if target == "" {
-		return ""
-	}
-	if port > 0 {
-		if id, ok := cache[fmt.Sprintf("%s:%d", target, port)]; ok {
-			return id
-		}
-	}
-	if id, ok := cache[target]; ok {
-		return id
-	}
-	return ""
 }
 
 func findingToRecord(task model.ScanTask, f *core.Finding) model.ScanFinding {

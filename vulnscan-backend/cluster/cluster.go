@@ -24,6 +24,8 @@ func (m *Cluster) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
 			Children: []authorize.Route{
 				{Name: "Worker列表", Path: "workers", Method: "GET", Handler: m.handler.ListWorkers, Enabled: true},
 				{Name: "Worker详情", Path: "workers/:id", Method: "GET", Handler: m.handler.GetWorker, Enabled: true},
+				{Name: "注销Worker", Path: "workers/:id/unregister", Method: "POST", Handler: m.handler.UnregisterWorker, Enabled: true},
+				{Name: "删除扫描节点", Path: "scan-nodes/:uuid", Method: "DELETE", Handler: m.handler.DeleteScanNode, Enabled: true},
 				{Name: "节点知识库版本", Path: "node-knowledge/manifest", Method: "GET", Handler: m.handler.NodeKnowledgeManifest, Enabled: true},
 				{Name: "部署拓扑说明", Path: "connectivity-modes", Method: "GET", Handler: m.handler.GetConnectivityModes, Enabled: true},
 				{Name: "签发扫描节点凭据", Path: "scan-nodes/enroll", Method: "POST", Handler: m.handler.IssueScanNodeCredentials, Enabled: true},

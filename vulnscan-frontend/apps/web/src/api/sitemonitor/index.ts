@@ -1,25 +1,28 @@
 /**
- * 网站监测模块 - API 函数集合
- *
- * 使用 requestClient 发送请求（IAM Token 自动注入）
- * 路径与后端约定保持一致：所有接口均挂在 /monitor 前缀下
+ * 网站监测模块 - API（目标 + 路径任务）
  */
 import type {
   AlertConfig,
+  CrawlResult,
   DashboardStats,
   DimensionConfig,
   FileEntry,
   FileLibrary,
   ImportResult,
   MonitorAgent,
+  MonitorCrawlJob,
   MonitorDefaultConfig,
   MonitorExecution,
+  MonitorPathTask,
   MonitorReportData,
   MonitorReportRequest,
-  MonitorTask,
+  MonitorTarget,
   PageParams,
-  TaskCreateDTO,
+  PathTaskUpdateDTO,
+  RunTaskOutcome,
+  TargetUpdateDTO,
   TaskExecutionStat,
+  TaskTrendResp,
   WordCategory,
   WordEntry,
   WordLibrary,
@@ -30,7 +33,7 @@ import { requestClient } from '#/api/request';
 const base = (url: string) => `/sitemonitor${url}`;
 
 // ════════════════════════════════════════
-// 词库 API
+// 词库 / 文件库 / 默认配置（保持不变）
 // ════════════════════════════════════════
 
 export const getWordLibraryList = (params?: PageParams & { name?: string }) =>
@@ -51,10 +54,6 @@ export const updateWordLibrary = (id: string, data: Partial<WordLibrary>) =>
 export const deleteWordLibrary = (id: string) =>
   requestClient.delete(base(`/word-libraries/${id}`));
 
-// ════════════════════════════════════════
-// 词库分类 API
-// ════════════════════════════════════════
-
 export const getWordCategoryList = (libraryId: string) =>
   requestClient.get<WordCategory[]>(base(`/word-categories/${libraryId}`));
 
@@ -66,10 +65,6 @@ export const updateWordCategory = (id: string, data: Partial<WordCategory>) =>
 
 export const deleteWordCategory = (id: string) =>
   requestClient.delete(base(`/word-categories/${id}`));
-
-// ════════════════════════════════════════
-// 词条 API
-// ════════════════════════════════════════
 
 export const getWordEntryList = (
   params: PageParams & { category_id: string; word?: string },
@@ -101,10 +96,6 @@ export const importWordEntries = (
   );
 };
 
-// ════════════════════════════════════════
-// 文件库 API
-// ════════════════════════════════════════
-
 export const getFileLibraryList = (params?: PageParams & { name?: string }) =>
   requestClient.get<{ count: number; data: FileLibrary[] }>(
     base('/file-libraries'),
@@ -122,10 +113,6 @@ export const updateFileLibrary = (id: string, data: Partial<FileLibrary>) =>
 
 export const deleteFileLibrary = (id: string) =>
   requestClient.delete(base(`/file-libraries/${id}`));
-
-// ════════════════════════════════════════
-// 文件条目 API
-// ════════════════════════════════════════
 
 export const getFileEntryList = (
   params: PageParams & { library_id: string; path?: string },
@@ -146,10 +133,6 @@ export const importFileEntries = (formData: FormData) =>
     headers: { 'Content-Type': 'multipart/form-data' },
   });
 
-// ════════════════════════════════════════
-// 默认配置 API
-// ════════════════════════════════════════
-
 export const getDefaultConfigList = () =>
   requestClient.get<MonitorDefaultConfig[]>(base('/default-configs'));
 
@@ -164,89 +147,155 @@ export const updateDefaultConfig = (
 ) => requestClient.put(base(`/default-configs/${dimension}`), data);
 
 // ════════════════════════════════════════
-// 任务 API
+// 监测目标
 // ════════════════════════════════════════
 
-export const fetchTaskMeta = (url: string) =>
+export const fetchPageMeta = (url: string) =>
   requestClient.get<{ error?: string; title: string; url: string }>(
-    base('/tasks/fetch-meta'),
+    base('/fetch-meta'),
     { params: { url } },
   );
 
-export const getTaskList = (
-  params?: PageParams & { enabled?: string; name?: string },
+/** @deprecated 使用 fetchPageMeta */
+export const fetchTaskMeta = fetchPageMeta;
+
+export const getTargetList = (
+  params?: PageParams & {
+    enabled?: string;
+    name?: string;
+    target_type?: string;
+    target_value?: string;
+  },
 ) =>
-  requestClient.get<{ count: number; data: MonitorTask[] }>(base('/tasks'), {
-    params,
-    responseReturn: 'body',
-  } as any);
+  requestClient.get<{ count: number; data: MonitorTarget[] }>(
+    base('/targets'),
+    { params, responseReturn: 'body' } as any,
+  );
 
-export const createTask = (data: TaskCreateDTO) =>
-  requestClient.post<{ id: string }>(base('/tasks'), data);
+export const createTarget = (data: Partial<MonitorTarget>) =>
+  requestClient.post<MonitorTarget>(base('/targets'), data);
 
+export const getTargetDetail = (id: string) =>
+  requestClient.get<MonitorTarget>(base(`/targets/${id}`));
+
+export const updateTarget = (id: string, data: TargetUpdateDTO) =>
+  requestClient.put(base(`/targets/${id}`), data);
+
+export const deleteTarget = (id: string) =>
+  requestClient.delete(base(`/targets/${id}`));
+
+export const runTarget = (id: string, dimensions?: string[]) =>
+  requestClient.post<RunTaskOutcome>(base(`/targets/run/${id}`), {
+    dimensions: dimensions ?? [],
+  });
+
+export const startCrawl = (
+  targetId: string,
+  data: {
+    use_headless?: boolean;
+    max_depth?: number;
+    max_pages?: number;
+    same_host?: boolean;
+  },
+) =>
+  requestClient.post<MonitorCrawlJob>(base(`/targets/${targetId}/crawl`), data);
+
+export const getCrawlJob = (jobId: string) =>
+  requestClient.get<MonitorCrawlJob>(base(`/crawl-jobs/${jobId}`));
+
+export const applyCrawlPaths = (
+  jobId: string,
+  data: { skip_existing?: boolean } = {},
+) =>
+  requestClient.post<{ created: number }>(
+    base(`/crawl-jobs/${jobId}/apply`),
+    data,
+  );
+
+// ════════════════════════════════════════
+// 路径任务
+// ════════════════════════════════════════
+
+export const getPathTaskList = (
+  params?: PageParams & {
+    target_id?: string;
+    enabled?: string;
+    name?: string;
+  },
+) =>
+  requestClient.get<{ count: number; data: MonitorPathTask[] }>(
+    base('/path-tasks'),
+    { params, responseReturn: 'body' } as any,
+  );
+
+export const createPathTask = (data: Partial<MonitorPathTask>) =>
+  requestClient.post<MonitorPathTask>(base('/path-tasks'), data);
+
+export interface CreateTasksFromAssetsResult {
+  total: number;
+  success: number;
+  results: Array<{
+    asset_id: string;
+    asset_name: string;
+    task_id?: string;
+    success: boolean;
+    skipped: boolean;
+    reason?: string;
+    error?: string;
+  }>;
+}
+
+/** 从资产台账批量创建监测目标与路径任务 */
 export const createTasksFromAssets = (assetIds: string[]) =>
-  requestClient.post<{
-    total: number;
-    success: number;
-    results: Array<{
-      asset_id: string;
-      asset_name: string;
-      task_id?: string;
-      success: boolean;
-      skipped: boolean;
-      reason?: string;
-      error?: string;
-    }>;
-  }>(base('/tasks/from-assets'), {
+  requestClient.post<CreateTasksFromAssetsResult>(base('/targets/from-assets'), {
     asset_ids: assetIds,
   });
 
-export const getTaskDetail = (id: string) =>
-  requestClient.get<MonitorTask>(base(`/tasks/${id}`));
+export const getPathTaskDetail = (id: string) =>
+  requestClient.get<MonitorPathTask>(base(`/path-tasks/${id}`));
 
-export const updateTask = (id: string, data: Partial<MonitorTask>) =>
-  requestClient.put(base(`/tasks/${id}`), data);
+export const updatePathTask = (id: string, data: PathTaskUpdateDTO) =>
+  requestClient.put(base(`/path-tasks/${id}`), data);
 
-export const deleteTask = (id: string) =>
-  requestClient.delete(base(`/tasks/${id}`));
+export const deletePathTask = (id: string) =>
+  requestClient.delete(base(`/path-tasks/${id}`));
 
-export const getTaskTrend = (id: string, hours = 24) =>
-  requestClient.get<any>(base(`/tasks/${id}/trend`), { params: { hours } });
+export interface PathTaskTrendParams {
+  hours?: number;
+  dimension?: string;
+  has_issue?: string;
+  disposition?: string;
+  status?: string;
+  time_start?: string;
+  time_end?: string;
+}
 
-export const runTask = (id: string, dimensions?: string[]) =>
-  requestClient.post<{ execution_ids: string[] }>(
-    base(`/tasks/run/${id}`),
-    dimensions ? { dimensions } : {},
-  );
-
-export const batchToggleEnabled = (ids: string[]) =>
-  requestClient.put(base('/tasks/batch/toggle-enabled'), { ids });
-
-export const batchUpdateConfigs = (
-  ids: string[],
-  configs: Partial<Record<string, DimensionConfig>>,
-) => {
-  const data: any = { ids };
-  for (const [dim, cfg] of Object.entries(configs)) {
-    data[`config_${dim}`] = cfg;
-  }
-  return requestClient.put(base('/tasks/batch/update-configs'), data);
+export const getPathTaskTrend = (id: string, params: number | PathTaskTrendParams = 24) => {
+  const query = typeof params === 'number' ? { hours: params } : params;
+  return requestClient.get<TaskTrendResp>(base(`/path-tasks/${id}/trend`), {
+    params: query,
+  });
 };
 
-export const batchSyncNames = (ids: string[]) =>
-  requestClient.put(base('/tasks/batch/sync-names'), { ids });
+export const runPathTask = (id: string, dimensions?: string[]) =>
+  requestClient.post<RunTaskOutcome>(base(`/path-tasks/run/${id}`), {
+    dimensions: dimensions ?? [],
+  });
 
-export const batchDeleteTasks = (ids: string[]) =>
-  requestClient.delete(base('/tasks/batch/delete'), { data: { ids } });
+export const batchDeletePathTasks = (ids: string[]) =>
+  requestClient.delete(base('/path-tasks/batch/delete'), { data: { ids } });
 
 // ════════════════════════════════════════
-// 执行记录 API
+// 执行记录 / 统计
 // ════════════════════════════════════════
 
-export const getTaskExecutionStats = () =>
+export const getPathTaskExecutionStats = () =>
   requestClient.get<Record<string, Record<string, TaskExecutionStat>>>(
-    base('/tasks/execution-stats'),
+    base('/execution-stats'),
   );
+
+/** @deprecated */
+export const getTaskExecutionStats = getPathTaskExecutionStats;
 
 export const getExecutionList = (
   params?: PageParams & {
@@ -254,7 +303,8 @@ export const getExecutionList = (
     disposition?: string;
     has_issue?: string;
     status?: string;
-    task_id?: string;
+    target_id?: string;
+    path_task_id?: string;
     time_end?: string;
     time_start?: string;
   },
@@ -306,7 +356,7 @@ export const generateMonitorReport = (data: MonitorReportRequest) =>
   requestClient.post<MonitorReportData>(base('/reports/generate'), data);
 
 // ════════════════════════════════════════
-// Agent API
+// Agent / 规则 / 告警 / 导入
 // ════════════════════════════════════════
 
 export const getAgentList = () =>
@@ -318,9 +368,8 @@ export const syncAgentRules = (uuid: string) =>
 export const shutdownAgent = (uuid: string) =>
   requestClient.post(base(`/agents/${uuid}/shutdown`));
 
-// ════════════════════════════════════════
-// 规则数据 API
-// ════════════════════════════════════════
+export const deleteMonitorAgent = (uuid: string) =>
+  requestClient.delete(base(`/agents/${uuid}`));
 
 export const getRuleDataList = () =>
   requestClient.get<any[]>(base('/rule-data'));
@@ -344,35 +393,83 @@ export const importRuleData = (
 export const resetDefaultRuleData = () =>
   requestClient.post(base('/rule-data/reset-defaults'));
 
-// ════════════════════════════════════════
-// 告警配置 API
-// ════════════════════════════════════════
-
 export const getAlertConfig = () =>
   requestClient.get<AlertConfig>(base('/alert-config'));
 
 export const updateAlertConfig = (config: Partial<AlertConfig>) =>
   requestClient.put(base('/alert-config'), config);
 
-// ════════════════════════════════════════
-// 批量导入 API
-// ════════════════════════════════════════
+export const downloadImportTemplate = () => base('/import/template');
 
-export const downloadImportTemplate = () =>
-  base('/tasks/import/template');
-
-export const importTasks = (file: File) => {
+export const importTargets = (file: File) => {
   const formData = new FormData();
   formData.append('file', file);
-  return requestClient.post<ImportResult>(base('/tasks/import'), formData, {
+  return requestClient.post<ImportResult>(base('/import'), formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
 };
 
-export const getImportResult = (importId: string) =>
-  requestClient.get<ImportResult>(base(`/tasks/import/result/${importId}`));
+/** @deprecated */
+export const importTasks = importTargets;
 
-export const exportImportResultUrl = (importId: string) =>
-  base(`/tasks/import/result/${importId}/export`);
+/** 将路径任务映射为旧版 MonitorTask 字段，供监测中心等页面过渡使用 */
+function mapPathTaskToLegacy(pt: MonitorPathTask): MonitorPathTask & {
+  task_name: string;
+  target_homepage: string;
+  target_domain: string;
+  target_ips: string;
+} {
+  return {
+    ...pt,
+    task_name: pt.name,
+    target_homepage: pt.url_override || pt.path || '/',
+    target_domain: '',
+    target_ips: '',
+  };
+}
+
+/** @deprecated 使用 getPathTaskList */
+export async function getTaskList(
+  params?: PageParams & {
+    enabled?: string;
+    name?: string;
+    target_homepage?: string;
+  },
+) {
+  const res = await getPathTaskList({
+    enabled: params?.enabled,
+    index: params?.index,
+    name: params?.name || params?.target_homepage,
+    size: params?.size,
+  });
+  return {
+    ...res,
+    data: (res.data || []).map(mapPathTaskToLegacy),
+  };
+}
+
+/** @deprecated */
+export const getTaskDetail = getPathTaskDetail;
+
+/** @deprecated */
+export const getTaskTrend = getPathTaskTrend;
+
+/** @deprecated */
+export const runTask = runPathTask;
+
+/** @deprecated */
+export const createTask = createPathTask;
+
+/** @deprecated */
+export const updateTask = (id: string, data: Partial<MonitorPathTask>) =>
+  updatePathTask(id, data as PathTaskUpdateDTO);
+
+/** @deprecated */
+export const deleteTask = deletePathTask;
+
+/** @deprecated */
+export const batchDeleteTasks = batchDeletePathTasks;
+
+export type { CrawlResult };
 
 export type * from './types';

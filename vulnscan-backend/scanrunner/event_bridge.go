@@ -206,7 +206,6 @@ func (eb *EventBridge) createIncidentFromFinding(ctx context.Context, f model.Sc
 	cvssScore := 0.0
 	owaspCategory := ""
 	incidentURL := ""
-	incidentType := classifyIncidentType(f.ModuleID)
 	affectScope := f.Target
 
 	if f.Port > 0 {
@@ -227,13 +226,8 @@ func (eb *EventBridge) createIncidentFromFinding(ctx context.Context, f model.Sc
 		}
 	}
 
-	descParts := []string{f.Description}
-	if f.Evidence != "" {
-		descParts = append(descParts, "证据: "+f.Evidence)
-	}
-	if f.VerificationDetail != "" {
-		descParts = append(descParts, "验证方式: "+f.VerificationDetail)
-	}
+	incidentType := classifyIncidentType(f.ModuleID)
+	description := buildScanIncidentDescription(f, incidentType)
 
 	exploitDifficulty := "未知"
 	switch f.VerificationLevel {
@@ -255,7 +249,7 @@ func (eb *EventBridge) createIncidentFromFinding(ctx context.Context, f model.Sc
 			IncidentType:        incidentType,
 			IncidentURL:         incidentURL,
 			DiscoveryTime:       discoveryTime,
-			IncidentDescription: strings.Join(descParts, "\n"),
+			IncidentDescription: description,
 			CvssScore:           cvssScore,
 			CveId:               cveId,
 			OwaspCategory:       owaspCategory,
@@ -274,6 +268,15 @@ func (eb *EventBridge) createIncidentFromFinding(ctx context.Context, f model.Sc
 			}
 			if asset.IPv4 != "" {
 				req.Asset.SiteIP = asset.IPv4
+			}
+			if organizeID == "" && asset.OrganizeID != "" {
+				organizeID = asset.OrganizeID
+			}
+			if asset.OrganizeID != "" {
+				var org model.Organize
+				if err := eb.db.WithContext(ctx).Select("name").Where("id = ?", asset.OrganizeID).First(&org).Error; err == nil {
+					req.Asset.Unit = org.Name
+				}
 			}
 		}
 	}

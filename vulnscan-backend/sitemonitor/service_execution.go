@@ -15,10 +15,13 @@ import (
 
 func (s *serviceMonitor) ListExecutions(ctx context.Context, req contract.ExecutionListReq, scopes ...func(*gorm.DB) *gorm.DB) (int64, []model.MonitorExecution, error) {
 	query := s.session().WithContext(ctx).Model(&model.MonitorExecution{}).
-		Joins("JOIN monitor_tasks ON monitor_tasks.id = monitor_executions.task_id").
+		Joins("LEFT JOIN monitor_targets ON monitor_targets.id = monitor_executions.target_id").
 		Scopes(scopes...)
-	if req.TaskID != "" {
-		query = query.Where("task_id = ?", req.TaskID)
+	if req.TargetID != "" {
+		query = query.Where("target_id = ?", req.TargetID)
+	}
+	if req.PathTaskID != "" {
+		query = query.Where("path_task_id = ?", req.PathTaskID)
 	}
 	if req.Dimension != "" {
 		query = query.Where("dimension = ?", req.Dimension)
@@ -77,7 +80,7 @@ func (s *serviceMonitor) GetExecutionDetail(ctx context.Context, id string) (*co
 	}
 	if exec.Dimension == "availability" {
 		var baseline model.MonitorPerfBaseline
-		if s.session().WithContext(ctx).Where("task_id = ?", exec.TaskID).First(&baseline).Error == nil {
+		if exec.PathTaskID != "" && s.session().WithContext(ctx).Where("task_id = ?", exec.PathTaskID).First(&baseline).Error == nil {
 			detail.PerfBaseline = &baseline
 		}
 	}

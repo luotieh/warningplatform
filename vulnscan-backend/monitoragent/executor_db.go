@@ -61,7 +61,7 @@ func (e *DBExecutor) Execute(ctx context.Context, payload json.RawMessage) *agen
 		return result
 	}
 
-	snap, err := e.pageService.FetchPage(ctx, msg.URL)
+	snap, err := e.pageService.FetchPage(ctx, msg.URL, msg.RequestHost)
 	if err != nil {
 		result.Status = "failed"
 		result.Error = err.Error()
@@ -76,7 +76,11 @@ func (e *DBExecutor) Execute(ctx context.Context, payload json.RawMessage) *agen
 		analyzed, aErr := e.analysis.Analyze(ctx, msg.Dimension, snapshotJSON, msg.URL, &msg)
 		if aErr != nil {
 			slog.Warn("analysis failed, using raw snapshot", "dimension", msg.Dimension, "error", aErr)
-			result.Result = snapshotJSON
+			if msg.Dimension == "availability" {
+				result.Result = BuildAvailabilityResultJSON(snapshotJSON, nil)
+			} else {
+				result.Result = snapshotJSON
+			}
 		} else {
 			result.Result = analyzed
 		}

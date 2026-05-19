@@ -7,19 +7,27 @@ import {
   createAsset,
   deleteAsset,
   getAssetList,
+  getAssetRegionScope,
   getAssetStats,
   downloadImportTemplate,
   importAssets,
   updateAsset,
   type Asset,
 } from '#/api/asset';
-import { getRequestErrorMessage } from '#/api/helpers';
+import {
+  getImportErrorPayload,
+  getRequestErrorMessage,
+  type ImportFailedRowPayload,
+  type ImportIssuePayload,
+} from '#/api/helpers';
+import { buildImportErrorTableRows, importErrorSummary } from '../import-errors';
 import {
   createConstruction,
   createOrganize,
   createVerifyTasks,
   getConstructionList,
   getOrganizeDetail,
+  getOrganizeList,
   getOrganizeTree,
   updateOrganize,
   type ConstructionOrg,
@@ -37,6 +45,12 @@ import {
   type DynamicFormSubmissionDetail,
   type DynamicFormTemplate,
 } from '#/api/formdesign';
+import {
+  deriveAssetNetworkFieldsFromAccessAddress,
+  mergeDerivedNetworkFields,
+  normalizeAssetAccessAddress,
+  validateAssetAccessAddress,
+} from '#/utils/asset-address';
 import { regionLabelFromCode } from '#/utils/region';
 import {
   validateCNPhone,
@@ -62,12 +76,18 @@ import {
   VERIFY_SOURCE_OPTIONS,
 } from '../constants';
 import { appendExecutorNodeParams, useScanExecutorNodes } from '../../../scan/scan-executor';
-import { assetTarget, buildScanTaskName, resolveScanTemplate as resolveScanTemplateForAssets } from '../scan-utils';
+import {
+  assetTarget,
+  buildScanAssetParameters,
+  buildScanTaskName,
+  resolveScanTemplate as resolveScanTemplateForAssets,
+} from '../scan-utils';
 import type {
   LedgerConstructionForm,
   LedgerFormModel,
   LedgerOption,
   LedgerScanForm,
+  LedgerScopeDimension,
   LedgerSearchForm,
   LedgerStats,
   LedgerVerifyForm,
@@ -77,8 +97,13 @@ import { downloadBlob } from '../file-utils';
 import {
   appendFallbackOption,
   assetIdentifier,
+  buildDictTreeOptions,
   buildOrgTreeOptions,
+  buildOrganizeSearchTreeOptions,
+  buildRegionTreeFromAssetCodes,
   flattenOrgTree,
+  regionAssetQueryFromCode,
+  regionScopeLabelFromCode,
   mapOrganizeToUnitExtra,
   mapUnitExtraToOrganizeUpdate,
   optionLabelOf,
@@ -113,8 +138,15 @@ export function useLedgerPage() {
   const industryCategoryOptions = ref<LedgerOption[]>([...DEFAULT_INDUSTRY_CATEGORY_OPTIONS]);
   const constructionOptions = ref<LedgerOption[]>([]);
   const orgTreeOptions = ref<TreeOption[]>([]);
+  const orgTreeSearchOptions = ref<TreeOption[]>([]);
+  const orgSearchKeyword = ref('');
   const orgNameMap = ref<Record<string, string>>({});
+  const orgParentMap = ref<Record<string, string>>({});
+  const scopeDimension = ref<LedgerScopeDimension>('organize');
   const selectedOrgKey = ref<string | null>(null);
+  const selectedRegionKey = ref<string | null>(null);
+  const selectedIndustryKey = ref<string | null>(null);
+  const selectedAssetFamilyKey = ref<string | null>(null);
   const templates = ref<ScanTemplate[]>([]);
   const enginePresets = ref<ScanEnginePreset[]>([]);
   const moduleConfigs = ref<Record<string, Record<string, any>>>({});
@@ -143,6 +175,9 @@ export function useLedgerPage() {
   const showEditModal = ref(false);
   const showImportModal = ref(false);
   const importErrorMessage = ref('');
+  const importErrorIssues = ref<ImportIssuePayload[]>([]);
+  const importErrorCount = ref(0);
+  const importErrorFailedRows = ref<ImportFailedRowPayload[]>([]);
   const showScanModal = ref(false);
   const showVerifyModal = ref(false);
   const showQuickConstructionModal = ref(false);
@@ -156,9 +191,37 @@ export function useLedgerPage() {
   let organizeExtraFillSeq = 0;
 
   const isEditing = computed(() => !!editingId.value);
-  const selectedOrgName = computed(() =>
-    selectedOrgKey.value ? orgNameMap.value[selectedOrgKey.value] ?? selectedOrgKey.value : '',
+  const regionScopeItems = ref<Array<{ count: number; region_code: string }>>([]);
+  const regionTreeOptions = computed(() => buildRegionTreeFromAssetCodes(regionScopeItems.value));
+  const industryTreeOptions = computed(() => buildDictTreeOptions(industryCategoryOptions.value));
+  const assetFamilyScopeTreeOptions = computed(() => buildDictTreeOptions(assetFamilyOptions.value));
+  const scopeLabel = computed(() => {
+    switch (scopeDimension.value) {
+      case 'organize':
+        return selectedOrgKey.value
+          ? orgNameMap.value[selectedOrgKey.value] ?? selectedOrgKey.value
+          : '';
+      case 'region':
+        return selectedRegionKey.value
+          ? regionScopeLabelFromCode(selectedRegionKey.value)
+          : '';
+      case 'industry':
+        return selectedIndustryKey.value
+          ? optionLabelOf(industryCategoryOptions.value, selectedIndustryKey.value)
+          : '';
+      case 'asset_family':
+        return selectedAssetFamilyKey.value
+          ? optionLabelOf(assetFamilyOptions.value, selectedAssetFamilyKey.value)
+          : '';
+      default:
+        return '';
+    }
+  });
+  const orgTreeDisplay = computed(() =>
+    orgSearchKeyword.value.trim() ? orgTreeSearchOptions.value : orgTreeOptions.value,
   );
+  const orgTreeSearchMode = computed(() => !!orgSearchKeyword.value.trim());
+  const scopeUsesAssetFamily = computed(() => scopeDimension.value === 'asset_family');
   const selectedAssets = computed(() => {
     const selected = new Set(checkedRowKeys.value);
     return rows.value.filter((row) => selected.has(row.id));
@@ -331,16 +394,57 @@ export function useLedgerPage() {
     ]);
   }
 
+  async function loadRegionScope() {
+    try {
+      regionScopeItems.value = await getAssetRegionScope();
+    } catch {
+      regionScopeItems.value = [];
+    }
+  }
+
   async function loadOrgTree() {
     treeLoading.value = true;
     try {
       const tree = await getOrganizeTree();
       const options = buildOrgTreeOptions(Array.isArray(tree) ? tree : []);
       orgTreeOptions.value = options;
-      orgNameMap.value = flattenOrgTree(options);
+      const nameMap: Record<string, string> = {};
+      const parentMap: Record<string, string> = {};
+      flattenOrgTree(options, nameMap, parentMap);
+      orgNameMap.value = nameMap;
+      orgParentMap.value = parentMap;
     } catch {
       orgTreeOptions.value = [];
       orgNameMap.value = {};
+      orgParentMap.value = {};
+    } finally {
+      treeLoading.value = false;
+    }
+  }
+
+  async function searchOrganizes(keyword: string) {
+    const q = keyword.trim();
+    orgSearchKeyword.value = q;
+    if (!q) {
+      orgTreeSearchOptions.value = [];
+      return;
+    }
+    treeLoading.value = true;
+    try {
+      const res = await getOrganizeList({ page: 1, page_size: 200, name: q });
+      const body = (res as any)?.data ?? res;
+      const items = (body?.data ?? body?.items ?? []) as Organize[];
+      const nameMap = { ...orgNameMap.value };
+      items.forEach((item) => {
+        if (item.id) nameMap[item.id] = item.name || nameMap[item.id] || item.id;
+      });
+      orgTreeSearchOptions.value = buildOrganizeSearchTreeOptions(
+        items,
+        nameMap,
+        orgParentMap.value,
+      );
+    } catch {
+      orgTreeSearchOptions.value = [];
     } finally {
       treeLoading.value = false;
     }
@@ -375,13 +479,55 @@ export function useLedgerPage() {
     }
   }
 
+  function clearScopeSelection() {
+    selectedOrgKey.value = null;
+    selectedRegionKey.value = null;
+    selectedIndustryKey.value = null;
+    selectedAssetFamilyKey.value = null;
+    orgSearchKeyword.value = '';
+    orgTreeSearchOptions.value = [];
+  }
+
+  function setScopeDimension(dim: LedgerScopeDimension) {
+    if (scopeDimension.value === dim) return;
+    scopeDimension.value = dim;
+    clearScopeSelection();
+    if (dim === 'asset_family') {
+      activeFamily.value = 'all';
+      searchForm.assetFamily = undefined;
+    }
+    pagination.page = 1;
+    void reload();
+  }
+
+  function resetScopePanel() {
+    clearScopeSelection();
+    pagination.page = 1;
+    void reload();
+  }
+
   function buildQueryParams() {
+    const regionQuery =
+      scopeDimension.value === 'region' && selectedRegionKey.value
+        ? regionAssetQueryFromCode(selectedRegionKey.value)
+        : {};
     return {
       page: pagination.page,
       page_size: pagination.pageSize,
       keyword: searchForm.keyword || undefined,
-      organize_id: selectedOrgKey.value || undefined,
-      asset_family: searchForm.assetFamily || undefined,
+      organize_id:
+        scopeDimension.value === 'organize' && selectedOrgKey.value
+          ? selectedOrgKey.value
+          : undefined,
+      ...regionQuery,
+      industry_category:
+        scopeDimension.value === 'industry' && selectedIndustryKey.value
+          ? selectedIndustryKey.value
+          : undefined,
+      asset_family:
+        scopeDimension.value === 'asset_family' && selectedAssetFamilyKey.value
+          ? selectedAssetFamilyKey.value
+          : searchForm.assetFamily || undefined,
       security_protection_level: searchForm.securityLevel || undefined,
       data_source: searchForm.dataSource || undefined,
       risk_score_min: searchForm.riskScoreMin ?? undefined,
@@ -436,7 +582,7 @@ export function useLedgerPage() {
     searchForm.riskScoreMax = null;
     searchForm.isKey = '';
     activeFamily.value = 'all';
-    selectedOrgKey.value = null;
+    clearScopeSelection();
     pagination.page = 1;
     void reload();
   }
@@ -450,6 +596,24 @@ export function useLedgerPage() {
 
   function selectOrg(key: string | null) {
     selectedOrgKey.value = key;
+    pagination.page = 1;
+    void reload();
+  }
+
+  function selectRegion(key: string | null) {
+    selectedRegionKey.value = key;
+    pagination.page = 1;
+    void reload();
+  }
+
+  function selectIndustry(key: string | null) {
+    selectedIndustryKey.value = key;
+    pagination.page = 1;
+    void reload();
+  }
+
+  function selectAssetFamily(key: string | null) {
+    selectedAssetFamilyKey.value = key;
     pagination.page = 1;
     void reload();
   }
@@ -551,7 +715,21 @@ export function useLedgerPage() {
     const unitErr = validateUnitProfile(formModel.extra);
     if (unitErr) return message.warning(unitErr);
 
+    if (formModel.address.trim()) {
+      const addressErr = validateAssetAccessAddress(formModel.address, {
+        allowEmpty: true,
+        assetFamily: fam,
+      });
+      if (addressErr) return message.warning(addressErr);
+      formModel.address = normalizeAssetAccessAddress(formModel.address, {
+        assetFamily: fam,
+      });
+    }
+
     const address = resolvedAssetAddress();
+    const derivedNetwork = address
+      ? deriveAssetNetworkFieldsFromAccessAddress(address, { assetFamily: fam })
+      : null;
 
     saving.value = true;
     try {
@@ -566,6 +744,21 @@ export function useLedgerPage() {
 
       const extraPayload = stripUnitProfileFromExtra(formModel.extra as Record<string, unknown>);
 
+      const networkMerged = derivedNetwork
+        ? mergeDerivedNetworkFields(
+            {
+              domain: '',
+              ipv4: formModel.ipv4.trim(),
+              ipv6: formModel.ipv6.trim(),
+              port: formModel.port,
+              protocol: '',
+              url: '',
+            },
+            derivedNetwork,
+            true,
+          )
+        : null;
+
       const payload = {
         name: formModel.name.trim(),
         type: formModel.assetFamily,
@@ -573,9 +766,12 @@ export function useLedgerPage() {
         organize_id: formModel.organizeId,
         data_number: formModel.dataNumber.trim() || undefined,
         address,
-        ipv4: formModel.ipv4.trim() || undefined,
-        ipv6: formModel.ipv6.trim() || undefined,
-        port: formModel.port ?? undefined,
+        domain: networkMerged?.domain || undefined,
+        ipv4: networkMerged?.ipv4 || undefined,
+        ipv6: networkMerged?.ipv6 || undefined,
+        url: networkMerged?.url || undefined,
+        protocol: networkMerged?.protocol || undefined,
+        port: networkMerged?.port ?? formModel.port ?? undefined,
         is_online: formModel.isOnline,
         is_key: formModel.isKey,
         security_protection_level: formModel.securityProtectionLevel || undefined,
@@ -599,7 +795,7 @@ export function useLedgerPage() {
         message.success('资产已创建');
       }
       showEditModal.value = false;
-      await Promise.all([reload(), loadOrgTree()]);
+      await Promise.all([reload(), loadOrgTree(), loadRegionScope()]);
     } finally {
       saving.value = false;
     }
@@ -653,7 +849,9 @@ export function useLedgerPage() {
 
     creatingScanTask.value = true;
     try {
-      const parameters: Record<string, any> = {};
+      const parameters: Record<string, any> = {
+        ...buildScanAssetParameters(scanAssets.value),
+      };
       if (Object.keys(moduleConfigs.value).length > 0) parameters.module_configs = moduleConfigs.value;
       if (scanForm.verificationLevel !== 'both') parameters.verification_level = scanForm.verificationLevel;
       if (scanForm.enginePreset) parameters.engine_preset = scanForm.enginePreset;
@@ -664,7 +862,8 @@ export function useLedgerPage() {
         template_id: scanForm.templateId,
         priority: scanForm.priority,
         executor_node_ids: scanForm.executorNodeIds,
-        parameters: Object.keys(parameters).length > 0 ? parameters : undefined,
+        asset_ids: scanAssets.value.map((item) => item.id),
+        parameters,
       });
       message.success('扫描任务已创建');
       showScanModal.value = false;
@@ -815,17 +1014,38 @@ export function useLedgerPage() {
     if (!importFile.value) return message.warning('请先选择导入文件');
     importLoading.value = true;
     importErrorMessage.value = '';
+    importErrorIssues.value = [];
+    importErrorCount.value = 0;
+    importErrorFailedRows.value = [];
     try {
       await importAssets(importFile.value);
       message.success('导入成功');
       showImportModal.value = false;
       importFile.value = null;
       importErrorMessage.value = '';
+      importErrorIssues.value = [];
+      importErrorCount.value = 0;
+      importErrorFailedRows.value = [];
       pagination.page = 1;
-      await Promise.all([reload(), loadOrgTree()]);
+      await Promise.all([reload(), loadOrgTree(), loadRegionScope()]);
       void probeReachabilityAndReload();
     } catch (error) {
-      importErrorMessage.value = getRequestErrorMessage(error, '导入失败，请检查文件内容后重试');
+      const payload = getImportErrorPayload(error, '导入失败，请检查文件内容后重试');
+      importErrorIssues.value = payload.issues;
+      importErrorFailedRows.value = payload.failedRows;
+      importErrorCount.value = payload.errorCount;
+      const tableRows = buildImportErrorTableRows(
+        payload.failedRows,
+        payload.issues,
+      );
+      if (tableRows.length > 0) {
+        importErrorMessage.value = importErrorSummary(
+          payload.errorCount,
+          tableRows.length,
+        );
+      } else {
+        importErrorMessage.value = payload.message;
+      }
     } finally {
       importLoading.value = false;
     }
@@ -833,6 +1053,9 @@ export function useLedgerPage() {
 
   function clearImportError() {
     importErrorMessage.value = '';
+    importErrorIssues.value = [];
+    importErrorCount.value = 0;
+    importErrorFailedRows.value = [];
   }
 
   function buildProbeParams() {
@@ -855,6 +1078,7 @@ export function useLedgerPage() {
     await Promise.all([
       loadOptions(),
       loadOrgTree(),
+      loadRegionScope(),
       loadConstructionOptions(),
       loadTemplates(),
       loadEnginePresets(),
@@ -895,8 +1119,24 @@ export function useLedgerPage() {
     industryCategoryOptions,
     constructionOptions,
     orgTreeOptions,
+    orgTreeDisplay,
+    orgTreeSearchMode,
+    searchOrganizes,
+    scopeDimension,
+    regionTreeOptions,
+    industryTreeOptions,
+    assetFamilyScopeTreeOptions,
+    scopeUsesAssetFamily,
+    scopeLabel,
+    setScopeDimension,
+    resetScopePanel,
     selectedOrgKey,
-    selectedOrgName,
+    selectedRegionKey,
+    selectedIndustryKey,
+    selectedAssetFamilyKey,
+    selectRegion,
+    selectIndustry,
+    selectAssetFamily,
     scanAssets,
     stats,
     searchForm,
@@ -918,6 +1158,9 @@ export function useLedgerPage() {
     showEditModal,
     showImportModal,
     importErrorMessage,
+    importErrorIssues,
+    importErrorCount,
+    importErrorFailedRows,
     clearImportError,
     showScanModal,
     showVerifyModal,

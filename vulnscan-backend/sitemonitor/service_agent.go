@@ -3,6 +3,7 @@ package sitemonitor
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"vulnscan-backend/model"
 
@@ -32,6 +33,33 @@ func (s *serviceMonitor) ShutdownAgent(ctx context.Context, agentUUID string) (m
 		return nil, fmt.Errorf("NATS 未连接")
 	}
 	return s.nats.SendAgentCommand(ctx, agentUUID, "shutdown")
+}
+
+const embeddedMonitorAgentUUID = "embedded-default"
+
+func (s *serviceMonitor) DeleteAgent(ctx context.Context, agentUUID string) error {
+	agentUUID = strings.TrimSpace(agentUUID)
+	if agentUUID == "" {
+		return fmt.Errorf("Agent UUID 为空")
+	}
+	if agentUUID == embeddedMonitorAgentUUID {
+		return fmt.Errorf("内置监测执行引擎不可删除")
+	}
+	var ag model.MonitorAgent
+	if err := s.session().WithContext(ctx).Where("uuid = ?", agentUUID).First(&ag).Error; err != nil {
+		return fmt.Errorf("监测节点不存在")
+	}
+	if ag.RunningTasks > 0 {
+		return fmt.Errorf("节点仍有运行中任务，请稍后再试")
+	}
+	res := s.session().WithContext(ctx).Where("uuid = ?", agentUUID).Delete(&model.MonitorAgent{})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return fmt.Errorf("监测节点不存在")
+	}
+	return nil
 }
 
 // ══ 告警配置 ══

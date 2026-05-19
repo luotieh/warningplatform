@@ -28,7 +28,12 @@ import {
 
 import type { DynamicFormSubmissionDetail, DynamicFormTemplate } from '#/api/formdesign';
 import DynamicFormRenderer from '#/components/dynamic-form/DynamicFormRenderer.vue';
-import { ledgerAssetFormRules } from '#/utils/form-rules';
+import { assetAddressFormRule, ledgerAssetFormRules } from '#/utils/form-rules';
+import {
+  deriveAssetNetworkFieldsFromAccessAddress,
+  mergeDerivedNetworkFields,
+  normalizeAssetAccessAddress,
+} from '#/utils/asset-address';
 import { regionOptions } from '#/utils/region';
 
 import type { LedgerFormModel, LedgerOption } from '../types';
@@ -89,7 +94,10 @@ const URL_FIRST_FAMILIES = new Set(['domain_site', 'official_account', 'mini_pro
 const showIpv4Row = computed(() => !URL_FIRST_FAMILIES.has(props.form.assetFamily || ''));
 
 const formRules = computed(() => {
-  const rules = { ...ledgerAssetFormRules };
+  const rules = {
+    ...ledgerAssetFormRules,
+    address: assetAddressFormRule(() => props.form.assetFamily),
+  };
   if (!showIpv4Row.value) {
     delete rules.ipv4;
     delete rules.port;
@@ -101,10 +109,40 @@ const accessAddressRequired = computed(() => URL_FIRST_FAMILIES.has(props.form.a
 
 const targetFieldHint = computed(() => {
   if (accessAddressRequired.value) {
-    return '当前分类请填写访问地址（域名、URL 或小程序路径等）。';
+    return '请填写一个访问地址（域名或 URL）；失焦后将自动规范写法，并尝试补全域名、IPv4、端口等空项。';
   }
-  return '访问地址与 IPv4 至少填写一项。';
+  return '访问地址与 IPv4 至少填写一项；失焦后可从地址解析补全 IPv4/端口，多个 IP 请填在 IPv4 字段。';
 });
+
+function normalizeAddressField() {
+  if (!props.form.address.trim()) return;
+  const normalized = normalizeAssetAccessAddress(props.form.address, {
+    assetFamily: props.form.assetFamily,
+  });
+  props.form.address = normalized;
+  if (!normalized) return;
+
+  const derived = deriveAssetNetworkFieldsFromAccessAddress(normalized, {
+    assetFamily: props.form.assetFamily,
+    existing: {
+      ipv4: props.form.ipv4,
+      ipv6: props.form.ipv6,
+      port: props.form.port,
+    },
+  });
+  const merged = mergeDerivedNetworkFields(
+    {
+      ipv4: props.form.ipv4,
+      ipv6: props.form.ipv6,
+      port: props.form.port,
+    },
+    derived,
+    true,
+  );
+  if (merged.ipv4) props.form.ipv4 = merged.ipv4;
+  if (merged.ipv6) props.form.ipv6 = merged.ipv6;
+  if (merged.port != null) props.form.port = merged.port;
+}
 
 const formRef = ref<FormInst | null>(null);
 
@@ -268,8 +306,16 @@ async function handleSubmit() {
             </NGridItem>
 
             <NGridItem :span="2">
-              <NFormItem label="访问地址" :required="accessAddressRequired">
-                <NInput v-model:value="form.address" placeholder="IP、域名或 URL" />
+              <NFormItem
+                label="访问地址"
+                path="address"
+                :required="accessAddressRequired"
+              >
+                <NInput
+                  v-model:value="form.address"
+                  placeholder="单个域名、URL 或 IP:端口（勿用逗号填多个）"
+                  @blur="normalizeAddressField"
+                />
               </NFormItem>
             </NGridItem>
 

@@ -9,49 +9,98 @@ import (
 	"time"
 )
 
-// ═══ 监控任务 ═══
+// ═══ 监测目标与路径任务 ═══
 
-type MonitorTask struct {
+const (
+	MonitorTargetTypeDomain = "domain"
+	MonitorTargetTypeIP     = "ip"
+)
+
+// MonitorTarget 监测目标（域名或 IP，可带虚拟主机）。
+type MonitorTarget struct {
 	BaseModel
-	TaskName             string     `json:"task_name" gorm:"type:varchar(200);not null"`
+	Name                 string     `json:"name" gorm:"type:varchar(200);not null"`
+	TargetType           string     `json:"target_type" gorm:"type:varchar(20);not null;index"`
+	TargetValue          string     `json:"target_value" gorm:"type:varchar(500);not null"`
+	DefaultScheme        string     `json:"default_scheme" gorm:"type:varchar(10);default:https"`
+	VirtualHost          string     `json:"virtual_host" gorm:"type:varchar(500)"`
+	ExpectedIPs          string     `json:"expected_ips" gorm:"type:text"`
 	AssetID              string     `json:"asset_id" gorm:"type:varchar(36);index"`
-	Enabled              bool       `json:"enabled" gorm:"not null"`
+	Enabled              bool       `json:"enabled" gorm:"not null;default:true"`
 	Notes                string     `json:"notes" gorm:"type:varchar(500)"`
-	TargetHomepage       string     `json:"target_homepage" gorm:"type:varchar(500);not null"`
-	TargetDomain         string     `json:"target_domain" gorm:"type:varchar(500)"`
-	TargetSubdomains     string     `json:"target_subdomains" gorm:"type:text"`
-	TargetIps            string     `json:"target_ips" gorm:"type:text"`
 	ScheduleEnabled      bool       `json:"schedule_enabled" gorm:"default:false"`
 	ScheduleCron         string     `json:"schedule_cron" gorm:"type:varchar(100)"`
-	ScheduleGroup        string     `json:"schedule_group" gorm:"type:varchar(100);index"`
+	ScheduleJitter       int        `json:"schedule_jitter" gorm:"default:0"`
+	NextRunAt            *time.Time `json:"next_run_at" gorm:"index"`
+	ConfigDomainHijack   JSONMap    `json:"config_domain_hijack" gorm:"type:text"`
+	ConfigSensitiveFile  JSONMap    `json:"config_sensitive_file" gorm:"type:text"`
+	LastRunDomainHijack  *time.Time `json:"last_run_domain_hijack"`
+	LastRunSensitiveFile *time.Time `json:"last_run_sensitive_file"`
+}
+
+func (MonitorTarget) TableName() string { return "monitor_targets" }
+
+func (m *MonitorTarget) GetDimensionConfig(dim string) JSONMap {
+	switch dim {
+	case "domain_hijack":
+		return m.ConfigDomainHijack
+	case "sensitive_file":
+		return m.ConfigSensitiveFile
+	}
+	return nil
+}
+
+func (m *MonitorTarget) SetDimensionConfig(dim string, cfg JSONMap) {
+	switch dim {
+	case "domain_hijack":
+		m.ConfigDomainHijack = cfg
+	case "sensitive_file":
+		m.ConfigSensitiveFile = cfg
+	}
+}
+
+func (m *MonitorTarget) GetLastRun(dim string) *time.Time {
+	switch dim {
+	case "domain_hijack":
+		return m.LastRunDomainHijack
+	case "sensitive_file":
+		return m.LastRunSensitiveFile
+	}
+	return nil
+}
+
+// MonitorPathTask 路径级监测任务（挂在 MonitorTarget 下）。
+type MonitorPathTask struct {
+	BaseModel
+	TargetID             string     `json:"target_id" gorm:"type:varchar(36);not null;index"`
+	Name                 string     `json:"name" gorm:"type:varchar(200);not null"`
+	Path                 string     `json:"path" gorm:"type:varchar(500);default:'/'"`
+	URLOverride          string     `json:"url_override" gorm:"type:varchar(1000)"`
+	AssetID              string     `json:"asset_id" gorm:"type:varchar(36);index"`
+	Enabled              bool       `json:"enabled" gorm:"not null;default:true"`
+	Notes                string     `json:"notes" gorm:"type:varchar(500)"`
+	ScheduleEnabled      bool       `json:"schedule_enabled" gorm:"default:false"`
+	ScheduleCron         string     `json:"schedule_cron" gorm:"type:varchar(100)"`
 	ScheduleJitter       int        `json:"schedule_jitter" gorm:"default:0"`
 	NextRunAt            *time.Time `json:"next_run_at" gorm:"index"`
 	ConfigAvailability   JSONMap    `json:"config_availability" gorm:"type:text"`
-	ConfigDomainHijack   JSONMap    `json:"config_domain_hijack" gorm:"type:text"`
 	ConfigTamper         JSONMap    `json:"config_tamper" gorm:"type:text"`
-	ConfigSensitiveFile  JSONMap    `json:"config_sensitive_file" gorm:"type:text"`
 	ConfigSensitiveWord  JSONMap    `json:"config_sensitive_word" gorm:"type:text"`
 	ConfigBlacklink      JSONMap    `json:"config_blacklink" gorm:"type:text"`
 	LastRunAvailability  *time.Time `json:"last_run_availability"`
-	LastRunDomainHijack  *time.Time `json:"last_run_domain_hijack"`
 	LastRunTamper        *time.Time `json:"last_run_tamper"`
-	LastRunSensitiveFile *time.Time `json:"last_run_sensitive_file"`
 	LastRunSensitiveWord *time.Time `json:"last_run_sensitive_word"`
 	LastRunBlacklink     *time.Time `json:"last_run_blacklink"`
 }
 
-func (MonitorTask) TableName() string { return "monitor_tasks" }
+func (MonitorPathTask) TableName() string { return "monitor_path_tasks" }
 
-func (m *MonitorTask) GetDimensionConfig(dim string) JSONMap {
+func (m *MonitorPathTask) GetDimensionConfig(dim string) JSONMap {
 	switch dim {
 	case "availability":
 		return m.ConfigAvailability
-	case "domain_hijack":
-		return m.ConfigDomainHijack
 	case "tamper":
 		return m.ConfigTamper
-	case "sensitive_file":
-		return m.ConfigSensitiveFile
 	case "sensitive_word":
 		return m.ConfigSensitiveWord
 	case "blacklink":
@@ -60,16 +109,12 @@ func (m *MonitorTask) GetDimensionConfig(dim string) JSONMap {
 	return nil
 }
 
-func (m *MonitorTask) SetDimensionConfig(dim string, cfg JSONMap) {
+func (m *MonitorPathTask) SetDimensionConfig(dim string, cfg JSONMap) {
 	switch dim {
 	case "availability":
 		m.ConfigAvailability = cfg
-	case "domain_hijack":
-		m.ConfigDomainHijack = cfg
 	case "tamper":
 		m.ConfigTamper = cfg
-	case "sensitive_file":
-		m.ConfigSensitiveFile = cfg
 	case "sensitive_word":
 		m.ConfigSensitiveWord = cfg
 	case "blacklink":
@@ -77,16 +122,12 @@ func (m *MonitorTask) SetDimensionConfig(dim string, cfg JSONMap) {
 	}
 }
 
-func (m *MonitorTask) GetLastRun(dim string) *time.Time {
+func (m *MonitorPathTask) GetLastRun(dim string) *time.Time {
 	switch dim {
 	case "availability":
 		return m.LastRunAvailability
-	case "domain_hijack":
-		return m.LastRunDomainHijack
 	case "tamper":
 		return m.LastRunTamper
-	case "sensitive_file":
-		return m.LastRunSensitiveFile
 	case "sensitive_word":
 		return m.LastRunSensitiveWord
 	case "blacklink":
@@ -95,16 +136,12 @@ func (m *MonitorTask) GetLastRun(dim string) *time.Time {
 	return nil
 }
 
-func MonitorLastRunColumn(dim string) string {
+func MonitorPathLastRunColumn(dim string) string {
 	switch dim {
 	case "availability":
 		return "last_run_availability"
-	case "domain_hijack":
-		return "last_run_domain_hijack"
 	case "tamper":
 		return "last_run_tamper"
-	case "sensitive_file":
-		return "last_run_sensitive_file"
 	case "sensitive_word":
 		return "last_run_sensitive_word"
 	case "blacklink":
@@ -113,10 +150,53 @@ func MonitorLastRunColumn(dim string) string {
 	return ""
 }
 
+func MonitorTargetLastRunColumn(dim string) string {
+	switch dim {
+	case "domain_hijack":
+		return "last_run_domain_hijack"
+	case "sensitive_file":
+		return "last_run_sensitive_file"
+	}
+	return ""
+}
+
+var MonitorPathDimensions = []string{
+	"availability", "tamper", "sensitive_word", "blacklink",
+}
+
+var MonitorTargetDimensions = []string{
+	"domain_hijack", "sensitive_file",
+}
+
 var MonitorAllDimensions = []string{
 	"availability", "domain_hijack", "tamper",
 	"sensitive_file", "sensitive_word", "blacklink",
 }
+
+// MonitorCrawlJob 目标站点爬虫任务。
+type MonitorCrawlJob struct {
+	ID          string     `gorm:"primarykey;type:varchar(36)" json:"id"`
+	TargetID    string     `json:"target_id" gorm:"type:varchar(36);not null;index"`
+	Status      string     `json:"status" gorm:"type:varchar(20);default:pending;index"`
+	UseHeadless bool       `json:"use_headless" gorm:"default:true"`
+	MaxDepth    int        `json:"max_depth" gorm:"default:2"`
+	MaxPages    int        `json:"max_pages" gorm:"default:50"`
+	SameHost    bool       `json:"same_host" gorm:"default:true"`
+	Error       string     `json:"error" gorm:"type:text"`
+	ResultJSON  string     `json:"result_json" gorm:"type:text"`
+	StartedAt   *time.Time `json:"started_at"`
+	FinishedAt  *time.Time `json:"finished_at"`
+	CreatedAt   time.Time  `json:"created_at"`
+}
+
+func (MonitorCrawlJob) TableName() string { return "monitor_crawl_jobs" }
+
+const (
+	MonitorCrawlStatusPending = "pending"
+	MonitorCrawlStatusRunning = "running"
+	MonitorCrawlStatusSuccess = "success"
+	MonitorCrawlStatusFailed  = "failed"
+)
 
 type MonitorDefaultConfig struct {
 	ID         string    `gorm:"primarykey;type:varchar(36)" json:"id"`
@@ -129,12 +209,30 @@ type MonitorDefaultConfig struct {
 func (MonitorDefaultConfig) TableName() string { return "monitor_default_configs" }
 
 var MonitorDefaultConfigSeeds = map[string]map[string]any{
-	"availability":   {"enabled": true, "alert_enabled": true, "cycle_minutes": 5, "timeout_seconds": 60},
-	"domain_hijack":  {"enabled": true, "alert_enabled": true, "cycle_minutes": 5},
-	"tamper":         {"enabled": true, "alert_enabled": true, "cycle_minutes": 5, "search_engine_ua": true},
-	"sensitive_file": {"enabled": true, "alert_enabled": true, "cycle_type": "daily", "cycle_time": "02:00"},
-	"sensitive_word": {"enabled": true, "alert_enabled": true, "cycle_type": "daily", "cycle_time": "03:00"},
-	"blacklink":      {"enabled": true, "alert_enabled": true, "cycle_type": "daily", "cycle_time": "04:00"},
+	"availability": {
+		"enabled": true, "alert_enabled": true, "cycle_minutes": 5, "timeout_seconds": 60,
+		"incident_auto_enabled": false, "incident_on_unavailable": true, "incident_max_response_time_ms": 0,
+	},
+	"domain_hijack": {
+		"enabled": true, "alert_enabled": true, "cycle_minutes": 5,
+		"incident_auto_enabled": false, "incident_on_hijack": true,
+	},
+	"tamper": {
+		"enabled": true, "alert_enabled": true, "cycle_minutes": 5, "search_engine_ua": true,
+		"incident_auto_enabled": false, "incident_min_diff_count": 1,
+	},
+	"sensitive_file": {
+		"enabled": true, "alert_enabled": true, "cycle_type": "daily", "cycle_time": "02:00",
+		"incident_auto_enabled": false, "incident_min_file_count": 1,
+	},
+	"sensitive_word": {
+		"enabled": true, "alert_enabled": true, "cycle_minutes": 1,
+		"incident_auto_enabled": false, "incident_min_match_count": 1,
+	},
+	"blacklink": {
+		"enabled": true, "alert_enabled": true, "cycle_minutes": 1,
+		"incident_auto_enabled": false, "incident_min_blacklink_count": 1,
+	},
 }
 
 // ═══ 执行记录 ═══
@@ -148,7 +246,8 @@ const (
 
 type MonitorExecution struct {
 	ID                string     `gorm:"primarykey;type:varchar(36)" json:"id"`
-	TaskID            string     `json:"task_id" gorm:"type:varchar(80);not null;index"`
+	TargetID          string     `json:"target_id" gorm:"type:varchar(36);index"`
+	PathTaskID        string     `json:"path_task_id" gorm:"type:varchar(36);index"`
 	AgentID           string     `json:"agent_id" gorm:"type:varchar(80);index"`
 	Dimension         string     `json:"dimension" gorm:"type:varchar(50);not null;index"`
 	URL               string     `json:"url" gorm:"type:varchar(500)"`
@@ -264,6 +363,7 @@ type MonitorBaseline struct {
 	Title                 string `json:"title" gorm:"type:varchar(500)"`
 	StatusCode            int    `json:"status_code" gorm:"default:0"`
 	VisibleTextLength     int    `json:"visible_text_length" gorm:"default:0"`
+	BodyText              string `json:"body_text" gorm:"type:text"`
 	ExemptSelectorsJSON   string `json:"exempt_selectors_json" gorm:"type:text"`
 	ExternalResourcesJSON string `json:"external_resources_json" gorm:"type:text"`
 	ObjKeyHTML            string `json:"obj_key_html" gorm:"type:varchar(200)"`
@@ -486,9 +586,11 @@ type MonitorAgentStatus struct {
 
 type MonitorTaskMessage struct {
 	ExecutionID string                   `json:"execution_id"`
-	TaskID      string                   `json:"task_id"`
+	TargetID    string                   `json:"target_id"`
+	PathTaskID  string                   `json:"path_task_id,omitempty"`
 	Dimension   string                   `json:"dimension"`
 	URL         string                   `json:"url"`
+	RequestHost string                   `json:"request_host,omitempty"`
 	Config      map[string]any           `json:"config"`
 	Baseline    *MonitorBaselineMetadata `json:"baseline,omitempty"`
 }
@@ -518,6 +620,7 @@ type MonitorBaselineUpdate struct {
 	Title             string         `json:"title"`
 	StatusCode        int            `json:"status_code"`
 	VisibleTextLength int            `json:"visible_text_length"`
+	BodyText          string         `json:"body_text,omitempty"`
 	ExemptSelectors   []string       `json:"exempt_selectors"`
 	ExternalResources map[string]any `json:"external_resources"`
 	ConfirmedBy       string         `json:"confirmed_by"`

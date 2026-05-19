@@ -22,10 +22,10 @@ import {
 
 import {
   generateMonitorReport,
-  getTaskList,
+  getPathTaskList,
   type MonitorReportComplianceItem,
   type MonitorReportData,
-  type MonitorTask,
+  type MonitorPathTask,
 } from '#/api/sitemonitor';
 
 defineOptions({ name: 'MonitorReportCenter' });
@@ -45,7 +45,7 @@ type DimensionRow = {
 
 const message = useMessage();
 const loading = ref(false);
-const tasks = ref<MonitorTask[]>([]);
+const tasks = ref<MonitorPathTask[]>([]);
 const report = ref<MonitorReportData | null>(null);
 
 function formatDate(date: Date) {
@@ -71,7 +71,7 @@ const compliance = computed(() => report.value?.Compliance ?? {});
 const taskReports = computed(() => report.value?.TaskReports ?? []);
 const taskOptions = computed(() =>
   tasks.value.map((task) => ({
-    label: task.task_name || task.target_homepage || task.id,
+    label: task.name || task.url_override || task.path || task.id,
     value: task.id,
   })),
 );
@@ -146,7 +146,7 @@ const complianceColumns: DataTableColumns<MonitorReportComplianceItem> = [
 ];
 
 async function fetchTasks() {
-  const result = await getTaskList({ index: 1, size: 200 });
+  const result = await getPathTaskList({ index: 1, size: 200 });
   tasks.value = result.data ?? [];
 }
 

@@ -1,0 +1,11 @@
+# 示例配置（由 `vulnscan-agent config init` 生成内容与此类似）
+# 复制为 agent.toml 后修改
+
+# 须为完整 URL（含 http:// 与端口），本地开发示例：
+master_url = "http://127.0.0.1:8090/api"
+max_concurrent = 0
+task_timeout = "10m"
+heartbeat_interval = "10s"
+log_level = "info"
+
+# credentials_file = "./node-agent.credentials.json"

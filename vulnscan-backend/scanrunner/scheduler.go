@@ -23,6 +23,11 @@ type Scheduler struct {
 	wg           sync.WaitGroup
 	eventBus     *EventBus
 	planResolver *PlanResolver
+	eventBridge  *EventBridge
+}
+
+func (s *Scheduler) SetEventBridge(eb *EventBridge) {
+	s.eventBridge = eb
 }
 
 func New(db *gorm.DB, maxParallel int) *Scheduler {
@@ -165,7 +170,11 @@ func (s *Scheduler) startTask(ctx context.Context, task model.ScanTask) {
 		return
 	}
 
-	runner := NewRunner(s.db, task, s.eventBus, tmplInstance, s.planResolver)
+	var runnerOpts []RunnerOption
+	if s.eventBridge != nil {
+		runnerOpts = append(runnerOpts, WithEventBridge(s.eventBridge))
+	}
+	runner := NewRunner(s.db, task, s.eventBus, tmplInstance, s.planResolver, runnerOpts...)
 	runCtx, cancel := context.WithCancel(ctx)
 	runner.cancelFn = cancel
 

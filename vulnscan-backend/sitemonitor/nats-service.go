@@ -185,14 +185,14 @@ func (s *NatsServiceImpl) SaveBaselineFromAgent(ctx context.Context, outerTx *go
 	return session.WithContext(ctx).Transaction(doSave)
 }
 
-func (s *NatsServiceImpl) GetLastSimhash(ctx context.Context, taskID string) string {
+func (s *NatsServiceImpl) GetLastSimhash(ctx context.Context, pathTaskID string) string {
 	session, err := s.db.GetDBSession()
 	if err != nil {
 		return ""
 	}
 	var result model.MonitorResultSensitiveWord
 	err = session.WithContext(ctx).
-		Where("task_id = ?", taskID).
+		Where("task_id = ?", pathTaskID).
 		Order("created_at DESC").
 		First(&result).Error
 	if err != nil {

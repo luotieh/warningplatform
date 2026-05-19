@@ -59,8 +59,17 @@ func buildAssetListQuery(sess *gorm.DB, query assetContract.AssetQuery, scopes .
 	if query.AssetFamily != "" {
 		tx = applyAssetFamilyFilter(tx, query.AssetFamily)
 	}
-	if query.RegionCode != "" {
+	if query.RegionPrefix != "" {
+		tx = tx.Where("region_code LIKE ?", query.RegionPrefix+"%")
+	} else if query.RegionCode != "" {
 		tx = tx.Where("region_code = ?", query.RegionCode)
+	}
+	if query.IndustryCategory != "" {
+		// 用子查询避免 JOIN 后 created_at / name 等列歧义（SQLite）
+		tx = tx.Where(
+			"organize_id IN (SELECT id FROM vs_organize WHERE industry_category = ? AND deleted_at IS NULL)",
+			query.IndustryCategory,
+		)
 	}
 	return tx
 }
@@ -83,7 +92,7 @@ func (s *serviceAsset) List(query assetContract.AssetQuery, scopes ...func(*gorm
 	}
 
 	offset := (query.Page - 1) * query.PageSize
-	if err := tx.Offset(offset).Limit(query.PageSize).Order("created_at DESC").Find(&items).Error; err != nil {
+	if err := tx.Offset(offset).Limit(query.PageSize).Order("vs_asset.created_at DESC").Find(&items).Error; err != nil {
 		return nil, 0, err
 	}
 

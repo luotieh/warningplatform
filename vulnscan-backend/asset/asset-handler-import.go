@@ -166,22 +166,28 @@ func (h *HandlerAsset) ImportAssets(c *gin.Context) {
 	resolver := h.newAssetImportResolver(createdBy, defaultParentID)
 
 	var items []*model.Asset
+	var importIssues []assetImportIssue
 	for rowIdx, row := range rows[dataStart:] {
+		rowNum := dataStart + rowIdx + 1
+		if !isImportDataRow(row, headerMap) {
+			continue
+		}
+		if reqIssues := validateImportRequiredFields(rowNum, row, headerMap); len(reqIssues) > 0 {
+			importIssues = append(importIssues, reqIssues...)
+			continue
+		}
+
 		orgID := strings.TrimSpace(getCell(row, headerMap, "organize_id"))
 		if orgID == "" {
 			orgName := strings.TrimSpace(getCell(row, headerMap, "organize_name"))
-			if orgName == "" {
-				web.Fail(c).Msg(fmt.Sprintf("第 %d 行：请填写单位名称或所属单位 ID", dataStart+rowIdx+1)).Send()
-				return
-			}
 			orgID, err = resolver.resolveOrCreateOrganize(c.Request.Context(), orgName)
 			if err != nil {
-				web.Fail(c).Msg(formatImportRowError(dataStart+rowIdx+1, err)).Send()
-				return
+				importIssues = append(importIssues, importIssueErr(rowNum, assetImportColumnTitle("organize_name"), err))
+				continue
 			}
 			if orgID == "" {
-				web.Fail(c).Msg(fmt.Sprintf("第 %d 行：无法创建或匹配单位「%s」", dataStart+rowIdx+1, orgName)).Send()
-				return
+				importIssues = append(importIssues, importIssue(rowNum, assetImportColumnTitle("organize_name"), fmt.Sprintf("无法创建或匹配单位「%s」", orgName)))
+				continue
 			}
 		}
 		item := &model.Asset{
@@ -193,9 +199,6 @@ func (h *HandlerAsset) ImportAssets(c *gin.Context) {
 		}
 		item.Name = getCell(row, headerMap, "name")
 		item.Address = getCell(row, headerMap, "address")
-		if item.Name == "" && item.Address == "" {
-			continue
-		}
 		if item.Name == "" {
 			item.Name = item.Address
 		}
@@ -223,16 +226,16 @@ func (h *HandlerAsset) ImportAssets(c *gin.Context) {
 		constructionInput := buildConstructionOrgImport(row, headerMap, "construction_org")
 		if constructionOrgImportHasData(constructionInput) {
 			if err := validateConstructionOrgImport(constructionInput); err != nil {
-				web.Fail(c).Msg(fmt.Sprintf("第 %d 行：%s", dataStart+rowIdx+1, err.Error())).Send()
-				return
+				importIssues = append(importIssues, importIssue(rowNum, assetImportColumnTitle("construction_org"), err.Error()))
+				continue
 			}
 			item.ConstructionOrgID = resolver.resolveConstructionOrg(constructionInput, createdBy)
 		}
 		opInput := buildConstructionOrgImport(row, headerMap, "operation_org")
 		if constructionOrgImportHasData(opInput) {
 			if err := validateConstructionOrgImport(opInput); err != nil {
-				web.Fail(c).Msg(fmt.Sprintf("第 %d 行：%s", dataStart+rowIdx+1, err.Error())).Send()
-				return
+				importIssues = append(importIssues, importIssue(rowNum, assetImportColumnTitle("operation_org"), err.Error()))
+				continue
 			}
 			item.OperationOrgID = resolver.resolveConstructionOrg(opInput, createdBy)
 		}
@@ -244,23 +247,32 @@ func (h *HandlerAsset) ImportAssets(c *gin.Context) {
 			if orgUpdates := buildOrganizeUpdatesFromImportRow(row, headerMap); orgUpdates != nil {
 				organize.NormalizeOrganizeUpdates(orgUpdates)
 				if err := organize.ValidateOrganizeProfileUpdates(orgUpdates); err != nil {
-					web.Fail(c).Msg(formatImportRowError(dataStart+rowIdx+1, err)).Send()
-					return
+					importIssues = append(importIssues, importIssueErr(rowNum, "单位基本信息", err))
+					continue
 				}
 			}
 			if err := resolver.syncOrganizeProfileFromImportRow(c.Request.Context(), item.OrganizeID, row, headerMap); err != nil {
-				web.Fail(c).Msg(formatImportRowError(dataStart+rowIdx+1, err)).Send()
-				return
+				importIssues = append(importIssues, importIssueErr(rowNum, "单位补充信息", err))
+				continue
 			}
 		}
-		if port, ok := parseInt(getCell(row, headerMap, "port")); ok {
+		portRaw := getCell(row, headerMap, "port")
+		if portRaw != "" {
+			port, ok := parseInt(portRaw)
+			if !ok {
+				importIssues = append(importIssues, importIssue(rowNum, assetImportColumnTitle("port"), "请输入有效数字"))
+				continue
+			}
 			item.Port = port
 		}
-		if err := validateAssetImportRow(dataStart+rowIdx+1, item.IPv4, item.Port); err != nil {
-			web.Fail(c).Msg(err.Error()).Send()
-			return
+		if err := validateAssetImportRow(item.IPv4, item.Port); err != nil {
+			field := assetImportColumnTitle("ipv4")
+			if item.Port > 0 {
+				field = assetImportColumnTitle("port")
+			}
+			importIssues = append(importIssues, importIssueErr(rowNum, field, err))
+			continue
 		}
-		normalizeAssetAddressFields(item)
 		item.AssetFamily = resolver.resolveDictValue("asset_family", rawFamily)
 		if canonical := canonicalAssetFamily(item.AssetFamily); canonical != "" {
 			item.AssetFamily = canonical
@@ -268,10 +280,23 @@ func (h *HandlerAsset) ImportAssets(c *gin.Context) {
 			item.AssetFamily = canonical
 		}
 		normalizeAssetFamily(item)
+		if strings.TrimSpace(item.Address) != "" {
+			normalized, err := NormalizeAccessAddress(item.Address, item.AssetFamily)
+			if err != nil {
+				importIssues = append(importIssues, importIssueErr(rowNum, assetImportColumnTitle("address"), err))
+				continue
+			}
+			item.Address = normalized
+		}
+		normalizeAssetAddressFields(item)
 
 		items = append(items, item)
 	}
 
+	if len(importIssues) > 0 {
+		respondImportValidationFailed(c, rows, headerMap, importIssues)
+		return
+	}
 	if len(items) == 0 {
 		web.Fail(c).Msg("无有效数据行").Send()
 		return
@@ -279,7 +304,7 @@ func (h *HandlerAsset) ImportAssets(c *gin.Context) {
 
 	count, err := h.svc.BatchImport(items)
 	if err != nil {
-		web.Fail(c).Err(err).Send()
+		web.Fail(c).Msg(importUserFacingError(err)).Err(err).Send()
 		return
 	}
 

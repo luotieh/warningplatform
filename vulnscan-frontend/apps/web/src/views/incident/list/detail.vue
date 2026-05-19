@@ -17,6 +17,15 @@ import {
 } from '#/api/incident';
 import { getVulnList, type Vulnerability } from '#/api/vuln';
 
+import {
+  parseDescriptionKvLines,
+  parseEvidenceBlock,
+  parseIncidentDescription,
+} from '../incident-description';
+import IncidentMonitorEvidencePanel from '../components/IncidentMonitorEvidencePanel.vue';
+import IncidentOverviewPanel from '../components/IncidentOverviewPanel.vue';
+import { useMonitorExecutionForIncident } from '../composables/useMonitorExecutionForIncident';
+
 defineOptions({ name: 'IncidentDetail' });
 
 const route = useRoute();
@@ -91,6 +100,59 @@ const cvssColor = computed(() => {
 const targetForSearch = computed(() => {
   const a = incident.value?.asset_detail;
   return a?.domain_ip || a?.site_ip || a?.asset_name || '';
+});
+
+const incidentDescription = computed(() =>
+  parseIncidentDescription(incident.value?.event_metadata?.incident_description),
+);
+
+const monitorExecutionId = computed(() => {
+  const trace = incidentDescription.value.trace;
+  return trace.match(/监测执行 ID[：:]\s*(\S+)/)?.[1] || '';
+});
+
+const monitorRecordNav = computed(() => {
+  const execId = monitorExecutionId.value;
+  if (!execId) return null;
+  const trace = incidentDescription.value.trace;
+  const taskId = trace.match(/路径任务 ID[：:]\s*(\S+)/)?.[1];
+  return {
+    path: `/monitor/records/detail/${execId}`,
+    query: taskId ? { taskId } : {},
+  };
+});
+
+const isMonitorSource = computed(
+  () =>
+    incident.value?.source === 1 ||
+    incidentDescription.value.trace.includes('站点监测'),
+);
+
+const {
+  loading: monitorExecLoading,
+  error: monitorExecError,
+  execution: monitorExecution,
+  parsedResult: monitorParsedResult,
+} = useMonitorExecutionForIncident(monitorExecutionId);
+
+const causeKvLines = computed(() =>
+  parseDescriptionKvLines(incidentDescription.value.cause),
+);
+const traceKvLines = computed(() =>
+  parseDescriptionKvLines(incidentDescription.value.trace),
+);
+const evidenceParsed = computed(() =>
+  parseEvidenceBlock(incidentDescription.value.evidence),
+);
+
+function goMonitorRecord() {
+  const nav = monitorRecordNav.value;
+  if (nav) router.push(nav);
+}
+
+const scanTaskLink = computed(() => {
+  const m = incidentDescription.value.trace.match(/扫描任务 ID[：:]\s*(\S+)/);
+  return m?.[1] ? `/scan/tasks/${m[1]}` : '';
 });
 
 const showAuditModal = ref(false);
@@ -279,84 +341,15 @@ onMounted(fetchData);
 
           <!-- 事件概况 -->
           <NTabPane name="overview" tab="事件概况">
-            <NGrid :cols="2" :x-gap="16" :y-gap="16" responsive="screen">
-              <!-- 事件信息 -->
-              <NGridItem span="2">
-                <NCard title="事件信息" size="small">
-                  <NDescriptions label-placement="left" bordered :column="2" size="small">
-                    <NDescriptionsItem label="事件编号">{{ incident.incident_no }}</NDescriptionsItem>
-                    <NDescriptionsItem label="当前状态">
-                      <NTag :type="(statusTypes[incident.status]||'default') as any" size="small" :bordered="false">
-                        {{ statusLabels[incident.status] ?? '-' }}
-                      </NTag>
-                    </NDescriptionsItem>
-                    <NDescriptionsItem label="事件等级">
-                      <span :style="{padding:'2px 8px',borderRadius:'4px',fontSize:'12px',fontWeight:'600',color:'#fff',background:levelColors[incident.level]??'#999'}">
-                        {{ levelLabels[incident.level] ?? '-' }}
-                      </span>
-                    </NDescriptionsItem>
-                    <NDescriptionsItem label="发现途径">
-                      {{ sourceLabels[incident.source] ?? '-' }}
-                    </NDescriptionsItem>
-                    <NDescriptionsItem label="发现时间">{{ formatTime(incident.report_time) }}</NDescriptionsItem>
-                    <NDescriptionsItem label="创建时间">{{ formatTime(incident.created_at) }}</NDescriptionsItem>
-                    <NDescriptionsItem
-                      v-if="incident.event_metadata?.incident_type"
-                      label="事件类型"
-                    >{{ incident.event_metadata.incident_type }}</NDescriptionsItem>
-                    <NDescriptionsItem
-                      v-if="incident.event_metadata?.incident_url"
-                      label="隐患地址"
-                      :span="2"
-                    ><span style="word-break:break-all;font-family:monospace;font-size:12px">{{ incident.event_metadata.incident_url }}</span></NDescriptionsItem>
-                  </NDescriptions>
-                </NCard>
-              </NGridItem>
-
-              <!-- 涉事资产 -->
-              <NGridItem v-if="incident.asset_detail" span="2 m:1">
-                <NCard title="涉事资产" size="small">
-                  <NDescriptions label-placement="left" bordered :column="1" size="small">
-                    <NDescriptionsItem label="资产名称">{{ incident.asset_detail.asset_name || '-' }}</NDescriptionsItem>
-                    <NDescriptionsItem label="系统名称">{{ incident.asset_detail.system_name || '-' }}</NDescriptionsItem>
-                    <NDescriptionsItem label="地址">{{ incident.asset_detail.domain_ip || '-' }}</NDescriptionsItem>
-                    <NDescriptionsItem label="IP">{{ incident.asset_detail.site_ip || '-' }}</NDescriptionsItem>
-                    <NDescriptionsItem label="所属单位">{{ incident.asset_detail.unit || '-' }}</NDescriptionsItem>
-                    <NDescriptionsItem label="单位类型">{{ incident.asset_detail.unit_type || '-' }}</NDescriptionsItem>
-                    <NDescriptionsItem label="行业">{{ incident.asset_detail.industry || '-' }}</NDescriptionsItem>
-                    <NDescriptionsItem label="归属地">{{ incident.asset_detail.region || '-' }}</NDescriptionsItem>
-                    <NDescriptionsItem label="等保等级">{{ incident.asset_detail.mlps_level || '-' }}</NDescriptionsItem>
-                    <NDescriptionsItem label="等保备案号">{{ incident.asset_detail.mlps_record_no || '-' }}</NDescriptionsItem>
-                    <NDescriptionsItem label="工信部备案">{{ incident.asset_detail.miit_record_no || '-' }}</NDescriptionsItem>
-                  </NDescriptions>
-                </NCard>
-              </NGridItem>
-
-              <!-- 漏洞技术详情 -->
-              <NGridItem v-if="incident.event_metadata" span="2 m:1">
-                <NCard title="漏洞详情" size="small">
-                  <NDescriptions label-placement="left" bordered :column="1" size="small">
-                    <NDescriptionsItem v-if="incident.event_metadata.cve_id" label="CVE 编号">
-                      <NTag size="small" type="error" :bordered="false">{{ incident.event_metadata.cve_id }}</NTag>
-                    </NDescriptionsItem>
-                    <NDescriptionsItem v-if="incident.event_metadata.cvss_score>0" label="CVSS 评分">
-                      <span :style="{fontSize:'18px',fontWeight:'700',color:cvssColor}">
-                        {{ incident.event_metadata.cvss_score.toFixed(1) }}
-                      </span>
-                    </NDescriptionsItem>
-                    <NDescriptionsItem v-if="incident.event_metadata.owasp_category" label="OWASP 分类">
-                      {{ incident.event_metadata.owasp_category }}
-                    </NDescriptionsItem>
-                    <NDescriptionsItem v-if="incident.event_metadata.exploit_difficulty" label="利用难度">
-                      {{ incident.event_metadata.exploit_difficulty }}
-                    </NDescriptionsItem>
-                    <NDescriptionsItem v-if="incident.event_metadata.affect_scope" label="影响范围">
-                      {{ incident.event_metadata.affect_scope }}
-                    </NDescriptionsItem>
-                  </NDescriptions>
-                </NCard>
-              </NGridItem>
-            </NGrid>
+            <IncidentOverviewPanel
+              :incident="incident"
+              :format-time="formatTime"
+              :is-monitor-source="isMonitorSource"
+              :monitor-execution="monitorExecution"
+              :monitor-result="monitorParsedResult"
+              :monitor-loading="monitorExecLoading"
+              :monitor-error="monitorExecError"
+            />
 
             <!-- 事件描述 -->
             <NCard
@@ -365,7 +358,105 @@ onMounted(fetchData);
               size="small"
               style="margin-top:16px"
             >
-              <div style="line-height:1.8;font-size:13px;white-space:pre-wrap">
+              <div v-if="incidentDescription.hasSections" class="incident-desc-sections">
+                <div v-if="incidentDescription.cause" class="incident-desc-section">
+                  <div class="incident-desc-section__title">事件成因</div>
+                  <NDescriptions
+                    v-if="causeKvLines.length"
+                    :column="1"
+                    size="small"
+                    label-placement="left"
+                    :label-width="108"
+                    class="incident-desc-kv"
+                  >
+                    <NDescriptionsItem
+                      v-for="(row, idx) in causeKvLines"
+                      :key="idx"
+                      :label="row.key || '说明'"
+                    >
+                      {{ row.value }}
+                    </NDescriptionsItem>
+                  </NDescriptions>
+                  <div v-else class="incident-desc-block">{{ incidentDescription.cause }}</div>
+                </div>
+                <div v-if="incidentDescription.evidence" class="incident-desc-section">
+                  <div class="incident-desc-section__title">证据详情</div>
+                  <div class="incident-desc-block incident-desc-block--evidence">
+                    <div v-if="evidenceParsed.title" class="incident-evidence-title">
+                      {{ evidenceParsed.title }}
+                    </div>
+                    <ul v-if="evidenceParsed.items.length" class="incident-evidence-list">
+                      <li v-for="(item, idx) in evidenceParsed.items" :key="idx">
+                        {{ item }}
+                      </li>
+                    </ul>
+                    <div v-else class="incident-desc-pre">{{ incidentDescription.evidence }}</div>
+                  </div>
+                </div>
+                <div
+                  v-if="isMonitorSource && monitorExecutionId"
+                  class="incident-desc-section"
+                >
+                  <div class="incident-desc-section__title">详细证据（与监测记录一致）</div>
+                  <IncidentMonitorEvidencePanel
+                    :execution="monitorExecution"
+                    :result="monitorParsedResult"
+                    :loading="monitorExecLoading"
+                    :error="monitorExecError"
+                    :text-detail-fallback="incidentDescription.detail"
+                  />
+                </div>
+                <div
+                  v-else-if="incidentDescription.detail"
+                  class="incident-desc-section"
+                >
+                  <div class="incident-desc-section__title">详细证据</div>
+                  <div class="incident-desc-block incident-desc-block--detail">
+                    <pre class="incident-desc-detail-pre">{{ incidentDescription.detail }}</pre>
+                  </div>
+                </div>
+                <div v-if="incidentDescription.trace" class="incident-desc-section">
+                  <div class="incident-desc-section__title">溯源信息</div>
+                  <NDescriptions
+                    v-if="traceKvLines.length"
+                    :column="1"
+                    size="small"
+                    label-placement="left"
+                    :label-width="108"
+                    class="incident-desc-kv"
+                  >
+                    <NDescriptionsItem
+                      v-for="(row, idx) in traceKvLines"
+                      :key="idx"
+                      :label="row.key || '说明'"
+                    >
+                      <span class="incident-desc-mono">{{ row.value }}</span>
+                    </NDescriptionsItem>
+                  </NDescriptions>
+                  <div v-else class="incident-desc-block">{{ incidentDescription.trace }}</div>
+                  <NSpace v-if="monitorRecordNav || scanTaskLink" :size="8" style="margin-top:12px">
+                    <NButton
+                      v-if="monitorRecordNav"
+                      size="small"
+                      type="primary"
+                      tertiary
+                      @click="goMonitorRecord"
+                    >
+                      查看监测执行记录
+                    </NButton>
+                    <NButton
+                      v-if="scanTaskLink"
+                      size="small"
+                      type="primary"
+                      tertiary
+                      @click="router.push(scanTaskLink)"
+                    >
+                      查看扫描任务
+                    </NButton>
+                  </NSpace>
+                </div>
+              </div>
+              <div v-else class="incident-desc-block">
                 {{ incident.event_metadata.incident_description }}
               </div>
               <NSpace v-if="incident.event_metadata?.vendor_name" :size="24" style="margin-top:12px">
@@ -645,3 +736,73 @@ onMounted(fetchData);
     </NSpin>
   </div>
 </template>
+
+<style scoped>
+.incident-desc-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.incident-desc-section__title {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--n-text-color);
+}
+.incident-desc-block {
+  line-height: 1.8;
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.incident-desc-block--evidence {
+  padding: 12px;
+  border-radius: 6px;
+  background: rgba(208, 48, 80, 0.06);
+  border: 1px solid rgba(208, 48, 80, 0.15);
+}
+.incident-desc-kv :deep(.n-descriptions-table-content) {
+  font-size: 13px;
+}
+.incident-desc-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  word-break: break-all;
+}
+.incident-evidence-title {
+  font-weight: 600;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+.incident-evidence-list {
+  margin: 0;
+  padding-left: 18px;
+  line-height: 1.85;
+  font-size: 13px;
+}
+.incident-evidence-list li {
+  margin-bottom: 4px;
+}
+.incident-desc-pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.8;
+  font-size: 13px;
+}
+.incident-desc-block--detail {
+  padding: 12px;
+  border-radius: 6px;
+  background: rgba(32, 128, 240, 0.04);
+  border: 1px solid rgba(32, 128, 240, 0.12);
+  max-height: 480px;
+  overflow: auto;
+}
+.incident-desc-detail-pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.65;
+}
+</style>

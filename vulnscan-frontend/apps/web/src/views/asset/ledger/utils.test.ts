@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   buildOrgTreeFromFlat,
   buildOrgTreeOptions,
+  buildRegionTreeFromAssetCodes,
+  expandRegionAncestorCodes,
   mapOrganizeToUnitExtra,
   mapUnitExtraToOrganizeUpdate,
   resolveLedgerFormAddress,
@@ -96,5 +98,28 @@ describe('buildOrgTreeOptions', () => {
       { id: 'b', name: '分部', parent_id: 'a' },
     ]);
     expect(roots[0]?.children?.[0]?.key).toBe('b');
+  });
+});
+
+describe('buildRegionTreeFromAssetCodes', () => {
+  it('expands county code to province and city ancestors', () => {
+    const set = expandRegionAncestorCodes(['110101']);
+    expect(set.has('110000')).toBe(true);
+    expect(set.has('110100')).toBe(true);
+    expect(set.has('110101')).toBe(true);
+  });
+
+  it('builds pruned tree with asset counts', () => {
+    const tree = buildRegionTreeFromAssetCodes([
+      { region_code: '320302', count: 3 },
+      { region_code: '320303', count: 2 },
+    ]);
+    expect(tree.length).toBeGreaterThan(0);
+    const jiangsu = tree.find((node) => String(node.key) === '320000');
+    expect(jiangsu?.label).toContain('(5)');
+  });
+
+  it('returns empty tree when no asset regions', () => {
+    expect(buildRegionTreeFromAssetCodes([])).toEqual([]);
   });
 });

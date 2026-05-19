@@ -25,7 +25,8 @@ defineProps<{
   sourceOptions: LedgerOption[];
   yesNoOptions: LedgerOption[];
   form: LedgerSearchForm;
-  selectedOrgName?: string;
+  hideFamilyFilter?: boolean;
+  scopeLabel?: string;
   showAdvanced: boolean;
 }>();
 
@@ -43,7 +44,7 @@ const emit = defineEmits<{
       <div class="ledger-filter-card__scope">
         <span class="ledger-filter-card__label">当前范围</span>
         <NTag type="info" size="small" :bordered="false" class="ledger-filter-card__scope-tag">
-          {{ selectedOrgName || '全部单位' }}
+          {{ scopeLabel || '全部范围' }}
         </NTag>
       </div>
 
@@ -56,7 +57,7 @@ const emit = defineEmits<{
       </button>
     </div>
 
-    <div class="ledger-filter-card__family">
+    <div v-if="!hideFamilyFilter" class="ledger-filter-card__family">
       <span class="ledger-filter-card__label">资产分类</span>
       <NSpace class="ledger-filter-card__family-options" :size="8" :wrap="true">
         <NButton

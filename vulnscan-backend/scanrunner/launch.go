@@ -26,6 +26,7 @@ type LaunchScanParams struct {
 	Targets         []string
 	TemplateID      string
 	Parameters      map[string]interface{}
+	AssetIDs        []string // 与 Targets 一一对应；单元素时写入 parameters.asset_id
 	ExecutorNodeIDs []string
 	Priority        int
 	ScheduleID      string
@@ -68,6 +69,16 @@ func LaunchScan(db *gorm.DB, sched *Scheduler, p LaunchScanParams) (*LaunchScanR
 	for k, v := range p.Parameters {
 		params[k] = v
 	}
+	if len(p.AssetIDs) > 0 {
+		paramMap := make(map[string]interface{}, len(params)+4)
+		for k, v := range params {
+			paramMap[k] = v
+		}
+		for k, v := range MergeAssetIDsIntoParameters(paramMap, p.Targets, p.AssetIDs) {
+			params[k] = v
+		}
+	}
+	NormalizeTaskAssetParameters(params, p.Targets)
 	executorIDs := NormalizeExecutorNodeIDs(p.ExecutorNodeIDs)
 	ApplyExecutorNodeParams(params, executorIDs)
 

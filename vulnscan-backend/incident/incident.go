@@ -1,6 +1,8 @@
 package incident
 
 import (
+	coreContract "vulnscan-backend/incident/core/core-contract"
+
 	"vulnscan-backend/incident/audit"
 	"vulnscan-backend/incident/comment"
 	"vulnscan-backend/incident/core"
@@ -47,6 +49,10 @@ func NewIncident(
 	}
 }
 
+func (m *Incident) CoreService() coreContract.ServiceCore {
+	return m.coreHandler.CoreService()
+}
+
 func (m *Incident) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
 	return authorize.RegisterRoutes(e.Group("/incident"), []authorize.Route{
 		{
@@ -74,6 +80,7 @@ func (m *Incident) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
 			Children: []authorize.Route{
 				{Name: "统计概览", Path: "stats", Method: "GET", Handler: m.coreHandler.DashboardStats, Enabled: true},
 				{Name: "事件类型分布", Path: "chart/type", Method: "GET", Handler: m.coreHandler.ChartByType, Enabled: true},
+				{Name: "事件等级分布", Path: "chart/level", Method: "GET", Handler: m.coreHandler.ChartByLevel, Enabled: true},
 				{Name: "事件趋势", Path: "chart/trend", Method: "GET", Handler: m.coreHandler.ChartByTrend, Enabled: true},
 			},
 		},

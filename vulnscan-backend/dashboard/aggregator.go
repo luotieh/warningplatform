@@ -79,7 +79,7 @@ func (a *Aggregator) GetSecurityPosture(ctx context.Context) (*SecurityPosture, 
 
 func (a *Aggregator) getMonitorStats(ctx context.Context) MonitorStats {
 	var stats MonitorStats
-	a.db.WithContext(ctx).Model(&model.MonitorTask{}).Count(new(int64))
+	a.db.WithContext(ctx).Model(&model.MonitorTarget{}).Count(new(int64))
 	a.db.WithContext(ctx).Raw(`SELECT
 		COUNT(*) as total_tasks,
 		SUM(CASE WHEN enabled = true THEN 1 ELSE 0 END) as enabled_tasks

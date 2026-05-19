@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -123,13 +124,52 @@ func (s *serviceCluster) SendCommand(workerID string, cmd clusterContract.Worker
 }
 
 func (s *serviceCluster) UnregisterWorker(ctx context.Context, workerID string) error {
-	return s.session().WithContext(ctx).
-		Model(&model.WorkerNode{}).
-		Where("id = ?", workerID).
-		Updates(map[string]interface{}{
-			"status":       model.WorkerStatusOffline,
-			"active_tasks": 0,
-		}).Error
+	return s.DeleteWorker(ctx, workerID)
+}
+
+func (s *serviceCluster) DeleteWorker(ctx context.Context, workerID string) error {
+	workerID = strings.TrimSpace(workerID)
+	if workerID == "" {
+		return fmt.Errorf("Worker ID 为空")
+	}
+	res := s.session().WithContext(ctx).Where("id = ?", workerID).Delete(&model.WorkerNode{})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return fmt.Errorf("Worker 不存在")
+	}
+	s.cmdMu.Lock()
+	delete(s.pendingCmds, workerID)
+	s.cmdMu.Unlock()
+	return nil
+}
+
+const embeddedScanNodeUUID = "embedded-default"
+
+func (s *serviceCluster) DeleteScanNode(ctx context.Context, nodeUUID string) error {
+	nodeUUID = strings.TrimSpace(nodeUUID)
+	if nodeUUID == "" {
+		return fmt.Errorf("节点 ID 为空")
+	}
+	if nodeUUID == embeddedScanNodeUUID {
+		return fmt.Errorf("内置执行节点不可删除，其能力已合并展示在「本地执行引擎」")
+	}
+	var node model.Node
+	if err := s.session().WithContext(ctx).Where("uuid = ?", nodeUUID).First(&node).Error; err != nil {
+		return fmt.Errorf("扫描节点不存在")
+	}
+	if node.RunningTasks > 0 {
+		return fmt.Errorf("节点仍有运行中任务，请稍后再试")
+	}
+	res := s.session().WithContext(ctx).Where("uuid = ?", nodeUUID).Delete(&model.Node{})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return fmt.Errorf("扫描节点不存在")
+	}
+	return nil
 }
 
 func (s *serviceCluster) ListWorkers(query clusterContract.WorkerQuery) ([]model.WorkerNode, int64, error) {

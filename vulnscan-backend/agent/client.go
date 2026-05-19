@@ -20,7 +20,7 @@ type Client struct {
 
 func NewClient(baseURL, token, secret string) *Client {
 	return &Client{
-		baseURL: baseURL,
+		baseURL: trimMasterURL(baseURL),
 		token:   token,
 		secret:  strings.TrimSpace(secret),
 		httpClient: &http.Client{
@@ -66,10 +66,27 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body any) ([]b
 	}
 
 	if resp.StatusCode >= 400 {
-		return respBody, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBody))
+		return respBody, fmt.Errorf("HTTP %d: %s", resp.StatusCode, FormatHTTPErrorBody(respBody))
+	}
+	if err := assertJSONResponse(respBody); err != nil {
+		return respBody, err
 	}
 
 	return respBody, nil
+}
+
+func assertJSONResponse(body []byte) error {
+	trimmed := strings.TrimSpace(string(body))
+	if trimmed == "" {
+		return nil
+	}
+	if trimmed[0] == '<' {
+		return fmt.Errorf("主控返回了 HTML 而非 JSON（请确认 master_url 含 /api 后缀，例如 http://127.0.0.1:8090/api）")
+	}
+	if trimmed[0] != '{' && trimmed[0] != '[' {
+		return fmt.Errorf("主控返回了非 JSON 响应（请确认 master_url 指向 vulnscan 后端 API 根路径）")
+	}
+	return nil
 }
 
 // PingHealth 探测主控 node-api 是否可达（无需鉴权）。
@@ -83,15 +100,30 @@ func (c *Client) PingHealth(ctx context.Context) error {
 		return err
 	}
 	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
+		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, FormatHTTPErrorBody(body))
+	}
+	if err := assertJSONResponse(body); err != nil {
+		return err
+	}
+	var probe struct {
+		OK bool `json:"ok"`
+	}
+	if err := json.Unmarshal(body, &probe); err != nil || !probe.OK {
+		return fmt.Errorf("node-api 健康检查未通过（请确认 master_url=%s 且主控已启动）", c.baseURL)
 	}
 	return nil
 }
 
 func (c *Client) Heartbeat(ctx context.Context, hb *HeartbeatReq) error {
 	_, err := c.doJSON(ctx, "POST", "/node-api/heartbeat", hb)
+	return err
+}
+
+// Shutdown 通知主控本节点即将/已经停止运行（优雅退出）。
+func (c *Client) Shutdown(ctx context.Context, req *ShutdownReq) error {
+	_, err := c.doJSON(ctx, "POST", "/node-api/shutdown", req)
 	return err
 }
 
@@ -123,11 +155,19 @@ func (c *Client) GetRules(ctx context.Context) (map[string]json.RawMessage, erro
 		return nil, err
 	}
 
+	trimmed := strings.TrimSpace(string(data))
+	if trimmed == "" {
+		return map[string]json.RawMessage{}, nil
+	}
+
 	var resp struct {
 		Rules map[string]json.RawMessage `json:"rules"`
 	}
 	if err := json.Unmarshal(data, &resp); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse rules: %w", err)
+	}
+	if resp.Rules == nil {
+		return map[string]json.RawMessage{}, nil
 	}
 
 	return resp.Rules, nil

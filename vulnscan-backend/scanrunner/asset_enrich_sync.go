@@ -10,10 +10,11 @@ import (
 	"gorm.io/gorm"
 
 	"vulnscan-backend/model"
+	"vulnscan-backend/pkg/assethost"
 )
 
 // SyncAssetTableAfterEnrichScan 在「资产信息富化」类扫描成功结束后，将发现摘要回写到 vs_asset。
-// 依赖 finding 上的 asset_id（persist 阶段已解析）；缺失时根据任务 parameters 回退。
+// 仅按 finding.asset_id 或任务 parameters 中的资产绑定汇总，不按域名匹配资产表。
 func SyncAssetTableAfterEnrichScan(db *gorm.DB, task *model.ScanTask) error {
 	if db == nil || task == nil {
 		return nil
@@ -30,12 +31,13 @@ func SyncAssetTableAfterEnrichScan(db *gorm.DB, task *model.ScanTask) error {
 		return nil
 	}
 
+	resolver := BuildAssetIDResolver(task)
 	byAsset := map[string][]model.ScanFinding{}
 	for i := range findings {
 		f := findings[i]
 		aid := strings.TrimSpace(f.AssetID)
 		if aid == "" {
-			aid = fallbackAssetID(db, task, &f)
+			aid = resolver.Resolve(f.Target, f.Port)
 		}
 		if aid == "" {
 			continue
@@ -62,50 +64,6 @@ func SyncAssetTableAfterEnrichScan(db *gorm.DB, task *model.ScanTask) error {
 		slog.Info("[AssetEnrichSync] 已回写资产表", "asset_id", aid, "task_id", task.ID, "fields", len(updates))
 	}
 	return nil
-}
-
-func fallbackAssetID(db *gorm.DB, task *model.ScanTask, f *model.ScanFinding) string {
-	if task.Parameters == nil {
-		return ""
-	}
-	if id, ok := stringFromJSONMap(task.Parameters, "asset_id"); ok && id != "" {
-		return id
-	}
-	ids := stringSliceFromJSONMap(task.Parameters, "asset_ids")
-	if len(ids) == 0 {
-		return ""
-	}
-	target := strings.TrimSpace(f.Target)
-	if target == "" {
-		return ""
-	}
-	var assets []model.Asset
-	if err := db.Select("id", "address", "ipv4", "domain").Where("id IN ?", ids).Find(&assets).Error; err != nil {
-		return ""
-	}
-	for _, a := range assets {
-		if scanTargetMatchesAsset(target, &a) {
-			return a.ID
-		}
-	}
-	return ""
-}
-
-func scanTargetMatchesAsset(target string, a *model.Asset) bool {
-	t := strings.TrimSpace(strings.ToLower(target))
-	if t == "" {
-		return false
-	}
-	for _, c := range []string{
-		strings.ToLower(strings.TrimSpace(a.Domain)),
-		strings.ToLower(strings.TrimSpace(a.IPv4)),
-		strings.ToLower(strings.TrimSpace(a.Address)),
-	} {
-		if c != "" && c == t {
-			return true
-		}
-	}
-	return false
 }
 
 func stringFromJSONMap(m model.JSONMap, key string) (string, bool) {
@@ -209,8 +167,8 @@ func buildAssetUpdatesFromEnrichFindings(fs []model.ScanFinding, asset *model.As
 	if ipv4 != "" {
 		updates["ipv4"] = ipv4
 	}
-	if ptrDomain != "" && strings.TrimSpace(asset.Domain) == "" {
-		updates["domain"] = ptrDomain
+	if ptrDomain != "" && assethost.ShouldApplyPTRDomain(asset.Address, asset.URL, asset.Domain, asset.Name, ptrDomain) {
+		updates["domain"] = assethost.ExtractHost(ptrDomain)
 	}
 	if sslExpiry != nil {
 		updates["ssl_expires_at"] = *sslExpiry

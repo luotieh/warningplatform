@@ -37,23 +37,54 @@ function sevLabel(s: string) {
   return m[s] || s || '-';
 }
 
-function highlightWord(context: string, word: string) {
-  if (!context || !word) return [h('span', { class: 'text-xs text-gray-600' }, context || '-')];
+function matchContext(row: Record<string, any>) {
+  if (row.context) return row.context;
+  const list = row.contexts;
+  if (Array.isArray(list) && list.length > 0) return String(list[0]);
+  return '';
+}
+
+function markClassForSeverity(severity: string) {
+  const s = String(severity || '').toLowerCase();
+  if (s === 'critical' || s === 'high') return 'sw-hit sw-hit--high';
+  if (s === 'low') return 'sw-hit sw-hit--low';
+  return 'sw-hit sw-hit--medium';
+}
+
+function highlightWord(context: string, word: string, severity?: string) {
+  if (!context || !word) {
+    return [h('span', { class: 'text-xs text-gray-600' }, context || '-')];
+  }
   const lowerCtx = context.toLowerCase();
   const lowerWord = word.toLowerCase();
   const idx = lowerCtx.indexOf(lowerWord);
-  if (idx === -1) return [h('span', { class: 'text-xs text-gray-600' }, context)];
+  if (idx === -1) {
+    return [h('span', { class: 'text-xs text-gray-600' }, context)];
+  }
   const before = context.slice(0, idx);
   const match = context.slice(idx, idx + word.length);
   const after = context.slice(idx + word.length);
   return [
     h('span', { class: 'text-xs text-gray-600' }, before),
-    h('mark', { class: 'bg-red-100 text-red-600 font-bold px-0.5 rounded' }, match),
+    h(
+      'mark',
+      { class: markClassForSeverity(severity || 'medium') },
+      match,
+    ),
     h('span', { class: 'text-xs text-gray-600' }, after),
   ];
 }
 
+const textLength = computed(() => {
+  const v = r.value.text_length ?? r.value.preprocessing?.text_length;
+  return v == null || v === '' ? '-' : String(v);
+});
+
 const matches = computed(() => r.value.matches || []);
+
+const pageEvidenceHtml = computed(
+  () => r.value.page_evidence_html || '',
+);
 
 const matchCols: DataTableColumns<any> = [
   {
@@ -96,7 +127,11 @@ const matchCols: DataTableColumns<any> = [
     title: '上下文',
     minWidth: 260,
     render: (row) =>
-      h('span', { class: 'inline' }, highlightWord(row.context, row.word)),
+      h(
+        'span',
+        { class: 'inline' },
+        highlightWord(matchContext(row), row.word, row.severity),
+      ),
   },
 ];
 </script>
@@ -126,9 +161,23 @@ const matchCols: DataTableColumns<any> = [
           <span class="font-mono">{{ r.total_matches ?? 0 }} 次</span>
         </NDescriptionsItem>
         <NDescriptionsItem label="页面文本长度">
-          {{ r.text_length ?? '-' }} 字符
+          {{ textLength }} 字符
         </NDescriptionsItem>
       </NDescriptions>
+    </NCard>
+
+    <NCard
+      v-if="pageEvidenceHtml"
+      size="small"
+      title="页面全文证据（可滚动）"
+    >
+      <p class="mb-2 text-xs text-gray-500">
+        展示监测抓取的全文，所有命中词已按严重程度分色高亮（红/橙/蓝）。
+      </p>
+      <div
+        class="sw-evidence-scroll sw-evidence rounded border border-gray-200 bg-gray-50 p-3 text-sm leading-relaxed text-gray-800"
+        v-html="pageEvidenceHtml"
+      />
     </NCard>
 
     <NCard
@@ -151,3 +200,33 @@ const matchCols: DataTableColumns<any> = [
     />
   </div>
 </template>
+
+<style scoped>
+.sw-evidence-scroll {
+  max-height: min(70vh, 560px);
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+:deep(.sw-hit) {
+  padding: 0 2px;
+  border-radius: 2px;
+  font-weight: 600;
+}
+
+.sw-evidence :deep(.sw-hit--high) {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.sw-evidence :deep(.sw-hit--medium) {
+  background: #ffedd5;
+  color: #ea580c;
+}
+
+.sw-evidence :deep(.sw-hit--low) {
+  background: #dbeafe;
+  color: #2563eb;
+}
+</style>

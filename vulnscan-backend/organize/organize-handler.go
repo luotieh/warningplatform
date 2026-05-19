@@ -47,7 +47,7 @@ func (h *HandlerOrganize) List(c *gin.Context) {
 	}
 
 	count := int64(len(filtered))
-	page, pageSize := normalizePage(req.Page, req.PageSize)
+	page, pageSize := normalizeOrganizePage(req.Page, req.PageSize, req.Name != "")
 	start := (page - 1) * pageSize
 	if start >= len(filtered) {
 		web.OK(c).List(count, []model.Organize{}).Send()
@@ -420,11 +420,21 @@ func filterOrganizesByName(items []model.Organize, keyword string) []model.Organ
 }
 
 func normalizePage(page, pageSize int) (int, int) {
+	return normalizeOrganizePage(page, pageSize, false)
+}
+
+func normalizeOrganizePage(page, pageSize int, searching bool) (int, int) {
 	if page < 1 {
 		page = 1
 	}
-	if pageSize < 1 || pageSize > 100 {
+	maxSize := 100
+	if searching {
+		maxSize = 200
+	}
+	if pageSize < 1 {
 		pageSize = 20
+	} else if pageSize > maxSize {
+		pageSize = maxSize
 	}
 	return page, pageSize
 }

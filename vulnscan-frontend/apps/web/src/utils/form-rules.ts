@@ -1,5 +1,6 @@
 import type { FormItemRule, FormRules } from 'naive-ui';
 
+import { validateAssetAccessAddress } from './asset-address';
 import {
   validateCNPhone,
   validateIPv4List,
@@ -34,8 +35,18 @@ export function phoneFormRule(label: string): FormItemRule {
 
 export const usccFormRule = optionalBlurRule(validateUSCC);
 
+export function assetAddressFormRule(assetFamily?: () => string | undefined): FormItemRule {
+  return optionalBlurRule((value) =>
+    validateAssetAccessAddress(String(value ?? ''), {
+      allowEmpty: true,
+      assetFamily: assetFamily?.(),
+    }),
+  );
+}
+
 /** 资产登记主表单 */
 export const ledgerAssetFormRules: FormRules = {
+  address: assetAddressFormRule(),
   ipv4: ipv4FormRule,
   port: portFormRule,
   'extra.unified_social_credit_code': usccFormRule,

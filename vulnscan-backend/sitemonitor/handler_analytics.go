@@ -4,6 +4,8 @@ import (
 	"strconv"
 	"time"
 
+	"vulnscan-backend/sitemonitor/contract"
+
 	"code.yt-security.com/public/core/v2/web"
 	"github.com/gin-gonic/gin"
 )
@@ -17,7 +19,16 @@ func (h *HandlerMonitor) GetTaskTrend(c *gin.Context) {
 	if v, err := strconv.Atoi(hoursStr); err == nil && v > 0 && v <= 720 {
 		hours = v
 	}
-	resp, err := h.svc.GetTaskTrend(c.Request.Context(), taskID, hours)
+	q := contract.TaskTrendQuery{
+		Hours:       hours,
+		Dimension:   c.Query("dimension"),
+		HasIssue:    c.Query("has_issue"),
+		Disposition: c.Query("disposition"),
+		Status:      c.Query("status"),
+		TimeStart:   c.Query("time_start"),
+		TimeEnd:     c.Query("time_end"),
+	}
+	resp, err := h.svc.GetTaskTrend(c.Request.Context(), taskID, q)
 	if err != nil {
 		web.Err(c, web.NotFound).Send()
 		return

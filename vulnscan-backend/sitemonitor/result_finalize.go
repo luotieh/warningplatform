@@ -35,7 +35,10 @@ func FinalizeMonitorResult(ctx context.Context, db *gorm.DB, ar *model.MonitorAg
 		ar.Dimension = exec.Dimension
 	}
 	if ar.TaskID == "" {
-		ar.TaskID = exec.TaskID
+		ar.TaskID = exec.PathTaskID
+		if ar.TaskID == "" {
+			ar.TaskID = exec.TargetID
+		}
 	}
 	if ar.URL == "" {
 		ar.URL = exec.URL
@@ -156,7 +159,7 @@ func FinalizeFromTaskResult(ctx context.Context, db *gorm.DB, executionID, agent
 	ar := &model.MonitorAgentResult{
 		AgentID:     agentID,
 		ExecutionID: executionID,
-		TaskID:      exec.TaskID,
+		TaskID:      exec.PathTaskID,
 		Dimension:   exec.Dimension,
 		URL:         exec.URL,
 		Status:      status,

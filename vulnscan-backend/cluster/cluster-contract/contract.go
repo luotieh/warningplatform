@@ -121,6 +121,8 @@ type ServiceCluster interface {
 	RegisterWorker(ctx context.Context, node *model.WorkerNode) error
 	Heartbeat(ctx context.Context, payload *HeartbeatPayload) (*HeartbeatResponse, error)
 	UnregisterWorker(ctx context.Context, workerID string) error
+	DeleteWorker(ctx context.Context, workerID string) error
+	DeleteScanNode(ctx context.Context, nodeUUID string) error
 	ListWorkers(query WorkerQuery) ([]model.WorkerNode, int64, error)
 	GetWorker(id string) (*model.WorkerNode, error)
 

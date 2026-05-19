@@ -49,6 +49,7 @@ export function createTask(data: {
   targets: string[];
   template_id?: string;
   parameters?: Record<string, any>;
+  asset_ids?: string[];
   executor_node_ids?: string[];
   priority?: number;
 }) {

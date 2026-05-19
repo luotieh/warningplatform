@@ -52,20 +52,9 @@ const logoDark = computed(() => preferences.logo.sourceDark);
   filter: none !important;
 }
 
-.vuln-auth-page [data-side='left'],
-.vuln-auth-page [data-side='right'] {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 252, 0.96)),
-    #fff;
-  border-color: rgba(148, 163, 184, 0.18);
-}
-
-.vuln-auth-page [data-side='bottom'] {
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 16px !important;
-  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.11);
-  backdrop-filter: blur(18px);
+/* 登录表单挂在 .side-content[data-side] 上，勿对其加背景（会出现 IAM 没有的灰蓝块） */
+.vuln-auth-page .min-h-full.flex-1 > .flex-col-center {
+  background: #fff;
 }
 
 .vuln-auth-page .animate-float {
@@ -117,14 +106,8 @@ const logoDark = computed(() => preferences.logo.sourceDark);
     ) !important;
 }
 
-.dark .vuln-auth-page [data-side='left'],
-.dark .vuln-auth-page [data-side='right'],
-.dark .vuln-auth-page [data-side='bottom'] {
-  background:
-    linear-gradient(180deg, rgba(15, 23, 42, 0.94), rgba(2, 6, 23, 0.96)),
-    #020617;
-  border-color: rgba(148, 163, 184, 0.16);
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.34);
+.dark .vuln-auth-page .min-h-full.flex-1 > .flex-col-center {
+  background: hsl(var(--background-deep));
 }
 
 .dark .vuln-auth-page .text-1xl,
@@ -134,14 +117,6 @@ const logoDark = computed(() => preferences.logo.sourceDark);
 
 .dark .vuln-auth-page .dark\:text-muted-foreground {
   color: #cbd5e1;
-}
-
-@media (max-width: 1023px) {
-  .vuln-auth-page [data-side='bottom'] {
-    width: min(92vw, 480px) !important;
-    padding-right: 20px;
-    padding-left: 20px;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

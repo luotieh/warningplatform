@@ -20,6 +20,8 @@ export const overridesPreferences = defineOverridesPreferences({
   theme: {
     builtinType: 'default',
     mode: 'light',
+    /** 中文后台常用 14px；可在右上角「偏好设置 → 主题」里再调 */
+    fontSize: 14,
     semiDarkHeader: false,
     semiDarkSidebar: false,
   },

@@ -12,9 +12,9 @@ import (
 
 func TestBuildAssetOnlineProbePrefersMonitorHomepage(t *testing.T) {
 	asset := model.Asset{ID: "a1", Address: "10.0.0.1"}
-	task := &model.MonitorTask{
+	task := &model.MonitorPathTask{
 		AssetID:            "a1",
-		TargetHomepage:     "https://monitor.example.com",
+		URLOverride:        "https://monitor.example.com",
 		Enabled:            true,
 		ConfigAvailability: model.JSONMap{"enabled": true},
 	}

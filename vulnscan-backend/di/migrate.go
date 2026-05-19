@@ -27,6 +27,7 @@ func (h *Handlers) autoMigrate() {
 		&model.ScanFinding{},
 		&model.ScanTemplate{},
 		&model.WorkerNode{},
+		&model.Node{},
 		&model.ServiceFingerprint{},
 		&model.WebFingerprint{},
 		&model.PortServiceMap{},
@@ -69,7 +70,9 @@ func (h *Handlers) autoMigrate() {
 		&model.DynamicFormTemplateVersion{},
 		&model.DynamicFormSubmission{},
 		// 站点监控
-		&model.MonitorTask{},
+		&model.MonitorTarget{},
+		&model.MonitorPathTask{},
+		&model.MonitorCrawlJob{},
 		&model.MonitorDefaultConfig{},
 		&model.MonitorExecution{},
 		&model.MonitorAlert{},
@@ -107,6 +110,15 @@ func (h *Handlers) autoMigrate() {
 		slog.Error("[!] 数据库迁移失败", "error", migrateErr)
 	} else {
 		slog.Info("[+] 数据库迁移完成", "tables", len(tables))
+	}
+
+	// 目标/路径任务重构后，GORM 不会自动删除 monitor_executions.task_id
+	if session.Migrator().HasTable("monitor_executions") && session.Migrator().HasColumn("monitor_executions", "task_id") {
+		if err := session.Migrator().DropColumn("monitor_executions", "task_id"); err != nil {
+			slog.Warn("[!] 移除 monitor_executions.task_id 失败", "error", err)
+		} else {
+			slog.Info("[+] 已移除 monitor_executions.task_id 遗留列")
+		}
 	}
 
 	if err := migration.RunAll(session); err != nil {

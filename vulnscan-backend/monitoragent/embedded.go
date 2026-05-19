@@ -101,7 +101,7 @@ func (e *EmbeddedAgent) registerNode(session *gorm.DB, maxConcurrent int) {
 			})
 	}
 
-	// Also register in unified node table (with per-node secret for node-api when hash is configured).
+	// vs_nodes 登记仅供 node-api 鉴权；节点总览列表已排除 uuid=embedded-default，能力合并展示在「本地执行引擎」。
 	var node model.Node
 	errNode := session.Where("uuid = ?", e.agentUUID).First(&node).Error
 	nodeExists := errNode == nil
@@ -214,14 +214,18 @@ func (e *EmbeddedAgent) runDirectLoop(ctx context.Context, session *gorm.DB) {
 					"queued_tasks":   e.scheduler.QueuedCount(),
 				})
 		case <-ticker.C:
-			available := 5 - e.scheduler.RunningCount() - e.scheduler.QueuedCount()
+			maxConc := e.scheduler.MaxConcurrent()
+			if maxConc < len(model.MonitorAllDimensions) {
+				maxConc = len(model.MonitorAllDimensions)
+			}
+			available := maxConc - e.scheduler.RunningCount() - e.scheduler.QueuedCount()
 			if available <= 0 {
 				continue
 			}
 
 			batch := available
-			if batch > 5 {
-				batch = 5
+			if batch > maxConc {
+				batch = maxConc
 			}
 
 			var executions []model.MonitorExecution
@@ -253,19 +257,20 @@ func (e *EmbeddedAgent) runDirectLoop(ctx context.Context, session *gorm.DB) {
 				Find(&executions)
 
 			for _, exec := range executions {
-				var task model.MonitorTask
-				if err := session.First(&task, "id = ?", exec.TaskID).Error; err != nil {
-					continue
-				}
-
-				msg, err := sitemonitor.BuildMonitorTaskMessage(ctx, session, &exec, &task)
+				msg, err := sitemonitor.BuildMonitorTaskMessage(ctx, session, &exec)
 				if err != nil {
+					e.failClaimedExecution(session, exec.ID, "构造监测载荷失败: "+err.Error())
 					continue
 				}
 				payload, err := sitemonitor.MarshalMonitorPayload(msg)
 				if err != nil {
+					e.failClaimedExecution(session, exec.ID, "序列化监测载荷失败: "+err.Error())
 					continue
 				}
+
+				now := time.Now()
+				session.Model(&model.MonitorExecution{}).Where("id = ?", exec.ID).
+					Update("started_at", now)
 
 				e.scheduler.Submit(&agent.TaskEnvelope{
 					ID:      exec.ID,
@@ -275,6 +280,16 @@ func (e *EmbeddedAgent) runDirectLoop(ctx context.Context, session *gorm.DB) {
 			}
 		}
 	}
+}
+
+func (e *EmbeddedAgent) failClaimedExecution(session *gorm.DB, executionID, errMsg string) {
+	now := time.Now()
+	session.Model(&model.MonitorExecution{}).Where("id = ?", executionID).
+		Updates(map[string]any{
+			"status":      "failed",
+			"error":       errMsg,
+			"finished_at": now,
+		})
 }
 
 func (e *EmbeddedAgent) saveResultToDB(session *gorm.DB, result *agent.TaskResult) {
@@ -294,6 +309,7 @@ func (e *EmbeddedAgent) saveResultToDB(session *gorm.DB, result *agent.TaskResul
 		result.FinishedAt,
 	); err != nil {
 		slog.Error("embedded monitor finalize failed", "execution_id", result.ID, "error", err)
+		e.failClaimedExecution(session, result.ID, "结果落库失败: "+err.Error())
 	}
 
 	session.Model(&model.MonitorAgent{}).

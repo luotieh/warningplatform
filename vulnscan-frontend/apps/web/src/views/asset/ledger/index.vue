@@ -10,7 +10,7 @@ import LedgerExpiryAlerts from './components/ledger-expiry-alerts.vue';
 import LedgerFilterCard from './components/ledger-filter-card.vue';
 import LedgerImportModal from './components/ledger-import-modal.vue';
 import LedgerMonitorResultModal from './components/ledger-monitor-result-modal.vue';
-import LedgerOrgTree from './components/ledger-org-tree.vue';
+import LedgerScopePanel from './components/ledger-scope-panel.vue';
 import LedgerQuickConstructionModal from './components/ledger-quick-construction-modal.vue';
 import LedgerQuickOrganizeModal from './components/ledger-quick-organize-modal.vue';
 import LedgerScanModal from './components/ledger-scan-modal.vue';
@@ -44,8 +44,24 @@ const {
   industryCategoryOptions,
   constructionOptions,
   orgTreeOptions,
+  orgTreeDisplay,
+  orgTreeSearchMode,
+  searchOrganizes,
+  scopeDimension,
+  regionTreeOptions,
+  industryTreeOptions,
+  assetFamilyScopeTreeOptions,
+  scopeUsesAssetFamily,
+  scopeLabel,
+  setScopeDimension,
+  resetScopePanel,
   selectedOrgKey,
-  selectedOrgName,
+  selectedRegionKey,
+  selectedIndustryKey,
+  selectedAssetFamilyKey,
+  selectRegion,
+  selectIndustry,
+  selectAssetFamily,
   scanAssets,
   stats,
   searchForm,
@@ -67,6 +83,9 @@ const {
   showEditModal,
   showImportModal,
   importErrorMessage,
+  importErrorIssues,
+  importErrorCount,
+  importErrorFailedRows,
   clearImportError,
   showScanModal,
   showVerifyModal,
@@ -159,12 +178,27 @@ onActivated(async () => {
 <template>
   <div class="ledger-page">
     <aside class="ledger-page__aside">
-      <LedgerOrgTree
-        :data="orgTreeOptions"
+      <LedgerScopePanel
+        :dimension="scopeDimension"
+        :org-tree="orgTreeDisplay"
+        :region-tree="regionTreeOptions"
+        :industry-tree="industryTreeOptions"
+        :asset-family-tree="assetFamilyScopeTreeOptions"
         :loading="treeLoading"
-        :selected-key="selectedOrgKey"
-        @reset="selectOrg(null)"
-        @update:selected-key="selectOrg"
+        :org-search-mode="orgTreeSearchMode"
+        :scope-label="scopeLabel"
+        :selected-org-key="selectedOrgKey"
+        :selected-region-key="selectedRegionKey"
+        :selected-industry-key="selectedIndustryKey"
+        :selected-asset-family-key="selectedAssetFamilyKey"
+        @update:dimension="setScopeDimension"
+        @org-search="searchOrganizes"
+        @org-reset="selectOrg(null)"
+        @reset-all="resetScopePanel"
+        @update:selected-org-key="selectOrg"
+        @update:selected-region-key="selectRegion"
+        @update:selected-industry-key="selectIndustry"
+        @update:selected-asset-family-key="selectAssetFamily"
       />
     </aside>
 
@@ -183,7 +217,8 @@ onActivated(async () => {
         :source-options="sourceOptions"
         :yes-no-options="booleanFilterOptions"
         :form="searchForm"
-        :selected-org-name="selectedOrgName"
+        :scope-label="scopeLabel"
+        :hide-family-filter="scopeUsesAssetFamily"
         :show-advanced="showAdvancedFilter"
         @family-change="changeFamily"
         @search="handleSearch"
@@ -253,6 +288,9 @@ onActivated(async () => {
       :loading="importLoading"
       :template-downloading="templateDownloading"
       :error-message="importErrorMessage"
+      :error-issues="importErrorIssues"
+      :error-count="importErrorCount"
+      :error-failed-rows="importErrorFailedRows"
       @close="showImportModal = false"
       @submit="submitImport"
       @download-template="downloadImportTemplateFile"

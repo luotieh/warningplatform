@@ -126,9 +126,34 @@ export interface DashboardStats {
   in_remediation: number;
   closed: number;
   overdue: number;
+  today_total?: number;
+  urgent_count?: number;
+  remediation_rate?: number;
   ai_auditing?: number;
   passed?: number;
   failed?: number;
+}
+
+export interface ChartTypeItem {
+  type: string;
+  count: number;
+  percentage: string;
+}
+
+export interface ChartLevelItem {
+  level: number;
+  label: string;
+  count: number;
+  percentage: string;
+}
+
+export interface ChartTrendItem {
+  period: string;
+  date: string;
+  created: number;
+  closed: number;
+  pending: number;
+  count?: number;
 }
 
 export interface SLAOverview {
@@ -311,11 +336,15 @@ export function getDashboardStats() {
 }
 
 export function getChartByType(params?: Record<string, any>) {
-  return requestClient.get('/incident/dashboard/chart/type', { params });
+  return requestClient.get<ChartTypeItem[]>('/incident/dashboard/chart/type', { params });
+}
+
+export function getChartByLevel(params?: Record<string, any>) {
+  return requestClient.get<ChartLevelItem[]>('/incident/dashboard/chart/level', { params });
 }
 
 export function getChartByTrend(params?: Record<string, any>) {
-  return requestClient.get('/incident/dashboard/chart/trend', { params });
+  return requestClient.get<ChartTrendItem[]>('/incident/dashboard/chart/trend', { params });
 }
 
 // ─── Stats ────────────────────────────────────────────────────

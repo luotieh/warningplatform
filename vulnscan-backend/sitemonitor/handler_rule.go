@@ -161,3 +161,17 @@ func (h *HandlerMonitor) ShutdownAgent(c *gin.Context) {
 	}
 	web.OK(c).Data(result).Send()
 }
+
+func (h *HandlerMonitor) DeleteAgent(c *gin.Context) {
+	uri, ok := web.BindUri[struct {
+		UUID string `uri:"uuid"`
+	}](c)
+	if !ok {
+		return
+	}
+	if err := h.svc.DeleteAgent(c.Request.Context(), uri.UUID); err != nil {
+		web.Fail(c).Err(err).Send()
+		return
+	}
+	web.OK(c).Send()
+}

@@ -51,13 +51,17 @@ func NewPageService() *PageService {
 
 const defaultUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
-func (ps *PageService) FetchPage(ctx context.Context, url string) (*PageSnapshot, error) {
+func (ps *PageService) FetchPage(ctx context.Context, url string, requestHost ...string) (*PageSnapshot, error) {
 	snap := &PageSnapshot{URL: url}
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		snap.Error = err.Error()
 		return snap, err
+	}
+	if len(requestHost) > 0 && requestHost[0] != "" {
+		req.Host = requestHost[0]
+		req.Header.Set("Host", requestHost[0])
 	}
 	req.Header.Set("User-Agent", defaultUA)
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
@@ -141,6 +145,7 @@ func (ps *PageService) FetchPage(ctx context.Context, url string) (*PageSnapshot
 	}
 
 	snap.RenderedHTML = string(body)
+	snap.ContentLength = int64(len(body))
 	snap.ContentHash = fmt.Sprintf("%x", md5.Sum(body))
 
 	ps.parseHTML(snap)
@@ -212,7 +217,13 @@ func (ps *PageService) parseHTML(snap *PageSnapshot) {
 	}
 
 	walk(doc)
-	snap.VisibleText = textBuf.String()
+	snap.VisibleText = strings.TrimSpace(textBuf.String())
+	if snap.VisibleText == "" {
+		raw := strings.TrimSpace(snap.RenderedHTML)
+		if raw != "" {
+			snap.VisibleText = raw
+		}
+	}
 
 	slog.Debug("page parsed",
 		"url", snap.URL,

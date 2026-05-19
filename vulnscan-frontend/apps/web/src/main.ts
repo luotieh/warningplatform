@@ -18,7 +18,7 @@ async function initApplication() {
   const namespace = `${import.meta.env.VITE_APP_NAMESPACE}-${appVersion}-${env}`;
 
   // Bump this when cached Vben preferences become incompatible with app defaults.
-  const PREFS_SCHEMA_VERSION = '5';
+  const PREFS_SCHEMA_VERSION = '6';
   const versionKey = `${namespace}__schema_v`;
   if (localStorage.getItem(versionKey) !== PREFS_SCHEMA_VERSION) {
     for (const key of Object.keys(localStorage)) {

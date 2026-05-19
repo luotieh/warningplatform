@@ -1,52 +1,28 @@
 <script lang="ts" setup>
 import type { DataTableColumns } from 'naive-ui';
-import { computed, h, onMounted, reactive, ref } from 'vue';
+import { computed, h, reactive, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 
-import type { MonitorExecution, MonitorTask } from '#/api/sitemonitor';
+import type { MonitorExecution, MonitorPathTask } from '#/api/sitemonitor';
 
 import { Page } from '@vben/common-ui';
 import { IconifyIcon } from '@vben/icons';
-
-import { LineChart, BarChart } from 'echarts/charts';
-import {
-  DataZoomComponent,
-  GridComponent,
-  LegendComponent,
-  TooltipComponent,
-} from 'echarts/components';
-import { use } from 'echarts/core';
-import { CanvasRenderer } from 'echarts/renderers';
-import VChart from 'vue-echarts';
-
-use([
-  CanvasRenderer,
-  LineChart,
-  BarChart,
-  GridComponent,
-  TooltipComponent,
-  LegendComponent,
-  DataZoomComponent,
-]);
 
 import dayjs from 'dayjs';
 import {
   NButton,
   NCard,
-  NCol,
   NDataTable,
   NDatePicker,
-  NDrawer,
-  NDrawerContent,
   NEmpty,
   NFormItem,
-  NGrid,
-  NGi,
+  NModal,
   NPopconfirm,
-  NRow,
   NSelect,
   NSpace,
-  NSpin,
   NStatistic,
+  NTabPane,
+  NTabs,
   NTag,
 } from 'naive-ui';
 
@@ -54,27 +30,24 @@ import { dialog, message } from '#/adapter/naive';
 import {
   batchDeleteExecutions,
   deleteExecution,
-  getExecutionDetail,
   getExecutionList,
-  getTaskDetail,
-  getTaskTrend,
+  getPathTaskDetail,
 } from '#/api/sitemonitor';
 
-import AvailabilityDetail from '../executions/components/AvailabilityDetail.vue';
-import BlacklinkDetail from '../executions/components/BlacklinkDetail.vue';
-import DomainHijackDetail from '../executions/components/DomainHijackDetail.vue';
-import SensitiveFileDetail from '../executions/components/SensitiveFileDetail.vue';
-import SensitiveWordDetail from '../executions/components/SensitiveWordDetail.vue';
-import TamperDetail from '../executions/components/TamperDetail.vue';
+import DimensionTrendPanel from './DimensionTrendPanel.vue';
+import RecordDetailContent from './RecordDetailContent.vue';
 
 defineOptions({ name: 'MonitorRecords' });
 
-const props = defineProps<{
-  taskId?: string;
-}>();
+const route = useRoute();
 
-const taskId = ref(props.taskId || '');
-const task = ref<MonitorTask | null>(null);
+const detailVisible = ref(false);
+const detailRecordId = ref('');
+
+const pathTaskId = computed(() =>
+  String(route.params.pathTaskId ?? route.params.taskId ?? '').trim(),
+);
+const pathTask = ref<MonitorPathTask | null>(null);
 
 const dimensions = [
   { key: 'all', label: '全部', icon: 'ri:layout-grid-line', color: '#6b7280' },
@@ -102,15 +75,38 @@ const statusLabel = (v: string) =>
 
 const fmtTime = (v: string) => (v ? dayjs(v).format('YYYY-MM-DD HH:mm:ss') : '-');
 
-const filterForm = reactive({
-  hasIssue: '',
-  disposition: '',
-  dateRange: null as [number, number] | null,
-});
+type DimFilter = {
+  hasIssue: string;
+  disposition: string;
+  status: string;
+  dateRange: null | [number, number];
+};
+
+function createDimFilter(): DimFilter {
+  return { hasIssue: '', disposition: '', status: '', dateRange: null };
+}
+
+const dimFilters = reactive<Record<string, DimFilter>>({});
+
+function ensureDimFilter(key: string) {
+  if (!dimFilters[key]) dimFilters[key] = createDimFilter();
+  return dimFilters[key];
+}
+
+for (const d of dimensions) {
+  ensureDimFilter(d.key);
+}
 
 const issueOpts = [
   { label: '有问题', value: 'true' },
   { label: '正常', value: 'false' },
+];
+
+const statusOpts = [
+  { label: '成功', value: 'success' },
+  { label: '失败', value: 'failed' },
+  { label: '运行中', value: 'running' },
+  { label: '等待中', value: 'pending' },
 ];
 
 const dispositionOptions = [
@@ -127,10 +123,11 @@ const dispositionLabelMap: Record<string, string> = {
   valid: '有效',
 };
 
-// 各维度数据
 const dimDataMap = reactive<Record<string, MonitorExecution[]>>({});
 const dimLoadingMap = reactive<Record<string, boolean>>({});
-const dimStatsMap = reactive<Record<string, { total: number; success: number; failed: number; issueCount: number }>>({});
+const dimStatsMap = reactive<
+  Record<string, { total: number; success: number; failed: number; issueCount: number }>
+>({});
 
 const pagination = reactive({
   page: 1,
@@ -141,104 +138,30 @@ const pagination = reactive({
 
 const pageCountMap = reactive<Record<string, number>>({});
 
+function applyRouteFilters() {
+  const q = route.query;
+  const dim = String(q.dimension ?? '').trim();
+  if (dim && dimensions.some((d) => d.key === dim)) {
+    activeDim.value = dim;
+  }
+  const f = ensureDimFilter(activeDim.value);
+  f.hasIssue = String(q.hasIssue ?? '').trim();
+  f.disposition = String(q.disposition ?? '').trim();
+}
+
 async function loadTaskInfo() {
-  if (!taskId.value) return;
+  if (!pathTaskId.value) return;
   try {
-    const res = await getTaskDetail(taskId.value);
-    task.value = (res as any)?.data || res;
+    const res = await getPathTaskDetail(pathTaskId.value);
+    pathTask.value = (res as any)?.data || res;
   } catch (e: any) {
-    message.error(e?.msg || '加载任务信息失败');
+    message.error(e?.msg || '加载路径任务失败');
   }
 }
 
-// ── 可用性趋势 ──
-const trendData = ref<any>(null);
-const trendLoading = ref(false);
-const trendHours = ref(24);
-
-const trendHoursOptions = [
-  { label: '近24小时', value: 24 },
-  { label: '近3天', value: 72 },
-  { label: '近7天', value: 168 },
-  { label: '近30天', value: 720 },
-];
-
-async function loadTrend() {
-  if (!taskId.value) return;
-  trendLoading.value = true;
-  try {
-    const res: any = await getTaskTrend(taskId.value, trendHours.value);
-    trendData.value = res?.data ?? res;
-  } catch {
-    trendData.value = null;
-  } finally {
-    trendLoading.value = false;
-  }
-}
-
-const trendChartOption = computed(() => {
-  const pts = trendData.value?.points || [];
-  if (!pts.length) return null;
-  const times = pts.map((p: any) => p.time);
-  const totalMs = pts.map((p: any) => p.total_ms ?? 0);
-  const dnsMs = pts.map((p: any) => p.dns_ms ?? 0);
-  const tcpMs = pts.map((p: any) => p.tcp_connect_ms ?? 0);
-  const tlsMs = pts.map((p: any) => p.tls_handshake_ms ?? 0);
-  const ttfbMs = pts.map((p: any) => p.ttfb_ms ?? 0);
-  return {
-    tooltip: {
-      trigger: 'axis',
-      formatter: (params: any) => {
-        const p = params[0]?.axisValueLabel || '';
-        let html = `<div style="font-weight:600;margin-bottom:4px">${p}</div>`;
-        for (const s of params) {
-          html += `<div>${s.marker} ${s.seriesName}: <b>${s.value?.toFixed(0) ?? '-'}</b> ms</div>`;
-        }
-        const idx = params[0]?.dataIndex;
-        if (idx != null && pts[idx]) {
-          const avail = pts[idx].available;
-          html += `<div style="margin-top:4px">${avail ? '✅ 可用' : '❌ 不可用'}</div>`;
-        }
-        return html;
-      },
-    },
-    legend: { data: ['总耗时', 'DNS', 'TCP', 'TLS', 'TTFB'], bottom: 0, textStyle: { fontSize: 11 } },
-    grid: { left: 50, right: 16, top: 16, bottom: pts.length > 30 ? 70 : 40 },
-    xAxis: { type: 'category', data: times, axisLabel: { fontSize: 10, rotate: pts.length > 30 ? 45 : 0 } },
-    yAxis: { type: 'value', name: 'ms', axisLabel: { fontSize: 10 } },
-    dataZoom: pts.length > 60 ? [{ type: 'inside', start: 80, end: 100 }] : [],
-    series: [
-      { name: '总耗时', type: 'line', data: totalMs, smooth: true, lineStyle: { width: 2 }, areaStyle: { opacity: 0.1 }, itemStyle: { color: '#3b82f6' } },
-      { name: 'DNS', type: 'line', data: dnsMs, smooth: true, lineStyle: { width: 1 }, itemStyle: { color: '#22c55e' } },
-      { name: 'TCP', type: 'line', data: tcpMs, smooth: true, lineStyle: { width: 1 }, itemStyle: { color: '#f59e0b' } },
-      { name: 'TLS', type: 'line', data: tlsMs, smooth: true, lineStyle: { width: 1 }, itemStyle: { color: '#a855f7' } },
-      { name: 'TTFB', type: 'line', data: ttfbMs, smooth: true, lineStyle: { width: 1 }, itemStyle: { color: '#ef4444' } },
-    ],
-  };
-});
-
-const availBarOption = computed(() => {
-  const pts = trendData.value?.points || [];
-  if (!pts.length) return null;
-  return {
-    tooltip: { trigger: 'axis' },
-    grid: { left: 50, right: 16, top: 8, bottom: 4 },
-    xAxis: { type: 'category', data: pts.map((p: any) => p.time), show: false },
-    yAxis: { type: 'value', show: false, max: 1 },
-    series: [{
-      type: 'bar',
-      data: pts.map((p: any) => ({
-        value: 1,
-        itemStyle: { color: p.available ? (p.has_issue ? '#f59e0b' : '#22c55e') : '#ef4444' },
-      })),
-      barGap: '0%',
-      barCategoryGap: '10%',
-    }],
-  };
-});
 
 async function loadData(dimKey: string) {
-  if (!taskId.value) return;
+  if (!pathTaskId.value) return;
 
   const targetDim = dimKey === 'all' ? '' : dimKey;
   dimLoadingMap[dimKey] = true;
@@ -247,16 +170,18 @@ async function loadData(dimKey: string) {
     const params: any = {
       index: pagination.page,
       size: pagination.pageSize,
-      task_id: taskId.value,
+      path_task_id: pathTaskId.value,
     };
 
     if (targetDim) params.dimension = targetDim;
-    if (filterForm.hasIssue) params.has_issue = filterForm.hasIssue;
-    if (filterForm.disposition) params.disposition = filterForm.disposition;
-    if (filterForm.dateRange?.[0])
-      params.time_start = dayjs(filterForm.dateRange[0]).format('YYYY-MM-DD HH:mm:ss');
-    if (filterForm.dateRange?.[1])
-      params.time_end = dayjs(filterForm.dateRange[1]).format('YYYY-MM-DD HH:mm:ss');
+    const ff = ensureDimFilter(dimKey);
+    if (ff.hasIssue) params.has_issue = ff.hasIssue;
+    if (ff.disposition) params.disposition = ff.disposition;
+    if (ff.status) params.status = ff.status;
+    if (ff.dateRange?.[0])
+      params.time_start = dayjs(ff.dateRange[0]).format('YYYY-MM-DD HH:mm:ss');
+    if (ff.dateRange?.[1])
+      params.time_end = dayjs(ff.dateRange[1]).format('YYYY-MM-DD HH:mm:ss');
 
     const res = await getExecutionList(params);
     const items = res.data || [];
@@ -280,7 +205,7 @@ async function loadData(dimKey: string) {
 }
 
 async function loadAllDimStats() {
-  if (!taskId.value) return;
+  if (!pathTaskId.value) return;
   const dimKeys = dimensions.map((d) => d.key);
   await Promise.all(
     dimKeys.map(async (dimKey) => {
@@ -289,7 +214,7 @@ async function loadAllDimStats() {
         const params: any = {
           index: 1,
           size: 1,
-          task_id: taskId.value,
+          path_task_id: pathTaskId.value,
         };
         if (targetDim) params.dimension = targetDim;
         const res = await getExecutionList(params);
@@ -310,9 +235,20 @@ async function loadAllDimStats() {
   );
 }
 
-function handleFilterChange() {
+function handleFilterChange(dimKey?: string) {
   pagination.page = 1;
-  loadData(activeDim.value);
+  const dim = dimKey || activeDim.value;
+  loadData(dim);
+  loadAllDimStats();
+}
+
+function resetDimFilter(dimKey: string) {
+  const f = ensureDimFilter(dimKey);
+  f.hasIssue = '';
+  f.disposition = '';
+  f.status = '';
+  f.dateRange = null;
+  handleFilterChange(dimKey);
 }
 
 function handlePageChange(p: number) {
@@ -326,40 +262,18 @@ function handlePageSizeChange(s: number) {
   loadData(activeDim.value);
 }
 
-function handleDimChange(dim: string) {
-  activeDim.value = dim;
+function handleTabChange(dim: string) {
   pagination.page = 1;
-  if (!dimDataMap[dim]) {
-    loadData(dim);
-  }
+  loadData(dim);
 }
 
-// 详情抽屉
-const detailVisible = ref(false);
-const detailLoading = ref(false);
-const detailData = ref<any>(null);
-
-const detailParsedResult = computed(() => {
-  if (!detailData.value?.result_json) return null;
-  try {
-    return JSON.parse(detailData.value.result_json);
-  } catch {
-    return null;
-  }
-});
-
-async function openDetail(row: MonitorExecution) {
-  detailData.value = null;
+function openDetail(row: MonitorExecution) {
+  detailRecordId.value = row.id;
   detailVisible.value = true;
-  detailLoading.value = true;
-  try {
-    const res: any = await getExecutionDetail(row.id);
-    detailData.value = res?.data ?? res;
-  } catch (e: any) {
-    message.error(e?.msg || '加载详情失败');
-  } finally {
-    detailLoading.value = false;
-  }
+}
+
+function closeDetail() {
+  detailVisible.value = false;
 }
 
 async function handleDelete(row: MonitorExecution) {
@@ -367,6 +281,7 @@ async function handleDelete(row: MonitorExecution) {
     await deleteExecution(row.id);
     message.success('删除成功');
     loadData(activeDim.value);
+    loadAllDimStats();
   } catch (e: any) {
     message.error(e?.msg || '删除失败');
   }
@@ -378,7 +293,7 @@ function handleBatchDelete() {
     message.warning('当前列表无记录');
     return;
   }
-  
+
   dialog.error({
     title: '危险操作',
     content: `确认删除当前页面 ${data.length} 条记录？同时清除相关证据文件，不可恢复！`,
@@ -390,6 +305,7 @@ function handleBatchDelete() {
         await batchDeleteExecutions(ids);
         message.success(`已删除 ${ids.length} 条记录`);
         loadData(activeDim.value);
+        loadAllDimStats();
       } catch (e: any) {
         message.error(e?.msg || '批量删除失败');
       }
@@ -397,7 +313,7 @@ function handleBatchDelete() {
   });
 }
 
-const columns: DataTableColumns<MonitorExecution> = [
+const baseColumns: DataTableColumns<MonitorExecution> = [
   { key: 'index', title: '序号', width: 60, align: 'center', render: (_, i) => i + 1 },
   {
     key: 'dimension',
@@ -423,11 +339,11 @@ const columns: DataTableColumns<MonitorExecution> = [
         row.status === 'success'
           ? 'success'
           : row.status === 'failed'
-          ? 'error'
-          : row.status === 'running'
-          ? 'warning'
-          : 'info';
-      return h(NTag, { type, size: 'small', bordered: false }, statusLabel(row.status));
+            ? 'error'
+            : row.status === 'running'
+              ? 'warning'
+              : 'info';
+      return h(NTag, { type, size: 'small', bordered: false }, () => statusLabel(row.status));
     },
   },
   {
@@ -443,7 +359,7 @@ const columns: DataTableColumns<MonitorExecution> = [
           size: 'small',
           bordered: false,
         },
-        row.has_issue ? '⚠ 问题' : '正常',
+        () => (row.has_issue ? '⚠ 问题' : '正常'),
       ),
   },
   {
@@ -453,7 +369,7 @@ const columns: DataTableColumns<MonitorExecution> = [
     align: 'center',
     render: (row) => {
       const d = row.disposition || 'pending';
-      const typeMap: Record<string, string> = {
+      const typeMap: Record<string, 'default' | 'warning' | 'success'> = {
         false_positive: 'default',
         invalid: 'default',
         pending: 'warning',
@@ -462,7 +378,7 @@ const columns: DataTableColumns<MonitorExecution> = [
       return h(
         NTag,
         { type: typeMap[d] || 'default', size: 'small', bordered: false },
-        dispositionLabelMap[d] || d,
+        () => dispositionLabelMap[d] || d,
       );
     },
   },
@@ -513,328 +429,311 @@ const columns: DataTableColumns<MonitorExecution> = [
   },
 ];
 
-function execStatusType(s: string) {
-  if (s === 'success') return 'success';
-  if (s === 'failed') return 'error';
-  if (s === 'running') return 'warning';
-  return 'info';
+const tableColumns = computed(() => {
+  if (activeDim.value === 'all') {
+    return baseColumns;
+  }
+  return baseColumns.filter((c) => c.key !== 'dimension');
+});
+
+function dimStats(key: string) {
+  return dimStatsMap[key] ?? { total: 0, success: 0, failed: 0, issueCount: 0 };
 }
 
-onMounted(() => {
-  if (taskId.value) {
+watch(
+  () => route.params.pathTaskId ?? route.params.taskId,
+  () => {
+    if (!pathTaskId.value) return;
+    applyRouteFilters();
+    pagination.page = 1;
     loadTaskInfo();
-    loadTrend();
     loadData(activeDim.value);
     loadAllDimStats();
-  }
-});
+  },
+  { immediate: true },
+);
 </script>
 
 <template>
-  <Page :title="`监测记录${task?.task_name ? ` — ${task.task_name}` : ''}`" description="网站监测记录详情">
+  <Page
+    :title="`监测记录${pathTask?.name ? ` — ${pathTask.name}` : ''}`"
+    description="按监测维度查看路径任务执行记录"
+  >
     <template #extra>
-      <NSpace :size="8">
-        <NButton size="small" @click="() => loadData(activeDim)">
-          <IconifyIcon icon="ri:refresh-line" class="text-sm" />
-          刷新
-        </NButton>
-      </NSpace>
+      <NButton size="small" @click="() => { loadData(activeDim); loadAllDimStats(); }">
+        <IconifyIcon icon="ri:refresh-line" class="text-sm" />
+        刷新
+      </NButton>
     </template>
 
-    <!-- 筛选区域 -->
-    <NCard class="mb-4">
-      <div class="records-filter-bar">
-        <NSpace align="center" wrap>
-          <NFormItem label="状态" label-width="40">
-            <NSelect
-              v-model:value="filterForm.hasIssue"
-              placeholder="全部"
-              clearable
-              size="small"
-              style="width: 110px"
-              :options="issueOpts"
-            />
-          </NFormItem>
-          <NFormItem label="处置" label-width="40">
-            <NSelect
-              v-model:value="filterForm.disposition"
-              placeholder="全部"
-              clearable
-              size="small"
-              style="width: 110px"
-              :options="dispositionOptions"
-            />
-          </NFormItem>
-          <NFormItem label="时间" label-width="40">
-            <NDatePicker
-              v-model:value="filterForm.dateRange"
-              type="datetimerange"
-              clearable
-              size="small"
-              style="width: 340px"
-            />
-          </NFormItem>
-          <NSpace :size="8">
-            <NButton type="primary" size="small" @click="handleFilterChange">查询</NButton>
-            <NButton
-              size="small"
-              @click="
-                () => {
-                  filterForm.hasIssue = '';
-                  filterForm.disposition = '';
-                  filterForm.dateRange = null;
-                  handleFilterChange();
-                }
-              "
+    <NCard class="records-main-card" content-style="padding: 0">
+      <NTabs
+        v-model:value="activeDim"
+        type="line"
+        animated
+        display-directive="if"
+        class="records-dimension-tabs"
+        @update:value="handleTabChange"
+      >
+      <NTabPane v-for="item in dimensions" :key="item.key" :name="item.key">
+        <template #tab>
+          <div
+            class="record-tab-label"
+            :class="{ 'record-tab-label--active': activeDim === item.key }"
+            :style="{ '--dim-color': item.color }"
+          >
+            <IconifyIcon :icon="item.icon" class="record-tab-icon" />
+            <span>{{ item.label }}</span>
+            <NTag
+              size="tiny"
+              round
+              :bordered="false"
+              :type="dimStatsMap[item.key]?.issueCount ? 'error' : 'default'"
+              class="record-tab-count"
             >
-              重置
-            </NButton>
-          </NSpace>
-        </NSpace>
-      </div>
-    </NCard>
-
-    <!-- 可用性趋势概览 -->
-    <NCard class="mb-4">
-      <NSpin :show="trendLoading" size="small">
-        <template v-if="trendData">
-          <div class="mb-2 flex items-center justify-between">
-            <span class="text-base font-bold">可用性概览</span>
-            <NSelect
-              v-model:value="trendHours"
-              :options="trendHoursOptions"
-              size="small"
-              style="width: 120px"
-              @update:value="() => loadTrend()"
-            />
-          </div>
-          <NRow :gutter="12" class="mb-3">
-            <NCol :span="4">
-              <NStatistic label="可用率" tabular-nums>
-                <span :class="(trendData.summary?.availability_pct ?? 0) >= 99 ? 'text-green-500' : (trendData.summary?.availability_pct ?? 0) >= 95 ? 'text-yellow-500' : 'text-red-500'" class="text-xl font-bold">
-                  {{ (trendData.summary?.availability_pct ?? 0).toFixed(1) }}%
-                </span>
-              </NStatistic>
-            </NCol>
-            <NCol :span="4">
-              <NStatistic label="检测次数" :value="trendData.summary?.total_checks ?? 0" tabular-nums />
-            </NCol>
-            <NCol :span="4">
-              <NStatistic label="平均耗时" tabular-nums>
-                <span class="font-mono">{{ (trendData.summary?.avg_response_ms ?? 0).toFixed(0) }} ms</span>
-              </NStatistic>
-            </NCol>
-            <NCol :span="4">
-              <NStatistic label="最大耗时" tabular-nums>
-                <span class="font-mono">{{ (trendData.summary?.max_response_ms ?? 0).toFixed(0) }} ms</span>
-              </NStatistic>
-            </NCol>
-            <NCol :span="4">
-              <NStatistic label="最小耗时" tabular-nums>
-                <span class="font-mono">{{ (trendData.summary?.min_response_ms ?? 0).toFixed(0) }} ms</span>
-              </NStatistic>
-            </NCol>
-            <NCol :span="4">
-              <NStatistic label="发现问题" tabular-nums>
-                <span :class="(trendData.summary?.issue_count ?? 0) > 0 ? 'text-red-500 font-bold' : 'text-green-500'">
-                  {{ trendData.summary?.issue_count ?? 0 }}
-                </span>
-              </NStatistic>
-            </NCol>
-          </NRow>
-
-          <div v-if="availBarOption" class="mb-2">
-            <div class="text-muted-foreground mb-1 text-xs">可用性状态（绿=正常 黄=有问题 红=不可用）</div>
-            <VChart :option="availBarOption" style="height: 28px; width: 100%" autoresize />
-          </div>
-
-          <div v-if="trendChartOption" class="mb-3">
-            <div class="text-muted-foreground mb-1 text-xs">响应时间趋势</div>
-            <VChart :option="trendChartOption" style="height: 220px; width: 100%" autoresize />
-          </div>
-
-          <div v-if="(trendData.dimensions || []).length">
-            <div class="text-muted-foreground mb-1 text-xs">各维度状态</div>
-            <div class="flex flex-wrap gap-2">
-              <NTag
-                v-for="dim in trendData.dimensions"
-                :key="dim.dimension"
-                :type="dim.issue_count > 0 ? 'error' : dim.total > 0 ? 'success' : 'default'"
-                size="small"
-                :bordered="false"
-              >
-                {{ dimLabelMap[dim.dimension] || dim.dimension }}：{{ dim.total }} 次
-                <template v-if="dim.issue_count > 0">（{{ dim.issue_count }} 问题）</template>
-              </NTag>
-            </div>
+              {{ dimStatsMap[item.key]?.total ?? 0 }}
+            </NTag>
           </div>
         </template>
-        <NEmpty v-else description="暂无趋势数据" />
-      </NSpin>
-    </NCard>
 
-    <!-- 维度统计卡片 -->
-    <NGrid cols="2 s:3 m:4 l:7" :x-gap="12" :y-gap="12" responsive="screen" class="mb-4">
-      <NGi
-        v-for="item in dimensions"
-        :key="item.key"
-        @click="handleDimChange(item.key)"
-      >
-        <div
-          class="dim-stat-card"
-          :class="{ active: activeDim === item.key }"
-          :style="{ '--dim-color': item.color }"
-        >
-          <div class="dim-stat-icon">
-            <IconifyIcon :icon="item.icon" />
-          </div>
-          <div class="dim-stat-content">
-            <div class="dim-stat-label">{{ item.label }}</div>
-            <div class="dim-stat-row">
-              <span class="dim-stat-value">{{ dimStatsMap[item.key]?.total || 0 }}</span>
-              <span
-                v-if="dimStatsMap[item.key]?.issueCount"
-                class="dim-stat-issue"
-              >
-                {{ dimStatsMap[item.key]?.issueCount }}问题
-              </span>
-            </div>
-          </div>
-        </div>
-      </NGi>
-    </NGrid>
-
-    <!-- 列表区域 -->
-    <NCard>
-      <div class="flex justify-between items-center mb-3">
-        <span class="text-sm text-muted-foreground">
-          共 {{ pageCountMap[activeDim] || 0 }} 条记录
-        </span>
-        <NButton type="error" size="small" @click="handleBatchDelete" v-if="dimDataMap[activeDim]?.length">
-          批量删除当前页
-        </NButton>
-      </div>
-
-      <NDataTable
-        :columns="columns"
-        :data="dimDataMap[activeDim] || []"
-        :loading="dimLoadingMap[activeDim]"
-        :pagination="{
-          ...pagination,
-          itemCount: pageCountMap[activeDim] || 0,
-        }"
-        :row-key="(r: MonitorExecution) => r.id"
-        remote
-        size="small"
-        @update:page="handlePageChange"
-        @update:page-size="handlePageSizeChange"
-      >
-        <template #empty>
-          <NEmpty description="暂无监测记录" />
-        </template>
-      </NDataTable>
-    </NCard>
-
-    <!-- 详情抽屉 -->
-    <NDrawer v-model:show="detailVisible" :width="900" placement="right">
-      <NDrawerContent
-        :title="
-          detailData
-            ? `监测详情 — ${dimLabelMap[detailData.dimension] || detailData.dimension}`
-            : '监测详情'
-        "
-        closable
-      >
-        <NSpin :show="detailLoading">
-          <template v-if="detailData">
-            <NCard size="small" class="mb-3">
-              <div class="grid grid-cols-4 gap-4">
-                <div class="text-center p-2 bg-gray-50 rounded">
-                  <div class="text-xs text-gray-500 mb-1">状态</div>
-                  <NTag
-                    :type="execStatusType(detailData.status)"
-                    size="small"
-                    :bordered="false"
-                  >
-                    {{ statusLabel(detailData.status) }}
-                  </NTag>
-                </div>
-                <div class="text-center p-2 bg-gray-50 rounded">
-                  <div class="text-xs text-gray-500 mb-1">安全问题</div>
-                  <NTag
-                    :type="detailData.has_issue ? 'error' : 'success'"
-                    size="small"
-                    :bordered="false"
-                  >
-                    {{ detailData.has_issue ? '⚠ 发现问题' : '无' }}
-                  </NTag>
-                </div>
-                <div class="text-center p-2 bg-gray-50 rounded">
-                  <div class="text-xs text-gray-500 mb-1">响应耗时</div>
-                  <span class="font-mono text-green-600">
-                    {{ detailData.duration_ms ?? '-' }} ms
-                  </span>
-                </div>
-                <div class="text-center p-2 bg-gray-50 rounded">
-                  <div class="text-xs text-gray-500 mb-1">监测ID</div>
-                  <span class="font-mono text-xs text-blue-600">
-                    {{ detailData.id }}
-                  </span>
+        <div class="dimension-record-panel">
+          <div class="dimension-card-header" :style="{ '--dim-color': item.color }">
+              <div class="dimension-card-title">
+                <span class="dimension-card-icon">
+                  <IconifyIcon :icon="item.icon" />
+                </span>
+                <div>
+                  <div class="dimension-card-name">{{ item.label }}</div>
+                  <div class="dimension-card-desc">
+                    {{ item.key === 'all' ? '汇总各维度执行记录' : `${item.label}监测执行记录` }}
+                  </div>
                 </div>
               </div>
-            </NCard>
+              <NSpace :size="16" class="dimension-card-stats">
+                <NStatistic label="记录数" tabular-nums>
+                  <span class="stat-num">{{ dimStats(item.key).total }}</span>
+                </NStatistic>
+                <NStatistic label="成功" tabular-nums>
+                  <span class="stat-num stat-success">{{ dimStats(item.key).success }}</span>
+                </NStatistic>
+                <NStatistic label="失败" tabular-nums>
+                  <span class="stat-num stat-failed">{{ dimStats(item.key).failed }}</span>
+                </NStatistic>
+                <NStatistic label="安全问题" tabular-nums>
+                  <span
+                    class="stat-num"
+                    :class="dimStats(item.key).issueCount > 0 ? 'stat-issue' : 'stat-ok'"
+                  >
+                    {{ dimStats(item.key).issueCount }}
+                  </span>
+                </NStatistic>
+              </NSpace>
+          </div>
 
-            <AvailabilityDetail
-              v-if="detailData.dimension === 'availability'"
-              :result="detailParsedResult"
-              class="mb-3"
-            />
-            <TamperDetail
-              v-else-if="detailData.dimension === 'tamper'"
-              :result="detailParsedResult"
-              :execution-id="detailData.id"
-              class="mb-3"
-            />
-            <BlacklinkDetail
-              v-else-if="detailData.dimension === 'blacklink'"
-              :result="detailParsedResult"
-              class="mb-3"
-            />
-            <SensitiveWordDetail
-              v-else-if="detailData.dimension === 'sensitive_word'"
-              :result="detailParsedResult"
-              class="mb-3"
-            />
-            <SensitiveFileDetail
-              v-else-if="detailData.dimension === 'sensitive_file'"
-              :result="detailParsedResult"
-              class="mb-3"
-            />
-            <DomainHijackDetail
-              v-else-if="detailData.dimension === 'domain_hijack'"
-              :result="detailParsedResult"
-              class="mb-3"
-            />
-
-            <NCard
-              v-if="detailData.result_json"
+          <div class="records-filter-bar mb-4">
+            <NSpace align="center" wrap>
+              <NFormItem label="执行" label-width="40">
+                <NSelect v-model:value="dimFilters[item.key]!.status" placeholder="全部" clearable size="small" style="width: 110px" :options="statusOpts" />
+              </NFormItem>
+              <NFormItem label="安全" label-width="40">
+                <NSelect v-model:value="dimFilters[item.key]!.hasIssue" placeholder="全部" clearable size="small" style="width: 110px" :options="issueOpts" />
+              </NFormItem>
+              <NFormItem label="处置" label-width="40">
+                <NSelect v-model:value="dimFilters[item.key]!.disposition" placeholder="全部" clearable size="small" style="width: 110px" :options="dispositionOptions" />
+              </NFormItem>
+              <NFormItem label="时间" label-width="40">
+                <NDatePicker v-model:value="dimFilters[item.key]!.dateRange" type="datetimerange" clearable size="small" style="width: 340px" />
+              </NFormItem>
+              <NSpace :size="8">
+                <NButton type="primary" size="small" @click="handleFilterChange(item.key)">查询</NButton>
+                <NButton size="small" @click="resetDimFilter(item.key)">重置</NButton>
+              </NSpace>
+            </NSpace>
+          </div>
+          <DimensionTrendPanel v-if="pathTaskId" :path-task-id="pathTaskId" :dimension="item.key" :dim-label="item.label" :dim-color="item.color" :filters="dimFilters[item.key]!" />
+          <div class="table-toolbar mb-3">
+            <span class="text-muted-foreground text-sm">
+              共 {{ pageCountMap[item.key] ?? 0 }} 条记录
+            </span>
+            <NButton
+              v-if="activeDim === item.key && (dimDataMap[item.key]?.length ?? 0) > 0"
+              type="error"
               size="small"
-              class="mb-3"
+              @click="handleBatchDelete"
             >
-              <div class="text-xs text-gray-500 mb-2 font-mono">原始数据</div>
-              <pre class="text-xs font-mono text-gray-600 overflow-auto max-h-48">{{ detailData.result_json }}</pre>
-            </NCard>
-          </template>
-          <NEmpty v-else-if="!detailLoading" description="暂无数据" />
-        </NSpin>
-      </NDrawerContent>
-    </NDrawer>
+              批量删除当前页
+            </NButton>
+          </div>
+
+          <NDataTable
+            :columns="tableColumns"
+            :data="dimDataMap[item.key] || []"
+            :loading="dimLoadingMap[item.key]"
+            :pagination="{
+              ...pagination,
+              itemCount: pageCountMap[item.key] || 0,
+            }"
+            :row-key="(r: MonitorExecution) => r.id"
+            remote
+            size="small"
+            @update:page="handlePageChange"
+            @update:page-size="handlePageSizeChange"
+          >
+            <template #empty>
+              <NEmpty :description="`暂无${item.label}监测记录`" />
+            </template>
+          </NDataTable>
+        </div>
+      </NTabPane>
+      </NTabs>
+    </NCard>
+
+    <NModal
+      v-model:show="detailVisible"
+      preset="card"
+      title="监测记录详情"
+      :bordered="false"
+      :segmented="{ content: true }"
+      class="record-detail-modal"
+      style="width: 92vw; max-width: 1100px"
+      @after-leave="detailRecordId = ''"
+    >
+      <div class="record-detail-modal-body">
+        <RecordDetailContent
+          v-if="detailRecordId"
+          :record-id="detailRecordId"
+          @close="closeDetail"
+        />
+      </div>
+    </NModal>
   </Page>
 </template>
 
 <style scoped>
+.records-main-card {
+  border-radius: 10px;
+  overflow: hidden;
+}
+
 .records-filter-bar {
-  padding: 12px 16px;
+  padding: 12px 14px;
+  background: var(--n-color-embedded);
+  border-radius: 8px;
+}
+
+.records-dimension-tabs :deep(.n-tabs-nav) {
+  padding: 0 16px;
+  margin-bottom: 0;
+}
+
+.records-dimension-tabs :deep(.n-tabs-tab-pad) {
+  border-bottom: 1px solid var(--n-border-color);
+}
+
+.records-dimension-tabs :deep(.n-tab-pane) {
+  padding: 0;
+}
+
+.dimension-record-panel {
+  padding: 16px 20px 20px;
+}
+
+.record-tab-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+  color: var(--n-text-color-2);
+  transition: color 0.2s;
+}
+
+.record-tab-label--active {
+  color: var(--dim-color);
+  font-weight: 600;
+}
+
+.record-tab-icon {
+  font-size: 15px;
+}
+
+.record-tab-count {
+  min-width: 22px;
+  justify-content: center;
+}
+
+.dimension-card-header {
+  display: flex;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--n-border-color);
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+
+.dimension-card-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.dimension-card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  font-size: 20px;
+  color: var(--dim-color);
+  background: color-mix(in srgb, var(--dim-color) 12%, transparent);
+}
+
+.dimension-card-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--n-text-color);
+}
+
+.dimension-card-desc {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--n-text-color-3);
+}
+
+.dimension-card-stats {
+  flex-wrap: wrap;
+}
+
+.dimension-card-stats :deep(.n-statistic-label) {
+  font-size: 12px;
+}
+
+.stat-num {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.stat-success {
+  color: #22c55e;
+}
+
+.stat-failed {
+  color: #ef4444;
+}
+
+.stat-issue {
+  color: #ef4444;
+}
+
+.stat-ok {
+  color: #22c55e;
+}
+
+.records-filter-bar {
+  padding: 12px 14px;
   background: var(--n-color-embedded);
   border-radius: 8px;
 }
@@ -843,65 +742,22 @@ onMounted(() => {
   margin-bottom: 0;
 }
 
-.dim-stat-card {
+.availability-panel {
+  padding: 14px;
+  background: var(--n-color-embedded);
+  border-radius: 8px;
+}
+
+.table-toolbar {
   display: flex;
   align-items: center;
-  padding: 16px;
-  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-  border-radius: 10px;
-  border: 2px solid transparent;
-  cursor: pointer;
-  transition: all 0.2s ease;
+  justify-content: space-between;
 }
 
-.dim-stat-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06);
-  border-color: rgba(59, 130, 246, 0.2);
-}
-
-.dim-stat-card.active {
-  border-color: var(--dim-color);
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.05) 0%, #f8fafc 100%);
-}
-
-.dim-stat-icon {
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--dim-color);
-  font-size: 18px;
-  opacity: 0.8;
-}
-
-.dim-stat-content {
-  flex: 1;
-  padding-left: 12px;
-}
-
-.dim-stat-label {
-  font-size: 12px;
-  color: var(--n-text-color-3);
-}
-
-.dim-stat-row {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin-top: 4px;
-}
-
-.dim-stat-value {
-  font-size: 20px;
-  font-weight: 600;
-  color: var(--n-text-color);
-}
-
-.dim-stat-issue {
-  font-size: 12px;
-  color: #ef4444;
-  font-weight: 500;
+.record-detail-modal-body {
+  max-height: min(78vh, 820px);
+  overflow-y: auto;
+  padding-right: 4px;
 }
 </style>
+

@@ -33,7 +33,7 @@ func LaunchVulnRetest(db *gorm.DB, sched *Scheduler, vuln *model.Vulnerability, 
 		params["poc_template_ids"] = []string{vuln.TemplateID}
 	}
 
-	return LaunchScan(db, sched, LaunchScanParams{
+	launch := LaunchScanParams{
 		Name:       name,
 		Targets:    []string{target},
 		TemplateID: VulnRetestTemplateID,
@@ -42,7 +42,11 @@ func LaunchVulnRetest(db *gorm.DB, sched *Scheduler, vuln *model.Vulnerability, 
 		OrganizeID: organizeID,
 		TaskType:   model.TaskTypeVulnRetest,
 		Parameters: params,
-	})
+	}
+	if aid := strings.TrimSpace(vuln.AssetID); aid != "" {
+		launch.AssetIDs = []string{aid}
+	}
+	return LaunchScan(db, sched, launch)
 }
 
 func buildRetestTarget(v *model.Vulnerability) string {

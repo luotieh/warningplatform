@@ -2,9 +2,9 @@ import type { TreeOption } from 'naive-ui';
 
 import type { Asset } from '#/api/asset';
 import type { Organize } from '#/api/assetmgr';
-import { regionCodeFromLabel, regionLabelFromCode } from '#/utils/region';
+import { regionCodeFromLabel, regionLabelFromCode, regionOptions } from '#/utils/region';
 
-import type { LedgerOption, LedgerUnitExtra } from './types';
+import type { LedgerOption, LedgerScopeDimension, LedgerUnitExtra } from './types';
 
 /** 仅存于组织表，不应写入资产 extra 的字段 */
 export const UNIT_PROFILE_EXTRA_KEYS = [
@@ -204,16 +204,235 @@ export function buildOrgTreeOptions(nodes: any[] = []): TreeOption[] {
   return buildOrgTreeFromFlat(nodes);
 }
 
-export function flattenOrgTree(nodes: TreeOption[], map: Record<string, string> = {}) {
+export function flattenOrgTree(
+  nodes: TreeOption[],
+  map: Record<string, string> = {},
+  parentMap: Record<string, string> = {},
+  parentKey = '',
+) {
   nodes.forEach((node) => {
     const key = String(node.key ?? node.value ?? '');
     const label = String(node.label ?? key);
     if (key) {
       map[key] = label;
+      if (parentKey) {
+        parentMap[key] = parentKey;
+      }
     }
-    flattenOrgTree((node.children as TreeOption[] | undefined) ?? [], map);
+    flattenOrgTree(
+      (node.children as TreeOption[] | undefined) ?? [],
+      map,
+      parentMap,
+      key,
+    );
   });
   return map;
+}
+
+/** 根据 parent 链拼接单位路径标签 */
+export function buildOrganizePathLabel(
+  id: string,
+  nameMap: Record<string, string>,
+  parentMap: Record<string, string>,
+): string {
+  const parts: string[] = [];
+  const visited = new Set<string>();
+  let current: string | undefined = id;
+  while (current && !visited.has(current)) {
+    visited.add(current);
+    parts.unshift(nameMap[current] ?? current);
+    current = parentMap[current];
+  }
+  return parts.filter(Boolean).join(' / ');
+}
+
+/** 组织搜索：仅展示命中项（扁平列表，label 含上级路径） */
+/** 省市区 code → 列表查询参数（区精确，市/省用前缀） */
+export function regionAssetQueryFromCode(code: string | null | undefined): {
+  region_code?: string;
+  region_prefix?: string;
+} {
+  const raw = String(code ?? '').trim();
+  if (!raw) return {};
+  if (raw.endsWith('0000')) {
+    return { region_prefix: raw.slice(0, 2) };
+  }
+  if (raw.endsWith('00')) {
+    return { region_prefix: raw.slice(0, 4) };
+  }
+  return { region_code: raw };
+}
+
+export function regionScopeLabelFromCode(code: string | null | undefined): string {
+  const raw = String(code ?? '').trim();
+  if (!raw) return '';
+  return regionLabelFromCode(raw) || raw;
+}
+
+type RegionAreaOption = {
+  label: string;
+  value: string;
+  children?: RegionAreaOption[];
+};
+
+export type RegionScopeRow = {
+  region_code: string;
+  count: number;
+};
+
+function formatRegionTreeLabel(label: string, count: number) {
+  return count > 0 ? `${label} (${count})` : label;
+}
+
+/** 将区县级 code 展开为省 / 市祖先，便于裁剪完整行政区划树 */
+export function expandRegionAncestorCodes(codes: Iterable<string>): Set<string> {
+  const set = new Set<string>();
+  for (const raw of codes) {
+    const code = String(raw ?? '').trim();
+    if (code.length < 2) continue;
+    set.add(code);
+    set.add(`${code.slice(0, 2)}0000`);
+    if (!code.endsWith('0000')) {
+      set.add(`${code.slice(0, 4)}00`);
+    }
+  }
+  return set;
+}
+
+function collectRegionTreeKeys(nodes: TreeOption[], into: Set<string> = new Set()): Set<string> {
+  for (const node of nodes) {
+    const key = String(node.key ?? node.value ?? '').trim();
+    if (key) into.add(key);
+    if (node.children?.length) collectRegionTreeKeys(node.children, into);
+  }
+  return into;
+}
+
+type PrunedRegionNode = {
+  option: TreeOption;
+  total: number;
+};
+
+function pruneRegionTreeByCodes(
+  nodes: RegionAreaOption[],
+  allowed: Set<string>,
+  countMap: Map<string, number>,
+): PrunedRegionNode[] {
+  const result: PrunedRegionNode[] = [];
+  for (const node of nodes) {
+    if (!allowed.has(node.value)) continue;
+    const childResults = node.children?.length
+      ? pruneRegionTreeByCodes(node.children, allowed, countMap)
+      : [];
+    const direct = countMap.get(node.value) ?? 0;
+    const childSum = childResults.reduce((sum, child) => sum + child.total, 0);
+    const total = direct + childSum;
+    if (total <= 0) continue;
+    result.push({
+      total,
+      option: {
+        key: node.value,
+        label: formatRegionTreeLabel(node.label, total),
+        value: node.value,
+        children:
+          childResults.length > 0 ? childResults.map((child) => child.option) : undefined,
+      },
+    });
+  }
+  return result;
+}
+
+/** 仅保留资产中已登记的地域，并汇总各级节点资产数 */
+export function buildRegionTreeFromAssetCodes(
+  items: RegionScopeRow[] = [],
+  areas: RegionAreaOption[] = regionOptions,
+): TreeOption[] {
+  const countMap = new Map<string, number>();
+  for (const item of items) {
+    const code = String(item.region_code ?? '').trim();
+    if (!code) continue;
+    countMap.set(code, (countMap.get(code) ?? 0) + Number(item.count ?? 0));
+  }
+  if (countMap.size === 0) return [];
+
+  const allowed = expandRegionAncestorCodes(countMap.keys());
+  const tree = pruneRegionTreeByCodes(areas, allowed, countMap).map((node) => node.option);
+  const known = collectRegionTreeKeys(tree);
+
+  const orphans: TreeOption[] = [];
+  for (const [code, count] of countMap) {
+    if (known.has(code)) continue;
+    const label = regionLabelFromCode(code) || code;
+    orphans.push({
+      key: code,
+      label: formatRegionTreeLabel(label, count),
+      value: code,
+    });
+  }
+  orphans.sort((a, b) => String(a.label).localeCompare(String(b.label), 'zh-CN'));
+  return orphans.length > 0 ? [...tree, ...orphans] : tree;
+}
+
+export function buildRegionTreeOptions(
+  areas: RegionAreaOption[] = regionOptions,
+): TreeOption[] {
+  return areas.map((province) => ({
+    key: province.value,
+    label: province.label,
+    value: province.value,
+    children: province.children?.map((city) => ({
+      key: city.value,
+      label: city.label,
+      value: city.value,
+      children: city.children?.map((county) => ({
+        key: county.value,
+        label: county.label,
+        value: county.value,
+      })),
+    })),
+  }));
+}
+
+export function buildDictTreeOptions(options: LedgerOption[] = []): TreeOption[] {
+  return options
+    .filter((item) => item.value)
+    .map((item) => ({
+      key: item.value,
+      label: item.label,
+      value: item.value,
+    }));
+}
+
+export function ledgerScopeDimensionLabel(dim: LedgerScopeDimension): string {
+  switch (dim) {
+    case 'organize':
+      return '组织';
+    case 'region':
+      return '地域';
+    case 'industry':
+      return '行业';
+    case 'asset_family':
+      return '资产类型';
+    default:
+      return '';
+  }
+}
+
+export function buildOrganizeSearchTreeOptions(
+  items: Array<{ id: string; name?: string }>,
+  nameMap: Record<string, string>,
+  parentMap: Record<string, string>,
+): TreeOption[] {
+  const nodes: TreeOption[] = [];
+  for (const item of items) {
+    const id = String(item.id ?? '').trim();
+    if (!id) continue;
+    const name = String(item.name ?? nameMap[id] ?? id).trim();
+    const path = buildOrganizePathLabel(id, { ...nameMap, [id]: name }, parentMap);
+    const label = path && path !== name ? path : name;
+    nodes.push({ key: id, label, value: id });
+  }
+  return nodes;
 }
 
 export function assetIdentifier(row: Partial<Asset>) {

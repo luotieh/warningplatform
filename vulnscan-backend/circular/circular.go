@@ -1,6 +1,8 @@
 package circular
 
 import (
+	transferContract "vulnscan-backend/circular/transfer/transfer-contract"
+
 	"vulnscan-backend/circular/disposal"
 	"vulnscan-backend/circular/distribute"
 	"vulnscan-backend/circular/input"
@@ -49,6 +51,10 @@ func NewCircular(
 		oplogHandler:      oplogHandler,
 		transferHandler:   transferHandler,
 	}
+}
+
+func (m *Circular) TransferService() transferContract.ServiceTransfer {
+	return m.transferHandler.TransferService()
 }
 
 func (m *Circular) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {

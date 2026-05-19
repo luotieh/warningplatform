@@ -315,10 +315,60 @@ func (s *serviceCore) GetDashboardStats(ctx context.Context) (*coreContract.Dash
 		stats.RemediationRate = float64(stats.ClosedCnt) / float64(totalCount) * 100
 	}
 
+	stats.Total = totalCount
+	var remediationPending int64
+	sess.WithContext(ctx).Model(&model.SecurityIncident{}).
+		Where("status = ?", model.IncidentStatusRemediation).
+		Count(&remediationPending)
+	stats.InRemediation = remediationPending + stats.RemediatingCnt
+	stats.Closed = stats.ClosedCnt
+	stats.Overdue = stats.OverdueCnt
+
 	return stats, nil
 }
 
 func (s *serviceCore) GetChartByType(ctx context.Context) ([]coreContract.ChartTypeItem, error) {
+	sess := s.session()
+
+	type typeCount struct {
+		IncidentType string `gorm:"column:incident_type"`
+		Count        int64  `gorm:"column:count"`
+	}
+	var results []typeCount
+	if err := sess.WithContext(ctx).Model(&model.SecurityIncident{}).
+		Select(`CASE
+			WHEN incident_metadata.incident_type IS NULL OR incident_metadata.incident_type = '' THEN '未分类'
+			ELSE incident_metadata.incident_type
+		END AS incident_type, COUNT(*) AS count`).
+		Joins("LEFT JOIN incident_metadata ON incident_metadata.id = security_incidents.event_metadata_id").
+		Group("incident_type").
+		Order("count DESC").
+		Scan(&results).Error; err != nil {
+		return nil, err
+	}
+
+	var total int64
+	for _, r := range results {
+		total += r.Count
+	}
+
+	items := make([]coreContract.ChartTypeItem, 0, len(results))
+	for _, r := range results {
+		item := coreContract.ChartTypeItem{
+			Type:  r.IncidentType,
+			Count: r.Count,
+		}
+		if total > 0 {
+			item.Percentage = fmt.Sprintf("%.1f%%", float64(r.Count)/float64(total)*100)
+		} else {
+			item.Percentage = "0%"
+		}
+		items = append(items, item)
+	}
+	return items, nil
+}
+
+func (s *serviceCore) GetChartByLevel(ctx context.Context) ([]coreContract.ChartLevelItem, error) {
 	sess := s.session()
 
 	type levelCount struct {
@@ -332,49 +382,71 @@ func (s *serviceCore) GetChartByType(ctx context.Context) ([]coreContract.ChartT
 		Find(&results)
 
 	countMap := make(map[int]int64)
+	var total int64
 	for _, r := range results {
 		countMap[r.Level] = r.Count
+		total += r.Count
 	}
 
-	items := []coreContract.ChartTypeItem{
-		{Level: model.IncidentLevelLow, Label: model.IncidentLevelText[model.IncidentLevelLow], Count: countMap[model.IncidentLevelLow]},
-		{Level: model.IncidentLevelMedium, Label: model.IncidentLevelText[model.IncidentLevelMedium], Count: countMap[model.IncidentLevelMedium]},
-		{Level: model.IncidentLevelHigh, Label: model.IncidentLevelText[model.IncidentLevelHigh], Count: countMap[model.IncidentLevelHigh]},
-		{Level: model.IncidentLevelUrgent, Label: model.IncidentLevelText[model.IncidentLevelUrgent], Count: countMap[model.IncidentLevelUrgent]},
+	levels := []int{
+		model.IncidentLevelLow,
+		model.IncidentLevelMedium,
+		model.IncidentLevelHigh,
+		model.IncidentLevelUrgent,
 	}
-
+	items := make([]coreContract.ChartLevelItem, 0, len(levels))
+	for _, lv := range levels {
+		cnt := countMap[lv]
+		item := coreContract.ChartLevelItem{
+			Level: lv,
+			Label: model.IncidentLevelText[lv],
+			Count: cnt,
+		}
+		if total > 0 {
+			item.Percentage = fmt.Sprintf("%.1f%%", float64(cnt)/float64(total)*100)
+		} else {
+			item.Percentage = "0%"
+		}
+		items = append(items, item)
+	}
 	return items, nil
 }
 
 func (s *serviceCore) GetChartByTrend(ctx context.Context, rangeType string) ([]coreContract.ChartTrendItem, error) {
 	sess := s.session()
 	now := time.Now()
+	loc := now.Location()
 
-	var startTime time.Time
-	switch rangeType {
-	case "month":
-		startTime = now.AddDate(0, -1, 0)
-	default:
-		startTime = now.AddDate(0, 0, -7)
+	days := 7
+	if rangeType == "month" {
+		days = 30
 	}
 
-	type dateCount struct {
-		Date  string `json:"date"`
-		Count int64  `json:"count"`
-	}
-	var results []dateCount
-	sess.WithContext(ctx).Model(&model.SecurityIncident{}).
-		Select("DATE(created_at) as date, COUNT(*) as count").
-		Where("created_at >= ?", startTime).
-		Group("DATE(created_at)").
-		Order("date ASC").
-		Find(&results)
+	items := make([]coreContract.ChartTrendItem, 0, days)
+	for i := days - 1; i >= 0; i-- {
+		day := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc).AddDate(0, 0, -i)
+		dayEnd := day.Add(24 * time.Hour)
+		period := day.Format("01-02")
 
-	items := make([]coreContract.ChartTrendItem, 0, len(results))
-	for _, r := range results {
+		var created, closed, pending int64
+		sess.WithContext(ctx).Model(&model.SecurityIncident{}).
+			Where("created_at >= ? AND created_at < ?", day, dayEnd).
+			Count(&created)
+		sess.WithContext(ctx).Model(&model.SecurityIncident{}).
+			Where("closed_at IS NOT NULL AND closed_at >= ? AND closed_at < ?", day, dayEnd).
+			Count(&closed)
+		sess.WithContext(ctx).Model(&model.SecurityIncident{}).
+			Where("created_at < ?", dayEnd).
+			Where("closed_at IS NULL OR closed_at >= ?", dayEnd).
+			Count(&pending)
+
 		items = append(items, coreContract.ChartTrendItem{
-			Date:  r.Date,
-			Count: r.Count,
+			Period:  period,
+			Date:    day.Format("2006-01-02"),
+			Created: created,
+			Closed:  closed,
+			Pending: pending,
+			Count:   created,
 		})
 	}
 

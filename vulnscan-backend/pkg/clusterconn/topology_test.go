@@ -17,6 +17,11 @@ func TestResolveMasterURL(t *testing.T) {
 
 	_, err = ResolveMasterURL(TopologyMasterPrivateNodePublic, "", Options{})
 	if err == nil {
-		t.Fatal("expected error when public url missing")
+		t.Fatal("expected error when public and internal url missing")
+	}
+
+	_, err = ResolveMasterURL("", "/api", opts)
+	if err == nil {
+		t.Fatal("expected error for path-only master_url")
 	}
 }

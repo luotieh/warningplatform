@@ -23,9 +23,6 @@ func validateAssetNetworkFields(ipv4 string, port int) error {
 	return nil
 }
 
-func validateAssetImportRow(rowNum int, ipv4 string, port int) error {
-	if err := validateAssetNetworkFields(ipv4, port); err != nil {
-		return fmt.Errorf("第 %d 行：%w", rowNum, err)
-	}
-	return nil
+func validateAssetImportRow(ipv4 string, port int) error {
+	return validateAssetNetworkFields(ipv4, port)
 }

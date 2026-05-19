@@ -30,3 +30,11 @@ type HeartbeatReq struct {
 	IPAddress     string  `json:"ip_address"`
 	MacAddress    string  `json:"mac_address"`
 }
+
+// ShutdownReq 节点主动下线时上报主控（SIGINT/SIGTERM 优雅退出）。
+type ShutdownReq struct {
+	Reason       string `json:"reason,omitempty"`
+	RunningTasks int    `json:"running_tasks,omitempty"`
+	QueuedTasks  int    `json:"queued_tasks,omitempty"`
+	Version      string `json:"version,omitempty"`
+}

@@ -59,6 +59,11 @@ func (h *AgentHealthChecker) runLoop(ctx context.Context) {
 		case <-ticker.C:
 			h.checkAgents()
 			h.reassignStuckTasks()
+			if n, err := ExpireAllStaleExecutions(h.session()); err != nil {
+				slog.Warn("[AgentHealth] expire stale executions failed", "error", err)
+			} else if n > 0 {
+				slog.Warn("[AgentHealth] expired stale monitor executions", "count", n)
+			}
 		}
 	}
 }
@@ -83,7 +88,7 @@ func (h *AgentHealthChecker) reassignStuckTasks() {
 
 	var stuckExecs []model.MonitorExecution
 	h.session().
-		Where("status = ? AND updated_at < ?", "running", cutoff).
+		Where("status = ? AND created_at < ?", "running", cutoff).
 		Find(&stuckExecs)
 
 	if len(stuckExecs) == 0 {

@@ -1,0 +1,48 @@
+/**
+ * 全局字体：优先使用系统中文字体，避免默认栈在中文环境下偏「西文化」。
+ * 第三方 .woff2 见 src/assets/fonts/ 与 app-fonts.css。
+ * 启用自定义字体后，把字体族名写在 --font-family 最前面。
+ */
+:root {
+  --font-family:
+           'NotoSans','PingFangRegular',
+    'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei UI', 'Microsoft YaHei',
+    'Source Han Sans SC', 'Noto Sans SC', 'Segoe UI', system-ui, -apple-system,
+    sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol';
+  --font-family-mono:
+    ui-monospace, 'Cascadia Code', 'SF Mono', SFMono-Regular, Menlo, Monaco, Consolas,
+    'Liberation Mono', 'Courier New', monospace;
+}
+
+html {
+  font-size: var(--font-size-base, 14px);
+}
+
+html,
+body,
+#app {
+    font-family: var(--font-family), system-ui;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Naive UI、表格与表单控件继承同一套字体 */
+.n-config-provider,
+.n-button,
+.n-input,
+.n-base-selection,
+.n-data-table,
+.n-tabs,
+.n-menu,
+.n-form-item-label {
+  font-family: inherit;
+}
+
+code,
+pre,
+kbd,
+samp,
+.font-mono {
+  font-family: var(--font-family-mono);
+}

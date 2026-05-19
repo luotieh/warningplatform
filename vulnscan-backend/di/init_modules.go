@@ -47,6 +47,16 @@ func (h *Handlers) initScheduler(authGroup *gin.RouterGroup, backends *[]authori
 	}
 
 	h.sched = scanrunner.New(session, 10)
+	if h.Incident != nil {
+		eb := scanrunner.NewEventBridge(
+			session,
+			h.Incident.CoreService(),
+			h.Circular.TransferService(),
+			scanrunner.DefaultEventBridgeConfig(),
+		)
+		h.sched.SetEventBridge(eb)
+		slog.Info("[+] 扫描完成自动转安全事件已启用")
+	}
 	h.sched.Start(context.Background())
 
 	scanAPI := scanrunner.NewAPI(session, h.sched)

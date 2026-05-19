@@ -10,6 +10,7 @@ import (
 
 	assetContract "vulnscan-backend/asset/asset-contract"
 	"vulnscan-backend/model"
+	"vulnscan-backend/pkg/assethost"
 	"vulnscan-backend/scanrunner"
 
 	"code.yt-security.com/public/core/v2/db"
@@ -426,6 +427,29 @@ func (h *EnrichHandler) AssetStats(c *gin.Context) {
 	}).Send()
 }
 
+// RegionScope 返回资产台账中实际出现的地域编码及数量（受数据权限约束，不含空地域）。
+func (h *EnrichHandler) RegionScope(c *gin.Context) {
+	scope := iamsdk.DataFilterScope(c, assetFieldMapping)
+
+	type row struct {
+		RegionCode string `json:"region_code"`
+		Count      int64  `json:"count"`
+	}
+	var rows []row
+	if err := h.session().Model(&model.Asset{}).
+		Scopes(scope).
+		Where("region_code != '' AND region_code IS NOT NULL").
+		Select("region_code, COUNT(*) as count").
+		Group("region_code").
+		Order("region_code ASC").
+		Find(&rows).Error; err != nil {
+		web.Fail(c).Err(err).Send()
+		return
+	}
+
+	web.OK(c).Data(rows).Send()
+}
+
 func (h *EnrichHandler) GroupList(c *gin.Context) {
 	scope := iamsdk.DataFilterScope(c, assetFieldMapping)
 	var groups []model.AssetGroup
@@ -779,6 +803,154 @@ func (h *EnrichHandler) Dedup(c *gin.Context) {
 	}).Send()
 }
 
+// ── 扫描子域名发现入库 / 地址修复 ──
+
+func subdomainFindingHost(f *model.ScanFinding) string {
+	if f == nil {
+		return ""
+	}
+	if h := assethost.ExtractHost(f.Target); h != "" {
+		return h
+	}
+	if d := scanFindingDataString(f.Data, "domain"); d != "" {
+		return assethost.ExtractHost(d)
+	}
+	return ""
+}
+
+// ImportSubdomainsFromScan 将扫描任务中的子域名发现写入资产台账（每条发现一条资产，地址为完整 FQDN）。
+func (h *EnrichHandler) ImportSubdomainsFromScan(c *gin.Context) {
+	var req struct {
+		TaskID string `json:"task_id" binding:"required"`
+	}
+	if !web.ValidationJson(c, &req) {
+		return
+	}
+	taskID := strings.TrimSpace(req.TaskID)
+	if taskID == "" {
+		web.Fail(c).Msg("请提供扫描任务 ID").Send()
+		return
+	}
+
+	var findings []model.ScanFinding
+	if err := h.session().Where("task_id = ? AND type = ?", taskID, "subdomain").
+		Order("created_at ASC").Find(&findings).Error; err != nil {
+		web.Fail(c).Err(err).Send()
+		return
+	}
+	if len(findings) == 0 {
+		web.OK(c).Data(gin.H{"total": 0, "created": 0, "skipped": 0}).Send()
+		return
+	}
+
+	user, _ := iamsdk.GetCurrentUser(c)
+	created, skipped := 0, 0
+	for i := range findings {
+		f := findings[i]
+		host := subdomainFindingHost(&f)
+		if host == "" {
+			skipped++
+			continue
+		}
+		name := strings.TrimSpace(f.Title)
+		if name == "" {
+			name = "发现子域名: " + host
+		}
+
+		var existing model.Asset
+		err := h.session().Where(
+			"LOWER(address) = ? OR LOWER(domain) = ? OR name = ?",
+			host, host, name,
+		).First(&existing).Error
+		if err == nil {
+			skipped++
+			continue
+		}
+
+		addr := host
+		if norm, err := NormalizeAccessAddress(host, "domain_site"); err == nil && norm != "" {
+			addr = norm
+		}
+		item := model.Asset{
+			ID:          qulid.GenerateID(),
+			Name:        name,
+			Type:        "domain",
+			Address:     addr,
+			Domain:      host,
+			AssetFamily: "domain_site",
+			Status:      1,
+			DataSource:  model.DataSourceScan,
+			CreatedBy:   user.UserID,
+			OrganizeID:  user.OrganizeID,
+		}
+		normalizeAssetAddressFields(&item)
+		if err := h.session().Create(&item).Error; err != nil {
+			skipped++
+			continue
+		}
+		created++
+	}
+
+	web.OK(c).Data(gin.H{
+		"total":   len(findings),
+		"created": created,
+		"skipped": skipped,
+	}).Send()
+}
+
+// RepairSubdomainAddresses 根据资产名称「发现子域名: {fqdn}」修复被错误写成根域的访问地址。
+func (h *EnrichHandler) RepairSubdomainAddresses(c *gin.Context) {
+	scope := iamsdk.DataFilterScope(c, assetFieldMapping)
+	var assets []model.Asset
+	if err := h.session().Model(&model.Asset{}).Scopes(scope).
+		Where("name LIKE ?", "发现子域名:%").Find(&assets).Error; err != nil {
+		web.Fail(c).Err(err).Send()
+		return
+	}
+
+	fixed, skipped := 0, 0
+	for i := range assets {
+		a := assets[i]
+		host := assethost.HostFromSubdomainDiscoveryName(a.Name)
+		if host == "" {
+			skipped++
+			continue
+		}
+		cur := assethost.ExtractHost(a.Address)
+		if cur == host {
+			skipped++
+			continue
+		}
+		if cur != "" && !assethost.IsStrictSubdomainOf(host, cur) && cur != host {
+			// 地址已是其它独立主机名，不自动覆盖
+			skipped++
+			continue
+		}
+
+		family := firstNonEmpty(a.AssetFamily, "domain_site")
+		addr := host
+		if norm, err := NormalizeAccessAddress(host, family); err == nil && norm != "" {
+			addr = norm
+		}
+		updates := map[string]any{"address": addr}
+		dom := strings.TrimSpace(a.Domain)
+		if dom == "" || assethost.IsStrictSubdomainOf(host, dom) || assethost.ExtractHost(dom) == host {
+			updates["domain"] = host
+		}
+		if err := h.session().Model(&model.Asset{}).Where("id = ?", a.ID).Updates(updates).Error; err != nil {
+			skipped++
+			continue
+		}
+		fixed++
+	}
+
+	web.OK(c).Data(gin.H{
+		"total":   len(assets),
+		"fixed":   fixed,
+		"skipped": skipped,
+	}).Send()
+}
+
 // ── 网络空间搜索结果入库 ──
 
 func (h *EnrichHandler) ImportFromCyberspace(c *gin.Context) {
@@ -864,13 +1036,10 @@ func (h *EnrichHandler) ImportFromCyberspace(c *gin.Context) {
 // ── 信息富化 ──
 
 func scanTargetForAsset(a *model.Asset) string {
-	if d := strings.TrimSpace(a.Domain); d != "" {
-		return d
+	if a == nil {
+		return ""
 	}
-	if ip := strings.TrimSpace(a.IPv4); ip != "" {
-		return ip
-	}
-	return strings.TrimSpace(a.Address)
+	return assethost.PrimaryHost(a.Address, a.URL, a.Domain, a.IPv4)
 }
 
 func (h *EnrichHandler) EnrichAsset(c *gin.Context) {
@@ -902,7 +1071,7 @@ func (h *EnrichHandler) EnrichAsset(c *gin.Context) {
 		CreatedBy:  user.UserID,
 		OrganizeID: user.OrganizeID,
 		TaskType:   model.TaskTypeAssetEnrich,
-		Parameters: map[string]interface{}{"asset_id": id},
+		AssetIDs:   []string{id},
 	})
 	if errors.Is(err, scanrunner.ErrTemplateNotFound) {
 		web.Fail(c).Msg("内置富化扫描模板不存在，请重启服务以同步模板").Send()
@@ -976,7 +1145,7 @@ func (h *EnrichHandler) BatchEnrich(c *gin.Context) {
 		CreatedBy:  user.UserID,
 		OrganizeID: user.OrganizeID,
 		TaskType:   model.TaskTypeAssetEnrich,
-		Parameters: map[string]interface{}{"asset_ids": assetIDs},
+		AssetIDs:   assetIDs,
 	})
 	if errors.Is(err, scanrunner.ErrTemplateNotFound) {
 		web.Fail(c).Msg("内置富化扫描模板不存在，请重启服务以同步模板").Send()

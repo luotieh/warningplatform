@@ -4,7 +4,8 @@ import type { DataTableColumns } from 'naive-ui';
 import type { MonitorExecution } from '#/api/sitemonitor';
 
 import { computed, h, onMounted, reactive, ref } from 'vue';
-import { useRouter } from 'vue-router';
+
+import { useMonitorRecordDetail } from '../composables/useMonitorRecordDetail';
 
 import { Page } from '@vben/common-ui';
 
@@ -24,9 +25,11 @@ import { useMessage } from 'naive-ui';
 import { getExecutionList } from '#/api/sitemonitor';
 import { createIncident, type CreateIncidentReq } from '#/api/incident';
 
+import { buildMonitorIncidentDescription } from '../monitor-incident-description';
+
 defineOptions({ name: 'MonitorExecutions' });
 
-const router = useRouter();
+const { openRecordDetail } = useMonitorRecordDetail();
 const msg = useMessage();
 const loading = ref(false);
 const dataList = ref<MonitorExecution[]>([]);
@@ -34,7 +37,7 @@ const safeDataList = computed(() =>
   Array.isArray(dataList.value) ? dataList.value : [],
 );
 
-const form = reactive({ task_id: '', dimension: '', status: '' });
+const form = reactive({ path_task_id: '', dimension: '', status: '' });
 
 const pagination = reactive({
   page: 1,
@@ -83,7 +86,7 @@ async function onSearch() {
       index: pagination.page,
       size: pagination.pageSize,
       status: form.status,
-      task_id: form.task_id,
+      path_task_id: form.path_task_id,
     });
     dataList.value = res.data || [];
     pagination.itemCount = (res as any).count || 0;
@@ -103,7 +106,7 @@ function resetForm() {
 }
 
 const goDetail = (row: MonitorExecution) =>
-  router.push(`/monitor/tasks/executions/detail/${row.id}`);
+  openRecordDetail(row.id, { taskId: row.path_task_id });
 
 const dimToIncidentType: Record<string, string> = {
   tamper: 'web_attack', blacklink: 'web_attack',
@@ -115,33 +118,13 @@ const dimToLevel: Record<string, number> = {
   sensitive_file: 3, domain_hijack: 4, availability: 3,
 };
 
-function buildDescFromRow(row: MonitorExecution): string {
-  const parts: string[] = [];
-  parts.push(`监测维度: ${dimensionLabel(row.dimension)}`);
-  parts.push(`目标URL: ${row.url}`);
-  if (row.created_at) parts.push(`检测时间: ${row.created_at}`);
-
-  if (row.result_json) {
-    try {
-      const result = JSON.parse(row.result_json);
-      if (row.dimension === 'tamper' && result.diffs?.length) {
-        parts.push(`篡改变更: ${result.diffs.length}处`);
-      } else if (row.dimension === 'blacklink') {
-        const cnt = (result.blacklink_matches?.length || 0) + (result.backdoor_findings?.length || 0);
-        if (cnt) parts.push(`暗链/后门: ${cnt}个`);
-      } else if (row.dimension === 'sensitive_word' && result.matches?.length) {
-        parts.push(`敏感词命中: ${result.matches.length}处`);
-      } else if (row.dimension === 'sensitive_file') {
-        const files = result.files || result.matches || [];
-        if (files.length) parts.push(`敏感文件: ${files.length}个`);
-      } else if (row.dimension === 'domain_hijack' && result.hijacked) {
-        parts.push('检测到域名劫持');
-      } else if (row.dimension === 'availability' && result.available === false) {
-        parts.push(`站点不可用${result.status_code ? ' (HTTP ' + result.status_code + ')' : ''}`);
-      }
-    } catch { /* ignore */ }
+function parseResultJson(row: MonitorExecution): any {
+  if (!row.result_json) return null;
+  try {
+    return JSON.parse(row.result_json);
+  } catch {
+    return null;
   }
-  return parts.join('\n');
 }
 
 async function convertToIncident(row: MonitorExecution) {
@@ -153,7 +136,19 @@ async function convertToIncident(row: MonitorExecution) {
     asset: { domain_ip: row.url, asset_name: row.url },
     metadata: {
       incident_type: dimToIncidentType[row.dimension] ?? 'other',
-      incident_description: buildDescFromRow(row),
+      incident_description: buildMonitorIncidentDescription(
+        {
+          dimension: row.dimension,
+          url: row.url,
+          id: row.id,
+          path_task_id: row.path_task_id,
+          target_id: row.target_id,
+          agent_id: row.agent_id,
+          started_at: row.started_at || row.created_at,
+        },
+        parseResultJson(row),
+        (t) => (t ? dayjs(t).format('YYYY-MM-DD HH:mm:ss') : '-'),
+      ),
       incident_url: row.url,
       discovery_time: row.created_at || undefined,
     },
@@ -168,7 +163,7 @@ async function convertToIncident(row: MonitorExecution) {
 
 const columns = computed<DataTableColumns<MonitorExecution>>(() => [
   { key: 'id', title: '执行ID', width: 200, ellipsis: { tooltip: true } },
-  { key: 'task_id', title: '任务ID', width: 200, ellipsis: { tooltip: true } },
+  { key: 'path_task_id', title: '路径任务ID', width: 200, ellipsis: { tooltip: true } },
   { key: 'url', title: 'URL', minWidth: 180, ellipsis: { tooltip: true } },
   {
     key: 'dimension',
@@ -244,7 +239,7 @@ onMounted(() => onSearch());
       <NSpace align="center">
         <span>任务ID</span>
         <NInput
-          v-model:value="form.task_id"
+          v-model:value="form.path_task_id"
           placeholder="请输入任务ID"
           clearable
           style="width: 200px"

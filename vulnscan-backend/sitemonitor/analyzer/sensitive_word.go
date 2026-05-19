@@ -28,36 +28,29 @@ func (a *SensitiveWordAnalyzer) Analyze(ctx context.Context, input *Input) (*Out
 	}
 
 	words := a.loadSensitiveWords()
-	text := strings.ToLower(snap.VisibleText)
-	title := strings.ToLower(snap.Title)
+	searchText := combineSearchText(snap)
+	lowerSearch := strings.ToLower(searchText)
+	lowerTitle := strings.ToLower(snap.Title)
 
 	matches := make([]map[string]any, 0)
 	totalMatches := 0
 
 	for _, word := range words {
 		lw := strings.ToLower(word.Word)
-		count := strings.Count(text, lw)
-		titleCount := strings.Count(title, lw)
+		count := strings.Count(lowerSearch, lw)
+		titleCount := strings.Count(lowerTitle, lw)
 		total := count + titleCount
 
 		if total > 0 {
+			ctx, ctxList, evidenceHTML := extractSensitiveWordEvidence(searchText, word.Word, word.Severity)
 			matchInfo := map[string]any{
-				"word":     word.Word,
-				"category": word.Category,
-				"severity": word.Severity,
-				"count":    total,
-			}
-
-			if idx := strings.Index(text, lw); idx >= 0 {
-				start := idx - 50
-				if start < 0 {
-					start = 0
-				}
-				end := idx + len(lw) + 50
-				if end > len(text) {
-					end = len(text)
-				}
-				matchInfo["context"] = text[start:end]
+				"word":          word.Word,
+				"category":      word.Category,
+				"severity":      word.Severity,
+				"count":         total,
+				"context":       ctx,
+				"contexts":      ctxList,
+				"evidence_html": evidenceHTML,
 			}
 
 			matches = append(matches, matchInfo)
@@ -74,10 +67,22 @@ func (a *SensitiveWordAnalyzer) Analyze(ctx context.Context, input *Input) (*Out
 		} else {
 			output.Severity = "low"
 		}
+		textLen := len([]rune(searchText))
+		hits := make([]wordHit, 0, len(matches))
+		for _, m := range matches {
+			w, _ := m["word"].(string)
+			sev, _ := m["severity"].(string)
+			if strings.TrimSpace(w) != "" {
+				hits = append(hits, wordHit{word: w, severity: sev})
+			}
+		}
+		pageEvidenceHTML := buildPageEvidenceHTML(searchText, hits)
 		detailJSON, _ := json.Marshal(map[string]any{
-			"matches":       matches,
-			"total_matches": totalMatches,
-			"text_length":   len(snap.VisibleText),
+			"matches":            matches,
+			"total_matches":      totalMatches,
+			"text_length":        textLen,
+			"url":                snap.URL,
+			"page_evidence_html": pageEvidenceHTML,
 		})
 		output.DetailsJSON = string(detailJSON)
 	}

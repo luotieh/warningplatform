@@ -1,0 +1,38 @@
+/**
+ * 第三方字体（.woff2）放在：src/assets/fonts/
+ *
+ * 将下方 MySans 改成你的字体族名，文件名改成你下载的文件名。
+ * 多字重就复制多段 @font-face，分别设置 font-weight。
+ */
+/*
+@font-face {
+  font-family: 'MySans';
+  src: url('../fonts/MySans-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'MySans';
+  src: url('../fonts/MySans-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+*/
+@font-face {
+    font-family: 'NotoSans';
+    src: url('../fonts/noto-sans.woff2') format('woff2');
+    font-weight: 500;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'PingFangRegular';
+    src: url('../fonts/PingFangSCRegular.woff2') format('woff2');
+    font-weight: 500;
+    font-style: normal;
+    font-display: swap;
+}

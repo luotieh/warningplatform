@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
-import * as monaco from 'monaco-editor';
+import type * as Monaco from 'monaco-editor';
 
 const props = withDefaults(
   defineProps<{
@@ -18,10 +18,14 @@ const emit = defineEmits<{
 }>();
 
 const container = ref<HTMLDivElement>();
-let editor: monaco.editor.IStandaloneCodeEditor | null = null;
+let editor: Monaco.editor.IStandaloneCodeEditor | null = null;
+let monaco: typeof import('monaco-editor') | null = null;
+let markersDisposable: Monaco.IDisposable | null = null;
 
-onMounted(() => {
+onMounted(async () => {
   if (!container.value) return;
+
+  monaco = await import('monaco-editor');
 
   editor = monaco.editor.create(container.value, {
     value: props.modelValue,
@@ -45,12 +49,12 @@ onMounted(() => {
     emit('update:modelValue', val);
   });
 
-  monaco.editor.onDidChangeMarkers((uris) => {
+  markersDisposable = monaco.editor.onDidChangeMarkers((uris) => {
     const uri = uris[0];
     if (!editor || !uri) return;
     const model = editor.getModel();
     if (!model || model.uri.toString() !== uri.toString()) return;
-    const markers = monaco.editor.getModelMarkers({ resource: uri });
+    const markers = monaco!.editor.getModelMarkers({ resource: uri });
     emit(
       'validate',
       markers.map((m) => ({
@@ -78,8 +82,11 @@ watch(
 );
 
 onBeforeUnmount(() => {
+  markersDisposable?.dispose();
+  markersDisposable = null;
   editor?.dispose();
   editor = null;
+  monaco = null;
 });
 
 function setMarkers(
@@ -90,7 +97,7 @@ function setMarkers(
     severity: 'error' | 'warning';
   }[],
 ) {
-  if (!editor) return;
+  if (!editor || !monaco) return;
   const model = editor.getModel();
   if (!model) return;
   monaco.editor.setModelMarkers(
@@ -111,7 +118,7 @@ function setMarkers(
 }
 
 function clearMarkers() {
-  if (!editor) return;
+  if (!editor || !monaco) return;
   const model = editor.getModel();
   if (!model) return;
   monaco.editor.setModelMarkers(model, 'poc-validator', []);

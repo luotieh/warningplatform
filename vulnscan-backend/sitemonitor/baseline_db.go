@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"vulnscan-backend/model"
 
@@ -31,6 +32,9 @@ func GetActiveBaseline(ctx context.Context, db *gorm.DB, rawURL string) (*model.
 func SaveBaselineFromUpdate(ctx context.Context, tx *gorm.DB, executionID, url, agentID string, bu *model.MonitorBaselineUpdate) error {
 	if bu == nil {
 		return nil
+	}
+	if strings.TrimSpace(bu.ContentHash) == "" {
+		return fmt.Errorf("baseline content_hash is empty, skip save")
 	}
 	uh := urlHash(url)
 
@@ -70,6 +74,7 @@ func SaveBaselineFromUpdate(ctx context.Context, tx *gorm.DB, executionID, url, 
 		Title:                 bu.Title,
 		StatusCode:            bu.StatusCode,
 		VisibleTextLength:     bu.VisibleTextLength,
+		BodyText:              bu.BodyText,
 		ExemptSelectorsJSON:   string(exemptJSON),
 		ExternalResourcesJSON: string(extResJSON),
 		ObjKeyHTML:            bu.ObjKeyHTML,

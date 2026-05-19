@@ -1,8 +1,8 @@
 <script lang="ts" setup>
 import type { DataTableColumns } from "naive-ui";
-import type { TestPocMatch, ValidateResult } from "#/api/poc";
+import type { TestPocMatch, ValidateResult } from '#/api/poc/index';
 
-import { computed, h, onMounted, ref } from "vue";
+import { computed, defineAsyncComponent, h, onMounted, ref } from "vue";
 
 import {
   NAlert,
@@ -42,10 +42,22 @@ import {
   updatePoc,
   validatePocYaml,
   type PocTemplate,
-} from "#/api/poc";
+} from '#/api/poc/index';
 import { sevLabels, sevColors } from '#/constants/severity';
 
-import YamlEditor from "./yaml-editor.vue";
+const YamlEditor = defineAsyncComponent(() => import('./yaml-editor.vue'));
+
+interface YamlEditorExpose {
+  setMarkers: (
+    markers: {
+      message: string;
+      startLine: number;
+      endLine: number;
+      severity: 'error' | 'warning';
+    }[],
+  ) => void;
+  clearMarkers: () => void;
+}
 
 defineOptions({ name: "PocManage" });
 
@@ -78,7 +90,7 @@ const editorForm = ref({
 const saving = ref(false);
 const editingId = ref("");
 const editorTab = ref("editor");
-const yamlEditorRef = ref<InstanceType<typeof YamlEditor>>();
+const yamlEditorRef = ref<YamlEditorExpose>();
 
 // Validate
 const validating = ref(false);

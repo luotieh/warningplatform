@@ -6,9 +6,11 @@ import (
 
 type TaskMessage struct {
 	ExecutionID string         `json:"execution_id"`
-	TaskID      string         `json:"task_id"`
+	TargetID    string         `json:"target_id"`
+	PathTaskID  string         `json:"path_task_id,omitempty"`
 	Dimension   string         `json:"dimension"`
 	URL         string         `json:"url"`
+	RequestHost string         `json:"request_host,omitempty"`
 	Config      map[string]any `json:"config,omitempty"`
 	Baseline    *BaselineMeta  `json:"baseline,omitempty"`
 }
@@ -48,6 +50,7 @@ type PageSnapshot struct {
 	StatusCode       int               `json:"status_code"`
 	Headers          map[string]string `json:"headers"`
 	RenderedHTML     string            `json:"rendered_html"`
+	ContentLength    int64             `json:"content_length"`
 	VisibleText      string            `json:"visible_text"`
 	Screenshot       []byte            `json:"-"`
 	Title            string            `json:"title"`

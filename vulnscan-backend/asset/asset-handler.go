@@ -82,13 +82,18 @@ func (h *HandlerAsset) Create(c *gin.Context) {
 		web.Fail(c).Msg(err.Error()).Send()
 		return
 	}
+	normalizedAddress, err := NormalizeAccessAddress(req.Address, req.AssetFamily)
+	if err != nil {
+		web.Fail(c).Msg(err.Error()).Send()
+		return
+	}
 
 	user, _ := iamsdk.GetCurrentUser(c)
 	item := model.Asset{
 		ID:         qulid.GenerateID(),
 		Name:       req.Name,
 		Type:       req.Type,
-		Address:    req.Address,
+		Address:    normalizedAddress,
 		GroupID:    req.GroupID,
 		Port:       req.Port,
 		Tags:       req.Tags,
@@ -123,6 +128,7 @@ func (h *HandlerAsset) Create(c *gin.Context) {
 		ResponsibleUserName:     req.ResponsibleUserName,
 		Remark:                  req.Remark,
 	}
+	normalizeAssetAddressFields(&item)
 
 	if err := h.svc.Create(&item); err != nil {
 		web.Fail(c).Err(err).Send()
@@ -200,6 +206,18 @@ func (h *HandlerAsset) Update(c *gin.Context) {
 		web.Fail(c).Msg(err.Error()).Send()
 		return
 	}
+	if req.Address != nil {
+		family := existing.AssetFamily
+		if req.AssetFamily != nil {
+			family = *req.AssetFamily
+		}
+		normalizedAddress, err := NormalizeAccessAddress(*req.Address, family)
+		if err != nil {
+			web.Fail(c).Msg(err.Error()).Send()
+			return
+		}
+		req.Address = &normalizedAddress
+	}
 
 	updates := make(map[string]any)
 	if req.Name != nil {
@@ -209,7 +227,31 @@ func (h *HandlerAsset) Update(c *gin.Context) {
 		updates["type"] = *req.Type
 	}
 	if req.Address != nil {
-		updates["address"] = *req.Address
+		merged := *existing
+		merged.Address = *req.Address
+		if req.AssetFamily != nil {
+			merged.AssetFamily = *req.AssetFamily
+		}
+		ApplyDerivedNetworkFields(&merged)
+		updates["address"] = merged.Address
+		if req.Domain == nil && strings.TrimSpace(existing.Domain) == "" && merged.Domain != "" {
+			updates["domain"] = merged.Domain
+		}
+		if req.IPv4 == nil && strings.TrimSpace(existing.IPv4) == "" && merged.IPv4 != "" {
+			updates["ipv4"] = merged.IPv4
+		}
+		if req.IPv6 == nil && strings.TrimSpace(existing.IPv6) == "" && merged.IPv6 != "" {
+			updates["ipv6"] = merged.IPv6
+		}
+		if req.URL == nil && strings.TrimSpace(existing.URL) == "" && merged.URL != "" {
+			updates["url"] = merged.URL
+		}
+		if req.Protocol == nil && strings.TrimSpace(existing.Protocol) == "" && merged.Protocol != "" {
+			updates["protocol"] = merged.Protocol
+		}
+		if req.Port == nil && existing.Port == 0 && merged.Port > 0 {
+			updates["port"] = merged.Port
+		}
 	}
 	if req.GroupID != nil {
 		updates["group_id"] = *req.GroupID

@@ -17,6 +17,10 @@ func NewHandlerCore(svc coreContract.ServiceCore) *HandlerCore {
 	return &HandlerCore{svc: svc}
 }
 
+func (h *HandlerCore) CoreService() coreContract.ServiceCore {
+	return h.svc
+}
+
 func (h *HandlerCore) List(c *gin.Context) {
 	req, ok := web.BindQuery[coreContract.IncidentListReq](c)
 	if !ok {
@@ -96,6 +100,15 @@ func (h *HandlerCore) DashboardStats(c *gin.Context) {
 
 func (h *HandlerCore) ChartByType(c *gin.Context) {
 	items, err := h.svc.GetChartByType(c.Request.Context())
+	if err != nil {
+		web.Fail(c).Err(err).Send()
+		return
+	}
+	web.OK(c).Data(items).Send()
+}
+
+func (h *HandlerCore) ChartByLevel(c *gin.Context) {
+	items, err := h.svc.GetChartByLevel(c.Request.Context())
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return

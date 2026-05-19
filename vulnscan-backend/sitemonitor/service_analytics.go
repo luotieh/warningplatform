@@ -7,15 +7,17 @@ import (
 
 	"vulnscan-backend/model"
 	"vulnscan-backend/sitemonitor/contract"
-)
 
-// ══ Dashboard / Analytics ══
+	"gorm.io/gorm"
+)
 
 func (s *serviceMonitor) GetDashboardStats(ctx context.Context) (*contract.DashboardStats, error) {
 	db := s.session().WithContext(ctx)
 	stats := &contract.DashboardStats{}
-	db.Model(&model.MonitorTask{}).Count(&stats.TotalTasks)
-	db.Model(&model.MonitorTask{}).Where("enabled = ?", true).Count(&stats.EnabledTasks)
+	db.Model(&model.MonitorTarget{}).Count(&stats.TotalTargets)
+	db.Model(&model.MonitorTarget{}).Where("enabled = ?", true).Count(&stats.EnabledTargets)
+	db.Model(&model.MonitorPathTask{}).Count(&stats.TotalPathTasks)
+	db.Model(&model.MonitorPathTask{}).Where("enabled = ?", true).Count(&stats.EnabledPathTasks)
 	db.Model(&model.MonitorExecution{}).Count(&stats.TotalExecutions)
 	db.Model(&model.MonitorExecution{}).Where("has_issue = ?", true).Count(&stats.IssueExecutions)
 	db.Model(&model.MonitorAgent{}).Where("status = ?", "online").Count(&stats.OnlineAgents)
@@ -25,7 +27,7 @@ func (s *serviceMonitor) GetDashboardStats(ctx context.Context) (*contract.Dashb
 
 func (s *serviceMonitor) GetTaskExecutionStats(ctx context.Context) (map[string]map[string]*contract.TaskDimStat, error) {
 	type row struct {
-		TaskID     string
+		PathTaskID string
 		Dimension  string
 		Total      int64
 		IssueCount int64
@@ -34,22 +36,24 @@ func (s *serviceMonitor) GetTaskExecutionStats(ctx context.Context) (map[string]
 	}
 	var rows []row
 	err := s.session().WithContext(ctx).Raw(`
-		SELECT task_id, dimension,
+		SELECT path_task_id, dimension,
 			COUNT(*) as total,
 			SUM(CASE WHEN has_issue = 1 THEN 1 ELSE 0 END) as issue_count,
 			SUM(CASE WHEN has_issue = 1 AND disposition = 'pending' THEN 1 ELSE 0 END) as pending_cnt,
 			SUM(CASE WHEN has_issue = 1 AND disposition = 'valid' THEN 1 ELSE 0 END) as valid_cnt
-		FROM monitor_executions GROUP BY task_id, dimension
+		FROM monitor_executions
+		WHERE path_task_id IS NOT NULL AND path_task_id != ''
+		GROUP BY path_task_id, dimension
 	`).Scan(&rows).Error
 	if err != nil {
 		return nil, err
 	}
 	result := map[string]map[string]*contract.TaskDimStat{}
 	for _, r := range rows {
-		if result[r.TaskID] == nil {
-			result[r.TaskID] = map[string]*contract.TaskDimStat{}
+		if result[r.PathTaskID] == nil {
+			result[r.PathTaskID] = map[string]*contract.TaskDimStat{}
 		}
-		result[r.TaskID][r.Dimension] = &contract.TaskDimStat{
+		result[r.PathTaskID][r.Dimension] = &contract.TaskDimStat{
 			Total:        r.Total,
 			IssueCount:   r.IssueCount,
 			PendingCount: r.PendingCnt,
@@ -59,33 +63,129 @@ func (s *serviceMonitor) GetTaskExecutionStats(ctx context.Context) (map[string]
 	return result, nil
 }
 
-func (s *serviceMonitor) GetTaskTrend(ctx context.Context, taskID string, hours int) (*contract.TaskTrendResp, error) {
-	db := s.session().WithContext(ctx)
+func applyTrendExecutionFilters(q *gorm.DB, query contract.TaskTrendQuery) *gorm.DB {
+	if query.HasIssue == "true" {
+		q = q.Where("has_issue = ?", true)
+	} else if query.HasIssue == "false" {
+		q = q.Where("has_issue = ?", false)
+	}
+	if query.Disposition != "" {
+		q = q.Where("disposition = ?", query.Disposition)
+	}
+	if query.Status != "" {
+		q = q.Where("status = ?", query.Status)
+	}
+	if query.TimeStart != "" {
+		if t, err := time.ParseInLocation("2006-01-02 15:04:05", query.TimeStart, time.Local); err == nil {
+			q = q.Where("created_at >= ?", t)
+		}
+	}
+	if query.TimeEnd != "" {
+		if t, err := time.ParseInLocation("2006-01-02 15:04:05", query.TimeEnd, time.Local); err == nil {
+			q = q.Where("created_at <= ?", t)
+		}
+	}
+	return q
+}
 
-	var task model.MonitorTask
-	if err := db.Where("id = ?", taskID).First(&task).Error; err != nil {
+func (s *serviceMonitor) GetTaskTrend(ctx context.Context, pathTaskID string, query contract.TaskTrendQuery) (*contract.TaskTrendResp, error) {
+	db := s.session().WithContext(ctx)
+	var pt model.MonitorPathTask
+	if err := db.Where("id = ?", pathTaskID).First(&pt).Error; err != nil {
 		return nil, err
+	}
+	var target model.MonitorTarget
+	if err := db.Where("id = ?", pt.TargetID).First(&target).Error; err != nil {
+		return nil, err
+	}
+	ep, err := ResolvePathTaskURL(&target, &pt)
+	if err != nil {
+		return nil, err
+	}
+	hours := query.Hours
+	if hours <= 0 {
+		hours = 24
+	}
+	if hours > 720 {
+		hours = 720
 	}
 
 	resp := &contract.TaskTrendResp{
-		TaskID:   task.ID,
-		TaskName: task.TaskName,
-		URL:      task.TargetHomepage,
+		TaskID:   pt.ID,
+		TaskName: pt.Name,
+		URL:      ep.DisplayURL,
 	}
 
-	since := time.Now().Add(-time.Duration(hours) * time.Hour)
+	dim := query.Dimension
+	if dim == "all" {
+		dim = ""
+	}
 
+	if dim == "" {
+		if err := s.buildAllDimensionsTrend(db, pathTaskID, hours, query, resp); err != nil {
+			return nil, err
+		}
+		return resp, nil
+	}
+	if dim == "availability" {
+		if err := s.buildAvailabilityTrend(db, pathTaskID, hours, query, resp); err != nil {
+			return nil, err
+		}
+		return resp, nil
+	}
+	if err := s.buildGenericDimensionTrend(db, pathTaskID, dim, hours, query, resp); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+func (s *serviceMonitor) buildAllDimensionsTrend(
+	db *gorm.DB, pathTaskID string, hours int, query contract.TaskTrendQuery, resp *contract.TaskTrendResp,
+) error {
+	since := time.Now().Add(-time.Duration(hours) * time.Hour)
+	q := db.Model(&model.MonitorExecution{}).
+		Where("path_task_id = ? AND created_at >= ?", pathTaskID, since)
+	q = applyTrendExecutionFilters(q, query)
 	var execs []model.MonitorExecution
-	db.Where("task_id = ? AND dimension = ? AND status = ? AND created_at >= ?",
-		taskID, "availability", "success", since).
-		Order("created_at ASC").Find(&execs)
+	q.Order("created_at ASC").Find(&execs)
+
+	for _, e := range execs {
+		resp.Points = append(resp.Points, contract.TaskTrendPoint{
+			Time:        e.CreatedAt.Format("2006-01-02 15:04"),
+			Dimension:   e.Dimension,
+			Status:      e.Status,
+			Disposition: e.Disposition,
+			HasIssue:    e.HasIssue,
+		})
+		summarizeExecution(&resp.Summary, e)
+	}
+	resp.Summary.TotalChecks = int64(len(execs))
+	appendDimensionBriefs(db, pathTaskID, resp)
+	return nil
+}
+
+func (s *serviceMonitor) buildAvailabilityTrend(
+	db *gorm.DB, pathTaskID string, hours int, query contract.TaskTrendQuery, resp *contract.TaskTrendResp,
+) error {
+	since := time.Now().Add(-time.Duration(hours) * time.Hour)
+	q := db.Model(&model.MonitorExecution{}).
+		Where("path_task_id = ? AND dimension = ? AND created_at >= ?", pathTaskID, "availability", since)
+	q = applyTrendExecutionFilters(q, query)
+	if query.Status == "" {
+		q = q.Where("status = ?", "success")
+	}
+	var execs []model.MonitorExecution
+	q.Order("created_at ASC").Find(&execs)
 
 	var totalMS, maxMS, minMS float64
 	minMS = 1e9
 	for _, e := range execs {
 		pt := contract.TaskTrendPoint{
-			Time:     e.CreatedAt.Format("2006-01-02 15:04"),
-			HasIssue: e.HasIssue,
+			Time:        e.CreatedAt.Format("2006-01-02 15:04"),
+			Dimension:   e.Dimension,
+			Status:      e.Status,
+			Disposition: e.Disposition,
+			HasIssue:    e.HasIssue,
 		}
 		var rj map[string]any
 		if e.ResultJSON != "" {
@@ -104,7 +204,6 @@ func (s *serviceMonitor) GetTaskTrend(ctx context.Context, taskID string, hours 
 			}
 		}
 		resp.Points = append(resp.Points, pt)
-
 		totalMS += pt.TotalMS
 		if pt.TotalMS > maxMS {
 			maxMS = pt.TotalMS
@@ -112,13 +211,11 @@ func (s *serviceMonitor) GetTaskTrend(ctx context.Context, taskID string, hours 
 		if pt.TotalMS > 0 && pt.TotalMS < minMS {
 			minMS = pt.TotalMS
 		}
+		summarizeExecution(&resp.Summary, e)
 		if pt.Available {
 			resp.Summary.AvailableCount++
-		} else {
+		} else if e.Status == "success" {
 			resp.Summary.UnavailableCount++
-		}
-		if pt.HasIssue {
-			resp.Summary.IssueCount++
 		}
 	}
 	resp.Summary.TotalChecks = int64(len(execs))
@@ -128,31 +225,69 @@ func (s *serviceMonitor) GetTaskTrend(ctx context.Context, taskID string, hours 
 		if minMS < 1e9 {
 			resp.Summary.MinResponseMS = minMS
 		}
-		resp.Summary.AvailabilityPct = float64(resp.Summary.AvailableCount) / float64(resp.Summary.TotalChecks) * 100
+		if resp.Summary.AvailableCount+resp.Summary.UnavailableCount > 0 {
+			resp.Summary.AvailabilityPct = float64(resp.Summary.AvailableCount) /
+				float64(resp.Summary.AvailableCount+resp.Summary.UnavailableCount) * 100
+		}
 	}
+	appendDimensionBriefs(db, pathTaskID, resp)
+	return nil
+}
 
-	for _, dim := range model.MonitorAllDimensions {
+func (s *serviceMonitor) buildGenericDimensionTrend(
+	db *gorm.DB, pathTaskID, dimension string, hours int, query contract.TaskTrendQuery, resp *contract.TaskTrendResp,
+) error {
+	since := time.Now().Add(-time.Duration(hours) * time.Hour)
+	q := db.Model(&model.MonitorExecution{}).
+		Where("path_task_id = ? AND dimension = ? AND created_at >= ?", pathTaskID, dimension, since)
+	q = applyTrendExecutionFilters(q, query)
+	var execs []model.MonitorExecution
+	q.Order("created_at ASC").Find(&execs)
+
+	for _, e := range execs {
+		resp.Points = append(resp.Points, contract.TaskTrendPoint{
+			Time:        e.CreatedAt.Format("2006-01-02 15:04"),
+			Dimension:   e.Dimension,
+			Status:      e.Status,
+			Disposition: e.Disposition,
+			HasIssue:    e.HasIssue,
+		})
+		summarizeExecution(&resp.Summary, e)
+	}
+	resp.Summary.TotalChecks = int64(len(execs))
+	appendDimensionBriefs(db, pathTaskID, resp)
+	return nil
+}
+
+func summarizeExecution(sum *contract.TaskTrendSummary, e model.MonitorExecution) {
+	switch e.Status {
+	case "success":
+		sum.SuccessCount++
+	case "failed":
+		sum.FailedCount++
+	}
+	if e.HasIssue {
+		sum.IssueCount++
+	} else if e.Status == "success" {
+		sum.NormalCount++
+	}
+	if e.HasIssue && e.Disposition == "pending" {
+		sum.PendingDisposition++
+	}
+}
+
+func appendDimensionBriefs(db *gorm.DB, pathTaskID string, resp *contract.TaskTrendResp) {
+	for _, dim := range model.MonitorPathDimensions {
 		brief := contract.TaskDimBrief{Dimension: dim}
-		db.Model(&model.MonitorExecution{}).
-			Where("task_id = ? AND dimension = ?", taskID, dim).
-			Count(&brief.Total)
-		db.Model(&model.MonitorExecution{}).
-			Where("task_id = ? AND dimension = ? AND status = ?", taskID, dim, "success").
-			Count(&brief.SuccessCount)
-		db.Model(&model.MonitorExecution{}).
-			Where("task_id = ? AND dimension = ? AND status = ?", taskID, dim, "failed").
-			Count(&brief.FailedCount)
-		db.Model(&model.MonitorExecution{}).
-			Where("task_id = ? AND dimension = ? AND has_issue = ?", taskID, dim, true).
-			Count(&brief.IssueCount)
+		db.Model(&model.MonitorExecution{}).Where("path_task_id = ? AND dimension = ?", pathTaskID, dim).Count(&brief.Total)
+		db.Model(&model.MonitorExecution{}).Where("path_task_id = ? AND dimension = ? AND status = ?", pathTaskID, dim, "success").Count(&brief.SuccessCount)
+		db.Model(&model.MonitorExecution{}).Where("path_task_id = ? AND dimension = ? AND status = ?", pathTaskID, dim, "failed").Count(&brief.FailedCount)
+		db.Model(&model.MonitorExecution{}).Where("path_task_id = ? AND dimension = ? AND has_issue = ?", pathTaskID, dim, true).Count(&brief.IssueCount)
 		var last model.MonitorExecution
-		if db.Where("task_id = ? AND dimension = ?", taskID, dim).
-			Order("created_at DESC").First(&last).Error == nil {
+		if db.Where("path_task_id = ? AND dimension = ?", pathTaskID, dim).Order("created_at DESC").First(&last).Error == nil {
 			brief.LastStatus = last.Status
 			brief.LastTime = last.CreatedAt.Format("2006-01-02 15:04:05")
 		}
 		resp.Dimensions = append(resp.Dimensions, brief)
 	}
-
-	return resp, nil
 }

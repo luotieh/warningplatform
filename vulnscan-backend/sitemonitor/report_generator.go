@@ -102,12 +102,12 @@ func (g *ReportGenerator) GenerateReport(ctx context.Context, startDate, endDate
 
 	session := g.session().WithContext(ctx)
 
-	taskQuery := session.Model(&model.MonitorTask{})
+	taskQuery := session.Model(&model.MonitorPathTask{})
 	if len(taskIDs) > 0 {
 		taskQuery = taskQuery.Where("id IN ?", taskIDs)
 	}
 
-	var tasks []model.MonitorTask
+	var tasks []model.MonitorPathTask
 	taskQuery.Find(&tasks)
 
 	report.Summary.TotalTasks = len(tasks)
@@ -122,7 +122,7 @@ func (g *ReportGenerator) GenerateReport(ctx context.Context, startDate, endDate
 	execQuery := session.Model(&model.MonitorExecution{}).
 		Where("created_at BETWEEN ? AND ?", startDate, endDate)
 	if len(taskIDs) > 0 {
-		execQuery = execQuery.Where("task_id IN ?", taskIDs)
+		execQuery = execQuery.Where("path_task_id IN ?", taskIDs)
 	}
 
 	var totalExecs int64
@@ -133,7 +133,7 @@ func (g *ReportGenerator) GenerateReport(ctx context.Context, startDate, endDate
 	issueQuery := session.Model(&model.MonitorExecution{}).
 		Where("created_at BETWEEN ? AND ? AND has_issue = ?", startDate, endDate, true)
 	if len(taskIDs) > 0 {
-		issueQuery = issueQuery.Where("task_id IN ?", taskIDs)
+		issueQuery = issueQuery.Where("path_task_id IN ?", taskIDs)
 	}
 	issueQuery.Count(&issueExecs)
 	report.Summary.IssueCount = int(issueExecs)
@@ -148,14 +148,14 @@ func (g *ReportGenerator) GenerateReport(ctx context.Context, startDate, endDate
 		dq := session.Model(&model.MonitorExecution{}).
 			Where("dimension = ? AND created_at BETWEEN ? AND ?", dim, startDate, endDate)
 		if len(taskIDs) > 0 {
-			dq = dq.Where("task_id IN ?", taskIDs)
+			dq = dq.Where("path_task_id IN ?", taskIDs)
 		}
 		dq.Count(&dimTotal)
 
 		diq := session.Model(&model.MonitorExecution{}).
 			Where("dimension = ? AND created_at BETWEEN ? AND ? AND has_issue = ?", dim, startDate, endDate, true)
 		if len(taskIDs) > 0 {
-			diq = diq.Where("task_id IN ?", taskIDs)
+			diq = diq.Where("path_task_id IN ?", taskIDs)
 		}
 		diq.Count(&dimIssue)
 
@@ -173,20 +173,24 @@ func (g *ReportGenerator) GenerateReport(ctx context.Context, startDate, endDate
 		var taskExecs int64
 		var taskIssues int64
 		session.Model(&model.MonitorExecution{}).
-			Where("task_id = ? AND created_at BETWEEN ? AND ?", task.ID, startDate, endDate).
+			Where("path_task_id = ? AND created_at BETWEEN ? AND ?", task.ID, startDate, endDate).
 			Count(&taskExecs)
 		session.Model(&model.MonitorExecution{}).
-			Where("task_id = ? AND created_at BETWEEN ? AND ? AND has_issue = ?", task.ID, startDate, endDate, true).
+			Where("path_task_id = ? AND created_at BETWEEN ? AND ? AND has_issue = ?", task.ID, startDate, endDate, true).
 			Count(&taskIssues)
 
 		issueRate := 0.0
 		if taskExecs > 0 {
 			issueRate = float64(taskIssues) / float64(taskExecs) * 100
 		}
+		displayURL := task.URLOverride
+		if displayURL == "" {
+			displayURL = task.Path
+		}
 
 		report.TaskReports = append(report.TaskReports, TaskReportItem{
-			TaskName:   task.TaskName,
-			URL:        task.TargetHomepage,
+			TaskName:   task.Name,
+			URL:        displayURL,
 			Executions: int(taskExecs),
 			Issues:     int(taskIssues),
 			IssueRate:  issueRate,
@@ -205,7 +209,7 @@ func (g *ReportGenerator) computeSLA(ctx context.Context, startDate, endDate tim
 	q := session.Model(&model.MonitorExecution{}).
 		Where("dimension = ? AND created_at BETWEEN ? AND ?", "availability", startDate, endDate)
 	if len(taskIDs) > 0 {
-		q = q.Where("task_id IN ?", taskIDs)
+		q = q.Where("path_task_id IN ?", taskIDs)
 	}
 
 	var totalAvail, availOK int64
@@ -214,7 +218,7 @@ func (g *ReportGenerator) computeSLA(ctx context.Context, startDate, endDate tim
 	okQ := session.Model(&model.MonitorExecution{}).
 		Where("dimension = ? AND created_at BETWEEN ? AND ? AND has_issue = ?", "availability", startDate, endDate, false)
 	if len(taskIDs) > 0 {
-		okQ = okQ.Where("task_id IN ?", taskIDs)
+		okQ = okQ.Where("path_task_id IN ?", taskIDs)
 	}
 	okQ.Count(&availOK)
 

@@ -122,36 +122,3 @@ export function downloadTaskReport(taskId: string, format: 'word' | 'pdf') {
     params: { format },
   });
 }
-
-export interface VulnDiff {
-  id: string;
-  title: string;
-  severity: string;
-  target: string;
-  status: string;
-  old_severity?: string;
-  diff_type: string;
-}
-
-export interface CompareResult {
-  base_task_id: string;
-  compare_task_id: string;
-  new_vulns: VulnDiff[];
-  fixed_vulns: VulnDiff[];
-  changed_vulns: VulnDiff[];
-  unchanged_count: number;
-  summary: {
-    base_total: number;
-    compare_total: number;
-    new_count: number;
-    fixed_count: number;
-    changed_count: number;
-    delta: number;
-  };
-}
-
-export function compareTasks(baseId: string, compareId: string) {
-  return requestClient.get<CompareResult>('/report/compare', {
-    params: { base: baseId, compare: compareId },
-  });
-}

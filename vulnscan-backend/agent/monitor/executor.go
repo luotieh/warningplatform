@@ -82,7 +82,11 @@ func (e *Executor) Execute(ctx context.Context, payload json.RawMessage) *agent.
 		analyzed, aErr := e.analysis.Analyze(ctx, msg.Dimension, snapshotJSON, msg.URL, &msg)
 		if aErr != nil {
 			slog.Warn("analysis failed, using raw snapshot", "dimension", msg.Dimension, "error", aErr)
-			result.Result = snapshotJSON
+			if msg.Dimension == "availability" {
+				result.Result = monitoragent.BuildAvailabilityResultJSON(snapshotJSON, nil)
+			} else {
+				result.Result = snapshotJSON
+			}
 		} else {
 			result.Result = analyzed
 		}

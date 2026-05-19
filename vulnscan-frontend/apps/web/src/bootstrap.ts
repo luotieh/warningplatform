@@ -18,6 +18,8 @@ import ElementPlus from 'element-plus';
 import 'element-plus/dist/index.css';
 import '#/assets/styles/form-designer-element-dark.css';
 import '#/assets/styles/app-theme.css';
+import '#/assets/styles/app-fonts.css';
+import '#/assets/styles/app-typography.css';
 /* 最后加载壳层（参考 iam-frontend：iam-global 紧跟 naive；此处压过 Element / form-create） */
 import './styles/app-shell.css';
 import { useTitle } from '@vueuse/core';

@@ -31,6 +31,20 @@ func TestFormatImportRowError(t *testing.T) {
 	}
 }
 
+func TestFormatImportIssuesMultiple(t *testing.T) {
+	issues := []assetImportIssue{
+		{Row: 3, Field: "访问地址", Message: "URL 格式不正确"},
+		{Row: 5, Field: "资产分类", Message: "不能为空"},
+	}
+	got := formatImportIssues(issues)
+	if !strings.Contains(got, "共 2 处问题") {
+		t.Fatalf("expected summary, got %q", got)
+	}
+	if !strings.Contains(got, "第 3 行【访问地址】") || !strings.Contains(got, "第 5 行【资产分类】") {
+		t.Fatalf("unexpected: %q", got)
+	}
+}
+
 func TestFormatImportRowErrorPlainOrganizeCreate(t *testing.T) {
 	raw := `创建单位「测试单位1」失败: constraint failed: UNIQUE constraint failed: vs_organize.unified_social_credit_code (2067)`
 	got := formatImportRowError(3, errors.New(raw))
