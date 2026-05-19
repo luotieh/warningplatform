@@ -28,6 +28,18 @@ import type {
   WordLibrary,
 } from './types';
 
+function resolvePathTaskFetchUrl(
+  task: MonitorPathTask,
+  target?: MonitorTarget | null,
+): string {
+  const override = task.url_override?.trim();
+  if (override) return override;
+  if (!target?.target_value) return '';
+  const scheme = target.default_scheme || 'https';
+  const path = task.path?.startsWith('/') ? task.path : `/${task.path || ''}`;
+  return `${scheme}://${target.target_value}${path}`;
+}
+
 import { requestClient } from '#/api/request';
 
 const base = (url: string) => `/sitemonitor${url}`;
@@ -285,6 +297,77 @@ export const runPathTask = (id: string, dimensions?: string[]) =>
 export const batchDeletePathTasks = (ids: string[]) =>
   requestClient.delete(base('/path-tasks/batch/delete'), { data: { ids } });
 
+/** 批量启停路径任务（逐条切换 enabled） */
+export async function batchToggleEnabled(ids: string[]) {
+  await Promise.all(
+    ids.map(async (id) => {
+      const task = await getPathTaskDetail(id);
+      await updatePathTask(id, { enabled: !task.enabled });
+    }),
+  );
+}
+
+/** 批量从页面标题同步任务名称 */
+export async function batchSyncNames(ids: string[]) {
+  let updated = 0;
+  for (const id of ids) {
+    const task = await getPathTaskDetail(id);
+    const target = task.target_id
+      ? await getTargetDetail(task.target_id)
+      : null;
+    const url = resolvePathTaskFetchUrl(task, target);
+    if (!url) continue;
+    try {
+      const res = await fetchPageMeta(url);
+      const meta = (res as { data?: { title?: string }; title?: string }).data ?? res;
+      const title = meta?.title?.trim();
+      if (!title) continue;
+      await updatePathTask(id, { name: title });
+      updated += 1;
+    } catch {
+      // 单条失败跳过
+    }
+  }
+  return { data: { updated } };
+}
+
+/** 批量更新路径任务维度配置（目标级维度写入关联 target） */
+export async function batchUpdateConfigs(
+  ids: string[],
+  cfgs: Partial<Record<string, DimensionConfig>>,
+) {
+  const pathPayload: PathTaskUpdateDTO = {};
+  const targetPayload: TargetUpdateDTO = {};
+  const pathKeys: Record<string, keyof PathTaskUpdateDTO> = {
+    availability: 'config_availability',
+    tamper: 'config_tamper',
+    sensitive_word: 'config_sensitive_word',
+    blacklink: 'config_blacklink',
+  };
+  const targetKeys: Record<string, keyof TargetUpdateDTO> = {
+    domain_hijack: 'config_domain_hijack',
+    sensitive_file: 'config_sensitive_file',
+  };
+  for (const [key, cfg] of Object.entries(cfgs)) {
+    if (!cfg) continue;
+    const pathField = pathKeys[key];
+    if (pathField) pathPayload[pathField] = cfg;
+    const targetField = targetKeys[key];
+    if (targetField) targetPayload[targetField] = cfg;
+  }
+  const hasPath = Object.keys(pathPayload).length > 0;
+  const hasTarget = Object.keys(targetPayload).length > 0;
+  await Promise.all(
+    ids.map(async (id) => {
+      if (hasPath) await updatePathTask(id, pathPayload);
+      if (hasTarget) {
+        const task = await getPathTaskDetail(id);
+        if (task.target_id) await updateTarget(task.target_id, targetPayload);
+      }
+    }),
+  );
+}
+
 // ════════════════════════════════════════
 // 执行记录 / 统计
 // ════════════════════════════════════════
@@ -400,6 +483,9 @@ export const updateAlertConfig = (config: Partial<AlertConfig>) =>
   requestClient.put(base('/alert-config'), config);
 
 export const downloadImportTemplate = () => base('/import/template');
+
+export const exportImportResultUrl = (importId: string) =>
+  base(`/import/${importId}/export`);
 
 export const importTargets = (file: File) => {
   const formData = new FormData();

@@ -113,6 +113,8 @@ func (m *Monitor) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
 			{Name: "应用爬虫路径", Path: "crawl-jobs/:jobId/apply", Method: "POST", Handler: m.handler.ApplyCrawlPaths, Enabled: true},
 			{Name: "下载导入模板", Path: "import/template", Method: "GET", Handler: m.handler.DownloadImportTemplate, Enabled: true},
 			{Name: "导入监测", Path: "import", Method: "POST", Handler: m.handler.ImportTasks, Enabled: true},
+			{Name: "导入结果", Path: "import/:importId", Method: "GET", Handler: m.handler.GetImportResult, Enabled: true},
+			{Name: "导出导入结果", Path: "import/:importId/export", Method: "GET", Handler: m.handler.ExportImportResult, Enabled: true},
 			// 执行记录
 			{Name: "执行记录列表", Path: "executions", Method: "GET", Handler: m.handler.ListExecutions, Enabled: true},
 			{Name: "执行记录详情", Path: "executions/:id", Method: "GET", Handler: m.handler.GetExecutionDetail, Enabled: true},
