@@ -18,7 +18,7 @@ async function initApplication() {
   const namespace = `${import.meta.env.VITE_APP_NAMESPACE}-${appVersion}-${env}`;
 
   // Bump this when cached Vben preferences become incompatible with app defaults.
-  const PREFS_SCHEMA_VERSION = '6';
+  const PREFS_SCHEMA_VERSION = '7';
   const versionKey = `${namespace}__schema_v`;
   if (localStorage.getItem(versionKey) !== PREFS_SCHEMA_VERSION) {
     for (const key of Object.keys(localStorage)) {
@@ -33,6 +33,12 @@ async function initApplication() {
   await initPreferences({
     namespace,
     overrides: overridesPreferences,
+  });
+
+  // 锁定为 IAM 后端菜单模式，避免偏好缓存被改成 frontend 导致全量菜单
+  const { updatePreferences } = await import('@vben/preferences');
+  updatePreferences({
+    app: { accessMode: 'backend' },
   });
 
   if (!applyInitialThemeFromParent()) {

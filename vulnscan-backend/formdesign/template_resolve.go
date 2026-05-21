@@ -59,5 +59,5 @@ func ResolveCircularInputTemplate(sess *gorm.DB, ctx context.Context) (model.Dyn
 		return fallback, nil
 	}
 
-	return model.DynamicFormTemplate{}, fmt.Errorf("未找到录入模板，请先创建录入模板")
+	return EnsureBuiltinCircularInputTemplate(sess, ctx)
 }

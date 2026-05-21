@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"vulnscan-backend/dict"
+	"vulnscan-backend/pkg/payload"
 	"vulnscan-backend/scan/core"
 )
 
@@ -145,14 +146,18 @@ func (m *BruteForcer) Run(ctx context.Context, targets []*core.Target, config ma
 						}
 
 						desc := fmt.Sprintf("服务 %s 存在弱口令", checker.Name())
-						if user != "" {
-							desc += fmt.Sprintf(" [用户: %s]", user)
+						if user != "" || pass != "" {
+							pwdLabel := pass
+							if pwdLabel == "" {
+								pwdLabel = "(空)"
+							}
+							desc += fmt.Sprintf(" %s/%s", user, pwdLabel)
 						}
 
 						data := map[string]string{
 							"service":  checker.Name(),
 							"username": user,
-							"password": maskPassword(pass),
+							"password": pass,
 							"protocol": target.Protocol,
 						}
 						if banner != "" {
@@ -200,10 +205,7 @@ func (m *BruteForcer) Run(ctx context.Context, targets []*core.Target, config ma
 
 func (m *BruteForcer) matchCheckers(t *core.Target) []ProtocolChecker {
 	var matched []ProtocolChecker
-	svc := strings.ToLower(t.Protocol)
-	if extra, ok := t.Extra["service"]; ok {
-		svc = strings.ToLower(extra)
-	}
+	svc := targetServiceForMatch(t)
 
 	for _, chk := range m.checkers {
 		if chk.MatchService(svc, t.Port) {
@@ -213,6 +215,27 @@ func (m *BruteForcer) matchCheckers(t *core.Target) []ProtocolChecker {
 	return matched
 }
 
+func targetServiceForMatch(t *core.Target) string {
+	if t == nil {
+		return ""
+	}
+	if s := strings.TrimSpace(t.Service); s != "" {
+		return strings.ToLower(s)
+	}
+	if s := strings.TrimSpace(t.Protocol); s != "" {
+		lower := strings.ToLower(s)
+		if lower != "tcp" && lower != "udp" {
+			return lower
+		}
+	}
+	if t.Extra != nil {
+		if s := strings.TrimSpace(t.Extra["service"]); s != "" {
+			return strings.ToLower(s)
+		}
+	}
+	return ""
+}
+
 func (m *BruteForcer) loadCredentials(chk ProtocolChecker, config map[string]interface{}) (usernames, passwords []string) {
 	if m.dictStore != nil {
 		usernames = m.dictStore.GetUsernames()
@@ -220,10 +243,12 @@ func (m *BruteForcer) loadCredentials(chk ProtocolChecker, config map[string]int
 	}
 
 	if len(usernames) == 0 {
-		usernames = defaultUsernamesForService(chk.Name())
+		payload.LogFallbackOnce("bruteforce")
+		usernames = payload.MinimalUsernamesForService(chk.Name())
 	}
 	if len(passwords) == 0 {
-		passwords = defaultPasswords()
+		payload.LogFallbackOnce("bruteforce")
+		passwords = payload.MinimalPasswords()
 	}
 
 	if cu, ok := config["usernames"].([]interface{}); ok {
@@ -244,45 +269,6 @@ func (m *BruteForcer) loadCredentials(chk ProtocolChecker, config map[string]int
 	return dedup(usernames), dedup(passwords)
 }
 
-func defaultUsernamesForService(service string) []string {
-	m := map[string][]string{
-		"FTP":        {"ftp", "anonymous", "admin", "root", "www", "web"},
-		"SSH":        {"root", "admin", "ubuntu", "centos", "ec2-user", "deploy", "git"},
-		"Telnet":     {"root", "admin", "user", "guest"},
-		"MySQL":      {"root", "admin", "mysql", "dba", "test"},
-		"PostgreSQL": {"postgres", "admin", "pgsql", "dbuser"},
-		"MSSQL":      {"sa", "admin", "mssql"},
-		"Redis":      {},
-		"MongoDB":    {"admin", "root", "mongodb"},
-		"Memcached":  {},
-		"SMTP":       {"admin", "postmaster", "info", "test"},
-		"POP3":       {"admin", "user", "test"},
-		"IMAP":       {"admin", "user", "test"},
-		"SNMP":       {},
-		"LDAP":       {"cn=admin", "cn=Manager", "cn=root", "admin"},
-		"VNC":        {},
-		"RDP":        {"administrator", "admin", "user", "guest"},
-	}
-	if users, ok := m[service]; ok && len(users) > 0 {
-		return users
-	}
-	return []string{"admin", "root"}
-}
-
-func defaultPasswords() []string {
-	return []string{
-		"", "admin", "admin123", "admin@123", "admin888",
-		"123456", "12345678", "123456789",
-		"password", "P@ssw0rd", "passw0rd",
-		"root", "root123", "root@123",
-		"test", "test123", "guest",
-		"default", "changeme", "letmein",
-		"qwerty", "abc123", "111111", "000000",
-		"1qaz2wsx", "1q2w3e4r",
-		"Aa123456", "Qwer1234",
-	}
-}
-
 func dedup(ss []string) []string {
 	seen := make(map[string]struct{}, len(ss))
 	var out []string
@@ -293,16 +279,6 @@ func dedup(ss []string) []string {
 		}
 	}
 	return out
-}
-
-func maskPassword(pwd string) string {
-	if pwd == "" {
-		return "(空)"
-	}
-	if len(pwd) <= 2 {
-		return "***"
-	}
-	return string(pwd[0]) + strings.Repeat("*", len(pwd)-2) + string(pwd[len(pwd)-1])
 }
 
 func truncate(s string, max int) string {

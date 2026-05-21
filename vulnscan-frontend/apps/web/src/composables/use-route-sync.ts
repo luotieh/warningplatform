@@ -41,6 +41,11 @@ function routeToSyncItem(
 
   const componentPath = resolveComponentPath(route);
 
+  // 纯重定向兼容项不同步到 IAM（避免在仪表盘等模块下多出「扫描报告」等菜单）
+  if (route.redirect && !componentPath && !(route.children?.length)) {
+    return null;
+  }
+
   const isDetailPage =
     meta.hideInMenu === true && !!(meta.activePath || !meta.icon);
 
@@ -53,6 +58,8 @@ function routeToSyncItem(
     rank: (meta.order as number) || (meta.rank as number) || undefined,
     redirect: (route.redirect as string) || undefined,
     hide_in_menu: isDetailPage ? true : undefined,
+    // IAM FrontendItem.show_link 缺省为 false，同步时必须显式 true 才能在侧栏显示
+    show_link: isDetailPage ? false : true,
     menu_type: 1,
   };
 
@@ -92,4 +99,54 @@ export function collectRouteManifest(): SyncMenuItem[] {
     if (item) items.push(item);
   }
   return items;
+}
+
+export interface RoutePermAuditRow {
+  path: string;
+  title: string;
+  name: string;
+  buttonCount: number;
+  missingPerms: boolean;
+}
+
+function walkAudit(
+  route: RouteRecordRaw,
+  parentPath: string | undefined,
+  rows: RoutePermAuditRow[],
+) {
+  const meta = (route.meta || {}) as Record<string, any>;
+  const name = (route.name as string) || '';
+  let fullPath = route.path || '';
+  if (parentPath && fullPath && !fullPath.startsWith('/')) {
+    fullPath = `${parentPath}/${fullPath}`.replace(/\/+/g, '/');
+  }
+  const isMenuPage =
+    name &&
+    meta.hideInMenu !== true &&
+    route.path !== '' &&
+    !String(route.redirect || '').startsWith('http');
+  if (isMenuPage) {
+    const perms = getRoutePerms(meta);
+    rows.push({
+      path: fullPath,
+      title: (meta.title as string) || name,
+      name,
+      buttonCount: perms.length,
+      missingPerms: perms.length === 0,
+    });
+  }
+  if (route.children?.length) {
+    for (const child of route.children) {
+      walkAudit(child, fullPath, rows);
+    }
+  }
+}
+
+/** 审计：哪些菜单页未声明 meta.perms（同步后 IAM 无按钮权限可分配） */
+export function auditRouteManifest(): RoutePermAuditRow[] {
+  const rows: RoutePermAuditRow[] = [];
+  for (const route of accessRoutes) {
+    walkAudit(route, undefined, rows);
+  }
+  return rows;
 }

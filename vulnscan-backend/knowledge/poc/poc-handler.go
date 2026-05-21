@@ -70,6 +70,7 @@ func (h *HandlerPoc) Create(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
+	h.svc.InvalidateCache()
 	web.OK(c).Data(item).Send()
 }
 
@@ -86,6 +87,7 @@ func (h *HandlerPoc) Update(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
+	h.svc.InvalidateCache()
 	web.OK(c).Send()
 }
 
@@ -98,6 +100,7 @@ func (h *HandlerPoc) Delete(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
+	h.svc.InvalidateCache()
 	web.OK(c).Send()
 }
 
@@ -135,6 +138,7 @@ func (h *HandlerPoc) ImportYAML(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
+	h.svc.InvalidateCache()
 	web.OK(c).Data(item).Send()
 }
 
@@ -148,6 +152,7 @@ func (h *HandlerPoc) ImportDir(c *gin.Context) {
 		return
 	}
 	imported, skipped, errors := h.svc.ImportDir(req.Dir)
+	h.svc.InvalidateCache()
 	web.OK(c).Data(gin.H{
 		"imported": imported,
 		"skipped":  skipped,

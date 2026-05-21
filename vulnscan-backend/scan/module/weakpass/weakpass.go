@@ -14,12 +14,22 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
+	"vulnscan-backend/dict"
+	"vulnscan-backend/model"
+	"vulnscan-backend/pkg/payload"
 	"vulnscan-backend/scan/core"
 )
 
-type WeakPassScanner struct{}
+type WeakPassScanner struct {
+	dictStore *dict.Store
+}
 
-func New() *WeakPassScanner { return &WeakPassScanner{} }
+func New(dictStore *dict.Store) *WeakPassScanner {
+	if dictStore == nil {
+		dictStore = dict.NewStore(nil)
+	}
+	return &WeakPassScanner{dictStore: dictStore}
+}
 
 func (m *WeakPassScanner) ID() string       { return "weak_pass" }
 func (m *WeakPassScanner) Name() string     { return "弱口令检测" }
@@ -30,7 +40,7 @@ type credential struct {
 	Password string
 }
 
-type serviceChecker func(ctx context.Context, host string, port int, cred credential) bool
+type serviceChecker func(ctx context.Context, host string, port int, cred credential) (bool, string)
 
 func (m *WeakPassScanner) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {
 	start := time.Now()
@@ -70,20 +80,25 @@ func (m *WeakPassScanner) Run(ctx context.Context, targets []*core.Target, confi
 				defer wg.Done()
 				defer func() { <-sem }()
 
-				if chk(ctx, host, target.Port, c) {
+				if ok, proof := chk(ctx, host, target.Port, c); ok {
 					finding := &core.Finding{
-						ModuleID:    m.ID(),
-						Target:      target,
-						Type:        "weak_password",
-						Title:       fmt.Sprintf("弱口令 - %s:%d", target.Host, target.Port),
-						Description: fmt.Sprintf("服务 %s 存在弱口令 %s/%s", serviceByPort(target.Port), c.Username, maskPassword(c.Password)),
-						Severity:    "critical",
-						Confidence:  95,
-						Timestamp:   time.Now(),
+						ModuleID:           m.ID(),
+						Target:             target,
+						Type:               "weak_password",
+						Title:              weakPassFindingTitle(target, c),
+						Description:        weakPassFindingDesc(target, c),
+						Severity:           "critical",
+						Confidence:         95,
+						ConfidenceReason:   "协议层认证成功",
+						Evidence:           proof,
+						VerificationLevel:  core.VerifyExploit,
+						VerificationDetail: "已完成登录/命令探测",
+						Timestamp:          time.Now(),
 						Data: map[string]string{
 							"service":  serviceByPort(target.Port),
 							"username": c.Username,
-							"password": maskPassword(c.Password),
+							"password": c.Password,
+							"proof":    proof,
 						},
 					}
 
@@ -124,8 +139,21 @@ func (m *WeakPassScanner) getChecker(t *core.Target) serviceChecker {
 }
 
 func (m *WeakPassScanner) getCredentials(t *core.Target) []credential {
-	usernames := defaultUsernames(t.Port)
-	passwords := defaultPasswords()
+	passwords := m.dictStore.GetPasswords()
+	if len(passwords) == 0 {
+		payload.LogFallbackOnce("weakpass")
+		passwords = payload.MinimalPasswords()
+	} else if !m.dictStore.HasDBEntries(model.DictTypePassword) {
+		slog.Debug("[weak_pass] 密码字典来自内嵌默认")
+	}
+
+	usernames := m.dictStore.GetUsernames()
+	if len(usernames) == 0 {
+		payload.LogFallbackOnce("weakpass")
+		usernames = payload.MinimalUsernamesForPort(t.Port)
+	} else {
+		usernames = m.dictStore.Merge(usernames, payload.MinimalUsernamesForPort(t.Port))
+	}
 
 	var creds []credential
 	for _, u := range usernames {
@@ -136,35 +164,11 @@ func (m *WeakPassScanner) getCredentials(t *core.Target) []credential {
 	return creds
 }
 
-func defaultUsernames(port int) []string {
-	m := map[int][]string{
-		21:    {"ftp", "anonymous", "admin", "root"},
-		22:    {"root", "admin", "ubuntu", "centos", "ec2-user"},
-		3306:  {"root", "admin", "mysql", "dba"},
-		5432:  {"postgres", "admin", "pgsql"},
-		6379:  {},
-		27017: {"admin", "root", "mongodb"},
-	}
-	if users, ok := m[port]; ok && len(users) > 0 {
-		return users
-	}
-	return []string{"admin", "root"}
-}
-
-func defaultPasswords() []string {
-	return []string{
-		"", "admin", "root", "123456", "password", "admin123",
-		"root123", "12345678", "admin@123", "P@ssw0rd",
-		"123456789", "test", "guest", "1234", "qwerty",
-		"letmein", "welcome", "monkey", "master", "1q2w3e4r",
-	}
-}
-
-func checkFTP(ctx context.Context, host string, port int, cred credential) bool {
+func checkFTP(ctx context.Context, host string, port int, cred credential) (bool, string) {
 	addr := net.JoinHostPort(host, strconv.Itoa(port))
 	conn, err := net.DialTimeout("tcp", addr, 5*time.Second)
 	if err != nil {
-		return false
+		return false, ""
 	}
 	defer conn.Close()
 
@@ -173,33 +177,36 @@ func checkFTP(ctx context.Context, host string, port int, cred credential) bool 
 	buf := make([]byte, 1024)
 	n, err := conn.Read(buf)
 	if err != nil || !strings.HasPrefix(string(buf[:n]), "220") {
-		return false
+		return false, ""
 	}
 
 	_, _ = fmt.Fprintf(conn, "USER %s\r\n", cred.Username)
 	n, err = conn.Read(buf)
 	if err != nil {
-		return false
+		return false, ""
 	}
 	resp := string(buf[:n])
 
 	if strings.HasPrefix(resp, "230") {
-		return true
+		return true, strings.TrimSpace(resp)
 	}
 
 	if strings.HasPrefix(resp, "331") {
 		_, _ = fmt.Fprintf(conn, "PASS %s\r\n", cred.Password)
 		n, err = conn.Read(buf)
 		if err != nil {
-			return false
+			return false, ""
 		}
-		return strings.HasPrefix(string(buf[:n]), "230")
+		final := string(buf[:n])
+		if strings.HasPrefix(final, "230") {
+			return true, strings.TrimSpace(final)
+		}
 	}
 
-	return false
+	return false, ""
 }
 
-func checkSSH(ctx context.Context, host string, port int, cred credential) bool {
+func checkSSH(ctx context.Context, host string, port int, cred credential) (bool, string) {
 	addr := net.JoinHostPort(host, strconv.Itoa(port))
 
 	config := &ssh.ClientConfig{
@@ -213,17 +220,17 @@ func checkSSH(ctx context.Context, host string, port int, cred credential) bool 
 
 	conn, err := ssh.Dial("tcp", addr, config)
 	if err != nil {
-		return false
+		return false, ""
 	}
 	conn.Close()
-	return true
+	return true, fmt.Sprintf("SSH 登录成功 user=%s", cred.Username)
 }
 
-func checkMySQL(ctx context.Context, host string, port int, cred credential) bool {
+func checkMySQL(ctx context.Context, host string, port int, cred credential) (bool, string) {
 	addr := net.JoinHostPort(host, strconv.Itoa(port))
 	conn, err := net.DialTimeout("tcp", addr, 5*time.Second)
 	if err != nil {
-		return false
+		return false, ""
 	}
 	defer conn.Close()
 	_ = conn.SetDeadline(time.Now().Add(10 * time.Second))
@@ -231,31 +238,33 @@ func checkMySQL(ctx context.Context, host string, port int, cred credential) boo
 	buf := make([]byte, 4096)
 	n, err := conn.Read(buf)
 	if err != nil || n < 5 {
-		return false
+		return false, ""
 	}
 
 	if buf[4] != 0x0a {
-		return false
+		return false, ""
 	}
+
+	version := extractMySQLGreetingVersion(buf[:n])
 
 	salt1End := 5
 	for salt1End < n && buf[salt1End] != 0 {
 		salt1End++
 	}
 	if salt1End+28 > n {
-		return false
+		return false, ""
 	}
 
 	salt1 := buf[salt1End+1 : salt1End+9]
 
 	capOffset := salt1End + 9
 	if capOffset+2 > n {
-		return false
+		return false, ""
 	}
 
 	restOffset := capOffset + 18
 	if restOffset+12 > n {
-		return false
+		return false, ""
 	}
 	salt2 := buf[restOffset : restOffset+12]
 
@@ -265,15 +274,29 @@ func checkMySQL(ctx context.Context, host string, port int, cred credential) boo
 
 	pkt := buildMySQLAuthPacket(cred.Username, authResp)
 	if _, err := conn.Write(pkt); err != nil {
-		return false
+		return false, ""
 	}
 
 	n, err = conn.Read(buf)
 	if err != nil || n < 5 {
-		return false
+		return false, ""
 	}
 
-	return buf[4] == 0x00
+	if buf[4] != 0x00 {
+		return false, ""
+	}
+	return true, fmt.Sprintf("MySQL auth OK user=%s version=%s", cred.Username, version)
+}
+
+func extractMySQLGreetingVersion(buf []byte) string {
+	if len(buf) < 6 {
+		return "unknown"
+	}
+	resp := string(buf[5:])
+	if idx := strings.Index(resp, "\x00"); idx != -1 {
+		return resp[:idx]
+	}
+	return "unknown"
 }
 
 func mysqlNativePassword(password string, salt []byte) []byte {
@@ -335,63 +358,66 @@ func buildMySQLAuthPacket(user string, authResp []byte) []byte {
 	return append(header, payload...)
 }
 
-func checkPostgres(ctx context.Context, host string, port int, cred credential) bool {
+func checkPostgres(ctx context.Context, host string, port int, cred credential) (bool, string) {
 	addr := net.JoinHostPort(host, strconv.Itoa(port))
 	conn, err := net.DialTimeout("tcp", addr, 5*time.Second)
 	if err != nil {
-		return false
+		return false, ""
 	}
 	defer conn.Close()
 	_ = conn.SetDeadline(time.Now().Add(10 * time.Second))
 
 	startupMsg := buildPgStartup(cred.Username)
 	if _, err = conn.Write(startupMsg); err != nil {
-		return false
+		return false, ""
 	}
 
 	buf := make([]byte, 4096)
 	n, err := conn.Read(buf)
 	if err != nil || n < 9 {
-		return false
+		return false, ""
 	}
 
 	if buf[0] != 'R' {
-		return false
+		return false, ""
 	}
 
 	authType := binary.BigEndian.Uint32(buf[5:9])
 
 	switch authType {
 	case 0:
-		return true
+		return true, fmt.Sprintf("PostgreSQL trust auth user=%s", cred.Username)
 
 	case 3:
 		pwMsg := buildPgPasswordMessage(cred.Password)
 		if _, err = conn.Write(pwMsg); err != nil {
-			return false
+			return false, ""
 		}
 
 	case 5:
 		if n < 13 {
-			return false
+			return false, ""
 		}
 		salt := buf[9:13]
 		hash := pgMD5Password(cred.Username, cred.Password, salt)
 		pwMsg := buildPgPasswordMessage(hash)
 		if _, err = conn.Write(pwMsg); err != nil {
-			return false
+			return false, ""
 		}
 
 	default:
-		return false
+		return false, ""
 	}
 
 	n, err = conn.Read(buf)
 	if err != nil || n < 1 {
-		return false
+		return false, ""
 	}
 
-	return buf[0] == 'R' && n >= 9 && binary.BigEndian.Uint32(buf[5:9]) == 0
+	if buf[0] == 'R' && n >= 9 && binary.BigEndian.Uint32(buf[5:9]) == 0 {
+		return true, fmt.Sprintf("PostgreSQL auth OK user=%s", cred.Username)
+	}
+	return false, ""
 }
 
 func pgMD5Password(user, password string, salt []byte) string {
@@ -410,42 +436,69 @@ func buildPgPasswordMessage(password string) []byte {
 	return msg
 }
 
-func checkRedis(ctx context.Context, host string, port int, cred credential) bool {
+func checkRedis(ctx context.Context, host string, port int, cred credential) (bool, string) {
 	addr := net.JoinHostPort(host, strconv.Itoa(port))
 	conn, err := net.DialTimeout("tcp", addr, 5*time.Second)
 	if err != nil {
-		return false
+		return false, ""
 	}
 	defer conn.Close()
 
 	_ = conn.SetDeadline(time.Now().Add(10 * time.Second))
 
-	if cred.Password == "" {
-		_, _ = fmt.Fprintf(conn, "PING\r\n")
-	} else {
+	if cred.Password != "" {
 		_, _ = fmt.Fprintf(conn, "AUTH %s\r\n", cred.Password)
+		body, _ := readRedisResp(conn, 1024)
+		if strings.Contains(body, "+OK") {
+			return true, strings.TrimSpace(body)
+		}
+		return false, ""
 	}
 
-	buf := make([]byte, 1024)
-	n, err := conn.Read(buf)
-	if err != nil {
-		return false
+	_, _ = fmt.Fprintf(conn, "PING\r\n")
+	body, _ := readRedisResp(conn, 1024)
+	if strings.Contains(body, "+PONG") {
+		return true, "PING → " + strings.TrimSpace(body)
 	}
-
-	resp := string(buf[:n])
-	return strings.Contains(resp, "+PONG") || strings.Contains(resp, "+OK")
+	_, _ = fmt.Fprintf(conn, "INFO server\r\n")
+	info, _ := readRedisResp(conn, 4096)
+	if strings.Contains(info, "redis_version") {
+		snippet := info
+		if len(snippet) > 400 {
+			snippet = snippet[:400] + "..."
+		}
+		return true, "INFO → " + strings.TrimSpace(snippet)
+	}
+	return false, ""
 }
 
-func checkMongo(ctx context.Context, host string, port int, cred credential) bool {
+func redisAuthOK(conn net.Conn) bool {
+	body, _ := readRedisResp(conn, 1024)
+	return strings.Contains(body, "+OK")
+}
+
+func redisRespOK(conn net.Conn) bool {
+	body, _ := readRedisResp(conn, 1024)
+	return strings.Contains(body, "+PONG") || strings.Contains(body, "+OK")
+}
+
+func readRedisResp(conn net.Conn, max int) (string, error) {
+	buf := make([]byte, max)
+	n, err := conn.Read(buf)
+	if err != nil {
+		return "", err
+	}
+	return string(buf[:n]), nil
+}
+
+func checkMongo(ctx context.Context, host string, port int, cred credential) (bool, string) {
 	addr := net.JoinHostPort(host, strconv.Itoa(port))
 	conn, err := net.DialTimeout("tcp", addr, 5*time.Second)
 	if err != nil {
-		return false
+		return false, ""
 	}
 	conn.Close()
-	// MongoDB 认证需要 SCRAM-SHA 等复杂协议
-	// 简化：仅检测无认证情况
-	return false
+	return false, ""
 }
 
 func buildPgStartup(user string) []byte {
@@ -468,6 +521,28 @@ func buildPgStartup(user string) []byte {
 	return msg
 }
 
+func weakPassFindingTitle(target *core.Target, c credential) string {
+	if target.Port == 6379 && c.Password == "" {
+		return fmt.Sprintf("Redis 未授权访问 - %s:%d", target.Host, target.Port)
+	}
+	return fmt.Sprintf("弱口令 - %s:%d", target.Host, target.Port)
+}
+
+func weakPassFindingDesc(target *core.Target, c credential) string {
+	svc := serviceByPort(target.Port)
+	if target.Port == 6379 && c.Password == "" {
+		return fmt.Sprintf("服务 %s 允许无密码或未授权访问（PING/INFO 可连通）", svc)
+	}
+	return fmt.Sprintf("服务 %s 存在弱口令 %s/%s", svc, c.Username, weakPassPasswordLabel(c.Password))
+}
+
+func weakPassPasswordLabel(pwd string) string {
+	if pwd == "" {
+		return "(空)"
+	}
+	return pwd
+}
+
 func serviceByPort(port int) string {
 	m := map[int]string{
 		21: "FTP", 22: "SSH", 3306: "MySQL",
@@ -477,11 +552,4 @@ func serviceByPort(port int) string {
 		return s
 	}
 	return "Unknown"
-}
-
-func maskPassword(pwd string) string {
-	if len(pwd) <= 2 {
-		return "***"
-	}
-	return string(pwd[0]) + strings.Repeat("*", len(pwd)-2) + string(pwd[len(pwd)-1])
 }

@@ -70,7 +70,7 @@ var defaultConfig = Config{
 		"53", "8888", "9090",
 	},
 	DefaultPortRange: "top1000",
-	PortScanTimeout:  3,
+	PortScanTimeout:  1,
 	MaxConcurrency:   3000,
 	SYNRateLimit:     10000,
 

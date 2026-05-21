@@ -2,6 +2,20 @@
 
 基于 template 框架开发业务子系统时积累的关键经验，避免重复踩坑。
 
+## 0. 权限（只看这一节）
+
+**IAM 管页面，子系统管 API。** 例外清单只在 `vulnscan-backend/di/module_authorization.go` 顶部注释，无其它配置文件。
+
+| 你要做的事 | 在哪做 |
+|-----------|--------|
+| 发版后同步菜单 | IAM 管理员 → vulnscan → 系统初始化 → 同步 |
+| 谁能看到哪些模块 | IAM → 角色 → 勾选 vulnscan 菜单 |
+| 新增跨模块只读 API | 改 `module_authorization.go` 里 `supportReadGETExact` 或 organize/scan 规则 |
+
+上线四步：注册应用 → 管理员同步菜单 → 角色勾菜单 → 用户重登。
+
+---
+
 ## 1. 路由前缀：必须使用 `/api` 路由组
 
 ### 问题
@@ -20,17 +34,13 @@ func (h *Handlers) RouteLoad() {
 
     // 所有 API 路由注册在 /api 组下
     apiGroup := engine.Group("/api")
-    authGroup := apiGroup.Group("/",
-        h.IAM.Middleware().Authentication(),
-        h.IAM.Middleware().Authorization(),
-    )
 
-    // RegisterDefaultRoutes 第一个参数必须是 *gin.Engine
-    // SSO 公开路由挂在 engine 根路径，认证路由挂在 authGroup（/api/ 下）
-    h.IAM.RegisterDefaultRoutes(engine, authGroup, iamsdk.DefaultRoutesOptions{...})
+    // 仅认证：SDK 的 /me/* 等不应挂 Authorization（否则非 admin 会 403 并触发前端降级）
+    apiAuthenticated := apiGroup.Group("/", h.IAM.Middleware().Authentication())
+    h.IAM.RegisterDefaultRoutes(engine, apiAuthenticated, iamsdk.DefaultRoutesOptions{...})
 
-    // 业务模块路由注册到 authGroup（最终路径：/api/xxx）
-    backends = append(backends, h.YourModule.RoutesWithGroup(authGroup)...)
+    apiAuthorized := apiAuthenticated.Group("", h.ModuleAuthorization())
+    backends = append(backends, h.YourModule.RoutesWithGroup(apiAuthorized)...)
 
     frontend.SetupSPA(engine, web.MiddlewareNotFound())
 }
@@ -40,9 +50,9 @@ func (h *Handlers) RouteLoad() {
 
 | 前端请求 | 后端路由 | 注册位置 |
 |---------|---------|---------|
-| `/api/me/profile` | `/api/me/profile` | authGroup（SDK 自动注册） |
-| `/api/auth/login` | `/api/auth/login` | SDK 自动注册 |
-| `/api/your-module/xxx` | `/api/your-module/xxx` | authGroup |
+| `/api/me/profile` | `/api/me/profile` | apiAuthenticated（SDK，仅 Authentication） |
+| `/api/auth/login` | `/api/auth/login` | SDK 公开代理 |
+| `/api/your-module/xxx` | `/api/your-module/xxx` | apiAuthorized |
 | `/sso/login` | `/sso/login` | engine 根路径（SDK） |
 
 ### Vite 代理配置

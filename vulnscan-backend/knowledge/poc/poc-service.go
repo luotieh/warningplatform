@@ -75,6 +75,12 @@ func (s *ServicePoc) GetByID(id string) (*model.PocTemplate, error) {
 	return &item, err
 }
 
+func (s *ServicePoc) InvalidateCache() {
+	if s.store != nil {
+		s.store.Invalidate()
+	}
+}
+
 func (s *ServicePoc) Create(item *model.PocTemplate) error {
 	if item.ID == "" {
 		item.ID = qulid.GenerateID()

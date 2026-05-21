@@ -55,6 +55,7 @@ const (
 	TaskStatusSplitting = "splitting"
 	TaskStatusPartial   = "partial"
 
-	TaskTypeAssetEnrich = "asset_enrich"
-	TaskTypeVulnRetest  = "vuln_retest"
+	TaskTypeAssetEnrich    = "asset_enrich"
+	TaskTypeAssetDiscovery = "asset_discovery"
+	TaskTypeVulnRetest     = "vuln_retest"
 )

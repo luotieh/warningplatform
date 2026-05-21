@@ -2,6 +2,7 @@ package scanrunner
 
 import (
 	"fmt"
+	"sync"
 
 	"gorm.io/gorm"
 
@@ -52,21 +53,31 @@ import (
 
 // PLACEHOLDER_FACTORY_BODY
 
+var registerModulesOnce sync.Once
+
+func ensureModulesRegistered() {
+	registerModulesOnce.Do(func() {
+		(&ModuleFactory{}).registerAll()
+	})
+}
+
 type ModuleFactory struct {
 	db     *gorm.DB
 	rs     *rulestore.Store
 	ds     *dict.Store
 	loader *payload.Loader
+	reg    *KnowledgeRegistry
 }
 
+// NewModuleFactory 优先使用 DefaultKnowledgeRegistry，否则临时创建（测试用）。
 func NewModuleFactory(db *gorm.DB) *ModuleFactory {
-	rs := rulestore.NewWithoutDB()
-	ds := dict.NewStore(nil)
-	pl := payload.NewLoader(db)
-	_ = pl.LoadAll()
-	f := &ModuleFactory{db: db, rs: rs, ds: ds, loader: pl}
-	f.registerAll()
-	return f
+	ensureModulesRegistered()
+	if reg := DefaultKnowledgeRegistry(); reg != nil {
+		return reg.NewModuleFactory()
+	}
+	reg := NewKnowledgeRegistry(db)
+	SetDefaultKnowledgeRegistry(reg)
+	return reg.NewModuleFactory()
 }
 
 func (f *ModuleFactory) registerAll() {
@@ -91,10 +102,10 @@ func (f *ModuleFactory) registerAll() {
 	RegisterModule("company_recon", func(_ *ModuleDeps) core.ScanModule { return company.New() })
 	RegisterModule("email_collect", func(_ *ModuleDeps) core.ScanModule { return emailcollect.New() })
 	RegisterModule("screenshot", func(_ *ModuleDeps) core.ScanModule { return screenshot.New() })
-	RegisterModule("dir_scan", func(_ *ModuleDeps) core.ScanModule { return dirscan.New() })
+	RegisterModule("dir_scan", func(d *ModuleDeps) core.ScanModule { return dirscan.NewWithDict(d.Factory.ds) })
 	RegisterModule("sqli", func(d *ModuleDeps) core.ScanModule { return sqli.New(d.Factory.loader) })
 	RegisterModule("xss", func(d *ModuleDeps) core.ScanModule { return xss.New(d.Factory.loader) })
-	RegisterModule("weak_pass", func(_ *ModuleDeps) core.ScanModule { return weakpass.New() })
+	RegisterModule("weak_pass", func(d *ModuleDeps) core.ScanModule { return weakpass.New(d.Factory.ds) })
 	RegisterModule("brute_force", func(d *ModuleDeps) core.ScanModule { return bruteforce.New(d.Factory.ds) })
 	RegisterModule("ssrf", func(d *ModuleDeps) core.ScanModule { return ssrf.New("", d.Factory.loader) })
 	RegisterModule("cmdi", func(d *ModuleDeps) core.ScanModule { return cmdi.New(d.Factory.loader) })
@@ -106,9 +117,15 @@ func (f *ModuleFactory) registerAll() {
 	RegisterModule("apisec", func(_ *ModuleDeps) core.ScanModule { return apisec.New() })
 	RegisterModule("fpenhance", func(_ *ModuleDeps) core.ScanModule { return fpenhance.New() })
 	RegisterModule("nettopo", func(_ *ModuleDeps) core.ScanModule { return nettopo.New() })
-	RegisterModule("nuclei-poc", func(d *ModuleDeps) core.ScanModule { return nuclei.NewModule(d.Factory.db) })
+	RegisterModule("nuclei-poc", func(d *ModuleDeps) core.ScanModule {
+		if d.Factory.reg != nil && d.Factory.reg.Poc != nil {
+			return nuclei.NewModuleWithStore(d.Factory.db, d.Factory.reg.Poc)
+		}
+		return nuclei.NewModule(d.Factory.db)
+	})
 	RegisterModule("advanced_vuln", func(d *ModuleDeps) core.ScanModule { return advancedvuln.New(d.Factory.loader) })
 	RegisterModule("unauth", func(_ *ModuleDeps) core.ScanModule { return unauth.New() })
+	registerBundleModules()
 }
 
 func (f *ModuleFactory) Build(id string) core.ScanModule {

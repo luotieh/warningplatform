@@ -9,7 +9,7 @@ import { accessRoutes, coreRouteNames } from '#/router/routes';
 import { useAuthStore } from '#/store';
 import { isSSOMode, redirectToSSO } from '#/utils/sso';
 
-import { generateAccess } from './access';
+import { ensureAccessMenusForPrivileged, generateAccess } from './access';
 
 function setupCommonGuard(router: Router) {
   const loadedPaths = new Set<string>();
@@ -86,6 +86,7 @@ function setupAccessGuard(router: Router) {
       return to;
     }
 
+    // 仅判断 isAccessChecked，勿因 accessMenus 为空反复重置（否则会无限请求 /me/menus）
     if (accessStore.isAccessChecked) {
       return true;
     }
@@ -105,23 +106,40 @@ function setupAccessGuard(router: Router) {
       }
       const userRoles = (userInfo as any).roles ?? [];
 
-      const { accessibleMenus, accessibleRoutes } = await generateAccess({
+      const accessOptions = {
         roles: userRoles,
         router,
         routes: accessRoutes,
-      });
+      };
+
+      let { accessibleMenus, accessibleRoutes } =
+        await generateAccess(accessOptions);
+
+      if ((accessibleMenus?.length ?? 0) === 0) {
+        const fallback = await ensureAccessMenusForPrivileged(accessOptions);
+        if (fallback) {
+          accessibleMenus = fallback.accessibleMenus;
+          accessibleRoutes = fallback.accessibleRoutes;
+        }
+      }
 
       accessStore.setAccessMenus(accessibleMenus);
       accessStore.setAccessRoutes(accessibleRoutes);
       accessStore.setIsAccessChecked(true);
+
       const homePath = '/dashboard/overview';
       const redirectPath = (from.query.redirect ??
         (to.path === homePath || to.path === '/'
           ? (userInfo as any).homePath || homePath
           : to.fullPath)) as string;
+      const resolved = decodeURIComponent(String(redirectPath));
+
+      if (resolved === to.fullPath || resolved === to.path) {
+        return true;
+      }
 
       return {
-        ...router.resolve(decodeURIComponent(redirectPath)),
+        ...router.resolve(resolved),
         replace: true,
       };
     } catch {

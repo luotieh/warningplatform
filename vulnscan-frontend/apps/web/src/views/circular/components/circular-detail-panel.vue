@@ -1,5 +1,6 @@
 <script lang="ts" setup>
 import { computed, onMounted } from 'vue';
+import { useMessage } from 'naive-ui';
 import {
   NButton,
   NCard,
@@ -22,9 +23,11 @@ import {
   CircularStatusTypes,
   DataSourceLabels,
   OperationTypeLabels,
+  downloadCircularIncidentReport,
   type CircularDetailResp,
   type CircularOplog,
 } from '#/api/circular';
+import { downloadBlob } from '#/views/asset/ledger/file-utils';
 import DynamicFormRenderer from '#/components/dynamic-form/DynamicFormRenderer.vue';
 
 import { useCircularOrganizeMaps } from '../composables/use-circular-organize';
@@ -32,8 +35,31 @@ import {
   circularDataToFormMap,
   extractCircularUnitHint,
   formatCircularTime,
+  isCircularReportDownload,
   pickCircularSummary,
 } from '../utils';
+
+const message = useMessage();
+
+function reportFormatFromPath(path: string): 'docx' | 'pdf' | null {
+  if (path.endsWith('/docx')) return 'docx';
+  if (path.endsWith('/pdf')) return 'pdf';
+  return null;
+}
+
+async function handleReportDownload(downloadPath: unknown, label: string) {
+  const path = String(downloadPath ?? '').trim();
+  const format = reportFormatFromPath(path);
+  if (!format) return;
+  try {
+    const res = await downloadCircularIncidentReport(props.detail.id, format);
+    const blob = (res as any)?.data ?? res;
+    const ext = format === 'docx' ? 'docx' : 'pdf';
+    downloadBlob(blob as Blob, `${props.detail.code || props.detail.id}_${label}.${ext}`);
+  } catch (e: any) {
+    message.error(e?.message || '下载报告失败');
+  }
+}
 
 const props = defineProps<{
   detail: CircularDetailResp;
@@ -120,7 +146,16 @@ onMounted(() => {
         <NGridItem v-for="item in summaryItems" :key="item.key">
           <div class="summary-item">
             <div class="summary-item__label">{{ item.key }}</div>
-            <div class="summary-item__value">{{ item.value }}</div>
+            <div class="summary-item__value">
+              <NButton
+                v-if="isCircularReportDownload(item.value)"
+                text
+                type="primary"
+                size="small"
+                @click="handleReportDownload(item.value, item.key)"
+              >下载 {{ item.key }}</NButton>
+              <template v-else>{{ item.value }}</template>
+            </div>
           </div>
         </NGridItem>
       </NGrid>

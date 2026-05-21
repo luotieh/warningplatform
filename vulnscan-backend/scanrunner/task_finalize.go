@@ -25,8 +25,18 @@ func (r *Runner) finalizeAfterRun(ctx context.Context) {
 			}
 		}
 		CleanupAssetEnrichTask(r.db, &r.task)
+	case model.TaskTypeAssetDiscovery:
+		if status == model.TaskStatusCompleted || status == model.TaskStatusPartial ||
+			status == model.TaskStatusFailed || status == model.TaskStatusCancelled {
+			if err := FinalizeAssetDiscoveryAfterScan(r.db, &r.task); err != nil {
+				slog.Warn("[Runner] 资产探测收尾失败", "task_id", r.task.ID, "error", err)
+			}
+		}
 	case model.TaskTypeVulnRetest:
 		if status == model.TaskStatusCompleted || status == model.TaskStatusPartial {
+			if err := RecordRetestExecutionMeta(r.db, &r.task); err != nil {
+				slog.Warn("[Runner] 回测元数据写入失败", "task_id", r.task.ID, "error", err)
+			}
 			if err := ApplyVulnRetestFromTask(r.db, &r.task); err != nil {
 				slog.Warn("[Runner] 漏洞回测结果处理失败", "task_id", r.task.ID, "error", err)
 			}

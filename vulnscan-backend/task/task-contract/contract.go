@@ -7,12 +7,13 @@ import (
 )
 
 type TaskQuery struct {
-	Page       int    `form:"page"`
-	PageSize   int    `form:"page_size"`
-	Keyword    string `form:"keyword"`
-	Status     string `form:"status"`
-	Type       string `form:"type"`
-	TemplateID string `form:"template_id"`
+	Page         int    `form:"page"`
+	PageSize     int    `form:"page_size"`
+	Keyword      string `form:"keyword"`
+	Status       string `form:"status"`
+	Type         string `form:"type"`
+	ExcludeTypes string `form:"exclude_types"`
+	TemplateID   string `form:"template_id"`
 }
 
 type CreateTaskReq struct {
@@ -26,15 +27,16 @@ type CreateTaskReq struct {
 }
 
 type FindingQuery struct {
-	TaskID   string `form:"-"`
-	Page     int    `form:"page"`
-	PageSize int    `form:"page_size"`
-	Category string `form:"category"`
-	Type     string `form:"type"`
-	Severity string `form:"severity"`
-	ModuleID string `form:"module_id"`
-	Keyword  string `form:"keyword"`
-	Target   string `form:"target"`
+	TaskID      string `form:"-"`
+	Page        int    `form:"page"`
+	PageSize    int    `form:"page_size"`
+	Category    string `form:"category"`
+	Type        string `form:"type"`
+	ExcludeType string `form:"exclude_type"`
+	Severity    string `form:"severity"`
+	ModuleID    string `form:"module_id"`
+	Keyword     string `form:"keyword"`
+	Target      string `form:"target"`
 }
 
 type FindingSummary struct {

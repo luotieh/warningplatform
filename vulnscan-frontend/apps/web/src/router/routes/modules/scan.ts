@@ -52,8 +52,12 @@ const routes: RouteRecordRaw[] = [
       {
         name: 'ScanReport',
         path: 'report',
-        redirect: '/reports/scan',
-        meta: { hideInMenu: true, title: '报告中心' },
+        component: () => import('#/views/dashboard/report.vue'),
+        meta: {
+          icon: 'lucide:file-bar-chart-2',
+          title: '扫描报告',
+          perms: [{ action: 'view', label: '查看' }, { action: 'export', label: '导出' }],
+        },
       },
       {
         name: 'ScanExclusions',

@@ -72,6 +72,9 @@ export const useAuthStore = defineStore('auth', () => {
 
       if (accessToken) {
         accessStore.setAccessToken(accessToken);
+        accessStore.setIsAccessChecked(false);
+        accessStore.setAccessMenus([]);
+        accessStore.setAccessRoutes([]);
 
         if (refreshToken) {
           localStorage.setItem('iam_refresh_token', refreshToken);

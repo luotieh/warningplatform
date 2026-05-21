@@ -100,7 +100,7 @@ export function getSchedulerStatus() {
 }
 
 export function getScanProfiles() {
-  return requestClient.get('/scan/profiles');
+  return requestClient.get('/scan/templates');
 }
 
 export interface ScanEnginePreset {
@@ -111,6 +111,54 @@ export interface ScanEnginePreset {
 
 export function getScanEnginePresets() {
   return requestClient.get<ScanEnginePreset[]>('/scan/engine-presets');
+}
+
+export interface SuggestScanParameters {
+  target_count: number;
+  module_count?: number;
+  template_version?: string;
+  template_outdated?: boolean;
+  derived: Record<string, any>;
+  module_ids?: string[];
+}
+
+export function suggestScanParameters(data: { template_id?: string; targets: string[] }) {
+  return requestClient.post<SuggestScanParameters>('/scan/suggest-parameters', data);
+}
+
+export interface EngineRuleInfo {
+  id: string;
+  name: string;
+  source: string;
+  default: string;
+  config_key?: string;
+  configurable: boolean;
+  description: string;
+}
+
+export function getScanEngineRules() {
+  return requestClient.get<{
+    rules: EngineRuleInfo[];
+    module_exposure: Record<string, string[]>;
+    primary_module_ids: string[];
+  }>('/scan/engine-rules');
+}
+
+export interface TaskLevelParamSchema {
+  key: string;
+  name: string;
+  type: string;
+  default_value?: unknown;
+  description?: string;
+  options?: { value: unknown; label: string }[];
+}
+
+export function getTaskParameterSchema() {
+  return requestClient.get<{
+    task_level_params: TaskLevelParamSchema[];
+    module_create_params: TaskLevelParamSchema[];
+    engine_presets: ScanEnginePreset[];
+  }>('/scan/task-parameter-schema');
 }
 
 export interface ScanFinding {
@@ -221,7 +269,7 @@ export function subscribeScanEvents(
     onProgress?: (payload: any) => void;
     onStage?: (payload: { stage: string; status: string }) => void;
     onDone?: (payload: { status: string; error_msg?: string }) => void;
-    onLog?: (payload: LogPayload) => void;
+    onLog?: (payload: LogPayload, eventTime?: string) => void;
     onError?: (error: Event) => void;
   },
 ): { close: () => void } {
@@ -270,7 +318,7 @@ export function subscribeScanEvents(
     try {
       const data = JSON.parse(e.data);
       const payload = typeof data.payload === 'string' ? JSON.parse(data.payload) : data.payload;
-      callbacks.onLog?.(payload);
+      callbacks.onLog?.(payload, data.time);
     } catch { /* parse error */ }
   });
 

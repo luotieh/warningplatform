@@ -10,6 +10,8 @@ import { getModuleConfigs, type ModuleConfigInfo } from '#/api/pipeline';
 const props = defineProps<{
   show: boolean;
   moduleConfigs?: Record<string, Record<string, any>>;
+  /** 仅展示模板/任务涉及的模块；为空则加载全部主模块 */
+  moduleIds?: string[];
 }>();
 
 const emit = defineEmits<{
@@ -41,7 +43,9 @@ const categoryLabels: Record<string, string> = {
 async function loadConfigs() {
   loading.value = true;
   try {
-    modules.value = await getModuleConfigs();
+    modules.value = await getModuleConfigs(
+      props.moduleIds?.length ? { moduleIds: props.moduleIds } : undefined,
+    );
     const initial: Record<string, Record<string, any>> = {};
     for (const m of modules.value) {
       const entry: Record<string, any> = {};
@@ -87,7 +91,11 @@ function resetAll() {
 }
 
 watch(() => props.show, (val) => {
-  if (val && modules.value.length === 0) loadConfigs();
+  if (val) loadConfigs();
+});
+
+watch(() => props.moduleIds?.join(','), () => {
+  if (props.show) loadConfigs();
 });
 
 function onShow(val: boolean) {

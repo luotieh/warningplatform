@@ -9,13 +9,26 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type HandlerDataLib struct {
-	svc    *ServiceDataLib
-	loader interface{}
+type knowledgeReloader interface {
+	ReloadAll() error
 }
 
-func NewHandlerDataLib(svc *ServiceDataLib, loader interface{}) *HandlerDataLib {
-	return &HandlerDataLib{svc: svc, loader: loader}
+type HandlerDataLib struct {
+	svc       *ServiceDataLib
+	knowledge knowledgeReloader
+}
+
+func NewHandlerDataLib(svc *ServiceDataLib, knowledge knowledgeReloader) *HandlerDataLib {
+	return &HandlerDataLib{svc: svc, knowledge: knowledge}
+}
+
+func (h *HandlerDataLib) reloadScanKnowledge() {
+	if h.knowledge != nil {
+		if err := h.knowledge.ReloadAll(); err != nil {
+			// logged inside ReloadAll
+			return
+		}
+	}
 }
 
 func (h *HandlerDataLib) List(c *gin.Context) {
@@ -138,7 +151,7 @@ func (h *HandlerDataLib) AddEntry(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	_ = h.svc.ReloadPayloads(h.loader)
+	h.reloadScanKnowledge()
 	web.OK(c).Data(entry).Send()
 }
 
@@ -155,7 +168,7 @@ func (h *HandlerDataLib) UpdateEntry(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	_ = h.svc.ReloadPayloads(h.loader)
+	h.reloadScanKnowledge()
 	web.OK(c).Send()
 }
 
@@ -168,7 +181,7 @@ func (h *HandlerDataLib) DeleteEntry(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	_ = h.svc.ReloadPayloads(h.loader)
+	h.reloadScanKnowledge()
 	web.OK(c).Send()
 }
 
@@ -190,7 +203,7 @@ func (h *HandlerDataLib) BatchAddEntries(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	_ = h.svc.ReloadPayloads(h.loader)
+	h.reloadScanKnowledge()
 	web.OK(c).Data(gin.H{"created": count}).Send()
 }
 
@@ -214,7 +227,7 @@ func (h *HandlerDataLib) Import(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	_ = h.svc.ReloadPayloads(h.loader)
+	h.reloadScanKnowledge()
 	web.OK(c).Data(gin.H{"imported": count}).Send()
 }
 
@@ -242,7 +255,7 @@ func (h *HandlerDataLib) Clear(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	_ = h.svc.ReloadPayloads(h.loader)
+	h.reloadScanKnowledge()
 	web.OK(c).Send()
 }
 
@@ -257,7 +270,11 @@ func (h *HandlerDataLib) GetCategories(c *gin.Context) {
 }
 
 func (h *HandlerDataLib) Reload(c *gin.Context) {
-	if err := h.svc.ReloadPayloads(h.loader); err != nil {
+	if h.knowledge == nil {
+		web.Fail(c).Msg("扫描知识库未初始化").Send()
+		return
+	}
+	if err := h.knowledge.ReloadAll(); err != nil {
 		web.Fail(c).Err(err).Send()
 		return
 	}

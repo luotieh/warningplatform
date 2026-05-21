@@ -14,13 +14,11 @@ const routes: RouteRecordRaw[] = [
         name: 'DashboardOverview',
         path: 'overview',
         component: () => import('#/views/dashboard/overview.vue'),
-        meta: { icon: 'lucide:gauge', title: '总览' },
-      },
-      {
-        name: 'DashboardReportCompat',
-        path: 'report',
-        redirect: '/reports/scan',
-        meta: { hideInMenu: true, title: '报告中心' },
+        meta: {
+          icon: 'lucide:gauge',
+          title: '总览',
+          perms: [{ action: 'view', label: '查看' }],
+        },
       },
     ],
   },

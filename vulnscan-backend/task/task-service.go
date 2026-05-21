@@ -41,6 +41,14 @@ func (s *serviceTask) List(query taskContract.TaskQuery, scopes ...func(*gorm.DB
 	if query.Type != "" {
 		tx = tx.Where("type = ?", query.Type)
 	}
+	if query.ExcludeTypes != "" {
+		excluded := splitCSV(query.ExcludeTypes)
+		if len(excluded) == 1 {
+			tx = tx.Where("type <> ?", excluded[0])
+		} else if len(excluded) > 1 {
+			tx = tx.Where("type NOT IN ?", excluded)
+		}
+	}
 	if query.TemplateID != "" {
 		tx = tx.Where("template_id = ?", query.TemplateID)
 	}
@@ -133,11 +141,29 @@ func (s *serviceTask) Resume(id string) error {
 		Update("status", model.TaskStatusRunning).Error
 }
 
+// relatedTaskIDs 返回当前任务及全部分片子任务 ID，便于在父任务详情页聚合 findings。
+func (s *serviceTask) relatedTaskIDs(taskID string) []string {
+	ids := []string{taskID}
+	var childIDs []string
+	if err := s.session().Model(&model.ScanTask{}).Where("parent_id = ?", taskID).Pluck("id", &childIDs).Error; err == nil {
+		ids = append(ids, childIDs...)
+	}
+	return ids
+}
+
+func scanFindingsScope(tx *gorm.DB, taskIDs []string) *gorm.DB {
+	if len(taskIDs) == 1 {
+		return tx.Where("task_id = ?", taskIDs[0])
+	}
+	return tx.Where("task_id IN ?", taskIDs)
+}
+
 func (s *serviceTask) ListFindings(query taskContract.FindingQuery) ([]model.ScanFinding, int64, error) {
 	var items []model.ScanFinding
 	var count int64
 
-	tx := s.session().Model(&model.ScanFinding{}).Where("task_id = ?", query.TaskID)
+	taskIDs := s.relatedTaskIDs(query.TaskID)
+	tx := scanFindingsScope(s.session().Model(&model.ScanFinding{}), taskIDs)
 
 	if query.Category != "" {
 		tx = tx.Where("category = ?", query.Category)
@@ -148,6 +174,17 @@ func (s *serviceTask) ListFindings(query taskContract.FindingQuery) ([]model.Sca
 			tx = tx.Where("type = ?", types[0])
 		} else {
 			tx = tx.Where("type IN ?", types)
+		}
+	}
+	if query.ExcludeType != "" {
+		excluded := strings.Split(query.ExcludeType, ",")
+		for i := range excluded {
+			excluded[i] = strings.TrimSpace(excluded[i])
+		}
+		if len(excluded) == 1 && excluded[0] != "" {
+			tx = tx.Where("type <> ?", excluded[0])
+		} else if len(excluded) > 1 {
+			tx = tx.Where("type NOT IN ?", excluded)
 		}
 	}
 	if query.Severity != "" {
@@ -208,42 +245,42 @@ func (s *serviceTask) FindingSummary(taskID string) (*taskContract.FindingSummar
 	}
 
 	session := s.session()
+	taskIDs := s.relatedTaskIDs(taskID)
+	base := func() *gorm.DB {
+		return scanFindingsScope(session.Model(&model.ScanFinding{}), taskIDs)
+	}
 
 	var total int64
-	session.Model(&model.ScanFinding{}).Where("task_id = ?", taskID).Count(&total)
+	base().Count(&total)
 	summary.TotalFindings = int(total)
 
 	var catResults []countResult
-	session.Model(&model.ScanFinding{}).
+	base().
 		Select("category as key, count(*) as count").
-		Where("task_id = ?", taskID).
 		Group("category").Find(&catResults)
 	for _, r := range catResults {
 		summary.ByCategory[r.Key] = r.Count
 	}
 
 	var typeResults []countResult
-	session.Model(&model.ScanFinding{}).
+	base().
 		Select("type as key, count(*) as count").
-		Where("task_id = ?", taskID).
 		Group("type").Find(&typeResults)
 	for _, r := range typeResults {
 		summary.ByType[r.Key] = r.Count
 	}
 
 	var sevResults []countResult
-	session.Model(&model.ScanFinding{}).
+	base().
 		Select("severity as key, count(*) as count").
-		Where("task_id = ?", taskID).
 		Group("severity").Find(&sevResults)
 	for _, r := range sevResults {
 		summary.BySeverity[r.Key] = r.Count
 	}
 
 	var modResults []countResult
-	session.Model(&model.ScanFinding{}).
+	base().
 		Select("module_id as key, count(*) as count").
-		Where("task_id = ?", taskID).
 		Group("module_id").Find(&modResults)
 	for _, r := range modResults {
 		summary.ByModule[r.Key] = r.Count
@@ -254,8 +291,8 @@ func (s *serviceTask) FindingSummary(taskID string) (*taskContract.FindingSummar
 
 func (s *serviceTask) ListAssets(taskID string) ([]taskContract.AssetSummary, error) {
 	var findings []model.ScanFinding
-	if err := s.session().Where("task_id = ?", taskID).
-		Order("created_at ASC").Find(&findings).Error; err != nil {
+	tx := scanFindingsScope(s.session().Model(&model.ScanFinding{}), s.relatedTaskIDs(taskID))
+	if err := tx.Order("created_at ASC").Find(&findings).Error; err != nil {
 		return nil, err
 	}
 
@@ -393,6 +430,18 @@ func (s *serviceTask) ListLogs(taskID string, limit int) ([]model.ScanLog, error
 		Limit(limit).
 		Find(&logs).Error
 	return logs, err
+}
+
+func splitCSV(s string) []string {
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func containsStr(arr []string, s string) bool {

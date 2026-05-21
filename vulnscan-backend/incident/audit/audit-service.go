@@ -152,14 +152,17 @@ func (s *serviceAudit) ManualAudit(ctx context.Context, req auditContract.Manual
 	}
 
 	if req.AuditResult == "success" {
-		s.transferToCircular(ctx, sess, &incident, req.Opinion)
+		if err := s.transferToCircular(ctx, sess, &incident); err != nil {
+			return fmt.Errorf("复核已通过，但流转通报失败: %w", err)
+		}
 	}
 
 	return nil
 }
 
-func (s *serviceAudit) transferToCircular(ctx context.Context, sess *gorm.DB, incident *model.SecurityIncident, opinion string) {
+func (s *serviceAudit) transferToCircular(ctx context.Context, sess *gorm.DB, incident *model.SecurityIncident) error {
 	req := transferContract.TransferIncidentReq{
+		IncidentID:   incident.Id,
 		IncidentNo:   incident.IncidentNo,
 		Name:         incident.Name,
 		AiOpinion:    incident.AiOpinion,
@@ -185,7 +188,7 @@ func (s *serviceAudit) transferToCircular(ctx context.Context, sess *gorm.DB, in
 	circularCode, err := s.transferSvc.ReceiveIncident(ctx, req, scope.SystemActor(), incident.OrganizeID)
 	if err != nil {
 		slog.Error("流转到通报模块失败", "incident_no", incident.IncidentNo, "error", err)
-		return
+		return err
 	}
 
 	transferLog := model.BuildIncidentOperationLog(
@@ -202,6 +205,7 @@ func (s *serviceAudit) transferToCircular(ctx context.Context, sess *gorm.DB, in
 		slog.Warn("创建流转操作日志失败", "incident_no", incident.IncidentNo, "error", err)
 	}
 	slog.Info("事件已流转到通报模块", "incident_no", incident.IncidentNo, "circular_code", circularCode)
+	return nil
 }
 
 func (s *serviceAudit) AIClassify(ctx context.Context, id string) (*auditContract.ClassifyResult, error) {

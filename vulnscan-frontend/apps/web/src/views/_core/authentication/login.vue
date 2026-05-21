@@ -398,24 +398,9 @@ async function loginWith(provider: string) {
       @submit="handleLogin"
     >
       <template #title>
-        <div class="vuln-login-title">
-          <div class="vuln-login-title__mark" aria-hidden="true">
-            <svg
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="1.8"
-            >
-              <path d="M12 3 4.5 6.2v5.6c0 4.65 3.2 8.75 7.5 9.85 4.3-1.1 7.5-5.2 7.5-9.85V6.2L12 3Z" />
-              <path d="M9 12.2 11.1 14.3 15.4 10" />
-            </svg>
-          </div>
-          <div>
-            <h2>登录漏洞扫描平台</h2>
-            <p>统一身份认证接入，进入资产、扫描与风险处置工作台</p>
-          </div>
+        <div class="vuln-login-head">
+          <h2 class="vuln-login-head__title">账号登录</h2>
+          <p class="vuln-login-head__hint">使用企业账号继续访问工作台</p>
         </div>
       </template>
 
@@ -585,45 +570,26 @@ async function loginWith(provider: string) {
   animation: vuln-login-enter 0.42s ease-out;
 }
 
-.vuln-login-title {
-  display: flex;
-  gap: 14px;
-  align-items: flex-start;
+.vuln-login-head {
   width: 100%;
-  max-width: 420px;
-  margin: 0 auto 26px;
-  color: hsl(var(--foreground));
+  max-width: 400px;
+  margin: 0 auto 24px;
+  text-align: left;
 }
 
-.vuln-login-title__mark {
-  display: grid;
-  flex: 0 0 44px;
-  width: 44px;
-  height: 44px;
-  color: rgb(var(--vuln-primary));
-  place-items: center;
-  background: rgba(var(--vuln-primary-soft), 0.12);
-  border: 1px solid rgba(var(--vuln-primary), 0.18);
-  border-radius: 12px;
-}
-
-.vuln-login-title__mark svg {
-  width: 25px;
-  height: 25px;
-}
-
-.vuln-login-title h2 {
+.vuln-login-head__title {
   margin: 0;
-  font-size: clamp(24px, 3vw, 32px);
+  font-size: 26px;
   font-weight: 700;
   line-height: 1.2;
-  letter-spacing: 0;
+  color: hsl(var(--foreground));
+  letter-spacing: 0.01em;
 }
 
-.vuln-login-title p {
+.vuln-login-head__hint {
   margin: 8px 0 0;
   font-size: 14px;
-  line-height: 1.7;
+  line-height: 1.6;
   color: hsl(var(--muted-foreground));
 }
 
@@ -773,7 +739,6 @@ async function loginWith(provider: string) {
   --vuln-primary-soft: 14 165 233;
 }
 
-:global(.dark) .vuln-login-title__mark,
 :global(.dark) .vuln-social-btn,
 :global(.dark) .vuln-captcha__image {
   background: rgba(14, 165, 233, 0.1);
@@ -786,15 +751,12 @@ async function loginWith(provider: string) {
 }
 
 @media (max-width: 480px) {
-  .vuln-login-title {
-    gap: 12px;
-    margin-bottom: 20px;
+  .vuln-login-head {
+    margin-bottom: 18px;
   }
 
-  .vuln-login-title__mark {
-    flex-basis: 40px;
-    width: 40px;
-    height: 40px;
+  .vuln-login-head__title {
+    font-size: 22px;
   }
 
   .vuln-captcha {

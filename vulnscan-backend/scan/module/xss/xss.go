@@ -136,7 +136,8 @@ func (m *XSSScanner) getXSSPayloads(canary string) []payload.XSSPayloadEntry {
 			return cfg.Payloads
 		}
 	}
-	return defaultXSSPayloads(canary)
+	payload.LogFallbackOnce("xss")
+	return payload.MinimalXSSPayloads(canary)
 }
 
 func (m *XSSScanner) getDOMSinkPatterns() []model.VulnPayloadPattern {
@@ -146,7 +147,8 @@ func (m *XSSScanner) getDOMSinkPatterns() []model.VulnPayloadPattern {
 			return cfg.DOMSinks
 		}
 	}
-	return defaultDOMSinkPatterns()
+	payload.LogFallbackOnce("xss")
+	return payload.MinimalDOMSinkPatterns()
 }
 
 func (m *XSSScanner) getDOMSourcePatterns() []model.VulnPayloadPattern {
@@ -156,7 +158,8 @@ func (m *XSSScanner) getDOMSourcePatterns() []model.VulnPayloadPattern {
 			return cfg.DOMSources
 		}
 	}
-	return defaultDOMSourcePatterns()
+	payload.LogFallbackOnce("xss")
+	return payload.MinimalDOMSourcePatterns()
 }
 
 func (m *XSSScanner) testDOMSinks(ctx context.Context, target *core.Target) []*core.Finding {
@@ -234,50 +237,4 @@ func extractContext(body, marker string, window int) string {
 	}
 
 	return body[start:end]
-}
-
-func defaultXSSPayloads(canary string) []payload.XSSPayloadEntry {
-	return []payload.XSSPayloadEntry{
-		{Value: fmt.Sprintf(`<script>alert('%s')</script>`, canary), Expect: fmt.Sprintf(`<script>alert('%s')</script>`, canary), Context: "html"},
-		{Value: fmt.Sprintf(`"><img src=x onerror=alert('%s')>`, canary), Expect: fmt.Sprintf(`onerror=alert('%s')`, canary), Context: "attribute"},
-		{Value: fmt.Sprintf(`'><svg/onload=alert('%s')>`, canary), Expect: fmt.Sprintf(`onload=alert('%s')`, canary), Context: "tag-break"},
-		{Value: fmt.Sprintf(`javascript:alert('%s')`, canary), Expect: fmt.Sprintf(`javascript:alert('%s')`, canary), Context: "href"},
-		{Value: fmt.Sprintf(`" onfocus="alert('%s')" autofocus="`, canary), Expect: fmt.Sprintf(`onfocus="alert('%s')"`, canary), Context: "event-handler"},
-		{Value: fmt.Sprintf(`<details open ontoggle=alert('%s')>`, canary), Expect: fmt.Sprintf(`ontoggle=alert('%s')`, canary), Context: "html5-element"},
-		{Value: fmt.Sprintf(`<math><mtext><table><mglyph><svg><mtext><textarea><path id="</textarea><img onerror=alert('%s') src=1>">`, canary), Expect: fmt.Sprintf(`onerror=alert('%s')`, canary), Context: "mutation-xss"},
-		{Value: fmt.Sprintf(`</script><script>alert('%s')</script>`, canary), Expect: fmt.Sprintf(`alert('%s')`, canary), Context: "script-break"},
-		{Value: fmt.Sprintf(`'-alert('%s')-'`, canary), Expect: fmt.Sprintf(`alert('%s')`, canary), Context: "js-string"},
-		{Value: fmt.Sprintf(`\x3cscript\x3ealert('%s')\x3c/script\x3e`, canary), Expect: fmt.Sprintf(`alert('%s')`, canary), Context: "hex-encode"},
-	}
-}
-
-func defaultDOMSinkPatterns() []model.VulnPayloadPattern {
-	return []model.VulnPayloadPattern{
-		{Pattern: `document\.write\s*\(`, Name: "document.write", Category: "dom_sink", Enabled: true},
-		{Pattern: `document\.writeln\s*\(`, Name: "document.writeln", Category: "dom_sink", Enabled: true},
-		{Pattern: `\.innerHTML\s*=`, Name: "innerHTML", Category: "dom_sink", Enabled: true},
-		{Pattern: `\.outerHTML\s*=`, Name: "outerHTML", Category: "dom_sink", Enabled: true},
-		{Pattern: `eval\s*\(`, Name: "eval", Category: "dom_sink", Enabled: true},
-		{Pattern: `setTimeout\s*\(\s*['"]`, Name: "setTimeout", Category: "dom_sink", Enabled: true},
-		{Pattern: `setInterval\s*\(\s*['"]`, Name: "setInterval", Category: "dom_sink", Enabled: true},
-		{Pattern: `new\s+Function\s*\(`, Name: "Function constructor", Category: "dom_sink", Enabled: true},
-		{Pattern: `\.insertAdjacentHTML\s*\(`, Name: "insertAdjacentHTML", Category: "dom_sink", Enabled: true},
-		{Pattern: `window\.location\s*=`, Name: "window.location", Category: "dom_sink", Enabled: true},
-		{Pattern: `location\.href\s*=`, Name: "location.href", Category: "dom_sink", Enabled: true},
-		{Pattern: `location\.assign\s*\(`, Name: "location.assign", Category: "dom_sink", Enabled: true},
-		{Pattern: `location\.replace\s*\(`, Name: "location.replace", Category: "dom_sink", Enabled: true},
-	}
-}
-
-func defaultDOMSourcePatterns() []model.VulnPayloadPattern {
-	return []model.VulnPayloadPattern{
-		{Pattern: `location\.hash`, Name: "location.hash", Category: "dom_source", Enabled: true},
-		{Pattern: `location\.search`, Name: "location.search", Category: "dom_source", Enabled: true},
-		{Pattern: `location\.href`, Name: "location.href", Category: "dom_source", Enabled: true},
-		{Pattern: `document\.URL`, Name: "document.URL", Category: "dom_source", Enabled: true},
-		{Pattern: `document\.documentURI`, Name: "document.documentURI", Category: "dom_source", Enabled: true},
-		{Pattern: `document\.referrer`, Name: "document.referrer", Category: "dom_source", Enabled: true},
-		{Pattern: `window\.name`, Name: "window.name", Category: "dom_source", Enabled: true},
-		{Pattern: `postMessage`, Name: "postMessage", Category: "dom_source", Enabled: true},
-	}
 }

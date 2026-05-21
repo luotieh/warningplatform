@@ -71,6 +71,7 @@ func (m *ServiceProbe) Run(ctx context.Context, targets []*core.Target, config m
 				Host:     target.Host,
 				IP:       target.IP,
 				Port:     target.Port,
+				Service:  probeResult.Service,
 				Protocol: probeResult.Service,
 				URL:      target.URL,
 			}

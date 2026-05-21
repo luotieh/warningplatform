@@ -15,6 +15,7 @@ import {
   transferToCircular,
   type SecurityIncident, type IncidentComment, type OpLog,
 } from '#/api/incident';
+import { getTransferStatus } from '#/api/circular';
 import { getVulnList, type Vulnerability } from '#/api/vuln';
 
 import {
@@ -24,9 +25,14 @@ import {
 } from '../incident-description';
 import IncidentMonitorEvidencePanel from '../components/IncidentMonitorEvidencePanel.vue';
 import IncidentOverviewPanel from '../components/IncidentOverviewPanel.vue';
+import IncidentReportPreview from '../components/IncidentReportPreview.vue';
 import { useMonitorExecutionForIncident } from '../composables/useMonitorExecutionForIncident';
+import { downloadOneIncidentExport } from '../incident-export';
+import { useRoutePerm } from '#/composables/use-route-perm';
 
 defineOptions({ name: 'IncidentDetail' });
+
+const { perm } = useRoutePerm('/incident/list');
 
 const route = useRoute();
 const router = useRouter();
@@ -155,6 +161,22 @@ const scanTaskLink = computed(() => {
   return m?.[1] ? `/scan/tasks/${m[1]}` : '';
 });
 
+const showReportPreview = ref(false);
+const exportingReport = ref(false);
+
+async function handleExportReport(format: 'docx' | 'pdf') {
+  const id = route.params.id as string;
+  if (!id) return;
+  exportingReport.value = true;
+  try {
+    await downloadOneIncidentExport(id, format, incident.value?.incident_no);
+    message.success('报告已下载');
+  } catch (e: any) {
+    message.error(e?.message || '导出失败');
+  } finally {
+    exportingReport.value = false;
+  }
+}
 const showAuditModal = ref(false);
 const auditForm = ref({ passed: true, opinion: '' });
 const showRemModal = ref(false);
@@ -187,6 +209,7 @@ async function fetchData() {
         relatedVulns.value = r?.items ?? [];
       } catch { relatedVulns.value = []; }
     }
+    await refreshTransferStatus();
   } finally {
     loading.value = false;
   }
@@ -198,8 +221,16 @@ async function handleAiAudit() {
 }
 
 async function handleManualAudit() {
-  try { await manualAudit(route.params.id as string, auditForm.value); message.success('复核完成'); showAuditModal.value = false; await fetchData(); }
-  catch (e: any) { message.error(e?.message || '复核失败'); }
+  try {
+    await manualAudit(route.params.id as string, auditForm.value);
+    if (auditForm.value.passed) {
+      message.success('复核通过，已尝试自动流转通报');
+    } else {
+      message.success('复核完成');
+    }
+    showAuditModal.value = false;
+    await fetchData();
+  } catch (e: any) { message.error(e?.message || '复核失败'); }
 }
 
 async function handleRemediation() {
@@ -218,12 +249,40 @@ async function handleClose() {
 }
 
 const transferring = ref(false);
+const transferredCircularCode = ref<string | null>(null);
+
+const canAiPreAudit = computed(() => incident.value?.status === 1);
+const canManualAudit = computed(() => incident.value?.status === 1);
+const canTransferToCircular = computed(() => {
+  const s = incident.value?.status;
+  return s === 2 && !transferredCircularCode.value;
+});
+
+async function refreshTransferStatus() {
+  const no = incident.value?.incident_no;
+  if (!no) {
+    transferredCircularCode.value = null;
+    return;
+  }
+  try {
+    const st = await getTransferStatus({ incident_no: no });
+    transferredCircularCode.value = st?.circular_code?.trim() || null;
+  } catch {
+    transferredCircularCode.value = null;
+  }
+}
+
 async function handleTransferToCircular() {
   if (!incident.value) return;
   const inc = incident.value;
+  if (transferredCircularCode.value) {
+    router.push(`/circular/input/${transferredCircularCode.value}`);
+    return;
+  }
   transferring.value = true;
   try {
     const payload: any = {
+      incident_id: inc.id,
       incident_no: inc.incident_no,
       name: inc.name,
       level: inc.level,
@@ -256,10 +315,26 @@ async function handleTransferToCircular() {
       };
     }
     const result = await transferToCircular(payload);
+    const code = result?.circular_code;
+    if (!code) {
+      message.warning('流转成功但未返回通报编号');
+      await refreshTransferStatus();
+      return;
+    }
+    transferredCircularCode.value = code;
     message.success('已成功流转为通报');
-    router.push(`/circular/input/${(result as any).circular_code ?? (result as any).data?.circular_code}`);
+    router.push(`/circular/input/${code}`);
   } catch (e: any) {
-    message.error(e?.message || '流转失败');
+    const msg = e?.message || '流转失败';
+    if (msg.includes('已流转')) {
+      await refreshTransferStatus();
+      if (transferredCircularCode.value) {
+        message.warning('该事件已通报，正在打开通报详情');
+        router.push(`/circular/input/${transferredCircularCode.value}`);
+        return;
+      }
+    }
+    message.error(msg);
   } finally {
     transferring.value = false;
   }
@@ -318,12 +393,69 @@ onMounted(fetchData);
           </template>
           <template #header-extra>
             <NSpace :size="8">
-              <NButton v-if="incident.status<=2" size="small" type="info" @click="handleAiAudit">智能预审</NButton>
-              <NButton v-if="incident.status===2" size="small" type="primary" @click="showAuditModal=true">人工复核</NButton>
-              <NButton v-if="incident.status===4||incident.status===6" size="small" type="warning" @click="showRemModal=true">提交整改</NButton>
-              <NButton v-if="incident.status===6" size="small" type="success" @click="handleVerify">验证整改</NButton>
-              <NButton v-if="incident.status===4||incident.status===5||incident.status===6" size="small" @click="handleClose">关闭事件</NButton>
-              <NButton size="small" type="error" :loading="transferring" @click="handleTransferToCircular">转为通报</NButton>
+              <NButton size="small" @click="showReportPreview = true">报告预览</NButton>
+              <NButton
+                v-perm="perm('export')"
+                size="small"
+                :loading="exportingReport"
+                @click="handleExportReport('docx')"
+              >导出 Word</NButton>
+              <NButton
+                v-perm="perm('export')"
+                size="small"
+                type="primary"
+                :loading="exportingReport"
+                @click="handleExportReport('pdf')"
+              >导出 PDF</NButton>
+              <NButton
+                v-if="canAiPreAudit"
+                v-perm="perm('ai-audit')"
+                size="small"
+                type="info"
+                @click="handleAiAudit"
+              >智能预审</NButton>
+              <NButton
+                v-if="canManualAudit"
+                v-perm="perm('manual-audit')"
+                size="small"
+                type="primary"
+                @click="showAuditModal=true"
+              >人工复核</NButton>
+              <NButton
+                v-if="incident.status===2||incident.status===4"
+                v-perm="perm('remediate')"
+                size="small"
+                type="warning"
+                @click="showRemModal=true"
+              >提交整改</NButton>
+              <NButton
+                v-if="incident.status===6"
+                v-perm="perm('verify')"
+                size="small"
+                type="success"
+                @click="handleVerify"
+              >验证整改</NButton>
+              <NButton
+                v-if="incident.status>=2&&incident.status<=6"
+                v-perm="perm('close')"
+                size="small"
+                @click="handleClose"
+              >关闭事件</NButton>
+              <NButton
+                v-if="canTransferToCircular"
+                v-perm="perm('transfer')"
+                size="small"
+                type="error"
+                :loading="transferring"
+                @click="handleTransferToCircular"
+              >转为通报</NButton>
+              <NButton
+                v-else-if="transferredCircularCode"
+                v-perm="perm('transfer')"
+                size="small"
+                type="error"
+                @click="router.push(`/circular/input/${transferredCircularCode}`)"
+              >查看通报</NButton>
             </NSpace>
           </template>
           <NSteps
@@ -732,6 +864,11 @@ onMounted(fetchData);
             </NFormItem>
           </NForm>
         </NModal>
+
+        <IncidentReportPreview
+          v-model:show="showReportPreview"
+          :incident-id="route.params.id as string"
+        />
       </template>
     </NSpin>
   </div>
@@ -791,9 +928,9 @@ onMounted(fetchData);
 }
 .incident-desc-block--detail {
   padding: 12px;
-  border-radius: 6px;
-  background: rgba(32, 128, 240, 0.04);
-  border: 1px solid rgba(32, 128, 240, 0.12);
+  border-radius: 8px;
+  background: var(--n-action-color);
+  border: 1px solid var(--n-border-color);
   max-height: 480px;
   overflow: auto;
 }

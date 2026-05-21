@@ -56,16 +56,8 @@ func (m *NoSQLiScanner) getOperatorPayloads() []string {
 			return result
 		}
 	}
-	return defaultOperatorPayloads()
-}
-
-func defaultOperatorPayloads() []string {
-	return []string{
-		"[$gt]",
-		"[$ne]=",
-		"[$regex]=.*",
-		"[$exists]=true",
-	}
+	payload.LogFallbackOnce("nosqli")
+	return payload.MinimalNoSQLiOperators()
 }
 
 func (m *NoSQLiScanner) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {

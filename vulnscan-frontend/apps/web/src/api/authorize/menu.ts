@@ -21,6 +21,7 @@ export interface SyncResult {
   unchanged: number;
 }
 
+/** 使用应用凭证同步到 IAM（需特权账号）；勿用 SDK 默认 /frontends/sync（非 admin 会 403） */
 export function syncFrontendRoutes(items: SyncMenuItem[]) {
-  return requestClient.post<SyncResult>('/frontends/sync', { items });
+  return requestClient.post<SyncResult>('/system/iam/sync-frontends', { items });
 }

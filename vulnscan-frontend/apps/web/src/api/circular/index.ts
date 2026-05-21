@@ -365,3 +365,13 @@ export function getCircularOplogs(circularId: string) {
 export function getTransferStatus(params?: Record<string, any>) {
   return requestClient.get<TransferStatusResp>('/circular/transfers/status', { params });
 }
+
+/** 下载由安全事件流转时附带的 Word/PDF 报告（circularId 为通报主键） */
+export async function downloadCircularIncidentReport(
+  circularId: string,
+  format: 'docx' | 'pdf',
+) {
+  return baseRequestClient.get<Blob>(`/circular/transfers/reports/${circularId}/${format}`, {
+    responseType: 'blob',
+  });
+}

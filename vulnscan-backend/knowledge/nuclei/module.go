@@ -21,9 +21,15 @@ type NucleiModule struct {
 }
 
 func NewModule(db *gorm.DB) *NucleiModule {
-	return &NucleiModule{
-		store: NewPocStore(db),
+	return NewModuleWithStore(db, NewPocStore(db))
+}
+
+// NewModuleWithStore 使用共享 PocStore（与知识库 PoC API 同一缓存，支持热重载）。
+func NewModuleWithStore(db *gorm.DB, store *PocStore) *NucleiModule {
+	if store == nil {
+		store = NewPocStore(db)
 	}
+	return &NucleiModule{store: store}
 }
 
 func NewModuleWithoutDB() *NucleiModule {
@@ -81,6 +87,10 @@ func (m *NucleiModule) Run(ctx context.Context, targets []*core.Target, config m
 			}
 		}
 		if len(templates) == 0 {
+			if isVulnRetestConfig(config) {
+				mc.outcome = "retest_no_templates"
+				return nil, fmt.Errorf("回测未找到可用 PoC 模板")
+			}
 			slog.Info("[NucleiModule] 无PoC模板，跳过")
 			mc.outcome = "skipped_no_templates"
 			return &core.ModuleResult{Duration: time.Since(start)}, nil
@@ -142,14 +152,28 @@ func (m *NucleiModule) Run(ctx context.Context, targets []*core.Target, config m
 	}, nil
 }
 
+func isVulnRetestConfig(config map[string]interface{}) bool {
+	return strings.TrimSpace(configString(config, "source_vuln_id", "")) != "" ||
+		configString(config, "vuln_retest", "") == "true"
+}
+
 func (m *NucleiModule) loadTemplates(config map[string]interface{}) []*PocEntry {
+	retest := isVulnRetestConfig(config)
 	if ids := configStringSlice(config, "poc_template_ids"); len(ids) > 0 {
 		matched := m.store.LoadByIDs(ids)
 		if len(matched) > 0 {
 			slog.Info("[NucleiModule] 按指定 PoC 回测", "templates", len(matched))
 			return matched
 		}
+		if retest {
+			slog.Warn("[NucleiModule] 回测指定 PoC 未在库中找到", "ids", ids)
+			return nil
+		}
 		slog.Warn("[NucleiModule] 未找到指定 PoC 模板，回退全部 PoC", "ids", ids)
+	}
+	if retest {
+		slog.Warn("[NucleiModule] 漏洞回测缺少 poc_template_ids，跳过全量 PoC")
+		return nil
 	}
 	if severities, ok := config["poc_severities"].([]string); ok && len(severities) > 0 {
 		return m.store.LoadBySeverity(severities)
@@ -451,11 +475,24 @@ func targetToURL(t *core.Target) string {
 	if t.Port == 0 {
 		return host
 	}
+	// 非 HTTP 服务端口：Nuclei network 模板需要 host:port，而非 http://host:port
+	if isNucleiNetworkPort(t.Port) {
+		return fmt.Sprintf("%s:%d", host, t.Port)
+	}
 	scheme := "http"
 	if t.Port == 443 || t.Port == 8443 {
 		scheme = "https"
 	}
 	return fmt.Sprintf("%s://%s:%d", scheme, host, t.Port)
+}
+
+func isNucleiNetworkPort(port int) bool {
+	switch port {
+	case 21, 22, 23, 25, 110, 143, 445, 1433, 1521, 3306, 3389, 5432, 5900, 6379, 11211, 27017:
+		return true
+	default:
+		return false
+	}
 }
 
 func convertResultToFinding(event *output.ResultEvent, targets []*core.Target) *core.Finding {

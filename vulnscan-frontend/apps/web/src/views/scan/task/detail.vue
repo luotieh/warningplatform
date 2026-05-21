@@ -41,6 +41,7 @@ import {
   type AssetSummary,
   type LogPayload,
   getTaskLogs,
+  type ScanLogEntry,
 } from '#/api/task';
 
 import { createIncident, type CreateIncidentReq } from '#/api/incident';
@@ -52,6 +53,14 @@ import {
 } from '../scan-incident-description';
 import { taskStatusLabels, taskStatusTypes } from '#/constants/status';
 import TopologyGraph from '../components/topology-graph.vue';
+import ScanFindingDetailDrawer from '../components/ScanFindingDetailDrawer.vue';
+import {
+  estimateTableScrollX,
+  findingCellStack,
+  findingCellSubtext,
+  primaryDataHint,
+} from '../components/finding-display';
+import { downloadTaskReport } from '#/api/report';
 
 defineOptions({ name: 'ScanTaskDetail' });
 
@@ -61,6 +70,7 @@ const message = useMessage();
 const loading = ref(true);
 const task = ref<ScanTask | null>(null);
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
+let logPollTimer: ReturnType<typeof setInterval> | null = null;
 
 const findings = ref<ScanFinding[]>([]);
 const findingsTotal = ref(0);
@@ -102,17 +112,23 @@ const endpointList = computed<EndpointNode[]>(() => {
   if (selectedEndpoint.value && cachedEndpointList.value.length > 0) {
     return cachedEndpointList.value;
   }
-  const ignorePort = hostOnlyTabs.has(activeSubTab.value);
+  const groupByHostOnly = hostOnlyTabs.has(activeSubTab.value);
   const map = new Map<string, EndpointNode>();
   for (const f of mergedFindings.value) {
-    const host = cleanTarget(f.target);
-    const port = ignorePort ? 0 : (f.port || 0);
-    const key = port > 0 ? `${host}:${port}` : host;
+    const host = findingHost(f);
+    const port = groupByHostOnly ? 0 : (f.port || 0);
+    const key = groupByHostOnly ? host : (port > 0 ? `${host}:${port}` : host);
     const existing = map.get(key);
     if (existing) {
       existing.count++;
     } else {
-      map.set(key, { key, host, port, label: key, count: 1 });
+      map.set(key, {
+        key,
+        host,
+        port,
+        label: groupByHostOnly ? host : key,
+        count: 1,
+      });
     }
   }
   const list = Array.from(map.values()).sort((a, b) => {
@@ -124,6 +140,7 @@ const endpointList = computed<EndpointNode[]>(() => {
 });
 
 interface LogEntry {
+  id?: number;
   time: string;
   level: string;
   message: string;
@@ -131,6 +148,45 @@ interface LogEntry {
   module?: string;
 }
 const liveLogs = ref<LogEntry[]>([]);
+const liveModuleProgress = ref({ done: 0, total: 0 });
+
+const stageLabels: Record<string, string> = {
+  discover: '资产发现',
+  recon: '信息收集',
+  vuln: '漏洞检测',
+  exploit: '漏洞利用',
+  report: '报告生成',
+};
+
+function formatLogTime(iso?: string): string {
+  const d = iso ? new Date(iso) : new Date();
+  if (Number.isNaN(d.getTime())) return '--:--:--';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+function scanLogToEntry(log: ScanLogEntry): LogEntry {
+  return {
+    id: log.id,
+    time: formatLogTime(log.created_at),
+    level: log.level,
+    message: log.message,
+    stage: log.stage,
+    module: log.module,
+  };
+}
+
+function appendLog(entry: LogEntry) {
+  liveLogs.value = [entry, ...liveLogs.value].slice(0, 200);
+}
+
+function mergeApiLogs(entries: ScanLogEntry[]) {
+  if (!entries.length) return;
+  const maxId = liveLogs.value.reduce((m, l) => Math.max(m, l.id ?? 0), 0);
+  const fresh = entries.filter((log) => log.id > maxId);
+  if (!fresh.length) return;
+  liveLogs.value = [...fresh.map(scanLogToEntry), ...liveLogs.value].slice(0, 200);
+}
 
 const dataKeyLabels: Record<string, string> = {
   url: 'URL',
@@ -221,6 +277,25 @@ async function handleRetestFinding(row: ScanFinding) {
 function openDetail(row: ScanFinding) {
   detailItem.value = row;
   showDetail.value = true;
+}
+
+const findingTableScrollX = computed(() =>
+  estimateTableScrollX(findingColumns.value as Array<{ width?: number; minWidth?: number }>),
+);
+
+function findingRowProps(row: ScanFinding) {
+  return {
+    style: 'cursor: pointer',
+    onClick: (e: MouseEvent) => {
+      const el = e.target as HTMLElement;
+      if (el.closest('button, a, .n-button')) return;
+      openDetail(row);
+    },
+  };
+}
+
+function dataHint(row: ScanFinding): string {
+  return primaryDataHint(row, (key) => d(row, key));
 }
 
 function openScreenshot(b64: string) {
@@ -484,6 +559,12 @@ const typeColors: Record<string, string> = {
 };
 
 const moduleLabels: Record<string, string> = {
+  host_discover: '主机发现',
+  web_recon: 'Web 信息收集',
+  asset_enrich: '资产富化',
+  web_vuln_scan: 'Web 漏洞检测',
+  credential_audit: '凭据安全',
+  infra_extra: '网络拓扑',
   icmp_ping: 'ICMP存活探测',
   port_scan: '端口扫描',
   syn_scan: 'SYN扫描',
@@ -523,7 +604,26 @@ const moduleLabels: Record<string, string> = {
   apisec: 'API安全检测',
   screenshot: '页面截图',
   nuclei: 'Nuclei PoC',
+  'nuclei-poc': 'Nuclei PoC',
+  advanced_vuln: '高级漏洞检测',
+  unauth: '未授权访问检测',
 };
+
+const runStatusText = computed(() => {
+  if (!isActive.value || !task.value) return '';
+  const parts: string[] = [];
+  const stage = task.value.current_stage;
+  if (stage) parts.push(stageLabels[stage] ?? stage);
+  const mod = task.value.current_module;
+  if (mod) {
+    const labels = mod.split(' · ').map((m) => moduleLabels[m.trim()] ?? m.trim());
+    parts.push(labels.join('、'));
+  }
+  const { done, total } = liveModuleProgress.value;
+  if (total > 0) parts.push(`模块 ${done}/${total}`);
+  parts.push(`${Math.round(task.value.progress ?? 0)}%`);
+  return parts.join(' · ');
+});
 
 const severityConfig: Record<string, { color: string; label: string }> = {
   critical: { color: '#e53e3e', label: '严重' },
@@ -533,12 +633,21 @@ const severityConfig: Record<string, { color: string; label: string }> = {
   info: { color: '#4299e1', label: '信息' },
 };
 
+/** 「全部」Tab 不展示的发现类型（在「开放端口/服务」等专用 Tab 查看） */
+const TYPES_IN_PORT_SERVICE_TAB = ['port_open', 'udp_port', 'service'] as const;
+const EXCLUDE_FROM_ALL_TAB = ['host_alive', ...TYPES_IN_PORT_SERVICE_TAB].join(',');
+
 const subTabDefs = [
   { key: 'overview', label: '任务概览', isOverview: true, group: 'summary' },
   { key: 'all', label: '全部', group: 'summary' },
+  {
+    key: 'port_open',
+    label: '开放端口/服务',
+    mergeTypes: [...TYPES_IN_PORT_SERVICE_TAB],
+    group: 'summary',
+  },
   { key: 'vuln', label: '漏洞', group: 'summary' },
-  { key: 'host_alive', label: '资产', group: 'findings' },
-  { key: 'port_open', label: '端口/服务', mergeTypes: ['port_open', 'udp_port', 'service'], group: 'findings' },
+  { key: 'host_alive', label: '存活主机', group: 'findings' },
   { key: 'subdomain', label: '子域名', group: 'findings' },
   { key: 'dns_record', label: 'DNS', mergeTypes: ['dns_record', 'dns_cname', 'dns_multi_ip', 'dns_nameservers', 'reverse_dns', 'zone_transfer'], group: 'findings' },
   { key: 'web_page', label: '网站/URL', mergeTypes: ['web_page', 'web_info', 'url', 'script', 'screenshot'], group: 'findings' },
@@ -578,6 +687,11 @@ const isActive = computed(
   () => task.value?.status === 'running' || task.value?.status === 'queued',
 );
 
+/** 资产探测任务：结果以 host_alive 为主，需在专用 Tab 展示 */
+const isAssetDiscoveryTask = computed(
+  () => task.value?.type === 'asset_discovery',
+);
+
 const canRerun = computed(() => {
   const s = task.value?.status;
   return (
@@ -595,7 +709,21 @@ const subTabsWithCount = computed(() => {
     if ('isOverview' in t && t.isOverview) return { ...t, count: -1 };
     let count = 0;
     if (t.key === 'all') {
-      count = summary.value!.total_findings;
+      if (isAssetDiscoveryTask.value) {
+        count = summary.value!.total_findings;
+      } else {
+        count = summary.value!.total_findings;
+        for (const mt of TYPES_IN_PORT_SERVICE_TAB) {
+          count -= summary.value!.by_type[mt] ?? 0;
+        }
+        count -= summary.value!.by_type.host_alive ?? 0;
+        count = Math.max(0, count);
+      }
+    } else if (t.key === 'host_alive') {
+      count = summary.value!.by_type.host_alive ?? 0;
+      if (count === 0 && (task.value?.alive_hosts ?? 0) > 0) {
+        count = task.value!.alive_hosts!;
+      }
     } else if (t.key === 'vuln') {
       count = summary.value!.by_category?.['vuln'] ?? 0;
     } else if ('mergeTypes' in t && t.mergeTypes) {
@@ -608,7 +736,23 @@ const subTabsWithCount = computed(() => {
     return { ...t, count };
   });
 
-  return withCount.filter((t) => t.count !== 0 || t.key === 'overview' || t.key === 'all' || t.key === 'vuln');
+  return withCount
+    .map((t) => {
+      if (t.key === 'host_alive' && isAssetDiscoveryTask.value) {
+        return { ...t, label: '存活主机', group: 'summary' as const };
+      }
+      return t;
+    })
+    .filter(
+      (t) =>
+        t.count !== 0 ||
+        t.key === 'overview' ||
+        t.key === 'all' ||
+        t.key === 'vuln' ||
+        t.key === 'port_open' ||
+        (t.key === 'host_alive' &&
+          ((task.value?.alive_hosts ?? 0) > 0 || isAssetDiscoveryTask.value)),
+    );
 });
 
 const severityOptions = [
@@ -628,24 +772,6 @@ const moduleOptions = computed(() => {
       value: k,
     }));
 });
-
-function getDataSummary(row: ScanFinding): string {
-  const d = row.data ?? {};
-  const parts: string[] = [];
-  if (d.url) parts.push(d.url);
-  else if (d.path) parts.push(d.path);
-  else if (d.subdomain) parts.push(d.subdomain);
-  else if (d.email) parts.push(d.email);
-  else if (d.name) parts.push(d.name);
-  else if (d.service) parts.push(`${d.service}${d.version ? ' ' + d.version : ''}`);
-  else if (d.value) parts.push(d.value);
-  else if (d.description) parts.push(d.description);
-  else if (d.banner) parts.push(d.banner.split('\n')[0]?.substring(0, 80) ?? '');
-  if (d.technologies) parts.push(d.technologies);
-  if (d.cdn_name) parts.push(`CDN: ${d.cdn_name}`);
-  if (d.waf) parts.push(`WAF: ${d.waf}`);
-  return parts.join(' | ').substring(0, 160);
-}
 
 function getConfColor(conf: number): string {
   if (conf >= 90) return '#52c41a';
@@ -669,12 +795,34 @@ function cleanTarget(raw: string): string {
   if (portMatch) t = t.slice(0, -portMatch[0].length);
   return t;
 }
+
+/** 表格/筛选用的主机标识（不含端口，优先 data.ip） */
+function findingHost(row: ScanFinding): string {
+  const ip = d(row, 'ip');
+  if (ip.trim()) return ip.trim();
+  return cleanTarget(row.target);
+}
+
 const colTarget = {
   title: '目标', key: 'target', width: 160, ellipsis: { tooltip: true },
   render: (row: ScanFinding) => {
     let text = cleanTarget(row.target);
     if (row.port > 0) text += `:${row.port}`;
     return h('span', { style: 'font-weight: 500; font-size: 12px', title: row.target }, text);
+  },
+};
+
+const colTargetHost = {
+  title: '目标主机',
+  key: 'host',
+  width: 148,
+  ellipsis: { tooltip: true },
+  render: (row: ScanFinding) => {
+    const host = findingHost(row);
+    return h('span', {
+      class: 'finding-host-cell',
+      title: row.target !== host ? row.target : host,
+    }, host);
   },
 };
 const colType = {
@@ -709,8 +857,17 @@ const colTime = {
   render: (row: ScanFinding) => h('span', { style: 'font-size: 11px' }, formatTime(row.created_at)),
 };
 const colActions = {
-  title: '', key: 'actions', width: 55, fixed: 'right' as const,
-  render: (row: ScanFinding) => h(NButton, { size: 'tiny', type: 'primary', secondary: true, onClick: () => openDetail(row) }, () => '详情'),
+  title: '', key: 'actions', width: 72, fixed: 'right' as const,
+  render: (row: ScanFinding) =>
+    h(NButton, {
+      size: 'tiny',
+      type: 'primary',
+      secondary: true,
+      onClick: (e: Event) => {
+        e.stopPropagation();
+        openDetail(row);
+      },
+    }, () => '详情'),
 };
 
 const colVulnActions = {
@@ -721,9 +878,20 @@ const colVulnActions = {
       type: 'warning',
       secondary: true,
       loading: retestingFindingId.value === row.id,
-      onClick: () => handleRetestFinding(row),
+      onClick: (e: Event) => {
+        e.stopPropagation();
+        handleRetestFinding(row);
+      },
     }, () => '回测'),
-    h(NButton, { size: 'tiny', type: 'primary', secondary: true, onClick: () => openDetail(row) }, () => '详情'),
+    h(NButton, {
+      size: 'tiny',
+      type: 'primary',
+      secondary: true,
+      onClick: (e: Event) => {
+        e.stopPropagation();
+        openDetail(row);
+      },
+    }, () => '详情'),
   ]),
 };
 
@@ -785,7 +953,7 @@ const findingColumns = computed(() => {
 
   if (tab === 'port_open') {
     return [
-      colTarget,
+      colTargetHost,
       { title: '端口', key: 'port_tag', width: 120, render: portTag },
       dataCol('协议', 'protocol', 80, (row) => {
         const proto = d(row, 'protocol').toUpperCase() || '-';
@@ -801,13 +969,11 @@ const findingColumns = computed(() => {
         if (!ver) return h('span', { style: 'color: #ccc' }, '-');
         return h(NTag, { size: 'tiny', bordered: false, type: 'success' }, () => ver);
       }),
-      dataCol('Banner', 'banner', 180, (row) => {
+      { title: 'Banner', key: 'banner', minWidth: 200, render: (row: ScanFinding) => {
         const banner = d(row, 'banner');
-        if (!banner) return h('span', { style: 'color: #ccc' }, '-');
-        const short = banner.split('\n')[0]?.substring(0, 60) ?? '';
-        return h('span', { style: 'font-family: "SF Mono", Consolas, monospace; font-size: 11px; color: #555', title: banner }, short);
-      }),
-      dataCol('IP', 'ip', 130),
+        if (!banner) return h('span', { class: 'finding-cell-muted' }, '-');
+        return findingCellSubtext(banner, 4) ?? h('span', { class: 'finding-cell-muted' }, '-');
+      }},
       colConfidence, colTime, colActions,
     ];
   }
@@ -870,11 +1036,18 @@ const findingColumns = computed(() => {
         });
       }},
       colTarget,
-      dataCol('URL', 'url', 220, (row) => {
+      { title: 'URL', key: 'url', minWidth: 240, render: (row: ScanFinding) => {
         const url = d(row, 'url');
-        if (!url) return h('span', { style: 'color: #ccc' }, '-');
-        return h('a', { href: url, target: '_blank', style: 'font-size: 12px; color: #1890ff; text-decoration: none; word-break: break-all', title: url, onClick: (e: Event) => e.stopPropagation() }, url.length > 55 ? url.substring(0, 55) + '...' : url);
-      }),
+        if (!url) return h('span', { class: 'finding-cell-muted' }, '-');
+        return h('a', {
+          href: url,
+          target: '_blank',
+          class: 'finding-cell-sub',
+          style: { WebkitLineClamp: 3, color: '#1890ff', textDecoration: 'none' },
+          title: url,
+          onClick: (e: Event) => e.stopPropagation(),
+        }, url);
+      }},
       { title: '状态码', key: 'status_tag', width: 70, align: 'center' as const, render: statusTag },
       dataCol('标题', 'title', 160, (row) => {
         const title = d(row, 'title');
@@ -988,10 +1161,9 @@ const findingColumns = computed(() => {
   if (tab === 'vuln') {
     return [
       colTarget,
-      { title: '漏洞', key: 'vuln_title', minWidth: 260, render: (row: ScanFinding) => h('div', { style: 'line-height: 1.5' }, [
-        h('div', { style: 'font-size: 13px; font-weight: 600; color: #1a1a1a' }, row.title || d(row, 'name') || '-'),
-        row.description ? h('div', { style: 'font-size: 11px; color: #888; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 400px', title: row.description }, row.description) : null,
-      ]) },
+      { title: '漏洞', key: 'vuln_title', minWidth: 320, render: (row: ScanFinding) =>
+        findingCellStack(row.title || d(row, 'name'), row.description, 4),
+      },
       colSeverity,
       { title: '验证', key: 'verification_level', width: 80, render: (row: ScanFinding) => {
         const vl = (row as any).verification_level;
@@ -1038,12 +1210,9 @@ const findingColumns = computed(() => {
   if (tab === 'info_collect') {
     return [
       colTarget, colType,
-      { title: '发现', key: 'info_title', minWidth: 260, render: (row: ScanFinding) => {
+      { title: '发现', key: 'info_title', minWidth: 320, render: (row: ScanFinding) => {
         const title = row.title || d(row, 'name') || d(row, 'url') || d(row, 'email') || d(row, 'path') || d(row, 'value');
-        return h('div', { style: 'line-height: 1.5' }, [
-          h('div', { style: 'font-size: 13px; font-weight: 500; color: #1a1a1a; word-break: break-all', title: title }, title ? (title.length > 80 ? title.substring(0, 80) + '...' : title) : '-'),
-          row.description ? h('div', { style: 'font-size: 11px; color: #888; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 400px', title: row.description }, row.description) : null,
-        ]);
+        return findingCellStack(title, row.description || dataHint(row), 4);
       }},
       colSeverity, colConfidence, colModule, colTime, colActions,
     ];
@@ -1064,14 +1233,11 @@ const findingColumns = computed(() => {
   }
 
   return [colTarget, colSeverity, colType, {
-    title: '发现内容', key: 'content', minWidth: 280,
+    title: '发现内容', key: 'content', minWidth: 340,
     render: (row: ScanFinding) => {
       const title = row.title || d(row, 'name');
-      const sm = getDataSummary(row);
-      return h('div', { style: 'line-height: 1.5' }, [
-        title ? h('div', { style: 'font-size: 12px; font-weight: 500; color: #1a1a1a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 400px', title }, title) : null,
-        sm && sm !== title ? h('div', { style: 'font-size: 11px; color: #888; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 400px; margin-top: 1px', title: sm }, sm) : (!title ? h('span', { style: 'color: #ccc' }, '-') : null),
-      ]);
+      const hint = dataHint(row);
+      return findingCellStack(title, hint !== title ? hint : '', 3);
     },
   }, colConfidence, colModule, colTime, colActions];
 });
@@ -1194,16 +1360,16 @@ async function fetchFindings() {
       page_size: findingsPageSize.value,
     };
 
-    if (activeSubTab.value !== 'all') {
-      if (activeSubTab.value === 'vuln') {
-        params.category = 'vuln';
+    if (activeSubTab.value === 'all' && !isAssetDiscoveryTask.value) {
+      params.exclude_type = EXCLUDE_FROM_ALL_TAB;
+    } else if (activeSubTab.value === 'vuln') {
+      params.category = 'vuln';
+    } else {
+      const tabDef = subTabDefs.find((t) => t.key === activeSubTab.value);
+      if (tabDef && 'mergeTypes' in tabDef && tabDef.mergeTypes) {
+        params.type = tabDef.mergeTypes.join(',');
       } else {
-        const tabDef = subTabDefs.find((t) => t.key === activeSubTab.value);
-        if (tabDef && 'mergeTypes' in tabDef && tabDef.mergeTypes) {
-          params.type = tabDef.mergeTypes.join(',');
-        } else {
-          params.type = activeSubTab.value;
-        }
+        params.type = activeSubTab.value;
       }
     }
 
@@ -1242,9 +1408,12 @@ function onSubTabChange(key: string) {
   selectedEndpoint.value = '';
   selectedTreeNode.value = '';
   if (key === 'overview') return;
-  if (assets.value.length === 0) fetchAssets();
   if (!summary.value) fetchSummary();
-  if (key === 'host_alive') return;
+  if (key === 'host_alive') {
+    fetchAssets();
+    return;
+  }
+  if (assets.value.length === 0) fetchAssets();
   findingsPage.value = 1;
   fetchFindings();
 }
@@ -1337,13 +1506,22 @@ async function handleResume() {
   }
 }
 
-async function handleExport(format: 'json' | 'markdown' | 'csv') {
+async function handleExport(format: 'json' | 'markdown' | 'csv' | 'word' | 'pdf') {
   if (!task.value) return;
   try {
-    const res = await exportTaskReport(task.value.id, format);
-    const raw = (res as any)?.data ?? res;
-    const blob = raw instanceof Blob ? raw : new Blob([typeof raw === 'string' ? raw : JSON.stringify(raw, null, 2)]);
-    const ext = format === 'markdown' ? 'md' : format;
+    let blob: Blob;
+    if (format === 'word' || format === 'pdf') {
+      blob = await downloadTaskReport(task.value.id, format);
+    } else {
+      const res = await exportTaskReport(task.value.id, format);
+      const raw = (res as any)?.data ?? res;
+      blob =
+        raw instanceof Blob
+          ? raw
+          : new Blob([typeof raw === 'string' ? raw : JSON.stringify(raw, null, 2)]);
+    }
+    const ext =
+      format === 'markdown' ? 'md' : format === 'word' ? 'doc' : format;
     const filename = `${task.value.name}.${ext}`;
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -1384,6 +1562,12 @@ function startSSE() {
       }
     },
     onProgress(payload) {
+      if (payload.modules_total != null || payload.modules_done != null) {
+        liveModuleProgress.value = {
+          done: payload.modules_done ?? liveModuleProgress.value.done,
+          total: payload.modules_total ?? liveModuleProgress.value.total,
+        };
+      }
       if (task.value) {
         task.value.progress = payload.progress ?? task.value.progress;
         task.value.current_stage = payload.current_stage ?? task.value.current_stage;
@@ -1403,17 +1587,18 @@ function startSSE() {
         task.value.current_stage = payload.stage;
       }
     },
-    onLog(payload: LogPayload) {
-      const now = new Date();
-      const pad = (n: number) => String(n).padStart(2, '0');
-      const ts = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
-      liveLogs.value = [
-        { time: ts, level: payload.level, message: payload.message, stage: payload.stage, module: payload.module },
-        ...liveLogs.value,
-      ].slice(0, 200);
+    onLog(payload: LogPayload, eventTime?: string) {
+      appendLog({
+        time: formatLogTime(eventTime),
+        level: payload.level,
+        message: payload.message,
+        stage: payload.stage,
+        module: payload.module,
+      });
     },
     onDone(payload) {
       sseConnected.value = false;
+      stopLogPolling();
       if (task.value) {
         task.value.status = payload.status;
         task.value.progress = 100;
@@ -1491,14 +1676,44 @@ const mergedFindings = computed(() => {
 });
 
 const filteredByEndpoint = computed(() => {
-  if (!selectedEndpoint.value) return mergedFindings.value;
-  const ignorePort = hostOnlyTabs.has(activeSubTab.value);
-  return mergedFindings.value.filter((f) => {
-    const host = cleanTarget(f.target);
-    const port = ignorePort ? 0 : (f.port || 0);
-    const key = port > 0 ? `${host}:${port}` : host;
-    return key === selectedEndpoint.value;
-  });
+  let rows = mergedFindings.value;
+  if (selectedEndpoint.value) {
+    const groupByHostOnly = hostOnlyTabs.has(activeSubTab.value);
+    rows = rows.filter((f) => {
+      const host = findingHost(f);
+      if (groupByHostOnly) {
+        return host === selectedEndpoint.value;
+      }
+      const port = f.port || 0;
+      const key = port > 0 ? `${host}:${port}` : host;
+      return key === selectedEndpoint.value;
+    });
+  }
+  if (activeSubTab.value === 'port_open') {
+    rows = [...rows].sort((a, b) => {
+      const cmp = findingHost(a).localeCompare(findingHost(b));
+      if (cmp !== 0) return cmp;
+      return (a.port || 0) - (b.port || 0);
+    });
+  }
+  return rows;
+});
+
+/** 开放端口/服务：按主机聚合，用于多目标时左侧筛选 */
+const portServiceHostCount = computed(() => {
+  if (activeSubTab.value !== 'port_open') return 0;
+  const hosts = new Set<string>();
+  for (const f of mergedFindings.value) {
+    hosts.add(findingHost(f));
+  }
+  return hosts.size;
+});
+
+const showEndpointSidebar = computed(() => {
+  if (activeSubTab.value === 'port_open') {
+    return portServiceHostCount.value > 1;
+  }
+  return endpointList.value.length > 1;
 });
 
 async function fetchLogs() {
@@ -1506,21 +1721,40 @@ async function fetchLogs() {
     const taskId = route.params.id as string;
     const data = await getTaskLogs(taskId);
     if (data && data.length > 0) {
-      const pad = (n: number) => String(n).padStart(2, '0');
-      liveLogs.value = data.map((log) => {
-        const d = new Date(log.created_at);
-        const ts = isNaN(d.getTime()) ? '--:--:--' : `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-        return { time: ts, level: log.level, message: log.message, stage: log.stage, module: log.module };
-      });
+      if (liveLogs.value.length === 0) {
+        liveLogs.value = data.map(scanLogToEntry);
+      } else {
+        mergeApiLogs(data);
+      }
     }
   } catch { /* silent */ }
 }
 
+function startLogPolling() {
+  if (logPollTimer) return;
+  logPollTimer = setInterval(() => {
+    if (isActive.value) fetchLogs();
+  }, 4000);
+}
+
+function stopLogPolling() {
+  if (logPollTimer) {
+    clearInterval(logPollTimer);
+    logPollTimer = null;
+  }
+}
+
 onMounted(async () => {
   await fetchData();
+  await fetchSummary();
+  if (isAssetDiscoveryTask.value && !isActive.value) {
+    activeSubTab.value = 'host_alive';
+    await fetchAssets();
+  }
   fetchLogs();
   if (isActive.value) {
     startSSE();
+    startLogPolling();
   }
   refreshTimer = setInterval(() => {
     if (isActive.value && !sseConnected.value) {
@@ -1532,6 +1766,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   if (refreshTimer) clearInterval(refreshTimer);
+  stopLogPolling();
   stopSSE();
 });
 </script>
@@ -1581,7 +1816,13 @@ onUnmounted(() => {
                 v-if="task.status === 'completed' || task.status === 'failed'"
                 size="small"
                 placeholder="导出报告"
-                :options="[{ label: 'JSON', value: 'json' }, { label: 'Markdown', value: 'markdown' }, { label: 'CSV', value: 'csv' }]"
+                :options="[
+                  { label: 'JSON', value: 'json' },
+                  { label: 'Markdown', value: 'markdown' },
+                  { label: 'CSV', value: 'csv' },
+                  { label: 'Word', value: 'word' },
+                  { label: 'PDF', value: 'pdf' },
+                ]"
                 style="width: 120px"
                 @update:value="(v: string) => handleExport(v as any)"
               />
@@ -1599,8 +1840,16 @@ onUnmounted(() => {
             <div class="progress-meta">
               <span class="progress-label">执行进度</span>
               <span v-if="task.current_stage" class="progress-stage">
-                {{ task.current_stage }}
-                <template v-if="task.current_module"> / {{ task.current_module }}</template>
+                {{ stageLabels[task.current_stage] ?? task.current_stage }}
+                <template v-if="task.current_module">
+                  /
+                  {{
+                    task.current_module
+                      .split(' · ')
+                      .map((m) => moduleLabels[m.trim()] ?? m.trim())
+                      .join('、')
+                  }}
+                </template>
               </span>
               <span class="progress-pct">{{ Math.round(task.progress ?? 0) }}%</span>
             </div>
@@ -1772,23 +2021,38 @@ onUnmounted(() => {
               </div>
             </template>
             <div
+              v-if="isActive && runStatusText"
+              style="margin-bottom: 10px; padding: 8px 12px; background: #f0f5ff; border: 1px solid #d6e4ff; border-radius: 6px; font-size: 13px; color: #1d39c4; display: flex; align-items: center; gap: 8px"
+            >
+              <span
+                style="width: 8px; height: 8px; border-radius: 50%; background: #1890ff; flex-shrink: 0; animation: pulse 1.5s infinite"
+              />
+              <span style="font-weight: 600">当前步骤</span>
+              <span>{{ runStatusText }}</span>
+            </div>
+            <div
               style="max-height: 360px; overflow-y: auto; font-family: 'SF Mono', 'Consolas', 'Monaco', monospace; font-size: 12px; line-height: 1.8; background: #1e1e2e; color: #cdd6f4; border-radius: 8px; padding: 12px 16px"
             >
               <div v-if="liveLogs.length === 0" style="color: #6c7086; padding: 20px 0; text-align: center">
                 {{ isActive ? '等待日志...' : '暂无运行日志' }}
               </div>
-              <div v-for="(log, idx) in liveLogs" :key="idx" style="display: flex; gap: 8px; padding: 2px 0">
+              <div
+                v-for="(log, idx) in liveLogs"
+                :key="log.id ?? `log-${idx}`"
+                :style="{ display: 'flex', gap: '8px', padding: '2px 0', opacity: log.message.includes('执行中') ? 0.92 : 1 }"
+              >
                 <span style="color: #6c7086; flex-shrink: 0">{{ log.time }}</span>
                 <span
                   style="flex-shrink: 0; min-width: 40px; text-align: center; border-radius: 3px; padding: 0 4px; font-size: 11px; font-weight: 600"
                   :style="{
-                    background: log.level === 'error' ? '#f38ba8' : log.level === 'warn' ? '#fab387' : '#a6e3a1',
+                    background: log.level === 'error' ? '#f38ba8' : log.level === 'warn' ? '#fab387' : log.message.includes('执行中') ? '#89dceb' : '#a6e3a1',
                     color: '#1e1e2e',
                   }"
                 >
-                  {{ log.level === 'error' ? 'ERR' : log.level === 'warn' ? 'WARN' : 'INFO' }}
+                  {{ log.level === 'error' ? 'ERR' : log.level === 'warn' ? 'WARN' : log.message.includes('执行中') ? 'RUN' : 'INFO' }}
                 </span>
-                <span style="color: #89b4fa; flex-shrink: 0" v-if="log.stage">[{{ log.stage }}]</span>
+                <span style="color: #89b4fa; flex-shrink: 0" v-if="log.stage">[{{ stageLabels[log.stage] ?? log.stage }}]</span>
+                <span style="color: #f9e2af; flex-shrink: 0" v-if="log.module">{{ moduleLabels[log.module] ?? log.module }}</span>
                 <span style="color: #cdd6f4; word-break: break-all">{{ log.message }}</span>
               </div>
             </div>
@@ -1897,12 +2161,14 @@ onUnmounted(() => {
 
         <!-- Findings Content: Unified Endpoint Split Layout -->
         <template v-if="activeSubTab !== 'overview' && activeSubTab !== 'host_alive'">
-          <div v-if="endpointList.length > 1" style="display: flex; gap: 16px; min-height: 500px;">
+          <div v-if="showEndpointSidebar" style="display: flex; gap: 16px; min-height: 500px;">
             <!-- Left: Endpoint List -->
             <div style="width: min(300px, 25%); min-width: 200px; flex-shrink: 0; border: 1px solid #f0f0f0; border-radius: 8px; background: #fafafa; overflow: hidden; max-height: 700px; display: flex; flex-direction: column;">
               <div style="padding: 10px 12px; font-size: 13px; font-weight: 600; color: #333; border-bottom: 1px solid #f0f0f0; position: sticky; top: 0; background: #fafafa; z-index: 1;">
-                目标地址
-                <span style="font-weight: 400; color: #999; font-size: 12px; margin-left: 6px">{{ endpointList.length }} 个</span>
+                {{ activeSubTab === 'port_open' ? '扫描主机' : '目标地址' }}
+                <span style="font-weight: 400; color: #999; font-size: 12px; margin-left: 6px">
+                  {{ activeSubTab === 'port_open' ? portServiceHostCount : endpointList.length }} 台
+                </span>
               </div>
               <NInput v-model:value="endpointSearch" placeholder="搜索目标" size="small" style="margin: 8px; border-radius: 4px;" />
               <div style="flex: 1; overflow-y: auto;">
@@ -1922,11 +2188,14 @@ onUnmounted(() => {
                 >
                   <div style="min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="ep.label">
                     <span style="font-weight: 500">{{ ep.host }}</span>
-                    <span v-if="ep.port > 0" style="color: #1890ff; font-weight: 600; margin-left: 2px">:{{ ep.port }}</span>
+                    <span
+                      v-if="ep.port > 0 && activeSubTab !== 'port_open'"
+                      style="color: #1890ff; font-weight: 600; margin-left: 2px"
+                    >:{{ ep.port }}</span>
                   </div>
                   <span style="font-size: 11px; padding: 1px 6px; border-radius: 10px; font-weight: 600; flex-shrink: 0; margin-left: 6px;"
                     :style="{ background: selectedEndpoint === ep.key ? 'rgba(24,144,255,0.15)' : '#eee', color: selectedEndpoint === ep.key ? '#1890ff' : '#888' }"
-                  >{{ ep.count }}</span>
+                  >{{ activeSubTab === 'port_open' ? `${ep.count} 端口` : ep.count }}</span>
                 </div>
               </div>
             </div>
@@ -1941,6 +2210,15 @@ onUnmounted(() => {
                   <NButton size="small" type="primary" @click="() => { findingsPage = 1; fetchFindings(); }">搜索</NButton>
                   <NButton size="small" @click="() => { filterSeverity = null; filterModule = null; filterKeyword = ''; selectedEndpoint = ''; findingsPage = 1; fetchFindings(); }">重置</NButton>
                 </div>
+                <span class="finding-table-hint">
+                  {{
+                    activeSubTab === 'port_open'
+                      ? (portServiceHostCount > 1
+                        ? '按主机查看开放端口与服务（目标列仅显示 IP/域名）'
+                        : '开放端口与服务（同端口已合并；目标列仅显示主机）')
+                      : '点击行查看完整内容'
+                  }}
+                </span>
                 <span style="font-size: 12px; color: #999; margin-left: auto;">共 <b style="color: #333">{{ findingsTotal }}</b> 条</span>
               </div>
               <NDataTable
@@ -1949,12 +2227,14 @@ onUnmounted(() => {
                 :data="filteredByEndpoint"
                 :loading="findingsLoading"
                 :row-key="(row: ScanFinding) => row.id"
+                :row-props="findingRowProps"
                 :pagination="false"
                 :bordered="false"
                 size="small"
                 striped
-                :max-height="600"
-                :scroll-x="800"
+                :max-height="640"
+                :scroll-x="findingTableScrollX"
+                class="findings-result-table"
               />
               <div v-if="findingsTotal > 0" style="display: flex; justify-content: flex-end; margin-top: 12px;">
                 <NPagination
@@ -1996,6 +2276,9 @@ onUnmounted(() => {
                 <NButton size="small" type="primary" @click="() => { findingsPage = 1; fetchFindings(); }">搜索</NButton>
                 <NButton size="small" @click="() => { filterSeverity = null; filterModule = null; filterKeyword = ''; activeSubTab = 'all'; findingsPage = 1; fetchFindings(); }">重置</NButton>
               </div>
+              <span class="finding-table-hint">
+                {{ activeSubTab === 'port_open' ? '端口扫描与服务识别结果（同端口已合并展示）' : '点击行查看完整内容' }}
+              </span>
               <span style="font-size: 13px; color: #999; margin-left: auto;">共 <b style="color: #333">{{ findingsTotal }}</b> 条结果</span>
             </div>
             <NDataTable
@@ -2004,12 +2287,14 @@ onUnmounted(() => {
               :data="mergedFindings"
               :loading="findingsLoading"
               :row-key="(row: ScanFinding) => row.id"
+              :row-props="findingRowProps"
               :pagination="false"
               :bordered="false"
               size="small"
               striped
-              :max-height="600"
-              :scroll-x="950"
+              :max-height="640"
+              :scroll-x="findingTableScrollX"
+              class="findings-result-table"
             />
             <div v-if="findingsTotal > 0" style="display: flex; justify-content: flex-end; margin-top: 12px;">
               <NPagination
@@ -2091,143 +2376,17 @@ onUnmounted(() => {
       </NDrawerContent>
     </NDrawer>
 
-    <!-- Finding Detail Drawer -->
-    <NDrawer v-model:show="showDetail" :width="520" placement="right">
-      <NDrawerContent :title="detailItem?.title ?? '发现详情'" closable>
-        <template v-if="detailItem">
-          <NDescriptions label-placement="left" bordered :column="1" size="small" style="margin-bottom: 16px">
-            <NDescriptionsItem label="目标">
-              {{ cleanTarget(detailItem.target) }}{{ detailItem.port > 0 ? `:${detailItem.port}` : '' }}
-            </NDescriptionsItem>
-            <NDescriptionsItem label="类型">
-              <NTag size="small" :bordered="false" type="info">
-                {{ typeLabels[detailItem.type] ?? detailItem.type }}
-              </NTag>
-            </NDescriptionsItem>
-            <NDescriptionsItem label="等级">
-              <NTag
-                size="small"
-                :bordered="false"
-                :style="`background:${(severityConfig[detailItem.severity] ?? { color: '#999' }).color}18;color:${(severityConfig[detailItem.severity] ?? { color: '#999' }).color}`"
-              >
-                {{ (severityConfig[detailItem.severity] ?? { label: detailItem.severity }).label }}
-              </NTag>
-            </NDescriptionsItem>
-            <NDescriptionsItem label="模块">{{ moduleLabels[detailItem.module_id] ?? detailItem.module_id }}</NDescriptionsItem>
-            <NDescriptionsItem label="置信度">
-              <NSpace align="center" :size="6">
-                <NTag
-                  size="small"
-                  :bordered="false"
-                  :style="`background: ${getConfColor(detailItem.confidence)}15; color: ${getConfColor(detailItem.confidence)}; font-weight: 600`"
-                >
-                  {{ detailItem.confidence }}%
-                </NTag>
-                <span v-if="detailItem.confidence_reason" style="font-size: 11px; color: #888">
-                  {{ detailItem.confidence_reason }}
-                </span>
-              </NSpace>
-            </NDescriptionsItem>
-            <NDescriptionsItem v-if="detailItem.confidence_reason" label="置信度依据">
-              <div
-                style="white-space: pre-wrap; line-height: 1.7; color: #444; font-size: 12px; background: #fafafa; border: 1px solid #ececec; border-radius: 6px; padding: 8px 10px"
-              >
-                {{ detailItem.confidence_reason }}
-              </div>
-            </NDescriptionsItem>
-            <NDescriptionsItem v-if="(detailItem as any).verification_level" label="验证级别">
-              <NTag
-                size="small"
-                :bordered="false"
-                :type="(detailItem as any).verification_level === 'exploit' ? 'error' : 'warning'"
-              >
-                {{ (detailItem as any).verification_level === 'exploit' ? '实际利用' : '原理验证' }}
-              </NTag>
-              <span v-if="(detailItem as any).verification_detail" style="margin-left: 6px; font-size: 11px; color: #888">
-                {{ (detailItem as any).verification_detail }}
-              </span>
-            </NDescriptionsItem>
-            <NDescriptionsItem v-if="detailItem.protocol" label="协议">{{ detailItem.protocol }}</NDescriptionsItem>
-            <NDescriptionsItem label="时间">{{ formatTime(detailItem.created_at) }}</NDescriptionsItem>
-          </NDescriptions>
-
-          <!-- Evidence -->
-          <template v-if="detailItem.evidence">
-            <div style="font-weight: 600; font-size: 13px; margin-bottom: 8px">证据</div>
-            <pre style="padding: 10px; background: #f7f7f7; border-radius: 6px; font-size: 12px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; margin: 0 0 16px; border: 1px solid #e8e8e8; max-height: 200px">{{ detailItem.evidence }}</pre>
-          </template>
-
-          <!-- Description -->
-          <template v-if="detailItem.description">
-            <div style="font-weight: 600; font-size: 13px; margin-bottom: 8px">描述</div>
-            <div style="font-size: 13px; color: #555; margin-bottom: 16px; line-height: 1.6">{{ detailItem.description }}</div>
-          </template>
-
-          <!-- Screenshot -->
-          <template v-if="detailItem.data?.screenshot">
-            <div style="font-weight: 600; font-size: 13px; margin-bottom: 8px">页面截图</div>
-            <div style="border: 1px solid #e8e8e8; border-radius: 6px; overflow: hidden; margin-bottom: 16px">
-              <img
-                :src="`data:image/jpeg;base64,${detailItem.data.screenshot}`"
-                alt="页面截图"
-                style="width: 100%; display: block; cursor: pointer"
-                title="点击查看大图"
-                @click="openScreenshot(detailItem!.data.screenshot)"
-              />
-            </div>
-          </template>
-
-          <!-- Raw Data -->
-          <template v-if="detailItem.data && Object.keys(detailItem.data).length > 0">
-            <div style="font-weight: 600; font-size: 13px; margin-bottom: 8px">原始数据</div>
-            <div style="border: 1px solid #e8e8e8; border-radius: 6px; overflow: hidden">
-              <template v-for="(val, key) in detailItem.data" :key="key">
-                <template v-if="key === 'screenshot' || key === 'body_preview'" />
-                <div v-else-if="key === 'banner'" style="border-bottom: 1px solid #e8e8e8">
-                  <div style="padding: 8px 12px; font-size: 12px; font-weight: 500; color: #333; background: #fafafa">
-                    {{ dataKeyLabels[key as string] ?? key }}
-                  </div>
-                  <pre style="padding: 8px 12px; margin: 0; font-size: 11px; background: #1a1a2e; color: #a8d8ea; overflow-x: auto; white-space: pre-wrap; word-break: break-all; max-height: 300px; line-height: 1.5">{{ val }}</pre>
-                </div>
-                <div v-else style="display: flex; border-bottom: 1px solid #f0f0f0; font-size: 12px">
-                  <div style="width: 120px; flex-shrink: 0; padding: 6px 12px; background: #fafafa; color: #666; font-weight: 500">
-                    {{ dataKeyLabels[key as string] ?? key }}
-                  </div>
-                  <div style="flex: 1; padding: 6px 12px; word-break: break-all; color: #333">
-                    {{ key === 'source' ? (sourceLabels[val as string] ?? val) : key === 'cdn' && val === 'possible_cdn' ? '疑似CDN' : val }}
-                  </div>
-                </div>
-              </template>
-            </div>
-          </template>
-
-          <!-- Convert to Incident -->
-          <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid #e8e8e8">
-            <NSpace vertical :size="8">
-              <NButton
-                type="warning"
-                size="small"
-                :loading="convertingToIncident"
-                style="width: 100%"
-                @click="convertFindingToIncident(detailItem!)"
-              >
-                转为安全事件
-              </NButton>
-              <NButton
-                type="error"
-                size="small"
-                secondary
-                :loading="markingFP"
-                style="width: 100%"
-                @click="handleMarkFP(detailItem!)"
-              >
-                标记误报
-              </NButton>
-            </NSpace>
-          </div>
-        </template>
-      </NDrawerContent>
-    </NDrawer>
+    <ScanFindingDetailDrawer
+      v-model:show="showDetail"
+      :finding="detailItem"
+      :module-label="detailItem ? (moduleLabels[detailItem.module_id] ?? detailItem.module_id) : ''"
+      :converting-to-incident="convertingToIncident"
+      :marking-fp="markingFP"
+      :retesting="!!detailItem && retestingFindingId === detailItem.id"
+      @retest="detailItem && handleRetestFinding(detailItem)"
+      @to-incident="detailItem && convertFindingToIncident(detailItem)"
+      @mark-fp="detailItem && handleMarkFP(detailItem)"
+    />
 
     <!-- All Modules Modal -->
     <NModal v-model:show="showAllModules" preset="card" title="所有扫描模块" :style="{ width: '480px' }">
@@ -2545,5 +2704,60 @@ onUnmounted(() => {
 .severity-chip-count {
   font-weight: 700;
   color: var(--sev-color);
+}
+
+.finding-table-hint {
+  font-size: 12px;
+  color: #8c8c8c;
+}
+
+:deep(.findings-result-table .n-data-table-td) {
+  vertical-align: top;
+  padding-top: 10px !important;
+  padding-bottom: 10px !important;
+}
+
+:deep(.findings-result-table .n-data-table-tr:hover) {
+  background: rgba(24, 144, 255, 0.04);
+}
+
+:deep(.finding-cell-stack) {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 180px;
+  max-width: 480px;
+  padding: 2px 0;
+}
+
+:deep(.finding-cell-title) {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1a1a1a;
+  line-height: 1.5;
+  word-break: break-word;
+  white-space: normal;
+}
+
+:deep(.finding-cell-sub) {
+  font-size: 12px;
+  color: #666;
+  line-height: 1.55;
+  word-break: break-word;
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+:deep(.finding-cell-muted) {
+  color: #ccc;
+}
+
+:deep(.finding-host-cell) {
+  font-weight: 600;
+  font-size: 12px;
+  font-family: 'SF Mono', Consolas, Monaco, monospace;
+  word-break: break-all;
 }
 </style>

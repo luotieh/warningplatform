@@ -156,6 +156,24 @@ func (l *Loader) Reload() error {
 	return l.LoadAll()
 }
 
+// VulnPayloadCategories 漏洞检测模块依赖的数据文库 category。
+var VulnPayloadCategories = []string{
+	"sqli", "xss", "ssrf", "cmdi", "lfi", "ssti", "xxe", "nosqli",
+}
+
+// CategoriesMissingPayloads 返回文库中无 payload 条目的 category。
+func (l *Loader) CategoriesMissingPayloads() []string {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	var missing []string
+	for _, cat := range VulnPayloadCategories {
+		if len(l.payloadsByCategory[cat]) == 0 {
+			missing = append(missing, cat)
+		}
+	}
+	return missing
+}
+
 func (l *Loader) GetPayloads(category string) []model.VulnPayload {
 	l.mu.RLock()
 	defer l.mu.RUnlock()

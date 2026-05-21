@@ -1,6 +1,7 @@
 package scanrunner
 
 import (
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -30,6 +31,8 @@ type TaskProgress struct {
 	Duration       string  `json:"duration"`
 	StagesTotal    int     `json:"stages_total"`
 	StagesDone     int     `json:"stages_done"`
+	ModulesTotal   int     `json:"modules_total"`
+	ModulesDone    int     `json:"modules_done"`
 }
 
 type ProgressTracker struct {
@@ -39,6 +42,7 @@ type ProgressTracker struct {
 	mu            sync.RWMutex
 	currentStage  string
 	currentModule string
+	running       []string
 	stagesTotal   int
 	stagesDone    int
 	modulesTotal  int
@@ -73,12 +77,46 @@ func (pt *ProgressTracker) SetModulesTotal(total int) {
 func (pt *ProgressTracker) SetCurrentStage(name string) {
 	pt.mu.Lock()
 	pt.currentStage = name
+	pt.running = nil
+	pt.currentModule = ""
 	pt.mu.Unlock()
 }
 
 func (pt *ProgressTracker) SetCurrentModule(name string) {
 	pt.mu.Lock()
 	pt.currentModule = name
+	pt.mu.Unlock()
+}
+
+func (pt *ProgressTracker) BeginModule(name string) {
+	if name == "" {
+		return
+	}
+	pt.mu.Lock()
+	for _, m := range pt.running {
+		if m == name {
+			pt.currentModule = strings.Join(pt.running, " · ")
+			pt.mu.Unlock()
+			return
+		}
+	}
+	pt.running = append(pt.running, name)
+	pt.currentModule = strings.Join(pt.running, " · ")
+	pt.mu.Unlock()
+}
+
+func (pt *ProgressTracker) EndModule(name string) {
+	if name == "" {
+		return
+	}
+	pt.mu.Lock()
+	for i, m := range pt.running {
+		if m == name {
+			pt.running = append(pt.running[:i], pt.running[i+1:]...)
+			break
+		}
+	}
+	pt.currentModule = strings.Join(pt.running, " · ")
 	pt.mu.Unlock()
 }
 
@@ -137,6 +175,8 @@ func (pt *ProgressTracker) Get() *TaskProgress {
 		Duration:       time.Since(pt.startTime).Round(time.Millisecond).String(),
 		StagesTotal:    pt.stagesTotal,
 		StagesDone:     pt.stagesDone,
+		ModulesTotal:   pt.modulesTotal,
+		ModulesDone:    done,
 	}
 
 	for _, f := range pt.findings {

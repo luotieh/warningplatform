@@ -7,7 +7,7 @@ import (
 )
 
 var WireSet = wire.NewSet(
-	NewServiceStats,
+	ProvideServiceStats,
 	NewHandlerStats,
 	wire.Bind(new(statsContract.ServiceStats), new(*serviceStats)),
 )

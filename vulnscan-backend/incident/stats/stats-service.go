@@ -18,11 +18,12 @@ import (
 )
 
 type serviceStats struct {
-	db *db.DB
+	db       *db.DB
+	objStore reportObjectStore
 }
 
-func NewServiceStats(database *db.DB) *serviceStats {
-	return &serviceStats{db: database}
+func NewServiceStats(database *db.DB, store reportObjectStore) *serviceStats {
+	return &serviceStats{db: database, objStore: store}
 }
 
 func (s *serviceStats) session() *gorm.DB {
@@ -306,104 +307,88 @@ func (s *serviceStats) ExportBatch(ctx context.Context, ids []string, format str
 		return nil, "", err
 	}
 
-	var buf bytes.Buffer
-	buf.Write([]byte{0xEF, 0xBB, 0xBF})
-	w := csv.NewWriter(&buf)
-
-	header := []string{"事件编号", "事件名称", "等级", "来源", "状态", "资产名称", "隶属单位", "事件类型", "风险评分", "创建时间"}
-	_ = w.Write(header)
-
-	for _, inc := range incidents {
-		assetName := ""
-		unit := ""
-		if inc.AssetDetail != nil {
-			assetName = inc.AssetDetail.AssetName
-			unit = inc.AssetDetail.Unit
-		}
-		incType := ""
-		if inc.EventMetadata != nil {
-			incType = inc.EventMetadata.IncidentType
-		}
-		row := []string{
-			inc.IncidentNo,
-			inc.Name,
-			model.IncidentLevelText[inc.Level],
-			model.IncidentSourceText[inc.Source],
-			model.IncidentStatusText[inc.Status],
-			assetName,
-			unit,
-			incType,
-			fmt.Sprintf("%.1f", inc.RiskScore),
-			inc.CreatedAt.Format("2006-01-02 15:04:05"),
-		}
-		_ = w.Write(row)
+	switch format {
+	case "word", "pdf", "docx":
+		return s.exportBatchReportsZip(ctx, incidents, format)
+	default:
+		return nil, "", fmt.Errorf("不支持的导出格式: %s（请使用 word、docx 或 pdf）", format)
 	}
-	w.Flush()
-
-	filename := fmt.Sprintf("incidents_export_%s.csv", time.Now().Format("20060102150405"))
-	return buf.Bytes(), filename, nil
 }
 
 // ─── ExportSingle ───
 
 func (s *serviceStats) ExportSingle(ctx context.Context, id string, format string) ([]byte, string, error) {
+	switch format {
+	case "word", "pdf", "docx", "json", "":
+		if format == "" {
+			format = "pdf"
+		}
+		return s.ExportIncidentReport(ctx, id, format)
+	default:
+		return nil, "", fmt.Errorf("不支持的导出格式: %s（请使用 word、docx、pdf 或 json）", format)
+	}
+}
+
+func (s *serviceStats) loadIncidentReportBundle(ctx context.Context, id string) (*model.SecurityIncident, []model.IncidentOperationLog, []model.Vulnerability, error) {
 	sess := s.session().WithContext(ctx)
 
 	var incident model.SecurityIncident
 	if err := sess.Preload("AssetDetail").Preload("EventMetadata").
 		First(&incident, "id = ?", id).Error; err != nil {
-		return nil, "", fmt.Errorf("事件不存在: %w", err)
+		return nil, nil, nil, fmt.Errorf("事件不存在")
 	}
 
-	var buf bytes.Buffer
-	buf.Write([]byte{0xEF, 0xBB, 0xBF})
-	w := csv.NewWriter(&buf)
+	var logs []model.IncidentOperationLog
+	_ = sess.Where("incident_id = ?", id).Order("operation_time DESC").Limit(50).Find(&logs).Error
 
-	header := []string{"字段", "值"}
-	_ = w.Write(header)
+	vulns := s.loadRelatedVulns(sess, incident)
+	return &incident, logs, vulns, nil
+}
 
-	_ = w.Write([]string{"事件编号", incident.IncidentNo})
-	_ = w.Write([]string{"事件名称", incident.Name})
-	_ = w.Write([]string{"等级", model.IncidentLevelText[incident.Level]})
-	_ = w.Write([]string{"来源", model.IncidentSourceText[incident.Source]})
-	_ = w.Write([]string{"状态", model.IncidentStatusText[incident.Status]})
-	_ = w.Write([]string{"风险评分", fmt.Sprintf("%.1f", incident.RiskScore)})
-	_ = w.Write([]string{"AI标签", incident.AiTags})
-	_ = w.Write([]string{"AI分类", incident.AiCategory})
-	_ = w.Write([]string{"创建时间", incident.CreatedAt.Format("2006-01-02 15:04:05")})
+func (s *serviceStats) loadRelatedVulns(sess *gorm.DB, incident model.SecurityIncident) []model.Vulnerability {
+	var vulns []model.Vulnerability
+	tx := sess.Model(&model.Vulnerability{}).Order("created_at DESC").Limit(20)
 
-	if incident.AssetDetail != nil {
-		a := incident.AssetDetail
-		_ = w.Write([]string{"资产名称", a.AssetName})
-		_ = w.Write([]string{"系统名称", a.SystemName})
-		_ = w.Write([]string{"域名/IP", a.DomainIP})
-		_ = w.Write([]string{"隶属单位", a.Unit})
-		_ = w.Write([]string{"所属行业", a.Industry})
-		_ = w.Write([]string{"等保等级", a.MLPSLevel})
-		_ = w.Write([]string{"归属地", a.Region})
+	if incident.EventMetadata != nil && incident.EventMetadata.CveId != "" {
+		tx = tx.Where("cve_ids LIKE ?", "%"+incident.EventMetadata.CveId+"%")
+	} else {
+		keyword := ""
+		if incident.AssetDetail != nil {
+			keyword = incident.AssetDetail.DomainIP
+			if keyword == "" {
+				keyword = incident.AssetDetail.AssetName
+			}
+		}
+		if keyword == "" {
+			return nil
+		}
+		tx = tx.Where("title LIKE ? OR target LIKE ?", "%"+keyword+"%", "%"+keyword+"%")
 	}
+	_ = tx.Find(&vulns).Error
+	return vulns
+}
 
-	if incident.EventMetadata != nil {
-		m := incident.EventMetadata
-		_ = w.Write([]string{"事件类型", m.IncidentType})
-		_ = w.Write([]string{"隐患URL", m.IncidentURL})
-		_ = w.Write([]string{"事件描述", m.IncidentDescription})
-		_ = w.Write([]string{"CVE编号", m.CveId})
-		_ = w.Write([]string{"CVSS评分", fmt.Sprintf("%.1f", m.CvssScore)})
-		_ = w.Write([]string{"OWASP分类", m.OwaspCategory})
+func (s *serviceStats) PreviewIncidentReport(ctx context.Context, id string) (*statsContract.IncidentReportData, error) {
+	incident, logs, vulns, err := s.loadIncidentReportBundle(ctx, id)
+	if err != nil {
+		return nil, err
 	}
+	data := buildIncidentReportData(*incident, logs, vulns)
+	s.enrichReportEvidence(ctx, data)
+	return data, nil
+}
 
-	_ = w.Write([]string{"整改方案", incident.RemediationPlan})
-	_ = w.Write([]string{"整改责任人", incident.RemediationAssignee})
-	if incident.RemediationDeadline != nil {
-		_ = w.Write([]string{"整改截止日期", incident.RemediationDeadline.Format("2006-01-02 15:04:05")})
+func (s *serviceStats) ExportIncidentReport(ctx context.Context, id string, format string) ([]byte, string, error) {
+	if format == "" {
+		format = "pdf"
 	}
-	_ = w.Write([]string{"关闭原因", incident.CloseReason})
-
-	w.Flush()
-
-	filename := fmt.Sprintf("incident_%s.csv", incident.IncidentNo)
-	return buf.Bytes(), filename, nil
+	incident, logs, vulns, err := s.loadIncidentReportBundle(ctx, id)
+	if err != nil {
+		return nil, "", err
+	}
+	data := buildIncidentReportData(*incident, logs, vulns)
+	s.enrichReportEvidence(ctx, data)
+	return generateIncidentReport(data, format)
 }
 
 // ─── GetTrendPrediction ───

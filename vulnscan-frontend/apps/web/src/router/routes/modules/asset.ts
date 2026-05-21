@@ -11,6 +11,21 @@ const routes: RouteRecordRaw[] = [
     redirect: '/asset/ledger',
     children: [
       {
+        name: 'AssetDiscovery',
+        path: 'discovery',
+        component: () => import('#/views/asset/discovery/index.vue'),
+        meta: {
+          icon: 'lucide:radar',
+          title: '资产探测',
+          keepAlive: true,
+          perms: [
+            { action: 'create', label: '新建探测' },
+            { action: 'verify', label: '下发核验' },
+            { action: 'import', label: '候选入库' },
+          ],
+        },
+      },
+      {
         name: 'AssetLedger',
         path: 'ledger',
         component: () => import('#/views/asset/ledger/index.vue'),
@@ -55,19 +70,31 @@ const routes: RouteRecordRaw[] = [
         name: 'AssetOrgTag',
         path: 'org-tag',
         component: () => import('#/views/asset/org-tag.vue'),
-        meta: { icon: 'lucide:building-2', title: '单位标签' },
+        meta: {
+          icon: 'lucide:building-2',
+          title: '单位标签',
+          perms: [{ action: 'view', label: '查看' }, { action: 'update', label: '维护' }],
+        },
       },
       {
         name: 'AssetVerifyTasks',
         path: 'verify-tasks',
         component: () => import('#/views/asset/verify-tasks.vue'),
-        meta: { icon: 'lucide:clipboard-check', title: '核验任务' },
+        meta: {
+          icon: 'lucide:clipboard-check',
+          title: '核验任务',
+          perms: [{ action: 'view', label: '查看' }, { action: 'verify', label: '核验' }],
+        },
       },
       {
         name: 'AssetArchive',
         path: 'archive',
         component: () => import('#/views/asset/archive.vue'),
-        meta: { icon: 'lucide:archive', title: '资产归档' },
+        meta: {
+          icon: 'lucide:archive',
+          title: '资产归档',
+          perms: [{ action: 'view', label: '查看' }],
+        },
       },
     ],
   },

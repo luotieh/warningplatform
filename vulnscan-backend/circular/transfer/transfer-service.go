@@ -17,7 +17,8 @@ import (
 )
 
 type serviceTransfer struct {
-	db *db.DB
+	db       *db.DB
+	reporter transferContract.IncidentReportExporter
 }
 
 func NewServiceTransfer(database *db.DB) *serviceTransfer {
@@ -38,7 +39,7 @@ func (s *serviceTransfer) ReceiveIncident(ctx context.Context, req transferContr
 
 	var existing model.Circular
 	if err := sess.WithContext(ctx).Where("custom_code = ?", req.IncidentNo).First(&existing).Error; err == nil {
-		return "", fmt.Errorf("该安全事件已流转，通报编号: %s", existing.Code)
+		return existing.Code, nil
 	}
 
 	defaultTemplate, err := formdesign.ResolveCircularInputTemplate(sess, ctx)
@@ -46,9 +47,10 @@ func (s *serviceTransfer) ReceiveIncident(ctx context.Context, req transferContr
 		return "", err
 	}
 
-	circularData := buildCircularDataFromIncident(req)
 	now := time.Now()
 	circularCode := qulid.GenerateID()
+	circularData := buildCircularDataFromIncident(req)
+	circularData = s.attachIncidentReports(ctx, circularCode, req, circularData)
 
 	unitOrganize := ""
 	if req.AssetInfo != nil {
@@ -71,8 +73,9 @@ func (s *serviceTransfer) ReceiveIncident(ctx context.Context, req transferContr
 		}
 
 		transferRecord := model.CircularTransferRecord{
-			CircularId: circularCode, IncidentNo: req.IncidentNo, SourceSystem: req.SourceSystem,
-			TransferTime: now.Format("2006-01-02 15:04:05"), SourceData: toJSONString(req),
+			CircularId: circularCode, IncidentID: req.IncidentID, IncidentNo: req.IncidentNo,
+			SourceSystem: req.SourceSystem, TransferTime: now.Format("2006-01-02 15:04:05"),
+			SourceData: toJSONString(req),
 		}
 		transferRecord.Id = qulid.GenerateID()
 		transferRecord.CreatedAt = now
@@ -82,7 +85,7 @@ func (s *serviceTransfer) ReceiveIncident(ctx context.Context, req transferContr
 		}
 
 		opLog := model.BuildCircularOperationLog(circularCode, model.CircularOpThirdPartyImport, actor.ID, actor.Name, "安全事件流转成功", "", map[string]interface{}{
-			"incident_no": req.IncidentNo, "incident_name": req.Name, "source_system": req.SourceSystem,
+			"incident_no": req.IncidentNo, "incident_id": req.IncidentID, "incident_name": req.Name, "source_system": req.SourceSystem,
 		})
 		return session.Create(&opLog).Error
 	})
@@ -133,7 +136,8 @@ func (s *serviceTransfer) GetTransferStatus(ctx context.Context, incidentNo stri
 	}
 
 	return &transferContract.TransferStatusResp{
-		IncidentNo: incidentNo, CircularId: circular.Id, CircularCode: circular.Code,
+		IncidentNo: incidentNo, IncidentID: record.IncidentID,
+		CircularId: circular.Id, CircularCode: circular.Code,
 		Status: string(circular.Status), TransferTime: record.TransferTime,
 	}, nil
 }

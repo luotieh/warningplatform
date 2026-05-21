@@ -28,14 +28,9 @@ func (m *PortScanner) Params() []core.ModuleParam {
 		{
 			Key:          "ports",
 			Name:         "端口范围",
-			Type:         "select",
+			Type:         "string",
 			DefaultValue: "top100",
-			Description:  "扫描的端口范围，也可输入自定义范围如 80,443,1-1000",
-			Options: []core.ParamOption{
-				{Value: "top100", Label: "常用100端口"},
-				{Value: "top1000", Label: "常用1000端口"},
-				{Value: "full", Label: "全端口 (1-65535)"},
-			},
+			Description:  "top100 / top1000 / full，或自定义：22,80,443,8000-8100",
 		},
 	}
 }
@@ -44,14 +39,14 @@ func (m *PortScanner) Run(ctx context.Context, targets []*core.Target, config ma
 	start := time.Now()
 
 	ports := parsePorts(config)
-	baseTimeout := parseTimeout(config)
-	concurrency := parseConcurrency(config)
+	baseTimeout := core.PortConnectTimeoutForScan(config, len(ports))
+	concurrency := core.ParseProbeConcurrency(config, 3000)
 
 	result := &core.ModuleResult{ModuleID: m.ID()}
 	var mu sync.Mutex
 	var scanned atomic.Int64
 
-	ac := newAdaptiveController(concurrency, baseTimeout)
+	ac := newAdaptiveController(concurrency, core.MinProbeConcurrencyForPorts(len(ports)))
 
 	for _, target := range targets {
 		select {
@@ -67,15 +62,8 @@ func (m *PortScanner) Run(ctx context.Context, targets []*core.Target, config ma
 		}
 
 		rtt := probeRTT(ip, baseTimeout)
-		dynamicTimeout := baseTimeout
+		dynamicTimeout := core.AdjustPortTimeoutByRTT(rtt, baseTimeout)
 		if rtt > 0 {
-			dynamicTimeout = rtt * 3
-			if dynamicTimeout < 300*time.Millisecond {
-				dynamicTimeout = 300 * time.Millisecond
-			}
-			if dynamicTimeout > baseTimeout {
-				dynamicTimeout = baseTimeout
-			}
 			slog.Debug("[*] 动态超时", "target", ip, "rtt", rtt, "timeout", dynamicTimeout)
 		}
 
@@ -173,14 +161,20 @@ type adaptiveController struct {
 	mu         sync.Mutex
 }
 
-func newAdaptiveController(maxConcurrency int, _ time.Duration) *adaptiveController {
+func newAdaptiveController(maxConcurrency, minConcurrency int) *adaptiveController {
 	if maxConcurrency < 100 {
 		maxConcurrency = 100
+	}
+	if minConcurrency < 100 {
+		minConcurrency = 100
+	}
+	if minConcurrency > maxConcurrency {
+		minConcurrency = maxConcurrency
 	}
 	ac := &adaptiveController{
 		sem:        make(chan struct{}, maxConcurrency),
 		maxConc:    maxConcurrency,
-		minConc:    100,
+		minConc:    minConcurrency,
 		checkEvery: 1000,
 	}
 	ac.curConc.Store(int64(maxConcurrency))
@@ -266,8 +260,8 @@ func (ac *adaptiveController) resizeSem(newSize int) {
 
 func probeRTT(ip string, maxTimeout time.Duration) time.Duration {
 	probeTimeout := maxTimeout
-	if probeTimeout > 2*time.Second {
-		probeTimeout = 2 * time.Second
+	if probeTimeout > time.Second {
+		probeTimeout = time.Second
 	}
 
 	probePorts := []string{"80", "443", "22", "3389"}
@@ -303,22 +297,31 @@ func resolveHost(t *core.Target) string {
 
 // --- 配置解析 ---
 
+// ParsePortsPreset 解析端口配置字符串（预设名或自定义列表，如 22,80,443 或 8000-8100）。
+func ParsePortsPreset(portsStr string) []int {
+	portsStr = strings.TrimSpace(portsStr)
+	if portsStr == "" {
+		return top100Ports()
+	}
+	switch portsStr {
+	case "top100":
+		return top100Ports()
+	case "top1000":
+		return top1000Ports()
+	case "full":
+		return fullPorts()
+	default:
+		return parsePortRange(portsStr)
+	}
+}
+
 func parsePorts(config map[string]interface{}) []int {
 	if config == nil {
 		return top100Ports()
 	}
 
 	if portsStr, ok := config["ports"].(string); ok {
-		switch portsStr {
-		case "top100":
-			return top100Ports()
-		case "top1000":
-			return top1000Ports()
-		case "full":
-			return fullPorts()
-		default:
-			return parsePortRange(portsStr)
-		}
+		return ParsePortsPreset(portsStr)
 	}
 
 	return top100Ports()
@@ -346,35 +349,6 @@ func parsePortRange(s string) []int {
 		return top100Ports()
 	}
 	return ports
-}
-
-func parseTimeout(config map[string]interface{}) time.Duration {
-	if config != nil {
-		if v, ok := config["timeout"].(string); ok {
-			if d, err := time.ParseDuration(v); err == nil {
-				return d
-			}
-		}
-	}
-	return 3 * time.Second
-}
-
-func parseConcurrency(config map[string]interface{}) int {
-	if config != nil {
-		if v, ok := config["concurrency"]; ok {
-			switch n := v.(type) {
-			case float64:
-				return int(n)
-			case int:
-				return n
-			case string:
-				if i, err := strconv.Atoi(n); err == nil {
-					return i
-				}
-			}
-		}
-	}
-	return 3000
 }
 
 func fullPorts() []int {

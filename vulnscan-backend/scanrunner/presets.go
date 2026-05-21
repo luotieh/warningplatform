@@ -16,6 +16,11 @@ type EnginePresetInfo struct {
 }
 
 var enginePresetDefs = map[string]EnginePresetInfo{
+	"auto": {
+		Name:        "auto",
+		Description: "按目标数量自动推导并发与速率（任务 parameters 可覆盖单项）。",
+		Parameters:  map[string]interface{}{},
+	},
 	"conservative": {
 		Name:        "conservative",
 		Description: "降低全局请求速率并关闭 Interactsh OOB，适合脆弱环境或低带宽。",

@@ -7,17 +7,17 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
 
+	"vulnscan-backend/agent"
 	"vulnscan-backend/di"
 )
 
 func main() {
-	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	})))
+	setupLogger()
 
 	go func() {
 		pprofAddr := os.Getenv("PPROF_ADDR")
@@ -73,4 +73,18 @@ func main() {
 	case <-shutdownCtx.Done():
 		slog.Warn("[!] 优雅退出超时，强制退出")
 	}
+}
+
+func setupLogger() {
+	level := slog.LevelInfo
+	if raw := os.Getenv("LOG_LEVEL"); raw != "" {
+		if l, err := agent.ParseLogLevel(raw); err == nil {
+			level = l
+		}
+	}
+	if strings.EqualFold(os.Getenv("LOG_FORMAT"), "json") {
+		slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level})))
+		return
+	}
+	agent.SetupCLILogger(level, os.Stdout)
 }

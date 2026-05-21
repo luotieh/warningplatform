@@ -10,10 +10,11 @@ import (
 // configKeySkipWebModules 写入运行配置，供 ExecuteStageWithOpts 过滤 Web 漏洞类模块（不入库、不传给模块）。
 const configKeySkipWebModules = "engine_skip_web_modules"
 
-// webVulnModuleIDs 无明确 HTTP 服务时默认可跳过的 Web 向漏洞模块（可通过门控关闭）。
+// webVulnModuleIDs 无明确 HTTP 服务时可跳过的 Web 向模块（含合并后的组合模块 ID）。
 var webVulnModuleIDs = map[string]struct{}{
-	"sqli": {}, "xss": {}, "ssrf": {}, "cmdi": {}, "lfi": {}, "ssti": {}, "xxe": {}, "nosqli": {},
-	"jwt_sec": {}, "apisec": {}, "dir_scan": {}, "advanced_vuln": {}, "unauth": {}, "fpenhance": {},
+	"web_vuln_scan": {},
+	"sqli":          {}, "xss": {}, "ssrf": {}, "cmdi": {}, "lfi": {}, "ssti": {}, "xxe": {}, "nosqli": {},
+	"jwt_sec": {}, "apisec": {}, "dir_scan": {}, "advanced_vuln": {}, "fpenhance": {},
 }
 
 func hasHTTPFromStageContext(ctx *StageContext) bool {

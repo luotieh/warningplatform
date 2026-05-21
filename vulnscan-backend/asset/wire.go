@@ -10,6 +10,7 @@ var WireSet = wire.NewSet(
 	NewServiceAsset,
 	NewHandlerAsset,
 	NewEnrichHandler,
+	NewDiscoveryHandler,
 	NewAsset,
 	wire.Bind(new(assetContract.ServiceAsset), new(*serviceAsset)),
 )

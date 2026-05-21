@@ -10,20 +10,30 @@ import (
 )
 
 type Asset struct {
-	handler       *HandlerAsset
-	enrichHandler *EnrichHandler
+	handler          *HandlerAsset
+	enrichHandler    *EnrichHandler
+	discoveryHandler *DiscoveryHandler
 }
 
-func NewAsset(handler *HandlerAsset, enrichHandler *EnrichHandler) *Asset {
-	return &Asset{handler: handler, enrichHandler: enrichHandler}
+func NewAsset(handler *HandlerAsset, enrichHandler *EnrichHandler, discoveryHandler *DiscoveryHandler) *Asset {
+	return &Asset{
+		handler:          handler,
+		enrichHandler:    enrichHandler,
+		discoveryHandler: discoveryHandler,
+	}
 }
 
-// BindScanRunner 在扫描调度器初始化后调用，使信息富化走漏扫引擎。
+// BindScanRunner 在扫描调度器初始化后调用，使信息富化/资产探测走漏扫引擎。
 func (m *Asset) BindScanRunner(session *gorm.DB, sched *scanrunner.Scheduler) {
-	if m == nil || m.enrichHandler == nil {
+	if m == nil {
 		return
 	}
-	m.enrichHandler.BindScanRunner(session, sched)
+	if m.enrichHandler != nil {
+		m.enrichHandler.BindScanRunner(session, sched)
+	}
+	if m.discoveryHandler != nil {
+		m.discoveryHandler.BindScanRunner(session, sched)
+	}
 }
 
 func (m *Asset) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
@@ -58,6 +68,19 @@ func (m *Asset) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
 				{Name: "风险趋势", Path: ":id/risk-trend", Method: "GET", Handler: m.enrichHandler.RiskTrend, Enabled: true},
 				{Name: "风险排名", Path: "risk-ranking", Method: "GET", Handler: m.enrichHandler.RiskRanking, Enabled: true},
 				{Name: "合规报告", Path: "compliance-report", Method: "GET", Handler: m.enrichHandler.ComplianceReport, Enabled: true},
+			},
+		},
+		{
+			Name: "资产探测", Enabled: true, Path: "discovery",
+			Children: []authorize.Route{
+				{Name: "探测任务列表", Path: "probes", Method: "GET", Handler: m.discoveryHandler.ListProbes, Enabled: true},
+				{Name: "创建探测任务", Path: "probes", Method: "POST", Handler: m.discoveryHandler.CreateProbe, Enabled: true},
+				{Name: "探测任务详情", Path: "probes/:id", Method: "GET", Handler: m.discoveryHandler.GetProbe, Enabled: true},
+				{Name: "候选资产列表", Path: "probes/:id/candidates", Method: "GET", Handler: m.discoveryHandler.ListCandidates, Enabled: true},
+				{Name: "同步候选", Path: "probes/:id/sync", Method: "POST", Handler: m.discoveryHandler.SyncCandidates, Enabled: true},
+				{Name: "下发核验", Path: "probes/:id/candidates/verify", Method: "POST", Handler: m.discoveryHandler.VerifyCandidates, Enabled: true},
+				{Name: "驳回候选", Path: "probes/:id/candidates/reject", Method: "POST", Handler: m.discoveryHandler.RejectCandidates, Enabled: true},
+				{Name: "候选入库", Path: "probes/:id/candidates/import", Method: "POST", Handler: m.discoveryHandler.ImportCandidates, Enabled: true},
 			},
 		},
 		{

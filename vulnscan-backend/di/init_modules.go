@@ -16,12 +16,10 @@ import (
 	"vulnscan-backend/intel"
 	"vulnscan-backend/knowledge/datalib"
 	kfp "vulnscan-backend/knowledge/fingerprint"
-	"vulnscan-backend/knowledge/nuclei"
 	"vulnscan-backend/knowledge/poc"
 	"vulnscan-backend/model"
 	"vulnscan-backend/nodeapi"
 	"vulnscan-backend/pkg/clusterconn"
-	"vulnscan-backend/pkg/payload"
 	"vulnscan-backend/scan/module/cyberspace"
 	"vulnscan-backend/scanrunner"
 	"vulnscan-backend/schedule"
@@ -104,13 +102,11 @@ func (h *Handlers) initKnowledgeAPIs(authGroup *gin.RouterGroup, backends *[]aut
 
 	_ = session.AutoMigrate(&model.DataLibrary{}, &model.DataLibraryEntry{})
 
-	h.payloadLoader = payload.NewLoader(session)
-	if err := h.payloadLoader.LoadAll(); err != nil {
-		slog.Warn("[Knowledge] 加载 payload 失败，将使用空加载器", "error", err)
-	}
+	h.Knowledge = scanrunner.NewKnowledgeRegistry(session)
+	scanrunner.SetDefaultKnowledgeRegistry(h.Knowledge)
+	h.payloadLoader = h.Knowledge.Loader
 
-	pocStore := nuclei.NewPocStore(session)
-	pocSvc := poc.NewServicePoc(h.DB, pocStore)
+	pocSvc := poc.NewServicePoc(h.DB, h.Knowledge.Poc)
 	pocHandler := poc.NewHandlerPoc(pocSvc)
 	pocRoutes := poc.NewPoc(pocHandler)
 	*backends = append(*backends, pocRoutes.RoutesWithGroup(authGroup)...)
@@ -123,7 +119,7 @@ func (h *Handlers) initKnowledgeAPIs(authGroup *gin.RouterGroup, backends *[]aut
 	*backends = append(*backends, fpRoutes.RoutesWithGroup(authGroup)...)
 
 	dlSvc := datalib.NewServiceDataLib(h.DB)
-	dlHandler := datalib.NewHandlerDataLib(dlSvc, h.payloadLoader)
+	dlHandler := datalib.NewHandlerDataLib(dlSvc, h.Knowledge)
 	dlRoutes := datalib.NewDataLib(dlHandler)
 	*backends = append(*backends, dlRoutes.RoutesWithGroup(authGroup)...)
 

@@ -56,11 +56,11 @@ func (m *SYNScanner) Run(ctx context.Context, targets []*core.Target, config map
 	result := &core.ModuleResult{ModuleID: m.ID()}
 
 	ports := parsePorts(config)
-	timeout := parseTimeout(config)
-	concurrency := parseConcurrency(config)
+	timeout := core.PortConnectTimeoutForScan(config, len(ports))
+	concurrency := core.ParseProbeConcurrency(config, 3000)
 	rateLimit := parseRateLimit(config)
 
-	if !canUseSYN() {
+	if !core.CanRawSYNScan() {
 		slog.Warn("[!] SYN扫描需要root/管理员权限，回退到高速TCP Connect模式")
 		return m.fastTCPConnect(ctx, targets, ports, timeout, concurrency), nil
 	}
@@ -235,8 +235,8 @@ func (m *SYNScanner) fastTCPConnect(ctx context.Context, targets []*core.Target,
 	sem := make(chan struct{}, concurrency)
 
 	rttProbe := probeRTT(targets, timeout)
-	if rttProbe > 0 && rttProbe*3 < timeout {
-		timeout = rttProbe * 3
+	if adj := core.AdjustPortTimeoutByRTT(rttProbe, timeout); rttProbe > 0 {
+		timeout = adj
 		slog.Info("[*] 动态超时调整", "rtt", rttProbe, "new_timeout", timeout)
 	}
 
@@ -343,15 +343,6 @@ func (s *portResultSet) has(key string) bool {
 	_, ok := s.m[key]
 	s.mu.RUnlock()
 	return ok
-}
-
-func canUseSYN() bool {
-	conn, err := net.ListenPacket("ip4:tcp", "0.0.0.0")
-	if err != nil {
-		return false
-	}
-	conn.Close()
-	return true
 }
 
 func getLocalIP() string {
@@ -463,31 +454,6 @@ func defaultPorts() []int {
 		443, 445, 993, 995, 1433, 1521, 3306, 3389,
 		5432, 5900, 6379, 8080, 8443, 9200, 27017,
 	}
-}
-
-func parseTimeout(config map[string]interface{}) time.Duration {
-	if config != nil {
-		if v, ok := config["timeout"].(string); ok {
-			if d, err := time.ParseDuration(v); err == nil {
-				return d
-			}
-		}
-	}
-	return 2 * time.Second
-}
-
-func parseConcurrency(config map[string]interface{}) int {
-	if config != nil {
-		if v, ok := config["concurrency"]; ok {
-			switch n := v.(type) {
-			case float64:
-				return int(n)
-			case int:
-				return n
-			}
-		}
-	}
-	return 3000
 }
 
 func parseRateLimit(config map[string]interface{}) int {

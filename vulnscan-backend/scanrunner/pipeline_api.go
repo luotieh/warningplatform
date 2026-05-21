@@ -1,6 +1,8 @@
 package scanrunner
 
 import (
+	"strings"
+
 	"vulnscan-backend/scan/core"
 	"vulnscan-backend/template/engine"
 
@@ -39,7 +41,10 @@ func (a *PipelineAPI) RegisterRoutes(g *gin.RouterGroup) {
 }
 
 func (a *PipelineAPI) ListModules(c *gin.Context) {
-	ids := a.factory.AllIDs()
+	ids := PrimaryModuleIDs()
+	if c.Query("legacy") == "1" {
+		ids = a.factory.AllIDs()
+	}
 	var result []ModuleInfo
 	for _, id := range ids {
 		m := a.factory.Build(id)
@@ -55,12 +60,22 @@ func (a *PipelineAPI) ListModules(c *gin.Context) {
 }
 
 func (a *PipelineAPI) ListModuleConfigs(c *gin.Context) {
-	ids := a.factory.AllIDs()
+	ids := PrimaryModuleIDs()
+	if c.Query("legacy") == "1" {
+		ids = a.factory.AllIDs()
+	}
+	if raw := c.Query("module_ids"); raw != "" {
+		ids = strings.Split(raw, ",")
+	}
 	var configs []core.ModuleConfigInfo
 	for _, id := range ids {
 		m := a.factory.Build(id)
 		if m != nil {
-			configs = append(configs, core.GetModuleConfigInfo(m))
+			if c.Query("legacy") == "1" {
+				configs = append(configs, core.GetModuleConfigInfo(m))
+			} else {
+				configs = append(configs, core.GetExposedModuleConfigInfo(m))
+			}
 		}
 	}
 	web.OK(c).Data(configs).Send()

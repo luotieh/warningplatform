@@ -1,4 +1,6 @@
 import { baseRequestClient, requestClient } from '#/api/request';
+import { normalizeMenuGroups } from '#/api/core/menu';
+import { isBackendAccessConfigured } from '#/permissions/access-check';
 
 export namespace AuthApi {
   export interface LoginParams {
@@ -144,13 +146,23 @@ export async function getPermissionApi(appId?: string) {
   });
 }
 
+const menusInflight = new Map<string, Promise<AuthApi.MenuGroup[]>>();
+
 /**
  * 单独拉取当前用户可见菜单（按应用分组）
  *   GET /me/menus?app_id=
  */
 export async function getUserMenusApi(appId?: string) {
+  const key = appId || '__default__';
+  const existing = menusInflight.get(key);
+  if (existing) return existing;
+
   const params = appId ? { app_id: appId } : {};
-  return requestClient.get<AuthApi.MenuGroup[]>('/me/menus', { params });
+  const req = requestClient
+    .get<AuthApi.MenuGroup[]>('/me/menus', { params })
+    .finally(() => menusInflight.delete(key));
+  menusInflight.set(key, req);
+  return req;
 }
 
 /**
@@ -188,12 +200,21 @@ export async function getAccessCodesApi() {
       }
     };
 
-    for (const group of menuGroups || []) {
-      if (group?.menus) walk(group.menus);
+    for (const group of normalizeMenuGroups(menuGroups)) {
+      if (group.menus?.length) walk(group.menus);
     }
 
     return [...codes];
-  } catch {
+  } catch (err: unknown) {
+    const status = (err as { response?: { status?: number } })?.response?.status;
+    if (status === 403) {
+      console.error('[AccessCodes] 无权拉取权限码（/me/profile 或 /me/menus）');
+      throw err;
+    }
+    if (isBackendAccessConfigured()) {
+      console.error('[AccessCodes] IAM 接口不可用，后端权限模式下拒绝放行');
+      throw err;
+    }
     console.warn('[AccessCodes] IAM 接口不可用，返回空权限码');
     return [];
   }

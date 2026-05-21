@@ -162,7 +162,7 @@ export async function getNotificationList(params?: any) {
 export function getNotificationDetail(id: string) { return requestClient.get<any>(`/me/notifications/${id}`); }
 export function deleteNotification(id: string) { return requestClient.delete(`/notifications/${id}`).catch(() => {}); }
 export function markNotificationRead(id: string) { return requestClient.post(`/notifications/${id}/read`); }
-export function markAllNotificationsRead() { return requestClient.post('/notifications/read-all'); }
+export function markAllNotificationsRead() { return requestClient.post('/notifications/read', { all: true }); }
 export async function getUnreadCount(): Promise<{ count: number }> {
   const data = await requestClient.get<any>('/me/unread-count');
   return { count: data?.total ?? data?.count ?? 0 };

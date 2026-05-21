@@ -196,7 +196,7 @@ func (e *Executor) resolveModules(profile string, config map[string]interface{})
 		return []core.ScanModule{
 			sqli.New(e.loader),
 			xss.New(e.loader),
-			weakpass.New(),
+			weakpass.New(nil),
 			ssrf.New("", e.loader),
 		}
 	case "recon":
@@ -223,7 +223,7 @@ func (e *Executor) resolveModules(profile string, config map[string]interface{})
 			dirscan.New(),
 			sqli.New(e.loader),
 			xss.New(e.loader),
-			weakpass.New(),
+			weakpass.New(nil),
 			ssrf.New("", e.loader),
 		}
 	}

@@ -1,7 +1,9 @@
 <script lang="ts" setup>
 import { h, onMounted, ref, computed } from 'vue';
+import type { DataTableRowKey } from 'naive-ui';
+
 import {
-  NButton, NCard, NDataTable, NInput, NSelect, NSpace, NTag, NPopconfirm,
+  NButton, NCard, NDataTable, NDropdown, NInput, NSelect, NSpace, NTag, NPopconfirm,
   NModal, NForm, NFormItem, NDatePicker, NInputNumber, NTabs, NTabPane,
   useMessage,
 } from 'naive-ui';
@@ -10,8 +12,18 @@ import {
   getIncidentList, deleteIncident, aiPreAudit, createIncident,
   type SecurityIncident, type CreateIncidentReq,
 } from '#/api/incident';
+import {
+  downloadBatchIncidentExport,
+  downloadOneIncidentExport,
+  type IncidentExportFormat,
+} from '../incident-export';
+import { usePerm } from '#/composables/usePerm';
+import { useRoutePerm } from '#/composables/use-route-perm';
 
 defineOptions({ name: 'IncidentList' });
+
+const { can } = usePerm();
+const { perm } = useRoutePerm('/incident/list');
 
 const router = useRouter();
 const message = useMessage();
@@ -24,6 +36,8 @@ const keyword = ref('');
 const statusFilter = ref<number | null>(null);
 const levelFilter = ref<number | null>(null);
 const showCreate = ref(false);
+const checkedRowKeys = ref<DataTableRowKey[]>([]);
+const exporting = ref(false);
 
 const defaultForm = (): CreateIncidentReq => ({
   name: '',
@@ -72,7 +86,42 @@ const industryOptions = [
   { label: '其他', value: '其他' },
 ];
 
+const exportMenuOptions = [
+  { label: '导出 Word (.docx)', key: 'docx' },
+  { label: '导出 PDF', key: 'pdf' },
+];
+
+async function handleBatchExport(format: IncidentExportFormat) {
+  const ids = checkedRowKeys.value.map(String);
+  if (!ids.length) {
+    message.warning('请先勾选要导出的事件');
+    return;
+  }
+  exporting.value = true;
+  try {
+    await downloadBatchIncidentExport(ids, format);
+    message.success('导出完成');
+  } catch (e: any) {
+    message.error(e?.message || '导出失败');
+  } finally {
+    exporting.value = false;
+  }
+}
+
+async function handleRowExport(row: SecurityIncident, format: IncidentExportFormat) {
+  exporting.value = true;
+  try {
+    await downloadOneIncidentExport(row.id, format, row.incident_no);
+    message.success('导出完成');
+  } catch (e: any) {
+    message.error(e?.message || '导出失败');
+  } finally {
+    exporting.value = false;
+  }
+}
+
 const columns = computed(() => [
+  { type: 'selection' as const },
   { title: '事件编号', key: 'incident_no', width: 160, ellipsis: { tooltip: true } },
   { title: '事件名称', key: 'name', minWidth: 200, render: (row: SecurityIncident) => h('a', { style: 'color:#2080f0;cursor:pointer', onClick: () => router.push(`/incident/list/${row.id}`) }, row.name) },
   { title: '级别', key: 'level', width: 80, align: 'center' as const, render: (row: SecurityIncident) => h('span', { style: `padding:2px 8px;border-radius:4px;font-size:12px;font-weight:600;color:#fff;background:${levelColors[row.level] ?? '#999'}` }, levelLabels[row.level] ?? '-') },
@@ -80,10 +129,21 @@ const columns = computed(() => [
   { title: 'AI预审', key: 'ai_pre_status', width: 90, render: (row: SecurityIncident) => h(NTag, { size: 'small', type: row.ai_pre_status === 1 ? 'success' : 'default', bordered: false }, () => row.ai_pre_status === 1 ? '已预审' : '未预审') },
   { title: 'SLA期限', key: 'sla_deadline', width: 170, render: (row: SecurityIncident) => { if (!row.sla_deadline) return '-'; const overdue = new Date(row.sla_deadline) < new Date(); return h('span', { style: overdue ? 'color:#d03050;font-weight:600' : '' }, row.sla_deadline); } },
   { title: '创建时间', key: 'created_at', width: 170 },
-  { title: '操作', key: 'actions', width: 200, fixed: 'right' as const, render: (row: SecurityIncident) => h(NSpace, { size: 4 }, () => {
+  { title: '操作', key: 'actions', width: 260, fixed: 'right' as const, render: (row: SecurityIncident) => h(NSpace, { size: 4 }, () => {
     const items: any[] = [h(NButton, { size: 'tiny', type: 'info', text: true, onClick: () => router.push(`/incident/list/${row.id}`) }, () => '详情')];
-    if (row.status === 1 || row.status === 3) items.push(h(NButton, { size: 'tiny', type: 'primary', text: true, onClick: () => handleAiAudit(row.id) }, () => 'AI预审'));
-    items.push(h(NPopconfirm, { onPositiveClick: () => handleDelete(row.id) }, { trigger: () => h(NButton, { size: 'tiny', type: 'error', text: true }, () => '删除'), default: () => '确定删除？' }));
+    if (can(perm('export'))) {
+      items.push(h(NDropdown, {
+        trigger: 'click',
+        options: exportMenuOptions,
+        onSelect: (key: string) => handleRowExport(row, key as IncidentExportFormat),
+      }, { default: () => h(NButton, { size: 'tiny', text: true, disabled: exporting.value }, () => '导出') }));
+    }
+    if ((row.status === 1 || row.status === 3) && can(perm('ai-audit'))) {
+      items.push(h(NButton, { size: 'tiny', type: 'primary', text: true, onClick: () => handleAiAudit(row.id) }, () => 'AI预审'));
+    }
+    if (can(perm('delete'))) {
+      items.push(h(NPopconfirm, { onPositiveClick: () => handleDelete(row.id) }, { trigger: () => h(NButton, { size: 'tiny', type: 'error', text: true }, () => '删除'), default: () => '确定删除？' }));
+    }
     return items;
   }) },
 ]);
@@ -134,10 +194,29 @@ onMounted(fetchData);
           <NSelect v-model:value="levelFilter" :options="levelOptions" placeholder="级别" size="small" style="width:100px" clearable @update:value="()=>{page=1;fetchData()}" />
           <NInput v-model:value="keyword" placeholder="搜索事件..." size="small" clearable style="width:200px" @keyup.enter="()=>{page=1;fetchData()}" @clear="()=>{page=1;fetchData()}" />
           <NButton size="small" type="primary" @click="()=>{page=1;fetchData()}">搜索</NButton>
-          <NButton size="small" type="primary" @click="openCreate">新建事件</NButton>
+          <NDropdown
+            v-if="can(perm('export'))"
+            trigger="click"
+            :options="exportMenuOptions"
+            @select="(key: string) => handleBatchExport(key as IncidentExportFormat)"
+          >
+            <NButton size="small" :loading="exporting" :disabled="!checkedRowKeys.length">
+              批量导出
+            </NButton>
+          </NDropdown>
+          <NButton v-perm="perm('create')" size="small" type="primary" @click="openCreate">新建事件</NButton>
         </NSpace>
       </template>
-      <NDataTable :columns="columns" :data="data" :loading="loading" :bordered="false" size="small" striped :scroll-x="1200"
+      <NDataTable
+        v-model:checked-row-keys="checkedRowKeys"
+        :columns="columns"
+        :data="data"
+        :loading="loading"
+        :bordered="false"
+        size="small"
+        striped
+        :scroll-x="1280"
+        :row-key="(row: SecurityIncident) => row.id"
         :pagination="{ page, pageSize, itemCount: total, showSizePicker: true, pageSizes: [20,50,100], onUpdatePage:(p:number)=>{page=p;fetchData()}, onUpdatePageSize:(s:number)=>{pageSize=s;page=1;fetchData()} }" />
     </NCard>
 

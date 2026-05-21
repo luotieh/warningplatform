@@ -9,7 +9,7 @@ export interface IamMenu {
   id: string;
   app: string;
   parent_id: string;
-  menu_type: string;
+  menu_type: string | number;
   title: string;
   name: string;
   path: string;
@@ -17,7 +17,9 @@ export interface IamMenu {
   redirect?: string;
   icon?: string;
   sort: number;
-  show_link: boolean;
+  show_link?: boolean;
+  hide_in_menu?: boolean;
+  unique_value?: string;
   children?: IamMenu[];
   buttons?: IamMenu[];
 }
@@ -28,6 +30,86 @@ export interface IamAppMenuGroup {
   menus: IamMenu[];
 }
 
+function isButtonMenu(menu: IamMenu): boolean {
+  const t = menu.menu_type;
+  return t === 4 || t === '4';
+}
+
+function shouldHideInMenu(menu: IamMenu): boolean {
+  const t = menu.menu_type;
+  // 额外页面、显式 hide_in_menu 不进入侧栏
+  if (t === 3 || t === '3') return true;
+  if (menu.hide_in_menu === true) return true;
+  // 纯重定向兼容项（无组件）不展示
+  if (menu.redirect && !menu.component) return true;
+  // IAM 同步时 show_link 缺省为 false，不能据此隐藏常规菜单(1/2)
+  if (t === 1 || t === '1' || t === 2 || t === '2') return false;
+  return menu.show_link === false;
+}
+
+/** 可用于侧栏展示的菜单路由数量 */
+export function countVisibleMenuRoutes(
+  routes: RouteRecordStringComponent[],
+): number {
+  let count = 0;
+  const walk = (list: RouteRecordStringComponent[]) => {
+    for (const route of list) {
+      if (!route.meta?.hideInMenu) count += 1;
+      if (route.children?.length) walk(route.children);
+    }
+  };
+  walk(routes);
+  return count;
+}
+
+/**
+ * 兼容 IAM 多种 /me/menus 响应结构
+ */
+export function normalizeMenuGroups(raw: unknown): IamAppMenuGroup[] {
+  if (!raw) return [];
+
+  if (Array.isArray(raw)) {
+    if (raw.length === 0) return [];
+    const first = raw[0] as Record<string, unknown>;
+    if (Array.isArray(first.menus)) {
+      return raw.map((g: Record<string, unknown>) => ({
+        app_id: String(g.app_id ?? g.appId ?? g.AppID ?? ''),
+        app_name: String(g.app_name ?? g.appName ?? ''),
+        menus: (g.menus as IamMenu[]) ?? [],
+      }));
+    }
+    if (first.path || first.name || first.title) {
+      return [{ app_id: '', app_name: '', menus: raw as IamMenu[] }];
+    }
+    return [];
+  }
+
+  if (typeof raw === 'object') {
+    const o = raw as Record<string, unknown>;
+    if (Array.isArray(o.menus)) {
+      return [
+        {
+          app_id: String(o.app_id ?? o.appId ?? ''),
+          app_name: String(o.app_name ?? o.appName ?? ''),
+          menus: o.menus as IamMenu[],
+        },
+      ];
+    }
+    if (Array.isArray(o.applications)) {
+      return (o.applications as Record<string, unknown>[]).map((app) => ({
+        app_id: String(app.id ?? app.app_id ?? app.client_id ?? ''),
+        app_name: String(app.app_name ?? app.display_name ?? app.name ?? ''),
+        menus: (app.menus as IamMenu[]) ?? [],
+      }));
+    }
+    if (Array.isArray(o.data)) {
+      return normalizeMenuGroups(o.data);
+    }
+  }
+
+  return [];
+}
+
 /**
  * menu_type:
  *  "1" = 菜单（常规）
@@ -35,7 +117,20 @@ export interface IamAppMenuGroup {
  *  "3" = 额外页面（不在菜单中显示）
  *  "4" = 按钮权限
  */
-function transformMenuToRoute(menu: IamMenu): RouteRecordStringComponent {
+function transformMenuToRoute(menu: IamMenu): RouteRecordStringComponent | null {
+  if (isButtonMenu(menu)) return null;
+
+  const routeChildren: IamMenu[] = [];
+  const buttons: IamMenu[] = [...(menu.buttons ?? [])];
+
+  for (const child of menu.children ?? []) {
+    if (isButtonMenu(child)) {
+      buttons.push(child);
+    } else {
+      routeChildren.push(child);
+    }
+  }
+
   const route: RouteRecordStringComponent = {
     name: menu.name,
     path: menu.path,
@@ -44,25 +139,30 @@ function transformMenuToRoute(menu: IamMenu): RouteRecordStringComponent {
       title: menu.title || menu.name,
       icon: menu.icon,
       order: menu.sort,
-      hideInMenu: !menu.show_link,
+      hideInMenu: shouldHideInMenu(menu),
     },
   };
 
-  if (menu.menu_type === '2' && menu.path) {
-    (route.meta as any).iframeSrc = menu.path;
+  const menuType = menu.menu_type;
+  if ((menuType === 2 || menuType === '2') && menu.path) {
+    (route.meta as Record<string, unknown>).iframeSrc = menu.path;
   }
 
   if (menu.redirect) {
     route.redirect = menu.redirect;
   }
 
-  if (menu.children && menu.children.length > 0) {
-    route.children = menu.children.map(transformMenuToRoute);
+  if (routeChildren.length > 0) {
+    route.children = routeChildren
+      .map(transformMenuToRoute)
+      .filter((r): r is RouteRecordStringComponent => r != null);
   }
 
-  if (menu.buttons && menu.buttons.length > 0) {
-    const authority = menu.buttons.map((b) => b.name || b.id);
-    (route.meta as any).authority = authority;
+  if (buttons.length > 0) {
+    const authority = buttons
+      .map((b) => b.unique_value || b.name || b.id)
+      .filter(Boolean);
+    (route.meta as Record<string, unknown>).authority = authority;
   }
 
   return route;
@@ -70,19 +170,13 @@ function transformMenuToRoute(menu: IamMenu): RouteRecordStringComponent {
 
 /**
  * 获取菜单（路由）列表
- *
- * @param appId 可选的应用过滤；不传则返回当前用户在所有应用下的菜单合集
- *              传入则只返回指定应用的菜单
- * @param reconcile 拉到 menu groups 后回调，调用方可以根据"哪些 app_id 有菜单"
- *                  纠偏 currentAppId，并返回最终用于过滤的 appId
  */
 export async function getAllMenusApi(
   appId?: string,
   reconcile?: (idsWithMenus: string[]) => string | undefined,
 ): Promise<RouteRecordStringComponent[]> {
-  // 仅请求菜单接口，避免拉整个 PermissionBundle
   const raw = await getUserMenusApi(appId);
-  const menuGroups: IamAppMenuGroup[] = (raw as unknown as IamAppMenuGroup[]) ?? [];
+  const menuGroups = normalizeMenuGroups(raw);
 
   let effectiveAppId = appId;
   if (reconcile) {
@@ -97,11 +191,15 @@ export async function getAllMenusApi(
 
   const allMenus: IamMenu[] = [];
   for (const group of menuGroups) {
-    if (effectiveAppId && group.app_id !== effectiveAppId) continue;
-    if (group.menus) {
+    if (effectiveAppId && group.app_id && group.app_id !== effectiveAppId) {
+      continue;
+    }
+    if (group.menus?.length) {
       allMenus.push(...group.menus);
     }
   }
 
-  return allMenus.map(transformMenuToRoute);
+  return allMenus
+    .map(transformMenuToRoute)
+    .filter((r): r is RouteRecordStringComponent => r != null);
 }

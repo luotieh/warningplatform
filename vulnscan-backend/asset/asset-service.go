@@ -113,7 +113,11 @@ func (s *serviceAsset) Create(item *model.Asset) error {
 	if err := s.session().Create(item).Error; err != nil {
 		return err
 	}
-	s.ensureVerifyTasks([]model.Asset{*item}, item.CreatedBy, string(model.DataSourceManual))
+	source := string(item.DataSource)
+	if source == "" {
+		source = string(model.DataSourceManual)
+	}
+	s.ensureVerifyTasks([]model.Asset{*item}, item.CreatedBy, source)
 	return nil
 }
 

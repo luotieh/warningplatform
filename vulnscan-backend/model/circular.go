@@ -160,6 +160,7 @@ func CreateCircularOperationLog(session *gorm.DB, log CircularOperationLog) erro
 type CircularTransferRecord struct {
 	FullModel
 	CircularId   string `json:"circular_id" gorm:"type:varchar(70);index;comment:关联通报ID"`
+	IncidentID   string `json:"incident_id" gorm:"type:varchar(36);index;comment:安全事件ID"`
 	IncidentNo   string `json:"incident_no" gorm:"type:varchar(100);uniqueIndex;comment:安全事件编号"`
 	SourceSystem string `json:"source_system" gorm:"type:varchar(100);comment:来源系统标识"`
 	TransferTime string `json:"transfer_time" gorm:"type:varchar(70);comment:流转时间"`

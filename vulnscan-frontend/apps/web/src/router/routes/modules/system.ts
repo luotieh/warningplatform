@@ -17,6 +17,7 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '系统设置',
           icon: 'lucide:sliders-horizontal',
+          perms: [{ action: 'view', label: '查看' }, { action: 'update', label: '保存' }],
         },
       },
       {
@@ -26,6 +27,11 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '数据字典',
           icon: 'lucide:list-tree',
+          perms: [
+            { action: 'create', label: '新建' },
+            { action: 'update', label: '编辑' },
+            { action: 'delete', label: '删除' },
+          ],
         },
       },
       {
@@ -35,6 +41,7 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '系统初始化',
           icon: 'lucide:database',
+          perms: [{ action: 'sync-menu', label: '同步菜单到IAM' }],
         },
       },
     ],

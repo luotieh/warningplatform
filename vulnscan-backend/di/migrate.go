@@ -55,6 +55,8 @@ func (h *Handlers) autoMigrate() {
 		&model.AssetVerify{},
 		&model.AssetVerifyTask{},
 		&model.AssetVerifyOplog{},
+		&model.AssetDiscoveryProbe{},
+		&model.AssetDiscoveryCandidate{},
 		&model.AssetArchiveSnapshot{},
 		&model.ComplianceTemplate{},
 		&model.ComplianceTemplateItem{},

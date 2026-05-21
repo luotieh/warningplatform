@@ -3,6 +3,7 @@ package unauth
 import (
 	"bufio"
 	"context"
+	"crypto/md5"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -84,10 +85,10 @@ func (m *UnauthScanner) Run(ctx context.Context, targets []*core.Target, config 
 			host = t.IP
 		}
 
-		// 首先尝试通过服务名称检测
+		// 首先尝试通过服务名称检测（Service / Protocol / Extra.service）
 		serviceDetected := false
-		if t.Service != "" {
-			if checker, ok := serviceCheckers[strings.ToLower(t.Service)]; ok {
+		if svc := targetServiceName(t); svc != "" {
+			if checker, ok := serviceCheckers[svc]; ok {
 				select {
 				case <-ctx.Done():
 					result.Duration = time.Since(start)
@@ -193,7 +194,7 @@ func (m *UnauthScanner) Run(ctx context.Context, targets []*core.Target, config 
 func isServiceLikelyOnPort(serviceName string, port int) bool {
 	switch serviceName {
 	case "redis":
-		return port >= 6000 && port <= 7000
+		return port == 6379 || port == 6380 || (port >= 6370 && port <= 6390)
 	case "mongodb":
 		return port >= 27000 && port <= 28000
 	case "elasticsearch":
@@ -277,97 +278,242 @@ func isLikelyUnauthService(serviceName string) bool {
 		serviceName == "zookeeper"
 }
 
-func checkRedis(ctx context.Context, host string, port int) *core.Finding {
-	addr := fmt.Sprintf("%s:%d", host, port)
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
-	var dialer net.Dialer
-	conn, err := dialer.DialContext(ctx, "tcp", addr)
-	if err != nil {
-		return nil
+func targetServiceName(t *core.Target) string {
+	if t == nil {
+		return ""
 	}
-	defer conn.Close()
-
-	conn.SetDeadline(time.Now().Add(5 * time.Second))
-
-	_, err = conn.Write([]byte("INFO\r\n"))
-	if err != nil {
-		return nil
+	if s := strings.TrimSpace(t.Service); s != "" {
+		return strings.ToLower(s)
 	}
-
-	reader := bufio.NewReader(conn)
-	resp, err := reader.ReadString('\n')
-	if err != nil {
-		return nil
-	}
-
-	if strings.Contains(resp, "redis_version") || strings.HasPrefix(resp, "$") || strings.HasPrefix(resp, "+") {
-		version := extractRedisVersion(resp, reader)
-		return &core.Finding{
-			ModuleID: "unauth",
-			Type:     "unauthorized_access",
-			Title:    fmt.Sprintf("Redis 未授权访问 - %s:%d", host, port),
-			Description: fmt.Sprintf(
-				"Redis 服务 (%s:%d) 允许未授权访问，攻击者可直接执行任意命令。版本: %s",
-				host, port, version,
-			),
-			Severity:   "critical",
-			Confidence: 95,
-			Timestamp:  time.Now(),
-			Data: map[string]string{
-				"service": "redis",
-				"version": version,
-				"port":    fmt.Sprintf("%d", port),
-			},
+	if s := strings.TrimSpace(t.Protocol); s != "" {
+		lower := strings.ToLower(s)
+		if lower != "tcp" && lower != "udp" {
+			return lower
 		}
 	}
-
-	return nil
+	if t.Extra != nil {
+		if s := strings.TrimSpace(t.Extra["service"]); s != "" {
+			return strings.ToLower(s)
+		}
+	}
+	return ""
 }
 
-func checkMySQL(ctx context.Context, host string, port int) *core.Finding {
-	addr := fmt.Sprintf("%s:%d", host, port)
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
-	var dialer net.Dialer
-	conn, err := dialer.DialContext(ctx, "tcp", addr)
-	if err != nil {
+func checkRedis(ctx context.Context, host string, port int) *core.Finding {
+	ok, version, evidence := probeRedisUnauth(ctx, host, port)
+	if !ok {
 		return nil
 	}
-	defer conn.Close()
-
-	conn.SetDeadline(time.Now().Add(5 * time.Second))
-
-	buf := make([]byte, 4096)
-	n, err := conn.Read(buf)
-	if err != nil || n < 5 {
-		return nil
-	}
-
-	if buf[4] != 0x0a {
-		return nil
-	}
-
-	version := extractMySQLVersion(buf[:n])
 	return &core.Finding{
 		ModuleID: "unauth",
 		Type:     "unauthorized_access",
-		Title:    fmt.Sprintf("MySQL 未授权访问（空密码）- %s:%d", host, port),
+		Title:    fmt.Sprintf("Redis 未授权访问 - %s:%d", host, port),
 		Description: fmt.Sprintf(
-			"MySQL 服务 (%s:%d) 允许空密码登录，攻击者可直接访问数据库。版本: %s",
+			"Redis 服务 (%s:%d) 在未认证情况下响应 PING/INFO，攻击者可直接执行任意命令。版本: %s",
 			host, port, version,
 		),
-		Severity:   "critical",
-		Confidence: 85,
-		Timestamp:  time.Now(),
+		Severity:           "critical",
+		Confidence:         95,
+		ConfidenceReason:   "PING 返回 PONG 或 INFO 返回 redis_version",
+		Evidence:           evidence,
+		VerificationLevel:  core.VerifyExploit,
+		VerificationDetail: "已发送 Redis 协议 PING/INFO 并读取响应",
+		Timestamp:          time.Now(),
 		Data: map[string]string{
-			"service": "mysql",
+			"service": "redis",
 			"version": version,
 			"port":    fmt.Sprintf("%d", port),
+			"check":   "PING/INFO",
+			"proof":   truncateEvidence(evidence, 512),
 		},
 	}
+}
+
+// probeRedisUnauth 探测 Redis 是否无需认证即可执行命令。
+func probeRedisUnauth(ctx context.Context, host string, port int) (ok bool, version, evidence string) {
+	addr := fmt.Sprintf("%s:%d", host, port)
+	ctx, cancel := context.WithTimeout(ctx, 6*time.Second)
+	defer cancel()
+
+	var dialer net.Dialer
+	conn, err := dialer.DialContext(ctx, "tcp", addr)
+	if err != nil {
+		return false, "", ""
+	}
+	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(6 * time.Second))
+
+	reader := bufio.NewReader(conn)
+	var lines []string
+
+	_, _ = conn.Write([]byte("PING\r\n"))
+	if line, err := reader.ReadString('\n'); err == nil {
+		lines = append(lines, strings.TrimSpace(line))
+		if strings.Contains(line, "+PONG") {
+			ok = true
+		}
+	}
+
+	_, _ = conn.Write([]byte("INFO server\r\n"))
+	infoLines, ver := readRedisInfoBlock(reader)
+	if len(infoLines) > 0 {
+		lines = append(lines, infoLines...)
+		if ver != "" && ver != "unknown" {
+			version = ver
+			ok = true
+		}
+	}
+	if !ok {
+		// 部分实例拒绝 PING 但仍对 INFO 返回版本（或 -NOAUTH 后仍可读）
+		for _, l := range lines {
+			if strings.Contains(l, "redis_version") {
+				ok = true
+				break
+			}
+		}
+	}
+	if version == "" {
+		version = "unknown"
+	}
+	if len(lines) > 0 {
+		evidence = strings.Join(lines, "\n")
+	}
+	return ok, version, evidence
+}
+
+func readRedisInfoBlock(r *bufio.Reader) ([]string, string) {
+	var lines []string
+	version := ""
+	for i := 0; i < 40; i++ {
+		line, err := r.ReadString('\n')
+		if err != nil {
+			break
+		}
+		line = strings.TrimRight(line, "\r\n")
+		if line == "" {
+			continue
+		}
+		lines = append(lines, line)
+		if strings.Contains(line, "redis_version") {
+			parts := strings.SplitN(line, ":", 2)
+			if len(parts) == 2 {
+				version = strings.TrimSpace(parts[1])
+			}
+		}
+		if strings.HasPrefix(line, "-") || strings.HasPrefix(line, "+") {
+			if i > 0 {
+				break
+			}
+		}
+	}
+	return lines, version
+}
+
+func truncateEvidence(s string, max int) string {
+	s = strings.TrimSpace(s)
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "..."
+}
+
+func checkMySQL(ctx context.Context, host string, port int) *core.Finding {
+	for _, user := range []string{"root", "mysql", ""} {
+		ok, version, evidence := probeMySQLEmptyAuth(ctx, host, port, user)
+		if !ok {
+			continue
+		}
+		userLabel := user
+		if userLabel == "" {
+			userLabel = "(空用户名)"
+		}
+		return &core.Finding{
+			ModuleID: "unauth",
+			Type:     "unauthorized_access",
+			Title:    fmt.Sprintf("MySQL 弱口令/空密码 - %s:%d", host, port),
+			Description: fmt.Sprintf(
+				"MySQL 服务 (%s:%d) 用户 %s 可使用空密码登录。版本: %s",
+				host, port, userLabel, version,
+			),
+			Severity:           "critical",
+			Confidence:         92,
+			ConfidenceReason:   "空密码认证握手返回 OK",
+			Evidence:           evidence,
+			VerificationLevel:  core.VerifyExploit,
+			VerificationDetail: fmt.Sprintf("已尝试用户 %s 空密码登录", userLabel),
+			Timestamp:          time.Now(),
+			Data: map[string]string{
+				"service":  "mysql",
+				"version":  version,
+				"port":     fmt.Sprintf("%d", port),
+				"username": user,
+				"password": "",
+				"check":    "mysql_native_password",
+				"proof":    truncateEvidence(evidence, 512),
+			},
+		}
+	}
+	return nil
+}
+
+func probeMySQLEmptyAuth(ctx context.Context, host string, port int, user string) (bool, string, string) {
+	addr := fmt.Sprintf("%s:%d", host, port)
+	ctx, cancel := context.WithTimeout(ctx, 6*time.Second)
+	defer cancel()
+
+	var dialer net.Dialer
+	conn, err := dialer.DialContext(ctx, "tcp", addr)
+	if err != nil {
+		return false, "", ""
+	}
+	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(6 * time.Second))
+
+	buf := make([]byte, 4096)
+	n, err := conn.Read(buf)
+	if err != nil || n < 10 || buf[4] != 0x0a {
+		return false, "", ""
+	}
+
+	version := extractMySQLVersion(buf[:n])
+	if version == "unknown" {
+		return false, "", ""
+	}
+
+	verEnd := 5
+	for verEnd < n && buf[verEnd] != 0 {
+		verEnd++
+	}
+	salt1End := verEnd + 5
+	if salt1End+8 > n {
+		return false, "", ""
+	}
+	salt1 := buf[salt1End : salt1End+8]
+	capOffset := salt1End + 8 + 1
+	restOffset := capOffset + 18
+	if restOffset+12 > n {
+		return false, "", ""
+	}
+	salt2 := buf[restOffset : restOffset+12]
+	salt := append(salt1, salt2...)
+
+	authUser := user
+	if authUser == "" {
+		authUser = "root"
+	}
+	authResp := mysqlNativePassword("", salt)
+	pkt := buildMySQLAuthPacket(authUser, authResp)
+	if _, err := conn.Write(pkt); err != nil {
+		return false, "", ""
+	}
+
+	n, err = conn.Read(buf)
+	if err != nil || n < 5 || buf[4] != 0x00 {
+		return false, "", ""
+	}
+
+	evidence := fmt.Sprintf("greeting: %s\nauth: OK (user=%s, empty password)", version, authUser)
+	return true, version, evidence
 }
 
 func extractMySQLVersion(buf []byte) string {
@@ -383,6 +529,53 @@ func extractMySQLVersion(buf []byte) string {
 		}
 	}
 	return "unknown"
+}
+
+func mysqlNativePassword(password string, salt []byte) []byte {
+	if password == "" {
+		return nil
+	}
+	hash1 := md5sum([]byte(password))
+	hash2 := md5sum(hash1)
+	combined := append(salt, hash2...)
+	hash3 := md5sum(combined)
+	result := make([]byte, len(hash1))
+	for i := range hash1 {
+		result[i] = hash1[i] ^ hash3[i]
+	}
+	return result
+}
+
+func md5sum(data []byte) []byte {
+	h := md5.Sum(data)
+	return h[:]
+}
+
+func buildMySQLAuthPacket(user string, authResp []byte) []byte {
+	payload := make([]byte, 0, 128)
+	capBuf := make([]byte, 4)
+	binary.LittleEndian.PutUint32(capBuf, 0x0003a685)
+	payload = append(payload, capBuf...)
+	sizeBuf := make([]byte, 4)
+	binary.LittleEndian.PutUint32(sizeBuf, 16777216)
+	payload = append(payload, sizeBuf...)
+	payload = append(payload, 0x21)
+	payload = append(payload, make([]byte, 23)...)
+	payload = append(payload, []byte(user)...)
+	payload = append(payload, 0)
+	if authResp != nil {
+		payload = append(payload, byte(len(authResp)))
+		payload = append(payload, authResp...)
+	} else {
+		payload = append(payload, 0)
+	}
+	pktLen := len(payload)
+	header := make([]byte, 4)
+	header[0] = byte(pktLen)
+	header[1] = byte(pktLen >> 8)
+	header[2] = byte(pktLen >> 16)
+	header[3] = 1
+	return append(header, payload...)
 }
 
 func checkFTP(ctx context.Context, host string, port int) *core.Finding {

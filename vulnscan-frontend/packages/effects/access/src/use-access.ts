@@ -16,6 +16,10 @@ function useAccess() {
    * @param roles
    */
   function hasAccessByRoles(roles: string[]) {
+    if (!roles?.length) return true;
+    if (preferences.app.accessMode === 'backend') {
+      return false;
+    }
     const userRoleSet = new Set(userStore.userRoles);
     const intersection = roles.filter((item) => userRoleSet.has(item));
     return intersection.length > 0;
@@ -27,7 +31,15 @@ function useAccess() {
    * @param codes
    */
   function hasAccessByCodes(codes: string[]) {
-    const userCodesSet = new Set(accessStore.accessCodes);
+    if (!codes?.length) return true;
+
+    const userCodesSet = new Set(accessStore.accessCodes || []);
+    if (userCodesSet.has('*:*')) return true;
+
+    // 后端菜单模式：仅 IAM 下发的权限码生效，不因角色名放行
+    if (preferences.app.accessMode === 'backend') {
+      return codes.some((item) => userCodesSet.has(item));
+    }
 
     const intersection = codes.filter((item) => userCodesSet.has(item));
     return intersection.length > 0;

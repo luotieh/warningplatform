@@ -3,18 +3,15 @@ import type { DataTableColumns } from 'naive-ui';
 
 import type {
   DashboardStats,
-  MonitorAgent,
   MonitorExecution,
   MonitorTask,
 } from '#/api/sitemonitor';
 
-import { computed, h, reactive, ref } from 'vue';
+import { computed, h, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 
 import { Page } from '@vben/common-ui';
 import { IconifyIcon } from '@vben/icons';
-import { useTabbarStore } from '@vben/stores';
-
 import dayjs from 'dayjs';
 import {
   NButton,
@@ -35,8 +32,6 @@ import {
   NSelect,
   NSpace,
   NSwitch,
-  NTabPane,
-  NTabs,
   NTag,
 } from 'naive-ui';
 
@@ -44,7 +39,6 @@ import { dialog, message } from '#/adapter/naive';
 import {
   batchDeleteExecutions,
   deleteExecution,
-  getAgentList,
   getDashboardStats,
   getExecutionList,
   getTaskExecutionStats,
@@ -61,7 +55,6 @@ defineOptions({ name: 'MonitorCenter' });
 const router = useRouter();
 const { openRecordDetail } = useMonitorRecordDetail();
 const { openTaskRecordsTab } = useOpenTaskRecordsTab();
-const tabbarStore = useTabbarStore();
 const loading = ref(false);
 
 const stats = reactive({
@@ -73,8 +66,6 @@ const stats = reactive({
   totalTasks: 0,
 });
 
-const recentExecutions = ref<MonitorExecution[]>([]);
-const agentList = ref<MonitorAgent[]>([]);
 const taskStatsMap = ref<
   Record<string, Record<string, { total: number; issue_count: number }>>
 >({});
@@ -108,27 +99,8 @@ const statusLabel = (v: string) =>
     success: '成功',
   })[v] ?? v;
 
-const statusColor = (v: string) => {
-  if (v === 'success') return '#22c55e';
-  if (v === 'failed') return '#ef4444';
-  if (v === 'running') return '#f59e0b';
-  return '#6b7280';
-};
-
-const agentStatusLabel = (v: string) =>
-  v === 'online' ? '在线' : v === 'offline' ? '离线' : v || '未知';
-
-const agentStatusColor = (v: string) => {
-  if (v === 'online') return '#22c55e';
-  if (v === 'offline') return '#ef4444';
-  return '#6b7280';
-};
-
 const fmtTime = (v: string) =>
   v ? dayjs(v).format('YYYY-MM-DD HH:mm:ss') : '-';
-
-const fmtPercent = (v: number | undefined) =>
-  v == null ? '-' : `${v.toFixed(1)}%`;
 
 const dimensionCards = computed(() =>
   dimensions.map((d) => {
@@ -150,20 +122,65 @@ const issueDimensionCards = computed(() =>
     .sort((a, b) => b.issueCount - a.issueCount),
 );
 
-const compactExecutions = computed(() => recentExecutions.value.slice(0, 8));
-const compactAgents = computed(() => agentList.value.slice(0, 8));
-const activeTab = ref('tasks');
+const selectedDimension = ref('');
+const centerIssueLoading = ref(false);
+const centerIssueList = ref<MonitorExecution[]>([]);
+const centerIssueFilter = reactive({ disposition: 'pending' });
+const centerIssuePagination = reactive({
+  page: 1,
+  pageSize: 15,
+  itemCount: 0,
+  showSizePicker: true,
+  pageSizes: [10, 15, 20, 50],
+});
+
+const selectedDimensionLabel = computed(
+  () => dimMap[selectedDimension.value] || '监测维度',
+);
+
+function selectDimension(key: string) {
+  selectedDimension.value = key;
+  centerIssuePagination.page = 1;
+  loadCenterIssues();
+}
+
+function ensureDefaultDimension() {
+  if (selectedDimension.value) return;
+  const firstWithIssues = issueDimensionCards.value[0]?.key;
+  selectedDimension.value = firstWithIssues || dimensions[0]?.key || '';
+}
+
+async function loadCenterIssues() {
+  if (!selectedDimension.value) return;
+  centerIssueLoading.value = true;
+  try {
+    const params: Record<string, string | number> = {
+      dimension: selectedDimension.value,
+      disposition: centerIssueFilter.disposition,
+      has_issue: 'true',
+      index: centerIssuePagination.page,
+      size: centerIssuePagination.pageSize,
+    };
+    const res = await getExecutionList(params);
+    centerIssueList.value = res.data || [];
+    centerIssuePagination.itemCount = (res as any).count || 0;
+  } catch {
+    centerIssueList.value = [];
+    centerIssuePagination.itemCount = 0;
+  } finally {
+    centerIssueLoading.value = false;
+  }
+}
 
 const lastRefreshAt = ref<null | string>(null);
 
 async function fetchDashboardStats() {
   loading.value = true;
   try {
-    const [statsRes, execRes, agentRes, taskStatsRes] = await Promise.all([
+    const [statsRes, taskStatsRes, taskRes] = await Promise.all([
       getDashboardStats(),
-      getExecutionList({ size: 20 }),
-      getAgentList(),
       getTaskExecutionStats(),
+      getTaskList({ index: 1, size: 200 }),
     ]);
     const overview = ((statsRes as any)?.data ?? statsRes ?? {}) as DashboardStats;
     stats.totalTasks =
@@ -174,10 +191,11 @@ async function fetchDashboardStats() {
     stats.issueExecutions = overview.issue_executions || 0;
     stats.onlineAgents = overview.online_agents || 0;
     stats.totalAgents = overview.total_agents || 0;
-    recentExecutions.value = execRes.data || [];
-    agentList.value = Array.isArray(agentRes) ? agentRes : ((agentRes as any)?.data || []);
     taskStatsMap.value = (taskStatsRes as any)?.data ?? taskStatsRes ?? {};
+    taskDataList.value = taskRes.data || [];
     lastRefreshAt.value = dayjs().format('HH:mm:ss');
+    ensureDefaultDimension();
+    await loadCenterIssues();
   } finally {
     loading.value = false;
   }
@@ -186,6 +204,14 @@ async function fetchDashboardStats() {
 async function refreshAll() {
   await fetchDashboardStats();
 }
+
+watch(
+  () => centerIssueFilter.disposition,
+  () => {
+    centerIssuePagination.page = 1;
+    loadCenterIssues();
+  },
+);
 
 const refreshIntervalOptions = [
   { label: '10 秒', value: 10_000 },
@@ -202,85 +228,24 @@ const { enabled: autoRefreshEnabled, interval: autoRefreshInterval } =
     runOnMount: true,
   });
 
-const goExecDetail = (row: MonitorExecution) => openRecordDetail(row.id);
+function goToIssues(query?: Record<string, string>) {
+  router.push({ path: '/monitor/issues', query });
+}
 
-// ── Agent 状态表格 ──
-const agentColumns: DataTableColumns<MonitorAgent> = [
-  {
-    key: 'label',
-    title: '节点名称',
-    minWidth: 220,
-    ellipsis: { tooltip: true },
-    render: (row) => row.label || row.uuid || '-',
-  },
-  { key: 'version', title: '版本', width: 90, align: 'center' },
-  {
-    key: 'status',
-    title: '状态',
-    width: 80,
-    align: 'center',
-    render: (row) =>
-      h(
-        'span',
-        { style: { color: agentStatusColor(row.status), fontWeight: 500 } },
-        agentStatusLabel(row.status),
-      ),
-  },
-  {
-    key: 'tasks',
-    title: '任务',
-    width: 150,
-    align: 'center',
-    render: (row) =>
-      h('span', null, [
-        `${row.running_tasks ?? 0}/${row.max_concurrent ?? 0}`,
-        h(
-          'span',
-          { style: { color: '#6b7280', marginLeft: '4px' } },
-          `(${row.queued_tasks ?? 0}/${row.max_queue ?? 0})`,
-        ),
-      ]),
-  },
-  {
-    key: 'cpu',
-    title: 'CPU',
-    width: 90,
-    align: 'center',
-    render: (row) => fmtPercent(row.cpu_usage),
-  },
-  {
-    key: 'memory',
-    title: '内存',
-    width: 90,
-    align: 'center',
-    render: (row) => fmtPercent(row.memory_usage),
-  },
-  {
-    key: 'updated_at',
-    title: '最后心跳',
-    width: 170,
-    align: 'center',
-    render: (row) => fmtTime(row.updated_at),
-  },
-];
-
-// ── 执行记录表格 ──
-const executionColumns: DataTableColumns<MonitorExecution> = [
+const centerIssueColumns = computed<DataTableColumns<MonitorExecution>>(() => [
   {
     key: 'task_name',
     title: '任务名称',
-    minWidth: 180,
+    minWidth: 160,
     ellipsis: { tooltip: true },
-    render: (row) => (row as any).task_name || taskNameMap.value[row.task_id] || row.task_id,
+    render: (row) =>
+      (row as any).task_name ||
+      taskNameMap.value[row.task_id] ||
+      taskNameMap.value[row.path_task_id] ||
+      row.path_task_id ||
+      '-',
   },
-  { key: 'url', title: 'URL', minWidth: 220, ellipsis: { tooltip: true } },
-  {
-    key: 'dimension',
-    title: '维度',
-    width: 110,
-    align: 'center',
-    render: (row) => dimMap[row.dimension] || row.dimension || '-',
-  },
+  { key: 'url', title: 'URL', minWidth: 200, ellipsis: { tooltip: true } },
   {
     key: 'status',
     title: '状态',
@@ -288,31 +253,34 @@ const executionColumns: DataTableColumns<MonitorExecution> = [
     align: 'center',
     render: (row) =>
       h(
-        'span',
-        { style: { color: statusColor(row.status), fontWeight: 500 } },
-        statusLabel(row.status),
+        NTag,
+        { type: execStatusType(row.status), size: 'small', bordered: false },
+        () => statusLabel(row.status),
       ),
   },
   {
-    key: 'has_issue',
-    title: '安全问题',
-    width: 100,
+    key: 'disposition',
+    title: '处置',
+    width: 90,
     align: 'center',
-    render: (row) =>
-      h(
-        'span',
-        {
-          style: {
-            color: row.has_issue ? '#ef4444' : '#22c55e',
-            fontWeight: 500,
-          },
-        },
-        row.has_issue ? '发现' : '无',
-      ),
+    render: (row) => {
+      const d = row.disposition || 'pending';
+      const typeMap: Record<string, string> = {
+        false_positive: 'default',
+        invalid: 'default',
+        pending: 'warning',
+        valid: 'success',
+      };
+      return h(
+        NTag,
+        { type: typeMap[d] || 'default', size: 'small', bordered: false },
+        () => dispositionLabelMap[d] || d,
+      );
+    },
   },
   {
     key: 'created_at',
-    title: '创建时间',
+    title: '时间',
     width: 170,
     align: 'center',
     render: (row) => fmtTime(row.created_at),
@@ -320,101 +288,53 @@ const executionColumns: DataTableColumns<MonitorExecution> = [
   {
     key: 'op',
     title: '操作',
-    width: 90,
-    align: 'center',
+    width: 200,
     fixed: 'right',
-    render: (row) =>
-      h(
-        NButton,
-        {
-          text: true,
-          type: 'primary',
-          size: 'small',
-          onClick: () => goExecDetail(row),
-        },
-        { default: () => '详情' },
-      ),
-  },
-];
-
-const previewExecutionColumns: DataTableColumns<MonitorExecution> = [
-  {
-    key: 'task_name',
-    title: '任务名称',
-    minWidth: 180,
     align: 'center',
     render: (row) =>
-      h(
-        'div',
-        {
-          style: {
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            textAlign: 'center',
-            gap: '6px',
+      h(NSpace, { size: 4 }, () => [
+        h(
+          NButton,
+          { text: true, type: 'primary', size: 'small', onClick: () => openDetailDrawer(row) },
+          () => '详情',
+        ),
+        h(
+          NButton,
+          { text: true, type: 'warning', size: 'small', onClick: () => openDispDialog(row) },
+          () => '处置',
+        ),
+        h(
+          NButton,
+          {
+            text: true,
+            type: 'success',
+            size: 'small',
+            onClick: async () => {
+              await updateDisposition(row.id, 'valid');
+              message.success('已标记为有效');
+              loadCenterIssues();
+              fetchDashboardStats();
+            },
           },
-        },
-        [
-          h(
-            'span',
-            {
-              style: {
-                color: 'var(--n-text-color)',
-                fontWeight: 600,
-                maxWidth: '100%',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              },
-              title: (row as any).task_name || taskNameMap.value[row.task_id] || row.task_id,
+          () => '有效',
+        ),
+        h(
+          NButton,
+          {
+            text: true,
+            size: 'small',
+            onClick: async () => {
+              await updateDisposition(row.id, 'false_positive');
+              message.success('已标记为误报');
+              loadCenterIssues();
+              fetchDashboardStats();
             },
-            (row as any).task_name || taskNameMap.value[row.task_id] || row.task_id,
-          ),
-          h(
-            NTag,
-            {
-              size: 'small',
-              bordered: false,
-              type: 'default',
-              style: { width: 'fit-content', margin: '0 auto' },
-            },
-            { default: () => dimMap[row.dimension] || row.dimension || '-' },
-          ),
-        ],
-      ),
+          },
+          () => '误报',
+        ),
+      ]),
   },
-  { key: 'url', title: 'URL', minWidth: 220, align: 'center', ellipsis: { tooltip: true } },
-  {
-    key: 'status',
-    title: '状态',
-    width: 80,
-    align: 'center',
-    render: (row) =>
-      h(
-        'span',
-        { style: { color: statusColor(row.status), fontWeight: 500 } },
-        statusLabel(row.status),
-      ),
-  },
-  {
-    key: 'op',
-    title: '操作',
-    width: 70,
-    align: 'center',
-    render: (row) =>
-      h(
-        NButton,
-        {
-          text: true,
-          type: 'primary',
-          size: 'small',
-          onClick: () => openDetailDrawer(row),
-        },
-        { default: () => '详情' },
-      ),
-  },
-];
+]);
 
 // ── 监测任务表格 ──
 const taskLoading = ref(false);
@@ -960,6 +880,8 @@ async function submitDisposition() {
     message.success('处置成功');
     dispDialogVisible.value = false;
     loadRecords();
+    loadCenterIssues();
+    fetchDashboardStats();
     fetchTaskList();
   } catch (e: any) {
     message.error(e?.msg || '处置失败');
@@ -970,7 +892,7 @@ async function submitDisposition() {
 
 function openDetailDrawer(row: MonitorExecution) {
   openRecordDetail(row.id, {
-    taskId: row.task_id,
+    taskId: row.path_task_id || row.task_id,
     from: 'tasks',
   });
 }
@@ -1032,8 +954,12 @@ function execStatusType(s: string) {
           <div class="stat-content">
             <div class="stat-value">{{ stats.totalExecutions }}</div>
             <div class="stat-label">执行记录</div>
-            <div class="stat-sub" :class="stats.issueExecutions > 0 ? 'text-error' : ''">
-              发现问题 {{ stats.issueExecutions }}
+            <div
+              class="stat-sub stat-sub--link"
+              :class="stats.issueExecutions > 0 ? 'text-error' : ''"
+              @click="goToIssues({ hasIssue: 'true', disposition: 'pending' })"
+            >
+              发现问题 {{ stats.issueExecutions }} · 去处置
             </div>
           </div>
         </div>
@@ -1073,7 +999,15 @@ function execStatusType(s: string) {
       class="mt-4"
     >
       <NGi v-for="item in dimensionCards" :key="item.key">
-        <div class="dim-card" :style="{ '--dim-color': item.color }">
+        <div
+          class="dim-card"
+          :class="{ 'dim-card--active': selectedDimension === item.key }"
+          :style="{ '--dim-color': item.color }"
+          role="button"
+          tabindex="0"
+          @click="selectDimension(item.key)"
+          @keydown.enter="selectDimension(item.key)"
+        >
           <div class="dim-header">
             <span class="dim-label">{{ item.label }}</span>
             <IconifyIcon :icon="item.icon" class="dim-icon" />
@@ -1098,94 +1032,93 @@ function execStatusType(s: string) {
     <div v-if="issueDimensionCards.length > 0" class="issue-banner mt-4">
       <div class="issue-banner__title">
         <IconifyIcon icon="ri:alarm-warning-line" />
-        <span>褰撳墠閲嶇偣椋庨櫓缁村害</span>
+        <span>当前重点风险维度</span>
       </div>
       <div class="issue-banner__list">
         <span
           v-for="item in issueDimensionCards.slice(0, 4)"
           :key="item.key"
-          class="issue-pill"
+          class="issue-pill issue-pill--link"
           :style="{ '--issue-color': item.color }"
+          @click="selectDimension(item.key)"
         >
           {{ item.label }} {{ item.issueCount }}
         </span>
       </div>
+      <NButton
+        size="small"
+        type="error"
+        ghost
+        @click="goToIssues({ hasIssue: 'true', disposition: 'pending' })"
+      >
+        查看全部待处置问题
+      </NButton>
     </div>
 
-    <div class="preview-layout mt-4">
-      <NCard class="preview-card" title="最近执行记录" size="small">
-        <template #header-extra>
-          <NTag size="small" :bordered="false">
-            {{ recentExecutions.length }} 条
+    <NCard class="mt-4 issue-records-card" size="small">
+      <template #header>
+        <NSpace align="center" :size="8">
+          <span class="issue-records-card__title">{{ selectedDimensionLabel }} — 问题记录</span>
+          <NTag size="small" :bordered="false" type="error">
+            共 {{ centerIssuePagination.itemCount }} 条
           </NTag>
-        </template>
-        <NDataTable
-          :columns="previewExecutionColumns"
-          :data="compactExecutions"
-          :loading="loading"
-          :pagination="false"
-          :max-height="260"
-          :row-key="(r: MonitorExecution) => r.id"
-          size="small"
-          :scroll-x="620"
-          class="exec-table"
-        />
-      </NCard>
-
-      <NCard class="preview-card" title="节点状态" size="small">
-        <template #header-extra>
-          <NTag size="small" :bordered="false" type="success">
-            在线 {{ stats.onlineAgents }}/{{ stats.totalAgents }}
-          </NTag>
-        </template>
-        <NDataTable
-          :columns="agentColumns"
-          :data="compactAgents"
-          :loading="loading"
-          :pagination="false"
-          :max-height="260"
-          :row-key="(r: MonitorAgent) => r.uuid"
-          size="small"
-          class="agent-table"
-        />
-      </NCard>
-    </div>
-
-    <NCard class="mt-4">
-      <NTabs type="line" v-model:value="activeTab" class="tab-container">
-        <NTabPane name="tasks" tab="网站监测">
-          <div class="monitor-center-task-hint">
-            <p>任务配置、六维统计与记录处置已合并至「网站监测」页。</p>
-            <NButton type="primary" @click="router.push('/monitor/targets')">
-              前往网站监测
-            </NButton>
-          </div>
-        </NTabPane>
-
-        <NTabPane name="executions" tab="执行记录">
-          <NDataTable
-            :columns="executionColumns"
-            :data="recentExecutions"
-            :loading="loading"
-            :max-height="500"
-            :row-key="(r: MonitorExecution) => r.id"
+        </NSpace>
+      </template>
+      <template #header-extra>
+        <NSpace :size="8" align="center">
+          <NSelect
+            v-model:value="centerIssueFilter.disposition"
+            :options="dispositionOptions"
             size="small"
-            class="exec-table"
+            style="width: 110px"
           />
-        </NTabPane>
-
-        <NTabPane name="agents" tab="Agent 状态">
-          <NDataTable
-            :columns="agentColumns"
-            :data="agentList"
-            :loading="loading"
-            :max-height="500"
-            :row-key="(r: MonitorAgent) => r.uuid"
+          <NButton
+            text
+            type="primary"
             size="small"
-            class="agent-table"
-          />
-        </NTabPane>
-      </NTabs>
+            @click="
+              goToIssues({
+                dimension: selectedDimension,
+                disposition: centerIssueFilter.disposition,
+                hasIssue: 'true',
+              })
+            "
+          >
+            完整问题处置
+          </NButton>
+          <NButton text type="primary" size="small" @click="router.push('/monitor/targets')">
+            网站监测
+          </NButton>
+        </NSpace>
+      </template>
+      <NDataTable
+        :columns="centerIssueColumns"
+        :data="centerIssueList"
+        :loading="centerIssueLoading"
+        :pagination="centerIssuePagination"
+        :row-key="(r: MonitorExecution) => r.id"
+        remote
+        size="small"
+        :scroll-x="900"
+        class="exec-table"
+        @update:page="
+          (p: number) => {
+            centerIssuePagination.page = p;
+            loadCenterIssues();
+          }
+        "
+        @update:page-size="
+          (s: number) => {
+            centerIssuePagination.pageSize = s;
+            centerIssuePagination.page = 1;
+            loadCenterIssues();
+          }
+        "
+      >
+        <template #empty>
+          <NEmpty description="该维度暂无待查看的问题记录" />
+        </template>
+      </NDataTable>
     </NCard>
 
     <!-- 监测记录弹窗 -->
@@ -1462,11 +1395,27 @@ function execStatusType(s: string) {
   background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
   border: 1px solid var(--n-border-color);
   transition: all 0.2s ease;
+  cursor: pointer;
 }
 
 .dim-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06);
+}
+
+.dim-card--active {
+  border-color: var(--dim-color);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--dim-color) 35%, transparent);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--dim-color) 6%, white) 0%,
+    #f8fafc 100%
+  );
+}
+
+.issue-records-card__title {
+  font-weight: 600;
+  font-size: 15px;
 }
 
 .dim-header {
@@ -1555,50 +1504,13 @@ function execStatusType(s: string) {
   font-weight: 600;
 }
 
-.preview-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 16px;
+.stat-sub--link,
+.issue-pill--link {
+  cursor: pointer;
 }
 
-.preview-card,
-.preview-card :deep(.n-card__content) {
-  min-width: 0;
-}
-
-.preview-card :deep(.n-card-header__extra) {
-  display: none;
-}
-
-.preview-card:first-child :deep(.n-card-header__main),
-.preview-card:last-child :deep(.n-card-header__main) {
-  font-size: 0;
-}
-
-.preview-card:first-child :deep(.n-card-header__main)::after {
-  content: '最近执行记录';
-  font-size: 16px;
-}
-
-.preview-card:last-child :deep(.n-card-header__main)::after {
-  content: '节点状态';
-  font-size: 16px;
-}
-
-.tab-container {
-  --n-tab-color: var(--n-text-color-3);
-  --n-tab-color-active: var(--n-primary-color);
-  --n-tab-bottom-border-color-active: var(--n-primary-color);
-}
-
-.monitor-center-task-hint {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 32px 16px;
-  color: var(--n-text-color-3);
-  text-align: center;
+.stat-sub--link:hover {
+  text-decoration: underline;
 }
 
 .filter-bar {

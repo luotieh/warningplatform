@@ -9,21 +9,26 @@ require (
 	code.yt-security.com/public/core/v2/product v0.1.0
 	code.yt-security.com/public/core/v2/web v0.2.0
 	code.yt-security.com/public/sdk v1.4.3
+	github.com/PuerkitoBio/goquery v1.11.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/go-pdf/fpdf v0.9.0
 	github.com/go-rod/rod v0.116.2
 	github.com/gocolly/colly/v2 v2.3.0
+	github.com/gomutex/godocx v0.1.5
 	github.com/google/gopacket v1.1.19
 	github.com/google/uuid v1.6.0
 	github.com/google/wire v0.7.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/nats-io/nats.go v1.51.0
+	github.com/pelletier/go-toml/v2 v2.3.1
 	github.com/projectdiscovery/nuclei/v3 v3.4.10
 	github.com/prometheus/client_golang v1.20.5
 	github.com/redis/go-redis/v9 v9.18.0
 	github.com/robfig/cron/v3 v3.0.1
+	github.com/sergi/go-diff v1.3.2-0.20230802210424-5b0b94c5c0d3
 	github.com/shirou/gopsutil/v4 v4.26.3
 	github.com/xuri/excelize/v2 v2.10.1
+	github.com/ysmood/gson v0.7.3
 	golang.org/x/crypto v0.50.0
 	golang.org/x/net v0.53.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -51,7 +56,6 @@ require (
 	github.com/Mzack9999/goja v0.0.0-20250507184235-e46100e9c697 // indirect
 	github.com/Mzack9999/goja_nodejs v0.0.0-20250507184139-66bcbf65c883 // indirect
 	github.com/ProtonMail/go-crypto v1.1.6 // indirect
-	github.com/PuerkitoBio/goquery v1.11.0 // indirect
 	github.com/STARRY-S/zip v0.2.3 // indirect
 	github.com/VividCortex/ewma v1.2.0 // indirect
 	github.com/akrylysov/pogreb v0.10.2 // indirect
@@ -276,7 +280,6 @@ require (
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/openrdap/rdap v0.9.1 // indirect
-	github.com/pelletier/go-toml/v2 v2.3.1 // indirect
 	github.com/perimeterx/marshmallow v1.1.5 // indirect
 	github.com/pierrec/lz4/v4 v4.1.23 // indirect
 	github.com/pjbgf/sha1cd v0.3.2 // indirect
@@ -334,7 +337,6 @@ require (
 	github.com/sashabaranov/go-openai v1.37.0 // indirect
 	github.com/segmentio/ksuid v1.0.4 // indirect
 	github.com/seh-msft/burpxml v1.0.1 // indirect
-	github.com/sergi/go-diff v1.3.2-0.20230802210424-5b0b94c5c0d3 // indirect
 	github.com/shirou/gopsutil v3.21.11+incompatible // indirect
 	github.com/shurcooL/graphql v0.0.0-20230722043721-ed46e5a46466 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
@@ -378,7 +380,6 @@ require (
 	github.com/ysmood/fetchup v0.2.3 // indirect
 	github.com/ysmood/goob v0.4.0 // indirect
 	github.com/ysmood/got v0.40.0 // indirect
-	github.com/ysmood/gson v0.7.3 // indirect
 	github.com/ysmood/leakless v0.9.0 // indirect
 	github.com/yuin/goldmark v1.7.13 // indirect
 	github.com/yuin/goldmark-emoji v1.0.6 // indirect

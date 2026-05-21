@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -285,9 +286,20 @@ func (r *Runner) Execute(ctx context.Context) {
 	currentTargets := targets
 
 	cb := StageCallbacks{
-		OnModuleDone: func(stage string) {
+		OnModuleStart: func(stage, moduleID string) {
+			if moduleID != "" {
+				r.progress.BeginModule(moduleID)
+			}
+			r.progress.SyncToDB(stage)
+			r.publishEvent(NewProgressEvent(r.task.ID, *r.progress.Get()))
+		},
+		OnModuleDone: func(stage, moduleID string) {
+			if moduleID != "" {
+				r.progress.EndModule(moduleID)
+			}
 			r.progress.IncrementModuleDone()
 			r.progress.SyncToDB(stage)
+			r.publishEvent(NewProgressEvent(r.task.ID, *r.progress.Get()))
 		},
 		OnModuleResult: func(findings []*core.Finding, stage, moduleID string) {
 			r.progress.AppendFindings(findings)
@@ -448,13 +460,66 @@ func (r *Runner) tryMergeParentScanTask(doneCtx context.Context) {
 func buildTargets(task model.ScanTask) []*core.Target {
 	var targets []*core.Target
 	for _, addr := range task.Targets {
-		targets = append(targets, &core.Target{Host: addr})
+		targets = append(targets, parseTargetAddr(addr))
 	}
 	return targets
 }
 
+func parseTargetAddr(addr string) *core.Target {
+	addr = strings.TrimSpace(addr)
+	if addr == "" {
+		return &core.Target{}
+	}
+	if strings.Contains(addr, "://") {
+		u, err := url.Parse(addr)
+		if err != nil {
+			return &core.Target{Host: addr, URL: addr}
+		}
+		t := &core.Target{
+			Host: u.Hostname(),
+			URL:  addr,
+		}
+		if p := u.Port(); p != "" {
+			fmt.Sscanf(p, "%d", &t.Port)
+		} else if u.Scheme == "https" {
+			t.Port = 443
+		} else if u.Scheme == "http" {
+			t.Port = 80
+		}
+		return t
+	}
+	if h, p, err := netSplitHostPort(addr); err == nil && p > 0 {
+		return &core.Target{Host: h, Port: p}
+	}
+	return &core.Target{Host: addr}
+}
+
+func netSplitHostPort(hostport string) (host string, port int, err error) {
+	if strings.HasPrefix(hostport, "[") {
+		return "", 0, fmt.Errorf("unsupported")
+	}
+	i := strings.LastIndex(hostport, ":")
+	if i < 0 {
+		return hostport, 0, fmt.Errorf("no port")
+	}
+	host = hostport[:i]
+	var p int
+	if _, scanErr := fmt.Sscanf(hostport[i+1:], "%d", &p); scanErr != nil {
+		return "", 0, scanErr
+	}
+	return host, p, nil
+}
+
 func buildConfig(task model.ScanTask) map[string]interface{} {
-	config := MergePresetWithParameters(task.Parameters)
+	params := task.Parameters
+	if params == nil {
+		params = model.JSONMap{}
+	}
+	if _, ok := params["target_count"]; !ok {
+		params = cloneJSONMap(params)
+		params["target_count"] = countTargets(task.Targets)
+	}
+	config := ApplyDerivedAndPreset(params)
 	config["scan_task_id"] = task.ID
 	if strings.TrimSpace(task.ParentID) != "" {
 		config["scan_parent_task_id"] = task.ParentID

@@ -122,6 +122,7 @@ func (m *Circular) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
 				{Name: "接收事件", Method: "POST", Handler: m.transferHandler.ReceiveIncident, Enabled: true},
 				{Name: "批量接收", Path: "batch", Method: "POST", Handler: m.transferHandler.ReceiveIncidentBatch, Enabled: true},
 				{Name: "流转状态", Path: "status", Method: "GET", Handler: m.transferHandler.GetTransferStatus, Enabled: true},
+				{Name: "下载事件报告", Path: "reports/:id/:format", Method: "GET", Handler: m.transferHandler.DownloadIncidentReport, Enabled: true},
 			},
 		},
 	})

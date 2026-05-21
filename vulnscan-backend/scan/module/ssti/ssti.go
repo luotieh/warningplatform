@@ -76,19 +76,12 @@ func (m *SSTIScanner) getMathProbes() []sstiProbe {
 			return result
 		}
 	}
-	return defaultMathProbes()
-}
-
-func defaultMathProbes() []sstiProbe {
-	return []sstiProbe{
-		{"{{7*7}}", "49", "Jinja2/Twig", "math"},
-		{"${7*7}", "49", "Freemarker/Mako", "math"},
-		{"<%= 7*7 %>", "49", "ERB/EJS", "math"},
-		{"#{7*7}", "49", "Ruby/Pug", "math"},
-		{"{{7*'7'}}", "7777777", "Jinja2", "math-str"},
-		{"${7*7}", "49", "Velocity/Thymeleaf", "math"},
-		{"[#assign x=7*7]${x}", "49", "Freemarker-assign", "math"},
+	payload.LogFallbackOnce("ssti")
+	var result []sstiProbe
+	for _, p := range payload.MinimalSSTIMathPayloads() {
+		result = append(result, sstiProbe{payload: p.Payload, expect: p.Expect, engine: p.Engine, category: "math"})
 	}
+	return result
 }
 
 var engineErrorPatterns = []*regexp.Regexp{
@@ -143,44 +136,13 @@ func (m *SSTIScanner) getExploitProbes() []sstiExploit {
 			return result
 		}
 	}
-	return defaultExploitProbes()
-}
-
-func defaultExploitProbes() []sstiExploit {
-	return []sstiExploit{
-		{
-			payload: "{{config}}",
-			detect:  func(body string) bool { return strings.Contains(body, "SECRET_KEY") || strings.Contains(body, "DEBUG") },
-			engine:  "Jinja2/Flask",
-			detail:  "config-object-leaked",
-		},
-		{
-			payload: "{{self.__class__.__mro__}}",
-			detect:  func(body string) bool { return strings.Contains(body, "object") && strings.Contains(body, "class") },
-			engine:  "Jinja2",
-			detail:  "mro-chain-exposed",
-		},
-		{
-			payload: "${.version}",
-			detect:  func(body string) bool { return regexp.MustCompile(`\d+\.\d+\.\d+`).MatchString(body) },
-			engine:  "Freemarker",
-			detail:  "version-leaked",
-		},
-		{
-			payload: "{{_self.env.getExtension('Twig\\Extension\\CoreExtension')}}",
-			detect:  func(body string) bool { return strings.Contains(body, "Twig") },
-			engine:  "Twig",
-			detail:  "extension-info-leaked",
-		},
-		{
-			payload: "{{range.constructor('return global.process.version')()}}",
-			detect: func(body string) bool {
-				return regexp.MustCompile(`v\d+\.\d+\.\d+`).MatchString(body)
-			},
-			engine: "Nunjucks/Pug",
-			detail: "node-version-leaked",
-		},
-	}
+	payload.LogFallbackOnce("ssti")
+	return []sstiExploit{{
+		payload: "{{config}}",
+		detect:  func(body string) bool { return strings.Contains(body, "SECRET_KEY") },
+		engine:  "Jinja2",
+		detail:  "config-leak",
+	}}
 }
 
 func (m *SSTIScanner) Run(ctx context.Context, targets []*core.Target, config map[string]interface{}) (*core.ModuleResult, error) {

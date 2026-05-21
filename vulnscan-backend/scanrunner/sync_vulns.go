@@ -25,7 +25,7 @@ func SyncVulnerabilitiesFromTask(db *gorm.DB, task *model.ScanTask) (int, error)
 	if db == nil || task == nil {
 		return 0, nil
 	}
-	if task.Type == model.TaskTypeAssetEnrich || task.Type == model.TaskTypeVulnRetest {
+	if task.Type == model.TaskTypeAssetEnrich || task.Type == model.TaskTypeAssetDiscovery || task.Type == model.TaskTypeVulnRetest {
 		return 0, nil
 	}
 

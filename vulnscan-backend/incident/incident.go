@@ -10,6 +10,7 @@ import (
 	"vulnscan-backend/incident/remediation"
 	"vulnscan-backend/incident/sla"
 	"vulnscan-backend/incident/stats"
+	statsContract "vulnscan-backend/incident/stats/stats-contract"
 	"vulnscan-backend/model"
 
 	"code.yt-security.com/public/core/v2/db"
@@ -53,6 +54,10 @@ func (m *Incident) CoreService() coreContract.ServiceCore {
 	return m.coreHandler.CoreService()
 }
 
+func (m *Incident) StatsService() statsContract.ServiceStats {
+	return m.statsHandler.ServiceStats()
+}
+
 func (m *Incident) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
 	return authorize.RegisterRoutes(e.Group("/incident"), []authorize.Route{
 		{
@@ -60,6 +65,8 @@ func (m *Incident) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
 			Children: []authorize.Route{
 				{Name: "事件列表", Method: "GET", Handler: m.coreHandler.List, Enabled: true},
 				{Name: "事件创建", Method: "POST", Handler: m.coreHandler.Create, Enabled: true},
+				{Name: "事件报告预览", Path: ":id/report/preview", Method: "GET", Handler: m.statsHandler.PreviewIncidentReport, Enabled: true},
+				{Name: "事件报告导出", Path: ":id/report", Method: "GET", Handler: m.statsHandler.ExportIncidentReport, Enabled: true},
 				{Name: "事件详情", Path: ":id", Method: "GET", Handler: m.coreHandler.Detail, Enabled: true},
 				{Name: "事件更新", Path: ":id", Method: "PUT", Handler: m.coreHandler.Update, Enabled: true},
 				{Name: "事件删除", Path: ":id", Method: "DELETE", Handler: m.coreHandler.Delete, Enabled: true},

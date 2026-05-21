@@ -14,7 +14,11 @@ const routes: RouteRecordRaw[] = [
         name: 'NotifyList',
         path: 'list',
         component: () => import('#/views/notify/index.vue'),
-        meta: { icon: 'lucide:inbox', title: '通知列表' },
+        meta: {
+          icon: 'lucide:inbox',
+          title: '通知列表',
+          perms: [{ action: 'view', label: '查看' }, { action: 'read', label: '标记已读' }],
+        },
       },
     ],
   },

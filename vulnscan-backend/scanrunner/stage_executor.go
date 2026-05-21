@@ -20,9 +20,33 @@ type moduleResult struct {
 }
 
 type StageCallbacks struct {
-	OnModuleDone   func(stage string)
+	OnModuleStart  func(stage, moduleID string)
+	OnModuleDone   func(stage, moduleID string)
 	OnModuleResult func(findings []*core.Finding, stage, moduleID string)
 	OnLog          func(level, message, stage, module string)
+}
+
+const moduleHeartbeatInterval = 8 * time.Second
+
+func startModuleHeartbeat(ctx context.Context, stageName, moduleID string, start time.Time, cb StageCallbacks) func() {
+	if cb.OnLog == nil {
+		return func() {}
+	}
+	hbCtx, cancel := context.WithCancel(ctx)
+	go func() {
+		ticker := time.NewTicker(moduleHeartbeatInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-hbCtx.Done():
+				return
+			case <-ticker.C:
+				elapsed := time.Since(start).Round(time.Second)
+				cb.OnLog("info", fmt.Sprintf("模块 [%s] 执行中，已耗时 %s", moduleID, elapsed), stageName, moduleID)
+			}
+		}
+	}()
+	return cancel
 }
 
 type EngineOpts struct {
@@ -85,7 +109,7 @@ func ExecuteStageWithOpts(
 	mods = filterWebVulnModules(mods, config)
 	if skipped := modsBeforeWeb - len(mods); skipped > 0 && cb.OnModuleDone != nil {
 		for i := 0; i < skipped; i++ {
-			cb.OnModuleDone(stage.name)
+			cb.OnModuleDone(stage.name, "")
 		}
 	}
 	if len(mods) == 0 {
@@ -115,7 +139,7 @@ func executeSingleWithOpts(
 				cb.OnLog("error", fmt.Sprintf("模块 [%s] panic: %v", mod.ID(), rv), stageName, mod.ID())
 			}
 			if cb.OnModuleDone != nil {
-				cb.OnModuleDone(stageName)
+				cb.OnModuleDone(stageName, mod.ID())
 			}
 			findings = nil
 			newTargets = nil
@@ -125,7 +149,7 @@ func executeSingleWithOpts(
 	if opts.Checkpoint != nil && opts.Checkpoint.IsModuleCompleted(taskID, stageName, mod.ID()) {
 		slog.Info("[Executor] 模块已完成(checkpoint)，跳过", "task", taskID, "module", mod.ID())
 		if cb.OnModuleDone != nil {
-			cb.OnModuleDone(stageName)
+			cb.OnModuleDone(stageName, mod.ID())
 		}
 		return nil, nil
 	}
@@ -135,7 +159,7 @@ func executeSingleWithOpts(
 		if len(targets) == 0 {
 			slog.Info("[Executor] 目标均被排除规则过滤，跳过模块", "task", taskID, "module", mod.ID())
 			if cb.OnModuleDone != nil {
-				cb.OnModuleDone(stageName)
+				cb.OnModuleDone(stageName, mod.ID())
 			}
 			return nil, nil
 		}
@@ -146,7 +170,7 @@ func executeSingleWithOpts(
 		if cached, hit := opts.Cache.Get(cacheKey); hit {
 			slog.Info("[Executor] 缓存命中", "task", taskID, "module", mod.ID())
 			if cb.OnModuleDone != nil {
-				cb.OnModuleDone(stageName)
+				cb.OnModuleDone(stageName, mod.ID())
 			}
 			if cb.OnModuleResult != nil && len(cached) > 0 {
 				cb.OnModuleResult(cached, stageName, mod.ID())
@@ -163,7 +187,7 @@ func executeSingleWithOpts(
 			cb.OnLog("warn", fmt.Sprintf("模块 [%s] 已熔断，跳过执行", mod.ID()), stageName, mod.ID())
 		}
 		if cb.OnModuleDone != nil {
-			cb.OnModuleDone(stageName)
+			cb.OnModuleDone(stageName, mod.ID())
 		}
 		return nil, nil
 	}
@@ -183,26 +207,31 @@ func executeSingleWithOpts(
 	modCtx, modCancel := context.WithTimeout(ctx, moduleTimeout)
 	defer modCancel()
 
+	if cb.OnModuleStart != nil {
+		cb.OnModuleStart(stageName, mod.ID())
+	}
 	if cb.OnLog != nil {
 		cb.OnLog("info", fmt.Sprintf("模块 [%s] 开始执行", mod.ID()), stageName, mod.ID())
 	}
 	slog.Info("[Executor] 模块开始", "task", taskID, "module", mod.ID(), "stage", stageName)
 	start := time.Now()
+	stopHeartbeat := startModuleHeartbeat(modCtx, stageName, mod.ID(), start, cb)
+	defer stopHeartbeat()
 
 	var result *core.ModuleResult
 	var err error
 
 	if opts.Circuit != nil {
-		result, err = orchestrate.RunWithRetry(modCtx, mod, targets, config, orchestrate.DefaultRetryConfig)
+		result, err = orchestrate.RunWithRetry(modCtx, mod, targets, ModuleConfigFor(mod.ID(), config), orchestrate.DefaultRetryConfig)
 	} else {
-		result, err = mod.Run(modCtx, targets, config)
+		result, err = mod.Run(modCtx, targets, ModuleConfigFor(mod.ID(), config))
 	}
 
 	dur := time.Since(start)
 	latencyMs := float64(dur.Milliseconds())
 
 	if cb.OnModuleDone != nil {
-		cb.OnModuleDone(stageName)
+		cb.OnModuleDone(stageName, mod.ID())
 	}
 
 	if err != nil {
@@ -352,18 +381,24 @@ func executeConcurrentWithOpts(
 			modCtx, modCancel := context.WithTimeout(ctx, moduleTimeout)
 			defer modCancel()
 
+			if cb.OnModuleStart != nil {
+				cb.OnModuleStart(stage.name, m.ID())
+			}
 			if cb.OnLog != nil {
 				cb.OnLog("info", fmt.Sprintf("模块 [%s] 开始执行", m.ID()), stage.name, m.ID())
 			}
 			slog.Info("[Executor] 模块开始", "task", taskID, "module", m.ID(), "stage", stage.name)
 			start := time.Now()
+			stopHeartbeat := startModuleHeartbeat(modCtx, stage.name, m.ID(), start, cb)
+			defer stopHeartbeat()
 
 			var res *core.ModuleResult
 			var err error
+			modCfg := ModuleConfigFor(m.ID(), config)
 			if opts.Circuit != nil {
-				res, err = orchestrate.RunWithRetry(modCtx, m, targets, config, orchestrate.DefaultRetryConfig)
+				res, err = orchestrate.RunWithRetry(modCtx, m, targets, modCfg, orchestrate.DefaultRetryConfig)
 			} else {
-				res, err = m.Run(modCtx, targets, config)
+				res, err = m.Run(modCtx, targets, modCfg)
 			}
 
 			dur := time.Since(start)
@@ -453,7 +488,7 @@ func collectResults(
 			}
 			received++
 			if cb.OnModuleDone != nil {
-				cb.OnModuleDone(stage.name)
+				cb.OnModuleDone(stage.name, mr.moduleID)
 			}
 
 			if mr.err != nil {
@@ -508,7 +543,7 @@ func drainRemaining(
 			}
 			received++
 			if cb.OnModuleDone != nil {
-				cb.OnModuleDone(stage.name)
+				cb.OnModuleDone(stage.name, mr.moduleID)
 			}
 			if mr.err == nil && cb.OnModuleResult != nil {
 				cb.OnModuleResult(mr.findings, stage.name, mr.moduleID)
@@ -517,7 +552,7 @@ func drainRemaining(
 			remaining := total - received
 			for i := 0; i < remaining; i++ {
 				if cb.OnModuleDone != nil {
-					cb.OnModuleDone(stage.name)
+					cb.OnModuleDone(stage.name, "")
 				}
 			}
 			slog.Warn("[Executor] 放弃等待未完成模块", "task", taskID, "stage", stage.name, "abandoned", remaining)

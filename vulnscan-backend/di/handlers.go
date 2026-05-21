@@ -78,21 +78,22 @@ type Handlers struct {
 	cronRunner    *schedule.CronRunner
 	Settings      *setting.Handler
 	payloadLoader *payload.Loader
+	Knowledge     *scanrunner.KnowledgeRegistry
 }
 
 func (h *Handlers) RouteLoad() {
 	h.autoMigrate()
 	h.initSettings()
+	h.wireIncidentReportExporter()
 
 	engine := h.Web.GetRawWeb()
 	engine.Use(web.MiddlewareRequestResponse())
 
 	apiGroup := engine.Group("/api")
 
-	iamAuthGroup := apiGroup.Group("/",
-		h.IAM.Middleware().Authentication(),
-		h.IAM.Middleware().Authorization(),
-	)
+	// 仅认证：IAM SDK 的 /me/*、/auth/refresh 等用用户 token 代理 IAM（Authenticated 端点），
+	// 不应再走 SyncBackends 的接口级 RBAC，否则非特权用户访问 /me/profile 会 403 并触发前端降级。
+	apiAuthenticated := apiGroup.Group("/", h.IAM.Middleware().Authentication())
 
 	var ssoOpts *iamsdk.SSORoutesOptions
 	if h.Config.SSO.CallbackURI != "" {
@@ -103,7 +104,9 @@ func (h *Handlers) RouteLoad() {
 			TokenRelayCallbackURI: h.Config.SSO.TokenRelayCallbackURI,
 		}
 	}
-	h.IAM.RegisterDefaultRoutes(engine, iamAuthGroup, iamsdk.DefaultRoutesOptions{
+	h.registerPrivilegedFrontendSync(apiAuthenticated)
+
+	h.IAM.RegisterDefaultRoutes(engine, apiAuthenticated, iamsdk.DefaultRoutesOptions{
 		SSO: ssoOpts,
 		Audit: &iamsdk.AuditMiddlewareOptions{
 			Domain:  h.Product.GetCode(),
@@ -115,47 +118,49 @@ func (h *Handlers) RouteLoad() {
 		},
 	})
 
+	apiAuthorized := apiAuthenticated.Group("", h.ModuleAuthorization())
+
 	var backends []authorize.BackendItem
-	backends = append(backends, h.Asset.RoutesWithGroup(iamAuthGroup)...)
-	backends = append(backends, h.Task.RoutesWithGroup(iamAuthGroup)...)
-	backends = append(backends, h.Vuln.RoutesWithGroup(iamAuthGroup)...)
-	backends = append(backends, h.Cluster.RoutesWithGroup(iamAuthGroup)...)
-	backends = append(backends, h.Tagging.RoutesWithGroup(iamAuthGroup)...)
-	backends = append(backends, h.Organize.RoutesWithGroup(iamAuthGroup)...)
-	backends = append(backends, h.AssetMgr.RoutesWithGroup(iamAuthGroup)...)
-	backends = append(backends, h.SiteMonitor.RoutesWithGroup(iamAuthGroup)...)
-	backends = append(backends, h.Circular.RoutesWithGroup(iamAuthGroup)...)
-	backends = append(backends, h.Incident.RoutesWithGroup(iamAuthGroup)...)
-	backends = append(backends, h.Dashboard.RoutesWithGroup(iamAuthGroup)...)
-	backends = append(backends, h.Notify.RoutesWithGroup(iamAuthGroup)...)
-	backends = append(backends, h.Compliance.RoutesWithGroup(iamAuthGroup)...)
-	backends = append(backends, h.Report.RoutesWithGroup(iamAuthGroup)...)
-	backends = append(backends, h.Exclusion.RoutesWithGroup(iamAuthGroup)...)
-	backends = append(backends, h.FPRule.RoutesWithGroup(iamAuthGroup)...)
+	backends = append(backends, h.Asset.RoutesWithGroup(apiAuthorized)...)
+	backends = append(backends, h.Task.RoutesWithGroup(apiAuthorized)...)
+	backends = append(backends, h.Vuln.RoutesWithGroup(apiAuthorized)...)
+	backends = append(backends, h.Cluster.RoutesWithGroup(apiAuthorized)...)
+	backends = append(backends, h.Tagging.RoutesWithGroup(apiAuthorized)...)
+	backends = append(backends, h.Organize.RoutesWithGroup(apiAuthorized)...)
+	backends = append(backends, h.AssetMgr.RoutesWithGroup(apiAuthorized)...)
+	backends = append(backends, h.SiteMonitor.RoutesWithGroup(apiAuthorized)...)
+	backends = append(backends, h.Circular.RoutesWithGroup(apiAuthorized)...)
+	backends = append(backends, h.Incident.RoutesWithGroup(apiAuthorized)...)
+	backends = append(backends, h.Dashboard.RoutesWithGroup(apiAuthorized)...)
+	backends = append(backends, h.Notify.RoutesWithGroup(apiAuthorized)...)
+	backends = append(backends, h.Compliance.RoutesWithGroup(apiAuthorized)...)
+	backends = append(backends, h.Report.RoutesWithGroup(apiAuthorized)...)
+	backends = append(backends, h.Exclusion.RoutesWithGroup(apiAuthorized)...)
+	backends = append(backends, h.FPRule.RoutesWithGroup(apiAuthorized)...)
 
 	settingRoutes := setting.NewSettingRoutes(h.Settings)
-	backends = append(backends, settingRoutes.RoutesWithGroup(iamAuthGroup)...)
+	backends = append(backends, settingRoutes.RoutesWithGroup(apiAuthorized)...)
 	systemDictSvc := systemdict.NewServiceSystemDict(h.DB)
 	systemDictHandler := systemdict.NewHandler(systemDictSvc)
 	systemDictHandler.SeedDefaults()
 	systemDictRoutes := systemdict.NewRoutes(systemDictHandler)
-	backends = append(backends, systemDictRoutes.RoutesWithGroup(iamAuthGroup)...)
+	backends = append(backends, systemDictRoutes.RoutesWithGroup(apiAuthorized)...)
 	formSvc := formdesign.NewServiceFormDesign(h.DB)
 	formHandler := formdesign.NewHandler(formSvc)
 	formRoutes := formdesign.NewRoutes(formHandler)
-	backends = append(backends, formRoutes.RoutesWithGroup(iamAuthGroup)...)
+	backends = append(backends, formRoutes.RoutesWithGroup(apiAuthorized)...)
 
-	h.initCyberspaceAPI(iamAuthGroup, &backends)
-	h.initKnowledgeAPIs(iamAuthGroup, &backends)
-	h.initTemplateAPI(iamAuthGroup, &backends)
-	h.initScheduler(iamAuthGroup, &backends)
-	h.initCronScheduler(iamAuthGroup, &backends)
-	h.initASMAPI(iamAuthGroup, &backends)
-	h.initIntelAPI(iamAuthGroup, &backends)
+	h.initCyberspaceAPI(apiAuthorized, &backends)
+	h.initKnowledgeAPIs(apiAuthorized, &backends)
+	h.initTemplateAPI(apiAuthorized, &backends)
+	h.initScheduler(apiAuthorized, &backends)
+	h.initCronScheduler(apiAuthorized, &backends)
+	h.initASMAPI(apiAuthorized, &backends)
+	h.initIntelAPI(apiAuthorized, &backends)
 	h.initWebSocket(apiGroup)
 
-	h.initUnifiedNodes(iamAuthGroup)
-	h.initFederationManageAPI(iamAuthGroup)
+	h.initUnifiedNodes(apiAuthorized)
+	h.initFederationManageAPI(apiAuthorized)
 
 	h.syncBackends(backends)
 	h.initFederation()

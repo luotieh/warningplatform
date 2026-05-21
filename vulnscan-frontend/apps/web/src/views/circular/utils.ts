@@ -83,6 +83,9 @@ export function buildLabelToIdMap(idToLabel: Record<string, string>): Record<str
 export const CIRCULAR_SUMMARY_FIELDS = [
   '隐患编号',
   '隐患名称',
+  '关联安全事件',
+  '隐患报告(Word)',
+  '隐患报告(PDF)',
   '隐患类型',
   '隐患URL',
   'CVE编号',
@@ -92,6 +95,11 @@ export const CIRCULAR_SUMMARY_FIELDS = [
   '网站域名IP',
   '隶属单位',
 ] as const;
+
+export function isCircularReportDownload(value: unknown): boolean {
+  const v = String(value ?? '').trim();
+  return v.startsWith('/circular/transfers/reports/');
+}
 
 export function pickCircularSummary(formData: Record<string, unknown>) {
   return CIRCULAR_SUMMARY_FIELDS.filter((key) => {

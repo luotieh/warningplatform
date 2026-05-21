@@ -3,6 +3,7 @@ package stats
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
 	statsContract "vulnscan-backend/incident/stats/stats-contract"
 
@@ -16,6 +17,10 @@ type HandlerStats struct {
 
 func NewHandlerStats(svc statsContract.ServiceStats) *HandlerStats {
 	return &HandlerStats{svc: svc}
+}
+
+func (h *HandlerStats) ServiceStats() statsContract.ServiceStats {
+	return h.svc
 }
 
 func (h *HandlerStats) RemediationStats(c *gin.Context) {
@@ -83,15 +88,19 @@ func (h *HandlerStats) ExportBatch(c *gin.Context) {
 	}
 	format := req.Format
 	if format == "" {
-		format = "csv"
+		format = "word"
 	}
 	data, filename, err := h.svc.ExportBatch(c.Request.Context(), req.IDs, format)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
-	c.Data(http.StatusOK, "text/csv; charset=utf-8", data)
+	contentType, disposition := incidentReportContentType(format, filename)
+	if strings.HasSuffix(strings.ToLower(filename), ".zip") {
+		contentType = "application/zip"
+	}
+	c.Header("Content-Disposition", disposition)
+	c.Data(http.StatusOK, contentType, data)
 }
 
 func (h *HandlerStats) ExportSingle(c *gin.Context) {
@@ -104,15 +113,69 @@ func (h *HandlerStats) ExportSingle(c *gin.Context) {
 	}
 	format := req.Format
 	if format == "" {
-		format = "csv"
+		format = "pdf"
 	}
 	data, filename, err := h.svc.ExportSingle(c.Request.Context(), req.ID, format)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
-	c.Data(http.StatusOK, "text/csv; charset=utf-8", data)
+	contentType, disposition := incidentReportContentType(format, filename)
+	c.Header("Content-Disposition", disposition)
+	c.Data(http.StatusOK, contentType, data)
+}
+
+func (h *HandlerStats) PreviewIncidentReport(c *gin.Context) {
+	uri, ok := web.BindUri[web.Id](c)
+	if !ok {
+		return
+	}
+	data, err := h.svc.PreviewIncidentReport(c.Request.Context(), uri.Id)
+	if err != nil {
+		web.Fail(c).Err(err).Send()
+		return
+	}
+	web.OK(c).Data(data).Send()
+}
+
+func (h *HandlerStats) ExportIncidentReport(c *gin.Context) {
+	uri, ok := web.BindUri[web.Id](c)
+	if !ok {
+		return
+	}
+	query, ok := web.BindQuery[struct {
+		Format string `form:"format"`
+	}](c)
+	if !ok {
+		return
+	}
+	format := query.Format
+	if format == "" {
+		format = "pdf"
+	}
+	data, filename, err := h.svc.ExportIncidentReport(c.Request.Context(), uri.Id, format)
+	if err != nil {
+		web.Fail(c).Err(err).Send()
+		return
+	}
+	contentType, disposition := incidentReportContentType(format, filename)
+	c.Header("Content-Disposition", disposition)
+	c.Data(http.StatusOK, contentType, data)
+}
+
+func incidentReportContentType(format, filename string) (string, string) {
+	switch format {
+	case "word":
+		return "application/msword; charset=utf-8", fmt.Sprintf("attachment; filename=%s", filename)
+	case "docx":
+		return "application/vnd.openxmlformats-officedocument.wordprocessingml.document", fmt.Sprintf("attachment; filename=%s", filename)
+	case "pdf":
+		return "application/pdf", fmt.Sprintf("attachment; filename=%s", filename)
+	case "json":
+		return "application/json; charset=utf-8", fmt.Sprintf("attachment; filename=%s", filename)
+	default:
+		return "text/csv; charset=utf-8", fmt.Sprintf("attachment; filename=%s", filename)
+	}
 }
 
 func (h *HandlerStats) TrendPrediction(c *gin.Context) {

@@ -17,6 +17,9 @@ import (
 // AssetEnrichTemplateID 内置「资产信息富化」扫描模板 ID（与模板表 id/code 一致）。
 const AssetEnrichTemplateID = "asset-enrich"
 
+// AssetDiscoveryTemplateID 内置「资产探测」扫描模板 ID（仅信息收集）。
+const AssetDiscoveryTemplateID = "asset-discovery"
+
 // ErrTemplateNotFound 模板不存在或未启用。
 var ErrTemplateNotFound = errors.New("scan template not found or disabled")
 

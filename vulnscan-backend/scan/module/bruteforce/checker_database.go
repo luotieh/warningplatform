@@ -18,7 +18,7 @@ func (c *MySQLChecker) Name() string        { return "MySQL" }
 func (c *MySQLChecker) DefaultPort() int    { return 3306 }
 func (c *MySQLChecker) NeedsUsername() bool { return true }
 func (c *MySQLChecker) MatchService(svc string, port int) bool {
-	return strings.Contains(svc, "mysql") || port == 3306 || port == 3307
+	return (svc != "" && strings.Contains(svc, "mysql")) || port == 3306 || port == 3307
 }
 func (c *MySQLChecker) Check(ctx context.Context, host string, port int, user, pass string) (bool, string) {
 	conn, err := dial(ctx, host, port)
@@ -43,6 +43,10 @@ func (c *MySQLChecker) Check(ctx context.Context, host string, port int, user, p
 		verEnd++
 	}
 	version := string(buf[5:verEnd])
+	if !strings.Contains(strings.ToLower(version), "mysql") &&
+		!strings.Contains(strings.ToLower(version), "mariadb") {
+		return false, ""
+	}
 
 	salt1End := verEnd + 5
 	if salt1End+8 > n {
@@ -69,7 +73,11 @@ func (c *MySQLChecker) Check(ctx context.Context, host string, port int, user, p
 		return false, ""
 	}
 
-	return buf[4] == 0x00, "MySQL " + version
+	if buf[4] != 0x00 {
+		return false, ""
+	}
+	evidence := fmt.Sprintf("greeting: %s\nauth: OK (user=%s)", version, user)
+	return true, evidence
 }
 
 func mysqlNativePassword(password string, salt []byte) []byte {
@@ -392,8 +400,15 @@ func (c *RedisChecker) Check(ctx context.Context, host string, port int, _, pass
 		resp, _ := reader.ReadString('\n')
 		if strings.Contains(resp, "+PONG") {
 			fmt.Fprintf(conn, "INFO server\r\n")
-			info, _ := reader.ReadString('\n')
-			return true, "Redis (无认证) " + strings.TrimSpace(info)
+			info, _ := readRedisInfoSnippet(reader)
+			return true, "Redis 未授权访问 " + strings.TrimSpace(info)
+		}
+		if strings.Contains(resp, "-NOAUTH") || strings.Contains(strings.ToUpper(resp), "NOAUTH") {
+			fmt.Fprintf(conn, "INFO server\r\n")
+			info, _ := readRedisInfoSnippet(reader)
+			if strings.Contains(info, "redis_version") {
+				return true, "Redis 未授权访问(INFO) " + strings.TrimSpace(info)
+			}
 		}
 		return false, ""
 	}
@@ -406,6 +421,21 @@ func (c *RedisChecker) Check(ctx context.Context, host string, port int, _, pass
 		return true, "Redis " + strings.TrimSpace(info)
 	}
 	return false, ""
+}
+
+func readRedisInfoSnippet(r *bufio.Reader) (string, error) {
+	var b strings.Builder
+	for i := 0; i < 8; i++ {
+		line, err := r.ReadString('\n')
+		if err != nil {
+			break
+		}
+		b.WriteString(line)
+		if strings.Contains(line, "redis_version") {
+			break
+		}
+	}
+	return b.String(), nil
 }
 
 // ─── MongoDB ────────────────────────────────────────────────────────────────

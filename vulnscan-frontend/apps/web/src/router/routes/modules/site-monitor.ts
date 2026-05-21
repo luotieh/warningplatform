@@ -14,7 +14,35 @@ const routes: RouteRecordRaw[] = [
         name: 'MonitorCenter',
         path: 'center',
         component: () => import('#/views/site-monitor/monitor-center.vue'),
-        meta: { title: '监测中心', icon: 'ri:dashboard-line' },
+        meta: {
+          title: '监测中心',
+          icon: 'ri:dashboard-line',
+          perms: [{ action: 'view', label: '查看' }],
+        },
+      },
+      {
+        name: 'MonitorIssues',
+        path: 'issues',
+        component: () => import('#/views/site-monitor/issues/index.vue'),
+        meta: {
+          title: '问题处置',
+          icon: 'ri:alarm-warning-line',
+          perms: [
+            { action: 'view', label: '查看' },
+            { action: 'dispose', label: '处置' },
+            { action: 'export', label: '导出' },
+          ],
+        },
+      },
+      {
+        name: 'MonitorReport',
+        path: 'report',
+        component: () => import('#/views/site-monitor/report.vue'),
+        meta: {
+          title: '监测报告',
+          icon: 'lucide:file-bar-chart-2',
+          perms: [{ action: 'view', label: '查看' }, { action: 'export', label: '导出' }],
+        },
       },
       {
         name: 'MonitorTargets',
@@ -60,10 +88,10 @@ const routes: RouteRecordRaw[] = [
       {
         name: 'MonitorExecutions',
         path: 'tasks/executions',
-        component: () => import('#/views/site-monitor/executions/index.vue'),
+        redirect: '/monitor/issues',
         meta: {
-          title: '执行结果',
-          activePath: '/monitor/targets',
+          title: '问题处置',
+          activePath: '/monitor/issues',
           hideInMenu: true,
         },
       },
@@ -101,7 +129,14 @@ const routes: RouteRecordRaw[] = [
         name: 'MonitorConfig',
         path: 'config',
         component: () => import('#/views/site-monitor/config/index.vue'),
-        meta: { title: '监测配置', icon: 'ri:settings-4-line' },
+        meta: {
+          title: '监测配置',
+          icon: 'ri:settings-4-line',
+          perms: [
+            { action: 'view', label: '查看' },
+            { action: 'update', label: '保存配置' },
+          ],
+        },
       },
     ],
   },

@@ -262,15 +262,24 @@ func (h *Handler) Toggle(c *gin.Context) {
 
 func (h *Handler) SeedBuiltins(c *gin.Context) {
 	builtins := tmplEngine.BuiltinTemplates()
+	updated, created := 0, 0
 	for _, bt := range builtins {
-		var exists model.ScanTemplate
-		if err := h.db.Where("code = ?", bt.ID).First(&exists).Error; err == nil {
+		content, _ := json.Marshal(bt)
+		var count int64
+		h.db.Model(&model.ScanTemplate{}).Where("id = ? OR code = ?", bt.ID, bt.ID).Count(&count)
+		if count > 0 {
+			h.db.Model(&model.ScanTemplate{}).Where("id = ? OR code = ?", bt.ID, bt.ID).
+				Updates(map[string]interface{}{
+					"content":     string(content),
+					"version":     bt.Version,
+					"name":        bt.Name,
+					"description": bt.Description,
+				})
+			updated++
 			continue
 		}
-
-		content, _ := json.Marshal(bt)
 		item := model.ScanTemplate{
-			ID:          qulid.GenerateID(),
+			ID:          bt.ID,
 			Name:        bt.Name,
 			Code:        bt.ID,
 			Category:    "builtin",
@@ -282,9 +291,14 @@ func (h *Handler) SeedBuiltins(c *gin.Context) {
 			Enabled:     true,
 			AuthorID:    "system",
 		}
+		if item.ID == "" {
+			item.ID = qulid.GenerateID()
+		}
 		h.db.Create(&item)
+		created++
 	}
-	web.OK(c).Send()
+	slog.Info("[Template] 内置模板同步完成", "updated", updated, "created", created)
+	web.OK(c).Data(map[string]int{"updated": updated, "created": created}).Send()
 }
 
 func (h *Handler) ListBuiltins(c *gin.Context) {

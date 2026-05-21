@@ -11,7 +11,7 @@ import {
 import type { DataTableColumns } from 'naive-ui';
 import {
   getTemplateList, createTemplate, updateTemplate,
-  deleteTemplate, toggleTemplate,
+  deleteTemplate, toggleTemplate, seedBuiltins,
   type ScanTemplate, type TemplateStage, type TemplateParam,
 } from '#/api/template';
 import { getPipelineModules, type ModuleInfo } from '#/api/pipeline';
@@ -68,6 +68,16 @@ async function loadModules() {
   try {
     allModules.value = await getPipelineModules();
   } catch {}
+}
+
+async function handleSeedBuiltins() {
+  try {
+    await seedBuiltins();
+    message.success('内置模板已同步');
+    await fetchData();
+  } catch (e: any) {
+    message.error(e?.message || '同步失败');
+  }
 }
 
 onMounted(() => { fetchData(); loadModules(); });
@@ -274,6 +284,7 @@ function openDetail(row: ScanTemplate) {
           <NSelect v-model:value="category" size="small" :options="categoryOptions" style="width:120px" @update:value="fetchData" />
           <NInput v-model:value="keyword" size="small" placeholder="搜索模板" clearable style="width:180px" @keyup.enter="fetchData" />
           <NButton size="small" @click="fetchData">搜索</NButton>
+          <NButton size="small" @click="handleSeedBuiltins">同步内置</NButton>
           <NButton size="small" type="primary" @click="openEditor()">新建模板</NButton>
         </NSpace>
       </template>

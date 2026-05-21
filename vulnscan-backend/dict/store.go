@@ -69,6 +69,14 @@ func (s *Store) GetPasswords() []string {
 	return s.Get(model.DictTypePassword, "")
 }
 
+// HasDBEntries 指定类型是否在数据文库（vs_data_library）中有启用条目。
+func (s *Store) HasDBEntries(dictType string) bool {
+	if s.db == nil {
+		return false
+	}
+	return len(s.loadByType(dictType)) > 0
+}
+
 // LoadFromFile 从文件加载字典
 func (s *Store) LoadFromFile(path string) ([]string, error) {
 	f, err := os.Open(path)

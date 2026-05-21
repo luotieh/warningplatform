@@ -30,7 +30,7 @@ export async function getPipelineStages() {
 }
 
 export async function getPipelineProfiles() {
-  const res = await baseRequestClient.get<any>('/pipeline/profiles');
+  const res = await baseRequestClient.get<any>('/pipeline/templates');
   return normalizeListResponse<ProfileInfo>(res);
 }
 
@@ -53,7 +53,14 @@ export interface ModuleConfigInfo {
   params: ModuleParam[];
 }
 
-export async function getModuleConfigs() {
-  const res = await baseRequestClient.get<any>('/pipeline/modules/config');
+export async function getModuleConfigs(opts?: { moduleIds?: string[]; legacy?: boolean }) {
+  const params: Record<string, string> = {};
+  if (opts?.moduleIds?.length) {
+    params.module_ids = opts.moduleIds.join(',');
+  }
+  if (opts?.legacy) {
+    params.legacy = '1';
+  }
+  const res = await baseRequestClient.get<any>('/pipeline/modules/config', { params });
   return normalizeListResponse<ModuleConfigInfo>(res);
 }

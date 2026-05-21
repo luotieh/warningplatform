@@ -4,6 +4,7 @@ func BuiltinTemplates() []*ScanTemplate {
 	return []*ScanTemplate{
 		quickTemplate(),
 		assetEnrichTemplate(),
+		assetDiscoveryTemplate(),
 		vulnRetestTemplate(),
 		reconTemplate(),
 		vulnTemplate(),
@@ -36,12 +37,28 @@ func assetEnrichTemplate() *ScanTemplate {
 		ID:          "asset-enrich",
 		Name:        "资产信息富化",
 		Description: "DNS 枚举、存活与常用端口探测、服务识别、证书检测、IP 属性（走扫描引擎，结果写入扫描发现）",
-		Version:     "1.0.0",
+		Version:     "2.0.0",
 		Author:      "system",
 		Tags:        []string{"asset", "enrich", "recon"},
 		Stages: []TemplateStage{
 			{Name: "discover", Modules: []string{"icmp_ping", "port_scan"}, Parallel: true},
-			{Name: "enrich", Modules: []string{"service_probe", "dns_all", "ip_attr", "cert_check"}, Parallel: true, DependsOn: []string{"discover"}},
+			{Name: "enrich", Modules: []string{"service_probe", "asset_enrich"}, Parallel: true, DependsOn: []string{"discover"}},
+		},
+	}
+}
+
+// assetDiscoveryTemplate 的 ID 须与 scanrunner.AssetDiscoveryTemplateID 一致。
+func assetDiscoveryTemplate() *ScanTemplate {
+	return &ScanTemplate{
+		ID:          "asset-discovery",
+		Name:        "资产探测",
+		Description: "仅信息收集：主机发现（ICMP/端口）、服务识别，不含漏洞扫描",
+		Version:     "1.0.0",
+		Author:      "system",
+		Tags:        []string{"asset", "discovery", "recon"},
+		Stages: []TemplateStage{
+			{Name: "discover", Modules: []string{"host_discover"}, Parallel: false},
+			{Name: "probe", Modules: []string{"service_probe"}, Parallel: false, DependsOn: []string{"discover"}},
 		},
 	}
 }
@@ -65,12 +82,12 @@ func reconTemplate() *ScanTemplate {
 		ID:          "recon",
 		Name:        "信息收集",
 		Description: "全面信息收集：子域名、DNS、指纹、WAF、JS分析、证书、API发现",
-		Version:     "1.0.0",
+		Version:     "2.0.0",
 		Author:      "system",
 		Tags:        []string{"recon", "discovery"},
 		Stages: []TemplateStage{
-			{Name: "discover", Modules: []string{"icmp_ping", "port_scan", "syn_scan", "udp_scan", "service_probe", "subdomain_brute", "web_crawl"}, Parallel: true},
-			{Name: "recon", Modules: []string{"tech_detect", "waf_detect", "favicon", "cert_check", "dns_all", "ip_attr", "real_ip", "js_analyze", "web_fingerprint", "api_disc", "info_leak", "company_recon", "email_collect", "screenshot"}, Parallel: true, DependsOn: []string{"discover"}},
+			{Name: "discover", Modules: []string{"host_discover", "service_probe", "web_crawl"}, Parallel: true},
+			{Name: "recon", Modules: []string{"web_recon"}, Parallel: true, DependsOn: []string{"discover"}},
 		},
 	}
 }
@@ -79,16 +96,12 @@ func vulnTemplate() *ScanTemplate {
 	return &ScanTemplate{
 		ID:          "vuln",
 		Name:        "漏洞扫描",
-		Description: "仅执行漏洞检测模块：SQLi、XSS、弱口令、SSRF等",
-		Version:     "1.0.0",
+		Description: "Web 漏洞与凭据安全组合检测",
+		Version:     "2.0.0",
 		Author:      "system",
 		Tags:        []string{"vuln", "attack"},
 		Stages: []TemplateStage{
-			{Name: "vuln", Modules: []string{
-				"sqli", "xss", "weak_pass", "brute_force",
-				"ssrf", "cmdi", "lfi", "ssti", "xxe", "nosqli",
-				"jwt_sec", "advanced_vuln", "unauth",
-			}, Parallel: true},
+			{Name: "vuln", Modules: []string{"web_vuln_scan", "credential_audit"}, Parallel: true},
 		},
 	}
 }
@@ -99,16 +112,12 @@ func vulnFullTemplate() *ScanTemplate {
 	return &ScanTemplate{
 		ID:          "vuln-full",
 		Name:        "完整漏洞扫描",
-		Description: "全部漏洞检测模块，包含API安全",
-		Version:     "1.0.0",
+		Description: "Web 漏洞与凭据安全组合检测（含 API 安全）",
+		Version:     "2.0.0",
 		Author:      "system",
 		Tags:        []string{"vuln", "full"},
 		Stages: []TemplateStage{
-			{Name: "vuln", Modules: []string{
-				"sqli", "xss", "weak_pass", "brute_force",
-				"ssrf", "cmdi", "lfi", "ssti", "xxe", "nosqli",
-				"jwt_sec", "apisec", "advanced_vuln", "unauth",
-			}, Parallel: true},
+			{Name: "vuln", Modules: []string{"web_vuln_scan", "credential_audit"}, Parallel: true},
 		},
 	}
 }
@@ -118,21 +127,14 @@ func fullTemplate() *ScanTemplate {
 		ID:          "full",
 		Name:        "全量扫描",
 		Description: "信息收集+目录扫描+漏洞扫描+nuclei模板完整流程",
-		Version:     "1.0.0",
+		Version:     "2.0.0",
 		Author:      "system",
 		Tags:        []string{"full", "recommended"},
 		Stages: []TemplateStage{
-			{Name: "discover", Modules: []string{"icmp_ping", "port_scan", "syn_scan", "udp_scan", "service_probe"}, Parallel: true},
-			{Name: "recon", Modules: []string{
-				"tech_detect", "waf_detect", "favicon", "cert_check", "dns_all", "ip_attr", "real_ip",
-				"subdomain_brute", "web_crawl", "js_analyze", "web_fingerprint", "api_disc", "info_leak",
-				"company_recon", "email_collect", "screenshot",
-			}, Parallel: true, DependsOn: []string{"discover"}},
+			{Name: "discover", Modules: []string{"host_discover", "service_probe"}, Parallel: true},
+			{Name: "recon", Modules: []string{"web_recon"}, Parallel: true, DependsOn: []string{"discover"}},
 			{Name: "attack", Modules: []string{
-				"sqli", "xss", "weak_pass", "brute_force",
-				"ssrf", "cmdi", "lfi", "ssti", "xxe", "nosqli",
-				"jwt_sec", "apisec", "advanced_vuln", "unauth",
-				"fpenhance", "nettopo", "nuclei-poc", "dir_scan",
+				"web_vuln_scan", "credential_audit", "nuclei-poc", "dir_scan", "infra_extra",
 			}, Parallel: true, DependsOn: []string{"recon"}, Condition: &StageCondition{PrevStageMinTargets: 1}},
 		},
 	}

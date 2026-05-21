@@ -92,8 +92,8 @@ func (r *Runner) executeDAG(
 					if !ShouldRun(stage, stageCtx) {
 						r.writeLog("info", fmt.Sprintf("阶段 [%s] 条件不满足，跳过", stage.name), stage.name, "")
 						if cb.OnModuleDone != nil {
-							for range stage.modules {
-								cb.OnModuleDone(stage.name)
+							for _, m := range stage.modules {
+								cb.OnModuleDone(stage.name, m.ID())
 							}
 						}
 						resultsCh <- dagResult{nodeIndex: n.index}
@@ -207,8 +207,8 @@ func (r *Runner) executeDAG(
 						if !ShouldRun(stg, stageCtx) {
 							r.writeLog("info", fmt.Sprintf("阶段 [%s] 条件不满足，跳过", stg.name), stg.name, "")
 							if cb.OnModuleDone != nil {
-								for range stg.modules {
-									cb.OnModuleDone(stg.name)
+								for _, m := range stg.modules {
+									cb.OnModuleDone(stg.name, m.ID())
 								}
 							}
 							resultsCh <- dagResult{nodeIndex: n.index}
@@ -273,8 +273,8 @@ func (r *Runner) executeSequential(
 		if !ShouldRun(stage, stageCtx) {
 			r.writeLog("info", fmt.Sprintf("阶段 [%s] 条件不满足，跳过", stage.name), stage.name, "")
 			if cb.OnModuleDone != nil {
-				for range stage.modules {
-					cb.OnModuleDone(stage.name)
+				for _, m := range stage.modules {
+					cb.OnModuleDone(stage.name, m.ID())
 				}
 			}
 			continue

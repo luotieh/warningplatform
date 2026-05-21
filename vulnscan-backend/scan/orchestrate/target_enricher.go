@@ -231,6 +231,14 @@ func (e *TargetEnricher) mergeInto(dest, src *core.Target) {
 	if dest.Protocol == "" && src.Protocol != "" {
 		dest.Protocol = src.Protocol
 	}
+	if dest.Service == "" && src.Service != "" {
+		dest.Service = src.Service
+	} else if dest.Service == "" && src.Protocol != "" {
+		p := strings.ToLower(src.Protocol)
+		if p != "tcp" && p != "udp" && !strings.HasPrefix(p, "http") {
+			dest.Service = src.Protocol
+		}
+	}
 	if src.Extra != nil {
 		if dest.Extra == nil {
 			dest.Extra = make(map[string]string)

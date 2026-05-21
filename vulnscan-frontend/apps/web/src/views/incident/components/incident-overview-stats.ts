@@ -159,9 +159,7 @@ export function buildIncidentOverviewStats(
     highlight:
       incident.level >= 4 ? 'error' : incident.level >= 3 ? 'warning' : 'info',
   });
-  push(primary, '发现途径', sourceLabels[incident.source] || String(incident.source), {
-    highlight: 'info',
-  });
+  push(primary, '发现途径', sourceLabels[incident.source] || String(incident.source));
   push(primary, '事件类型', meta?.incident_type);
   push(primary, '发现时间', fmt(incident.report_time));
   push(primary, '创建时间', fmt(incident.created_at));

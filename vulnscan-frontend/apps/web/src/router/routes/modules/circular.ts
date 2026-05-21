@@ -117,6 +117,7 @@ const routes: RouteRecordRaw[] = [
         meta: {
           icon: 'lucide:book-open',
           title: '通报台账',
+          perms: [{ action: 'view', label: '查看' }, { action: 'export', label: '导出' }],
         },
       },
       {

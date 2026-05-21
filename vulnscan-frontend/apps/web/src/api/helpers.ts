@@ -125,11 +125,32 @@ export function getImportErrorPayload(
 }
 
 export function normalizePagedResponse<T = any>(res: any): { items: T[]; total: number } {
-  const body = res?.data ?? res;
-  return {
-    items: (body?.data ?? body?.items ?? []) as T[],
-    total: Number(body?.count ?? body?.total ?? 0),
-  };
+  const envelope = res?.data ?? res;
+  const payload = envelope?.data ?? envelope;
+
+  let items: T[] = [];
+  if (Array.isArray(payload)) {
+    items = payload as T[];
+  } else if (payload && typeof payload === 'object') {
+    if (Array.isArray(payload.data)) items = payload.data as T[];
+    else if (Array.isArray(payload.items)) items = payload.items as T[];
+    else if (Array.isArray(payload.list)) items = payload.list as T[];
+  }
+  if (items.length === 0) {
+    if (Array.isArray(envelope?.items)) items = envelope.items as T[];
+    else if (Array.isArray(envelope?.list)) items = envelope.list as T[];
+  }
+
+  const total = Number(
+    (payload && typeof payload === 'object' && !Array.isArray(payload)
+      ? payload.count ?? payload.total
+      : undefined) ??
+      envelope?.count ??
+      envelope?.total ??
+      items.length,
+  );
+
+  return { items, total };
 }
 
 export function normalizeListResponse<T = any>(res: any): T[] {

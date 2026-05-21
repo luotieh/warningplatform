@@ -316,16 +316,100 @@ export function downloadImportTemplate() {
   });
 }
 
-export function exportBatch(params?: { ids?: string[]; status?: number; level?: number }) {
+export function exportBatch(params?: {
+  ids?: string[];
+  format?: 'word' | 'docx' | 'pdf';
+  status?: number;
+  level?: number;
+}) {
   return baseRequestClient.post('/incident/incidents/export-batch', params, {
     responseType: 'blob',
   });
 }
 
-export function exportSingle(id: string) {
+export function exportSingle(id: string, format?: string) {
   return baseRequestClient.get(`/incident/incidents/export-single`, {
-    params: { id },
+    params: { id, format },
     responseType: 'blob',
+  });
+}
+
+export interface IncidentReportData {
+  title: string;
+  name?: string;
+  generated_at: string;
+  incident_no: string;
+  data_no?: string;
+  vendor_region?: string;
+  incident_url?: string;
+  asset_name?: string;
+  system_name?: string;
+  domain_ip?: string;
+  site_ip?: string;
+  region?: string;
+  incident_type?: string;
+  warning_level?: string;
+  level: string;
+  discovery_time?: string;
+  vendor_name?: string;
+  vendor_time?: string;
+  affected_count?: string;
+  affected_type?: string;
+  unit?: string;
+  unit_type?: string;
+  industry?: string;
+  miit_record_no?: string;
+  mlps_level?: string;
+  mlps_record_no?: string;
+  description?: string;
+  description_sections?: {
+    has_sections?: boolean;
+    cause?: string;
+    evidence?: string;
+    detail?: string;
+    trace?: string;
+  };
+  evidence_images?: Array<{
+    caption: string;
+    mime_type: string;
+    base64?: string;
+  }>;
+  attachment?: string;
+  source: string;
+  status: string;
+  risk_score?: number;
+  ai_opinion?: string;
+  cve_id?: string;
+  cvss_score?: number;
+  remediation_plan?: string;
+  remediation_result?: string;
+  remediation_advice?: string;
+  remediation_assignee?: string;
+  remediation_deadline?: string;
+  vulnerabilities?: Array<{
+    title: string;
+    severity: string;
+    cve_id?: string;
+    asset?: string;
+    status?: string;
+    description?: string;
+    remediation?: string;
+  }>;
+  operation_logs?: Array<{
+    operation: string;
+    operator: string;
+    time: string;
+    comment?: string;
+  }>;
+}
+
+export function previewIncidentReport(id: string) {
+  return requestClient.get<IncidentReportData>(`/incident/incidents/${id}/report/preview`);
+}
+
+export function downloadIncidentDetailReport(id: string, format: 'word' | 'docx' | 'pdf') {
+  return requestClient.download<Blob>(`/incident/incidents/${id}/report`, {
+    params: { format },
   });
 }
 
@@ -454,6 +538,7 @@ export async function getOplogList(params: { incident_id: string } & Record<stri
 // ─── 流转到通报 ───
 
 export interface TransferToCircularReq {
+  incident_id?: string;
   incident_no: string;
   name: string;
   level?: number;
