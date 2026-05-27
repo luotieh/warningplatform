@@ -117,6 +117,9 @@ type Asset struct {
 	EventsCount   int `gorm:"default:0" json:"events_count"`
 	CircularCount int `gorm:"default:0" json:"circular_count"`
 
+	// ── 首页截图 ──
+	Screenshot string `gorm:"type:mediumtext" json:"screenshot,omitempty"`
+
 	// ── 扩展 ──
 	Tags   StringArray `gorm:"type:text" json:"tags"`
 	Extra  JSONMap     `gorm:"type:text" json:"extra"`
@@ -211,6 +214,7 @@ type Organize struct {
 	UnitType                  string     `gorm:"type:varchar(50)" json:"unit_type"`
 	IsNotificationMember      bool       `gorm:"default:false" json:"is_notification_member"`
 	Address                   string     `gorm:"type:varchar(500)" json:"address"`
+	RegionCode                string     `gorm:"type:varchar(12)" json:"region_code"`
 	UnitDetailAddress         string     `gorm:"type:varchar(500)" json:"unit_detail_address"`
 	LeaderName                string     `gorm:"type:varchar(100)" json:"leader_name"`
 	LeaderTitle               string     `gorm:"type:varchar(100)" json:"leader_title"`
@@ -222,6 +226,7 @@ type Organize struct {
 	ContactTitle              string     `gorm:"type:varchar(100)" json:"contact_title"`
 	ContactPhone              string     `gorm:"type:varchar(30)" json:"contact_phone"`
 	AssetCount                int64      `gorm:"default:0" json:"asset_count"`
+	ParentName                string     `gorm:"-" json:"parent_name,omitempty"`
 	DeletedAt                 *time.Time `gorm:"index" json:"deleted_at"`
 	CreatedBy                 string     `gorm:"type:varchar(64)" json:"created_by"`
 	CreatedAt                 time.Time  `json:"created_at"`

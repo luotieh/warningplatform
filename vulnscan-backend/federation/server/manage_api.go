@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"code.yt-security.com/public/core/v2/web"
+	"code.yt-security.com/public/sdk/authorize"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
@@ -16,14 +17,15 @@ type ManageAPI struct {
 	versionManager *fedSync.VersionManager
 }
 
-func RegisterManageRoutes(g *gin.RouterGroup, db *gorm.DB) {
+func RegisterManageRoutes(g *gin.RouterGroup, db *gorm.DB) []authorize.BackendItem {
 	api := &ManageAPI{
 		db:             db,
 		versionManager: fedSync.NewVersionManager(db),
 	}
-	fg := g.Group("/federation")
-	fg.GET("/sub-masters", api.ListSubMasters)
-	fg.GET("/stats", api.Stats)
+	return authorize.RegisterRoutes(g.Group("/federation"), []authorize.Route{
+		{Name: "子节点列表", Path: "sub-masters", Method: "GET", Handler: api.ListSubMasters, Enabled: true},
+		{Name: "联邦统计", Path: "stats", Method: "GET", Handler: api.Stats, Enabled: true},
+	})
 }
 
 type subMasterItem struct {

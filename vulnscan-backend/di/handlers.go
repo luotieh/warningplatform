@@ -42,6 +42,7 @@ import (
 	"code.yt-security.com/public/core/v2/web"
 	iamsdk "code.yt-security.com/public/sdk"
 	"code.yt-security.com/public/sdk/authorize"
+	"code.yt-security.com/public/sdk/storage"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -91,10 +92,6 @@ func (h *Handlers) RouteLoad() {
 
 	apiGroup := engine.Group("/api")
 
-	// 仅认证：IAM SDK 的 /me/*、/auth/refresh 等用用户 token 代理 IAM（Authenticated 端点），
-	// 不应再走 SyncBackends 的接口级 RBAC，否则非特权用户访问 /me/profile 会 403 并触发前端降级。
-	apiAuthenticated := apiGroup.Group("/", h.IAM.Middleware().Authentication())
-
 	var ssoOpts *iamsdk.SSORoutesOptions
 	if h.Config.SSO.CallbackURI != "" {
 		ssoOpts = &iamsdk.SSORoutesOptions{
@@ -104,9 +101,9 @@ func (h *Handlers) RouteLoad() {
 			TokenRelayCallbackURI: h.Config.SSO.TokenRelayCallbackURI,
 		}
 	}
-	h.registerPrivilegedFrontendSync(apiAuthenticated)
 
-	h.IAM.RegisterDefaultRoutes(engine, apiAuthenticated, iamsdk.DefaultRoutesOptions{
+	// SDK v1.5+ 在 sdkRoot 内自动挂 Authentication，parent 上不要重复挂认证中间件。
+	h.IAM.RegisterDefaultRoutes(engine, apiGroup, iamsdk.DefaultRoutesOptions{
 		SSO: ssoOpts,
 		Audit: &iamsdk.AuditMiddlewareOptions{
 			Domain:  h.Product.GetCode(),
@@ -118,9 +115,32 @@ func (h *Handlers) RouteLoad() {
 		},
 	})
 
-	apiAuthorized := apiAuthenticated.Group("", h.ModuleAuthorization())
+	apiAuthenticated := apiGroup.Group("/", h.IAM.Middleware().Authentication())
+	h.registerPrivilegedFrontendSync(apiAuthenticated)
+
+	apiAuthorized := apiAuthenticated.Group("", h.IAMAuthorization())
 
 	var backends []authorize.BackendItem
+	backends = append(backends, authorize.BackendItem{
+		Method: "POST",
+		Path:   "/api/system/iam/sync-frontends",
+		Name:   "同步前端菜单到IAM",
+	})
+	backends = append(backends,
+		authorize.BackendItem{Method: "GET", Path: "/api/iam/todos", Name: "待办事项列表", Enabled: true},
+		authorize.BackendItem{Method: "GET", Path: "/api/iam/todos/stats", Name: "待办事项统计", Enabled: true},
+		authorize.BackendItem{Method: "POST", Path: "/api/iam/todos", Name: "创建待办事项", Enabled: true},
+		authorize.BackendItem{Method: "PUT", Path: "/api/iam/todos/:id", Name: "更新待办事项", Enabled: true},
+		authorize.BackendItem{Method: "PUT", Path: "/api/iam/todos/:id/status", Name: "更新待办状态", Enabled: true},
+		authorize.BackendItem{Method: "DELETE", Path: "/api/iam/todos/:id", Name: "删除待办事项", Enabled: true},
+		authorize.BackendItem{Method: "GET", Path: "/api/notify/list", Name: "通知列表", Enabled: true},
+		authorize.BackendItem{Method: "GET", Path: "/api/notify/unread-count", Name: "未读通知数", Enabled: true},
+		authorize.BackendItem{Method: "POST", Path: "/api/notify/:id/read", Name: "标记通知已读", Enabled: true},
+		authorize.BackendItem{Method: "POST", Path: "/api/notify/read-all", Name: "全部标记已读", Enabled: true},
+		authorize.BackendItem{Method: "GET", Path: "/api/nodes", Name: "节点列表", Enabled: true},
+		authorize.BackendItem{Method: "GET", Path: "/api/sitemonitor/executions/export", Name: "导出监测记录", Enabled: true},
+		authorize.BackendItem{Method: "GET", Path: "/api/sitemonitor/reports", Name: "监测报告列表", Enabled: true},
+	)
 	backends = append(backends, h.Asset.RoutesWithGroup(apiAuthorized)...)
 	backends = append(backends, h.Task.RoutesWithGroup(apiAuthorized)...)
 	backends = append(backends, h.Vuln.RoutesWithGroup(apiAuthorized)...)
@@ -159,8 +179,8 @@ func (h *Handlers) RouteLoad() {
 	h.initIntelAPI(apiAuthorized, &backends)
 	h.initWebSocket(apiGroup)
 
-	h.initUnifiedNodes(apiAuthorized)
-	h.initFederationManageAPI(apiAuthorized)
+	backends = append(backends, h.initUnifiedNodes(apiAuthorized)...)
+	backends = append(backends, h.initFederationManageAPI(apiAuthorized)...)
 
 	h.syncBackends(backends)
 	h.initFederation()
@@ -178,6 +198,13 @@ func (h *Handlers) RouteLoad() {
 	sitemon.InitDefaultRuleData(h.DB)
 
 	h.embeddedAgent = monitoragent.NewEmbeddedAgent(h.DB, "")
+	if nats := h.SiteMonitor.GetNatsService(); nats != nil {
+		h.embeddedAgent.SetScreenshotStore(nats.StoreEvidenceScreenshot)
+	}
+
+	h.injectCrawlScreenshotUploader()
+	h.injectAnnotatedScreenshotUploader()
+
 	h.embeddedAgent.Start()
 
 	h.SiteMonitor.StartScheduler()
@@ -185,17 +212,90 @@ func (h *Handlers) RouteLoad() {
 	frontend.SetupSPA(engine, web.MiddlewareNotFound())
 }
 
+func (h *Handlers) injectCrawlScreenshotUploader() {
+	if h.IAM == nil {
+		return
+	}
+	iamBase := strings.TrimRight(h.Config.IAM.BaseURL, "/")
+	storageBaseURL := iamBase + h.Config.IAM.PathPrefix + "/storage/file"
+
+	uploader := func(ctx context.Context, jpegData []byte, name string) (string, error) {
+		req := storage.FileUploadRequest{
+			PolicyCode:  "default",
+			FileName:    "crawl-" + name + ".jpg",
+			ContentType: "image/jpeg",
+			Data:        jpegData,
+			BizType:     "crawl_screenshot",
+			App:         "vulnscan",
+		}
+		if uid := sitemon.CreatorIDFromContext(ctx); uid != "" {
+			req.UserID = uid
+		}
+		file, err := h.IAM.Storage.UploadSimpleAsService(ctx, req)
+		if err != nil {
+			return "", err
+		}
+		return file.ID, nil
+	}
+	h.SiteMonitor.SetCrawlScreenshotUploader(uploader, storageBaseURL)
+	slog.Info("[+] 爬虫截图上传能力已注入（IAM Storage）")
+}
+
+func (h *Handlers) injectAnnotatedScreenshotUploader() {
+	if h.IAM == nil || h.embeddedAgent == nil {
+		return
+	}
+	iamBase := strings.TrimRight(h.Config.IAM.BaseURL, "/")
+	storageBaseURL := iamBase + h.Config.IAM.PathPrefix + "/storage/file"
+
+	uploader := func(ctx context.Context, jpegData []byte, name string) (string, error) {
+		req := storage.FileUploadRequest{
+			PolicyCode:  "default",
+			FileName:    name + ".jpg",
+			ContentType: "image/jpeg",
+			Data:        jpegData,
+			BizType:     "tamper_screenshot",
+			App:         "vulnscan",
+		}
+		file, err := h.IAM.Storage.UploadSimpleAsService(ctx, req)
+		if err != nil {
+			return "", err
+		}
+		return file.ID, nil
+	}
+	deleter := func(ctx context.Context, fileID string) error {
+		return h.IAM.Storage.DeleteFileAsService(ctx, fileID)
+	}
+	h.embeddedAgent.SetAnnotatedUploader(uploader, deleter, storageBaseURL)
+	slog.Info("[+] 标注截图上传能力已注入（IAM Storage）")
+}
+
 func (h *Handlers) syncBackends(backends []authorize.BackendItem) {
 	if len(backends) == 0 || h.Config.IAM.ClientID == "" {
 		return
 	}
+
+	leafCount := 0
+	countLeaves(backends, &leafCount)
+	slog.Info("[sync-backends] 准备同步", "top_level", len(backends), "leaf_endpoints", leafCount)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	if err := h.IAM.Authorize.SyncBackends(ctx, h.Config.IAM.ClientID, backends); err != nil {
 		slog.Error("sync backends to IAM failed", "err", err)
 		return
 	}
-	slog.Info("[+] 后端接口已同步到 IAM", "count", len(backends))
+	slog.Info("[+] 后端接口已同步到 IAM", "count", len(backends), "leaf_endpoints", leafCount)
+}
+
+func countLeaves(items []authorize.BackendItem, count *int) {
+	for i := range items {
+		if len(items[i].Children) > 0 {
+			countLeaves(items[i].Children, count)
+		} else if items[i].Method != "" {
+			*count++
+		}
+	}
 }
 
 func (h *Handlers) Shutdown() {

@@ -5,7 +5,7 @@ import { BasicLayout } from '#/layouts';
 const routes: RouteRecordRaw[] = [
   {
     component: BasicLayout,
-    meta: { icon: 'lucide:layout-dashboard', order: 1, title: '仪表盘' },
+    meta: { icon: 'lucide:layout-dashboard', order: 1, title: '安全看板' },
     name: 'Dashboard',
     path: '/dashboard',
     redirect: '/dashboard/overview',
@@ -18,6 +18,18 @@ const routes: RouteRecordRaw[] = [
           icon: 'lucide:gauge',
           title: '总览',
           perms: [{ action: 'view', label: '查看' }],
+          apis: [
+            'GET /dashboard/overview',
+            'GET /dashboard/vuln-trend',
+            'GET /dashboard/task-trend',
+            'GET /dashboard/top-vuln-assets',
+            'GET /dashboard/task-status',
+            'GET /dashboard/recent-activity',
+            'GET /task/list',
+          ],
+          apisByAction: {
+            view: ['GET /dashboard/overview'],
+          },
         },
       },
     ],

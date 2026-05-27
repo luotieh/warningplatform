@@ -806,7 +806,7 @@ onMounted(() => { fetchStats(); onSearch(); fetchSubscriptions(); fetchTrend(); 
     <NModal v-model:show="testModalVisible" preset="card" title="订阅测试结果" style="width:640px">
       <template v-if="testResult">
         <div style="margin-bottom:8px;font-size:13px">
-          规则「{{ testResult.subscription?.name }}」在当前情报库中匹配到 <b>{{ testResult.matched }}</b> 条CVE（展示前20条）
+          规则「{{ testResult.subscription?.name }}」在当前威胁情报中匹配到 <b>{{ testResult.matched }}</b> 条CVE（展示前20条）
         </div>
         <NDataTable
           :data="testResult.preview ?? []"

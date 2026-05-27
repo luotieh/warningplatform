@@ -1,10 +1,10 @@
 <script lang="ts" setup>
 import type { TreeOption } from 'naive-ui';
 
-import { computed, ref, watch } from 'vue';
+import { computed, h, ref, watch } from 'vue';
 
 import { useDebounceFn } from '@vueuse/core';
-import { NButton, NCard, NEmpty, NInput, NSpace, NTree } from 'naive-ui';
+import { NButton, NCard, NEmpty, NInput, NSpace, NTag, NTree } from 'naive-ui';
 
 defineOptions({ name: 'LedgerOrgTree' });
 
@@ -56,6 +56,12 @@ const emptyDescription = computed(() => {
   return '暂无组织数据';
 });
 
+function renderSuffix({ option }: { option: TreeOption & { assetCount?: number } }) {
+  const count = option.assetCount;
+  if (!count || count <= 0) return null;
+  return h(NTag, { size: 'tiny', round: true, bordered: false, type: 'info' }, () => String(count));
+}
+
 defineExpose({
   clearSearch() {
     pattern.value = '';
@@ -95,6 +101,7 @@ defineExpose({
         children-field="children"
         :data="data"
         :selected-keys="selectedKeys"
+        :render-suffix="renderSuffix"
         @update:selected-keys="handleSelect"
       />
       <NEmpty v-else size="small" :description="emptyDescription" />
@@ -120,6 +127,7 @@ defineExpose({
       children-field="children"
       :data="data"
       :selected-keys="selectedKeys"
+      :render-suffix="renderSuffix"
       @update:selected-keys="handleSelect"
     />
     <NEmpty v-else size="small" :description="emptyDescription" />

@@ -36,6 +36,33 @@ func (a *TamperAnalyzer) Analyze(ctx context.Context, input *Input) (*Output, er
 	if needsBaselineInit(input.Baseline) {
 		bodyText := tamperCompareText(snap)
 		textLen := utf8.RuneCountInString(bodyText)
+
+		trustedCDNs := a.loadTrustedDomains()
+		suspicion := EvaluateBaselineSuspicion(snap, trustedCDNs)
+		waybackResult := VerifyBaselineViaWayback(ctx, snap.URL, snap)
+		crossResult := CrossValidateBaseline(ctx, snap)
+
+		if waybackResult.Suspicious {
+			suspicion.Score = min(suspicion.Score+20, 100)
+			suspicion.Details = append(suspicion.Details, SuspicionFinding{
+				Rule:     "wayback_mismatch",
+				Severity: "high",
+				Score:    20,
+				Desc:     waybackResult.Reason,
+			})
+		}
+		if crossResult.Suspicious {
+			suspicion.Score = min(suspicion.Score+crossResult.Score, 100)
+			for _, reason := range crossResult.Reasons {
+				suspicion.Details = append(suspicion.Details, SuspicionFinding{
+					Rule:     "cross_validate",
+					Severity: "medium",
+					Score:    crossResult.Score,
+					Desc:     reason,
+				})
+			}
+		}
+
 		output.BaselineUpdate = &model.MonitorBaselineUpdate{
 			ContentHash:       snap.ContentHash,
 			DomStructureHash:  fmt.Sprintf("%x", md5.Sum([]byte(extractDOMStructure(snap.RenderedHTML)))),
@@ -44,6 +71,8 @@ func (a *TamperAnalyzer) Analyze(ctx context.Context, input *Input) (*Output, er
 			VisibleTextLength: textLen,
 			BodyText:          bodyText,
 			Action:            "init",
+			SuspicionScore:    suspicion.Score,
+			SuspicionDetail:   suspicion.DetailJSON(),
 		}
 		evidence := buildTamperFirstRunEvidence(bodyText)
 		detailJSON, _ := json.Marshal(map[string]any{
@@ -54,6 +83,9 @@ func (a *TamperAnalyzer) Analyze(ctx context.Context, input *Input) (*Output, er
 			"visible_text_length": textLen,
 			"url":                 firstNonEmptyStr(snap.URL),
 			"evidence":            evidence,
+			"suspicion":           suspicion,
+			"wayback":             waybackResult,
+			"cross_validation":    crossResult,
 		})
 		output.DetailsJSON = string(detailJSON)
 		return output, nil

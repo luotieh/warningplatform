@@ -73,65 +73,67 @@ func (r *Runner) executeDAG(
 	resultsCh := make(chan dagResult, len(nodes))
 	var wg sync.WaitGroup
 
+	runNode := func(n *dagNode) {
+		defer wg.Done()
+
+		select {
+		case <-ctx.Done():
+			resultsCh <- dagResult{nodeIndex: n.index}
+			return
+		default:
+		}
+
+		stage := n.stage
+
+		if !ShouldRun(stage, stageCtx) {
+			r.writeLog("info", fmt.Sprintf("阶段 [%s] 条件不满足，跳过", stage.name), stage.name, "")
+			if cb.OnModuleDone != nil {
+				for _, m := range stage.modules {
+					cb.OnModuleDone(stage.name, m.ID())
+				}
+			}
+			resultsCh <- dagResult{nodeIndex: n.index}
+			return
+		}
+
+		r.progress.SetCurrentStage(stage.name)
+		r.progress.SyncToDB(stage.name)
+		r.publishEvent(NewStageEvent(r.task.ID, stage.name, "started"))
+
+		moduleNames := make([]string, 0, len(stage.modules))
+		for _, m := range stage.modules {
+			moduleNames = append(moduleNames, m.ID())
+		}
+		r.writeLog("info",
+			fmt.Sprintf("阶段 [%s] 开始，包含 %d 个模块: %v", stage.name, len(stage.modules), moduleNames),
+			stage.name, "")
+
+		stageConfig := mergeConfig(config, stage.config)
+		timeout := r.moduleTimeout
+		if stage.timeout > 0 {
+			timeout = stage.timeout
+		}
+
+		targetsMu.RLock()
+		stageTargets := currentTargets
+		targetsMu.RUnlock()
+
+		stageFindings, newTargets := ExecuteStageWithOpts(
+			ctx, r.task.ID, stage, stageTargets, stageConfig, timeout, cb, engineOpts,
+		)
+
+		resultsCh <- dagResult{
+			nodeIndex: n.index,
+			findings:  stageFindings,
+			targets:   newTargets,
+		}
+	}
+
 	launchReady := func() {
 		for _, node := range nodes {
 			if atomic.LoadInt32(&node.inDegree) == 0 && atomic.CompareAndSwapInt32(&node.inDegree, 0, -1) {
 				wg.Add(1)
-				go func(n *dagNode) {
-					defer wg.Done()
-
-					select {
-					case <-ctx.Done():
-						resultsCh <- dagResult{nodeIndex: n.index}
-						return
-					default:
-					}
-
-					stage := n.stage
-
-					if !ShouldRun(stage, stageCtx) {
-						r.writeLog("info", fmt.Sprintf("阶段 [%s] 条件不满足，跳过", stage.name), stage.name, "")
-						if cb.OnModuleDone != nil {
-							for _, m := range stage.modules {
-								cb.OnModuleDone(stage.name, m.ID())
-							}
-						}
-						resultsCh <- dagResult{nodeIndex: n.index}
-						return
-					}
-
-					r.progress.SetCurrentStage(stage.name)
-					r.progress.SyncToDB(stage.name)
-					r.publishEvent(NewStageEvent(r.task.ID, stage.name, "started"))
-
-					moduleNames := make([]string, 0, len(stage.modules))
-					for _, m := range stage.modules {
-						moduleNames = append(moduleNames, m.ID())
-					}
-					r.writeLog("info",
-						fmt.Sprintf("阶段 [%s] 开始，包含 %d 个模块: %v", stage.name, len(stage.modules), moduleNames),
-						stage.name, "")
-
-					stageConfig := mergeConfig(config, stage.config)
-					timeout := r.moduleTimeout
-					if stage.timeout > 0 {
-						timeout = stage.timeout
-					}
-
-					targetsMu.RLock()
-					stageTargets := currentTargets
-					targetsMu.RUnlock()
-
-					stageFindings, newTargets := ExecuteStageWithOpts(
-						ctx, r.task.ID, stage, stageTargets, stageConfig, timeout, cb, engineOpts,
-					)
-
-					resultsCh <- dagResult{
-						nodeIndex: n.index,
-						findings:  stageFindings,
-						targets:   newTargets,
-					}
-				}(node)
+				go runNode(node)
 			}
 		}
 	}
@@ -193,52 +195,7 @@ func (r *Runner) executeDAG(
 				if atomic.AddInt32(&child.inDegree, -1) == 0 {
 					atomic.StoreInt32(&child.inDegree, -1)
 					wg.Add(1)
-					go func(n *dagNode) {
-						defer wg.Done()
-						// PLACEHOLDER_DAG_CHILD
-						select {
-						case <-ctx.Done():
-							resultsCh <- dagResult{nodeIndex: n.index}
-							return
-						default:
-						}
-
-						stg := n.stage
-						if !ShouldRun(stg, stageCtx) {
-							r.writeLog("info", fmt.Sprintf("阶段 [%s] 条件不满足，跳过", stg.name), stg.name, "")
-							if cb.OnModuleDone != nil {
-								for _, m := range stg.modules {
-									cb.OnModuleDone(stg.name, m.ID())
-								}
-							}
-							resultsCh <- dagResult{nodeIndex: n.index}
-							return
-						}
-
-						r.progress.SetCurrentStage(stg.name)
-						r.progress.SyncToDB(stg.name)
-						r.publishEvent(NewStageEvent(r.task.ID, stg.name, "started"))
-
-						stageConfig := mergeConfig(config, stg.config)
-						timeout := r.moduleTimeout
-						if stg.timeout > 0 {
-							timeout = stg.timeout
-						}
-
-						targetsMu.RLock()
-						stageTargets := currentTargets
-						targetsMu.RUnlock()
-
-						stageFindings, newTargets := ExecuteStageWithOpts(
-							ctx, r.task.ID, stg, stageTargets, stageConfig, timeout, cb, engineOpts,
-						)
-
-						resultsCh <- dagResult{
-							nodeIndex: n.index,
-							findings:  stageFindings,
-							targets:   newTargets,
-						}
-					}(child)
+					go runNode(child)
 				}
 			}
 		}

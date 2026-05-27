@@ -35,6 +35,9 @@ func NewMonitor(
 		if s, ok := handler.svc.(*serviceMonitor); ok {
 			s.nats = natsSvc
 			svcImpl = s
+			if natsSvc != nil {
+				natsSvc.svc = s
+			}
 		}
 	}
 
@@ -295,4 +298,13 @@ func (m *Monitor) handleScheduleOverview(c *gin.Context) {
 
 func (m *Monitor) GetNatsService() *NatsServiceImpl {
 	return m.nats
+}
+
+// SetCrawlScreenshotUploader 注入爬虫截图上传能力
+func (m *Monitor) SetCrawlScreenshotUploader(fn CrawlScreenshotUploader, baseURL string) {
+	if m.handler != nil && m.handler.svc != nil {
+		if s, ok := m.handler.svc.(*serviceMonitor); ok {
+			s.SetCrawlScreenshotUploader(fn, baseURL)
+		}
+	}
 }

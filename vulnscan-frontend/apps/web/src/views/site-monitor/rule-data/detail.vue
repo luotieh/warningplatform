@@ -41,6 +41,14 @@ const updatedAt = ref('');
 const sectionData = reactive<Record<string, Record<string, any>[]>>({});
 const activeTab = ref('');
 
+function normalizeRuleDataResponse(res: any) {
+  const raw = typeof res?.data === 'string' ? res : (res?.data ?? res);
+  return {
+    data: typeof raw?.data === 'string' ? raw.data : (typeof raw === 'string' ? raw : ''),
+    updatedAt: raw?.updated_at || '',
+  };
+}
+
 async function fetchData() {
   if (!moduleDef.value) {
     message.error(`未知模块: ${moduleKey}`);
@@ -49,11 +57,11 @@ async function fetchData() {
   loading.value = true;
   try {
     const res = await getRuleData(moduleKey);
-    const raw = (res as any)?.data ?? res;
-    updatedAt.value = raw?.updated_at || '';
+    const raw = normalizeRuleDataResponse(res);
+    updatedAt.value = raw.updatedAt;
 
     let parsed: Record<string, any> = {};
-    if (raw?.data) {
+    if (raw.data) {
       try {
         parsed = JSON.parse(raw.data);
       } catch {

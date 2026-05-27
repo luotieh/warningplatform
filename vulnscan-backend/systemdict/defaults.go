@@ -80,9 +80,10 @@ func defaultDicts() []defaultDict {
 			Category:    "资产台账",
 			Description: "资产登记中的数据来源字段",
 			Items: []defaultDictItem{
-				{Label: "手动导入", Value: "manual_import"},
-				{Label: "自动探测", Value: "auto_detect"},
-				{Label: "外部集成", Value: "external"},
+				{Label: "手工录入", Value: "manual"},
+				{Label: "扫描发现", Value: "scan"},
+				{Label: "批量导入", Value: "import"},
+				{Label: "自动探测", Value: "discovery"},
 			},
 		},
 		{

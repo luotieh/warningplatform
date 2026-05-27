@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"vulnscan-backend/model"
@@ -22,6 +24,8 @@ func NewSensitiveFileAnalyzer(rules RuleAccessor) *SensitiveFileAnalyzer {
 
 func (a *SensitiveFileAnalyzer) Dimension() string { return "sensitive_file" }
 
+const sensitiveFileConcurrency = 10
+
 func (a *SensitiveFileAnalyzer) Analyze(ctx context.Context, input *Input) (*Output, error) {
 	baseURL := input.URL
 	if baseURL == "" {
@@ -36,62 +40,112 @@ func (a *SensitiveFileAnalyzer) Analyze(ctx context.Context, input *Input) (*Out
 		paths = paths[:80]
 	}
 
-	client := &http.Client{Timeout: 12 * time.Second}
-	findings := make([]model.MonitorSensitiveFileFinding, 0)
-	riskSummary := map[string]int{}
-	totalMs := 0
+	client := &http.Client{
+		Timeout: 12 * time.Second,
+		Transport: &http.Transport{
+			MaxIdleConnsPerHost: sensitiveFileConcurrency,
+			IdleConnTimeout:     30 * time.Second,
+			DialContext: (&net.Dialer{
+				Timeout: 5 * time.Second,
+			}).DialContext,
+		},
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 3 {
+				return http.ErrUseLastResponse
+			}
+			return nil
+		},
+	}
 
-	for _, p := range paths {
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		default:
-		}
+	type probeResult struct {
+		finding model.MonitorSensitiveFileFinding
+		hit     bool
+		elapsed int
+	}
 
+	results := make([]probeResult, len(paths))
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, sensitiveFileConcurrency)
+
+	for i, p := range paths {
 		target, err := joinURL(baseURL, p.Path)
 		if err != nil {
 			continue
 		}
-		start := time.Now()
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
-		if err != nil {
-			continue
-		}
-		req.Header.Set("User-Agent", "VulnScan-Monitor/1.0")
 
-		resp, err := client.Do(req)
-		elapsed := time.Since(start).Milliseconds()
-		totalMs += int(elapsed)
-		if err != nil {
-			continue
-		}
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		_ = resp.Body.Close()
+		wg.Add(1)
+		go func(idx int, pp probePath, targetURL string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
 
-		if !isSensitiveFileHit(resp.StatusCode, len(body)) {
-			continue
-		}
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
 
-		risk := p.Risk
-		if risk == "" {
-			risk = "high"
-		}
-		mark := p.Mark
-		if mark == "" {
-			mark = "敏感路径"
-		}
-		riskSummary[risk]++
+			start := time.Now()
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, targetURL, nil)
+			if err != nil {
+				return
+			}
+			req.Header.Set("User-Agent", "VulnScan-Monitor/1.0")
 
-		findings = append(findings, model.MonitorSensitiveFileFinding{
-			URL:           target,
-			Path:          p.Path,
-			Mark:          mark,
-			Risk:          risk,
-			StatusCode:    resp.StatusCode,
-			ContentLength: len(body),
-			Detail:        truncate(string(body), 200),
-			ElapsedMs:     float64(elapsed),
-		})
+			resp, err := client.Do(req)
+			elapsed := int(time.Since(start).Milliseconds())
+			if err != nil {
+				results[idx] = probeResult{elapsed: elapsed}
+				return
+			}
+			body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+			_ = resp.Body.Close()
+
+			hitType := classifySensitiveFileHit(resp.StatusCode, len(body))
+			if hitType == "" {
+				results[idx] = probeResult{elapsed: elapsed}
+				return
+			}
+
+			risk := pp.Risk
+			if risk == "" {
+				risk = "high"
+			}
+			if hitType == "auth_required" && risk != "critical" {
+				risk = "medium"
+			}
+			mark := pp.Mark
+			if mark == "" {
+				mark = "敏感路径"
+			}
+
+			results[idx] = probeResult{
+				hit:     true,
+				elapsed: elapsed,
+				finding: model.MonitorSensitiveFileFinding{
+					URL:           targetURL,
+					Path:          pp.Path,
+					Mark:          mark,
+					Risk:          risk,
+					StatusCode:    resp.StatusCode,
+					ContentLength: len(body),
+					Detail:        truncate(string(body), 200),
+					ElapsedMs:     float64(elapsed),
+				},
+			}
+		}(i, p, target)
+	}
+	wg.Wait()
+
+	findings := make([]model.MonitorSensitiveFileFinding, 0)
+	riskSummary := map[string]int{}
+	totalMs := 0
+	for _, r := range results {
+		totalMs += r.elapsed
+		if r.hit {
+			findings = append(findings, r.finding)
+			riskSummary[r.finding.Risk]++
+		}
 	}
 
 	hasHit := len(findings) > 0
@@ -109,10 +163,31 @@ func (a *SensitiveFileAnalyzer) Analyze(ctx context.Context, input *Input) (*Out
 	raw, _ := json.Marshal(detail)
 	out := &Output{HasIssue: hasHit}
 	if hasHit {
-		out.Severity = "high"
+		out.Severity = classifySensitiveFileSeverity(findings)
 	}
 	out.DetailsJSON = string(raw)
 	return out, nil
+}
+
+func classifySensitiveFileSeverity(findings []model.MonitorSensitiveFileFinding) string {
+	for _, f := range findings {
+		if f.Risk == "critical" {
+			return "critical"
+		}
+	}
+	highCount := 0
+	for _, f := range findings {
+		if f.Risk == "high" {
+			highCount++
+		}
+	}
+	if highCount > 2 {
+		return "critical"
+	}
+	if highCount > 0 {
+		return "high"
+	}
+	return "medium"
 }
 
 type probePath struct {
@@ -217,14 +292,14 @@ func joinURL(base, path string) (string, error) {
 	return u.ResolveReference(ref).String(), nil
 }
 
-func isSensitiveFileHit(status int, bodyLen int) bool {
+func classifySensitiveFileHit(status int, bodyLen int) string {
 	if status == http.StatusOK && bodyLen > 0 {
-		return true
+		return "content_exposed"
 	}
 	if status == http.StatusForbidden || status == http.StatusUnauthorized {
-		return true
+		return "auth_required"
 	}
-	return false
+	return ""
 }
 
 func truncate(s string, n int) string {

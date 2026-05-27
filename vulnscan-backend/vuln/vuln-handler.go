@@ -8,9 +8,9 @@ import (
 
 	"code.yt-security.com/public/core/v2/web"
 	iamsdk "code.yt-security.com/public/sdk"
-	"code.yt-security.com/public/sdk/permission"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
+	"vulnscan-backend/pkg/definition"
 )
 
 type HandlerVuln struct {
@@ -34,7 +34,7 @@ func (h *HandlerVuln) List(c *gin.Context) {
 		return
 	}
 
-	scope := iamsdk.DataFilterScope(c, permission.DefaultFieldMapping)
+	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
 	items, count, err := h.svc.List(query, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
@@ -197,7 +197,7 @@ func (h *HandlerVuln) RetestFromFinding(c *gin.Context) {
 }
 
 func (h *HandlerVuln) Stats(c *gin.Context) {
-	scope := iamsdk.DataFilterScope(c, permission.DefaultFieldMapping)
+	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
 	stats, err := h.svc.Stats(scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()

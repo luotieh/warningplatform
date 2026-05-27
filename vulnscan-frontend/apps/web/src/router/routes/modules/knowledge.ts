@@ -5,7 +5,7 @@ import { BasicLayout } from '#/layouts';
 const routes: RouteRecordRaw[] = [
   {
     component: BasicLayout,
-    meta: { icon: 'lucide:database', order: 11, title: '知识库' },
+    meta: { icon: 'lucide:database', order: 11, title: '知识仓库' },
     name: 'Knowledge',
     path: '/knowledge',
     redirect: '/knowledge/poc',
@@ -16,13 +16,20 @@ const routes: RouteRecordRaw[] = [
         component: () => import('#/views/knowledge/poc/list.vue'),
         meta: {
           icon: 'lucide:file-code',
-          title: 'PoC 管理',
+          title: '检测模板',
           perms: [
             { action: 'create', label: '新建' },
             { action: 'import', label: '导入' },
             { action: 'update', label: '编辑' },
             { action: 'delete', label: '删除' },
           ],
+          apis: ['GET /poc/list'],
+          apisByAction: {
+            create: ['POST /poc'],
+            import: ['POST /poc/import'],
+            update: ['PUT /poc/:id'],
+            delete: ['DELETE /poc/:id'],
+          },
         },
       },
       {
@@ -31,12 +38,18 @@ const routes: RouteRecordRaw[] = [
         component: () => import('#/views/knowledge/fingerprint/list.vue'),
         meta: {
           icon: 'lucide:fingerprint',
-          title: '指纹库',
+          title: '识别指纹',
           perms: [
             { action: 'create', label: '新建' },
             { action: 'update', label: '编辑' },
             { action: 'delete', label: '删除' },
           ],
+          apis: ['GET /fingerprint/list'],
+          apisByAction: {
+            create: ['POST /fingerprint'],
+            update: ['PUT /fingerprint/:id'],
+            delete: ['DELETE /fingerprint/:id'],
+          },
         },
       },
       {
@@ -45,13 +58,20 @@ const routes: RouteRecordRaw[] = [
         component: () => import('#/views/knowledge/datalib/list.vue'),
         meta: {
           icon: 'lucide:book-open',
-          title: '数据字典',
+          title: '扫描字典',
           perms: [
             { action: 'create', label: '新建' },
             { action: 'import', label: '导入' },
             { action: 'update', label: '编辑' },
             { action: 'delete', label: '删除' },
           ],
+          apis: ['GET /data-libraries'],
+          apisByAction: {
+            create: ['POST /data-libraries'],
+            import: ['POST /data-libraries/:id/entries'],
+            update: ['PUT /data-libraries/:id'],
+            delete: ['DELETE /data-libraries/:id'],
+          },
         },
       },
       {
@@ -63,6 +83,7 @@ const routes: RouteRecordRaw[] = [
           hideInMenu: true,
           title: '词库详情',
           activePath: '/knowledge/datalib',
+          apis: ['GET /data-libraries/:id', 'GET /data-libraries/:id/entries'],
         },
       },
       {
@@ -74,6 +95,27 @@ const routes: RouteRecordRaw[] = [
           hideInMenu: true,
           title: '文件库详情',
           activePath: '/knowledge/datalib',
+          apis: ['GET /data-libraries/:id', 'GET /data-libraries/:id/entries'],
+        },
+      },
+      {
+        name: 'PromptManage',
+        path: 'prompt',
+        component: () => import('#/views/knowledge/prompt/list.vue'),
+        meta: {
+          icon: 'lucide:message-square-code',
+          title: '提示模板',
+          perms: [
+            { action: 'create', label: '新建' },
+            { action: 'update', label: '编辑' },
+            { action: 'delete', label: '删除' },
+          ],
+          apis: ['GET /prompt-templates'],
+          apisByAction: {
+            create: ['POST /prompt-templates'],
+            update: ['PUT /prompt-templates/:id', 'POST /prompt-templates/:id/toggle'],
+            delete: ['DELETE /prompt-templates/:id'],
+          },
         },
       },
       {
@@ -88,6 +130,12 @@ const routes: RouteRecordRaw[] = [
             { action: 'import', label: '导入' },
             { action: 'sync', label: '同步' },
           ],
+          apis: ['GET /sitemonitor/rule-data', 'GET /cluster/node-knowledge/manifest'],
+          apisByAction: {
+            update: ['PUT /sitemonitor/rule-data/:moduleKey'],
+            import: ['POST /sitemonitor/rule-data/:moduleKey/import'],
+            sync: ['POST /sitemonitor/rule-data/sync'],
+          },
         },
       },
       {
@@ -98,6 +146,12 @@ const routes: RouteRecordRaw[] = [
           hideInMenu: true,
           title: '规则编辑',
           activePath: '/knowledge/rule-engine',
+          apis: [
+            'GET /sitemonitor/rule-data/:moduleKey',
+          ],
+          apisByAction: {
+            update: ['PUT /sitemonitor/rule-data/:moduleKey'],
+          },
         },
       },
       {
@@ -114,6 +168,13 @@ const routes: RouteRecordRaw[] = [
             { action: 'delete', label: '删除' },
             { action: 'archive', label: '归档' },
           ],
+          apis: ['GET /incident/knowledge'],
+          apisByAction: {
+            create: ['POST /incident/knowledge'],
+            update: ['PUT /incident/knowledge/:id'],
+            delete: ['DELETE /incident/knowledge/:id'],
+            archive: ['POST /incident/knowledge/archive'],
+          },
         },
       },
       {
@@ -122,14 +183,24 @@ const routes: RouteRecordRaw[] = [
         component: () => import('#/views/intel/index.vue'),
         meta: {
           icon: 'lucide:shield-alert',
-          title: '情报库',
+          title: '威胁情报',
+          apis: [
+            'GET /intel/cve',
+            'GET /intel/stats',
+            'GET /intel/sources',
+            'GET /intel/ioc',
+          ],
         },
       },
       {
         name: 'KnowledgeArticleDetail',
         path: 'articles/:id',
         component: () => import('#/views/knowledge/articles/detail.vue'),
-        meta: { hideInMenu: true, title: '知识详情' },
+        meta: {
+          hideInMenu: true,
+          title: '知识详情',
+          apis: ['GET /incident/knowledge/:id'],
+        },
       },
     ],
   },

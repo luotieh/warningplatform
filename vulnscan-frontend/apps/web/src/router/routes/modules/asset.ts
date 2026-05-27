@@ -23,6 +23,14 @@ const routes: RouteRecordRaw[] = [
             { action: 'verify', label: '下发核验' },
             { action: 'import', label: '候选入库' },
           ],
+          apis: [
+            'GET /asset/discovery/probes',
+          ],
+          apisByAction: {
+            create: ['POST /asset/discovery/probes'],
+            verify: ['POST /asset/discovery/probes/:id/sync'],
+            import: ['POST /asset/discovery/probes/:id/candidates/import'],
+          },
         },
       },
       {
@@ -40,6 +48,19 @@ const routes: RouteRecordRaw[] = [
             { action: 'delete', label: '删除' },
             { action: 'import', label: '导入' },
           ],
+          apis: [
+            'GET /asset/list',
+            'GET /asset/stats',
+            'GET /asset/group/list',
+            'GET /organize/tree',
+            'GET /tagging/tags/list',
+          ],
+          apisByAction: {
+            create: ['POST /asset', 'POST /asset/group'],
+            update: ['PUT /asset/:id', 'PUT /asset/group/:id'],
+            delete: ['DELETE /asset/:id', 'DELETE /asset/group/:id'],
+            import: ['POST /asset/import'],
+          },
         },
       },
       {
@@ -50,6 +71,11 @@ const routes: RouteRecordRaw[] = [
           hideInMenu: true,
           icon: 'lucide:file-search',
           title: '资产详情',
+          apis: [
+            'GET /asset/:id',
+            'GET /asset/:id/enrich',
+            'GET /tagging/asset-tags/:asset_id',
+          ],
         },
       },
       {
@@ -64,6 +90,11 @@ const routes: RouteRecordRaw[] = [
             { action: 'create', label: '新建分组' },
             { action: 'delete', label: '删除' },
           ],
+          apis: ['GET /asset/group/list'],
+          apisByAction: {
+            create: ['POST /asset/group'],
+            delete: ['DELETE /asset/group/:id'],
+          },
         },
       },
       {
@@ -74,6 +105,15 @@ const routes: RouteRecordRaw[] = [
           icon: 'lucide:building-2',
           title: '单位标签',
           perms: [{ action: 'view', label: '查看' }, { action: 'update', label: '维护' }],
+          apis: [
+            'GET /organize/tree',
+            'GET /organize/list',
+            'GET /tagging/tags/list',
+          ],
+          apisByAction: {
+            view: ['GET /organize/tree', 'GET /organize/list', 'GET /tagging/tags/list'],
+            update: ['POST /tagging/tags', 'POST /tagging/asset-tags'],
+          },
         },
       },
       {
@@ -84,6 +124,11 @@ const routes: RouteRecordRaw[] = [
           icon: 'lucide:clipboard-check',
           title: '核验任务',
           perms: [{ action: 'view', label: '查看' }, { action: 'verify', label: '核验' }],
+          apis: ['GET /assetmgr/verify/tasks/list'],
+          apisByAction: {
+            view: ['GET /assetmgr/verify/tasks/list'],
+            verify: ['PUT /assetmgr/verify/tasks/:id/confirm'],
+          },
         },
       },
       {
@@ -94,6 +139,10 @@ const routes: RouteRecordRaw[] = [
           icon: 'lucide:archive',
           title: '资产归档',
           perms: [{ action: 'view', label: '查看' }],
+          apis: ['GET /asset/list'],
+          apisByAction: {
+            view: ['GET /asset/list'],
+          },
         },
       },
     ],

@@ -11,14 +11,21 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptrace"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/go-rod/rod"
+	"github.com/go-rod/rod/lib/launcher"
+	"github.com/go-rod/rod/lib/proto"
 	"golang.org/x/net/html"
 )
 
 type PageService struct {
-	client *http.Client
+	client  *http.Client
+	browser *rod.Browser
 }
 
 func NewPageService() *PageService {
@@ -35,7 +42,7 @@ func NewPageService() *PageService {
 		}).DialContext,
 	}
 
-	return &PageService{
+	ps := &PageService{
 		client: &http.Client{
 			Transport: transport,
 			Timeout:   30 * time.Second,
@@ -47,6 +54,8 @@ func NewPageService() *PageService {
 			},
 		},
 	}
+	ps.browser = ps.initBrowser()
+	return ps
 }
 
 const defaultUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -149,6 +158,10 @@ func (ps *PageService) FetchPage(ctx context.Context, url string, requestHost ..
 	snap.ContentHash = fmt.Sprintf("%x", md5.Sum(body))
 
 	ps.parseHTML(snap)
+
+	if ps.browser != nil {
+		snap.Screenshot = ps.captureScreenshot(ctx, url)
+	}
 
 	return snap, nil
 }
@@ -342,4 +355,276 @@ func matchDomain(pattern, host string) bool {
 
 func (ps *PageService) Close() {
 	ps.client.CloseIdleConnections()
+	if ps.browser != nil {
+		_ = ps.browser.Close()
+		ps.browser = nil
+	}
+}
+
+var monitorBrowserFallbackPaths = []string{
+	`C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`,
+	`C:\Program Files\Microsoft\Edge\Application\msedge.exe`,
+	`/usr/bin/microsoft-edge`,
+	`/usr/bin/microsoft-edge-stable`,
+	`/usr/bin/chromium-browser`,
+	`/usr/bin/chromium`,
+	`/usr/bin/google-chrome`,
+	`/usr/bin/google-chrome-stable`,
+}
+
+func (ps *PageService) initBrowser() *rod.Browser {
+	path := ""
+	if env := os.Getenv("CHROME_BIN"); env != "" {
+		if _, err := exec.LookPath(env); err == nil {
+			path = env
+		}
+	}
+	if path == "" {
+		if found, ok := launcher.LookPath(); ok {
+			path = found
+		}
+	}
+	if path == "" {
+		for _, p := range monitorBrowserFallbackPaths {
+			if _, err := exec.LookPath(p); err == nil {
+				path = p
+				break
+			}
+		}
+	}
+	if path == "" {
+		slog.Info("[Monitor] 未找到浏览器，监测截图功能不可用")
+		return nil
+	}
+
+	userDataDir := filepath.Join(os.TempDir(), fmt.Sprintf("monitor-rod-%d", os.Getpid()))
+	_ = os.RemoveAll(userDataDir)
+
+	l := launcher.New().Bin(path).
+		Headless(true).
+		UserDataDir(userDataDir).
+		Set("no-sandbox").
+		Set("disable-gpu").
+		Set("ignore-certificate-errors").
+		Set("disable-dev-shm-usage").
+		Set("disable-extensions").
+		Set("disable-background-networking").
+		Set("disable-default-apps").
+		Set("no-first-run").
+		Set("no-default-browser-check")
+
+	u, err := l.Launch()
+	if err != nil {
+		slog.Warn("[Monitor] 启动浏览器失败，监测截图不可用", "error", err)
+		_ = os.RemoveAll(userDataDir)
+		return nil
+	}
+
+	b := rod.New().ControlURL(u)
+	if err := b.Connect(); err != nil {
+		slog.Warn("[Monitor] 连接浏览器失败", "error", err)
+		return nil
+	}
+	_ = b.IgnoreCertErrors(true)
+	slog.Info("[Monitor] 浏览器截图已启用", "path", path)
+	return b
+}
+
+func (ps *PageService) captureScreenshot(ctx context.Context, rawURL string) []byte {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Debug("[Monitor] 截图异常恢复", "url", rawURL, "error", r)
+		}
+	}()
+
+	page, err := ps.browser.Page(proto.TargetCreateTarget{URL: "about:blank"})
+	if err != nil {
+		return nil
+	}
+	defer page.Close()
+
+	page = page.Context(ctx).Timeout(20 * time.Second)
+	if err := page.Navigate(rawURL); err != nil {
+		return nil
+	}
+	_ = page.WaitStable(800 * time.Millisecond)
+	_ = page.SetViewport(&proto.EmulationSetDeviceMetricsOverride{
+		Width: 1280, Height: 720, DeviceScaleFactor: 1,
+	})
+
+	quality := 70
+	data, err := page.Screenshot(false, &proto.PageCaptureScreenshot{
+		Format:  proto.PageCaptureScreenshotFormatJpeg,
+		Quality: &quality,
+	})
+	if err != nil {
+		slog.Debug("[Monitor] 截图失败", "url", rawURL, "error", err)
+		return nil
+	}
+	return data
+}
+
+// CaptureSimpleScreenshot 截取指定 URL 的普通截图（不带标注）。
+func (ps *PageService) CaptureSimpleScreenshot(ctx context.Context, rawURL string) []byte {
+	return ps.captureScreenshot(ctx, rawURL)
+}
+
+// IssueAnnotation 描述需要在截图上标注的问题元素。
+type IssueAnnotation struct {
+	Type     string   `json:"type"`     // text | link | selector
+	Keywords []string `json:"keywords"` // type=text: 需标注的文字; type=link: 需标注的 URL 片段
+	Selector string   `json:"selector"` // type=selector: CSS 选择器
+	Label    string   `json:"label"`    // 标注说明文字
+}
+
+// CaptureAnnotatedScreenshot 导航到指定 URL，根据标注信息在页面上注入红框高亮，然后截图。
+func (ps *PageService) CaptureAnnotatedScreenshot(ctx context.Context, rawURL string, annotations []IssueAnnotation) []byte {
+	if ps.browser == nil || len(annotations) == 0 {
+		return nil
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Debug("[Monitor] 标注截图异常恢复", "url", rawURL, "error", r)
+		}
+	}()
+
+	page, err := ps.browser.Page(proto.TargetCreateTarget{URL: "about:blank"})
+	if err != nil {
+		return nil
+	}
+	defer page.Close()
+
+	page = page.Context(ctx).Timeout(25 * time.Second)
+	if err := page.Navigate(rawURL); err != nil {
+		return nil
+	}
+	_ = page.WaitStable(800 * time.Millisecond)
+	_ = page.SetViewport(&proto.EmulationSetDeviceMetricsOverride{
+		Width: 1920, Height: 1080, DeviceScaleFactor: 1,
+	})
+
+	js := buildAnnotationJS(annotations)
+	_, err = page.Timeout(5 * time.Second).Eval(js)
+	if err != nil {
+		slog.Debug("[Monitor] 注入标注 JS 失败", "url", rawURL, "error", err)
+	}
+
+	quality := 80
+	data, err := page.Screenshot(false, &proto.PageCaptureScreenshot{
+		Format:  proto.PageCaptureScreenshotFormatJpeg,
+		Quality: &quality,
+	})
+	if err != nil {
+		slog.Debug("[Monitor] 标注截图失败", "url", rawURL, "error", err)
+		return nil
+	}
+	return data
+}
+
+func buildAnnotationJS(annotations []IssueAnnotation) string {
+	var parts []string
+
+	parts = append(parts, `(function(){
+const STYLE='outline:3px solid red;outline-offset:2px;background:rgba(255,0,0,0.08);position:relative;';
+const BADGE_STYLE='position:absolute;top:-18px;right:0;background:red;color:#fff;font-size:11px;padding:1px 6px;border-radius:3px;z-index:99999;white-space:nowrap;pointer-events:none;';
+let marked=0;
+
+function addBadge(el, text){
+  if(!text) return;
+  const b=document.createElement('span');
+  b.style.cssText=BADGE_STYLE;
+  b.textContent=text;
+  const pos=getComputedStyle(el).position;
+  if(pos==='static') el.style.position='relative';
+  el.appendChild(b);
+}
+
+function highlightTextNodes(root, keyword, label){
+  const walker=document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+  const matches=[];
+  while(walker.nextNode()){
+    const node=walker.currentNode;
+    if(node.nodeValue && node.nodeValue.includes(keyword)){
+      matches.push(node);
+    }
+  }
+  matches.forEach(node=>{
+    const parent=node.parentElement;
+    if(!parent||parent.tagName==='SCRIPT'||parent.tagName==='STYLE') return;
+    const idx=node.nodeValue.indexOf(keyword);
+    if(idx<0) return;
+    const before=node.nodeValue.substring(0,idx);
+    const match=node.nodeValue.substring(idx,idx+keyword.length);
+    const after=node.nodeValue.substring(idx+keyword.length);
+    const mark=document.createElement('mark');
+    mark.style.cssText=STYLE+'display:inline;';
+    mark.textContent=match;
+    if(label&&marked<10) addBadge(mark, label);
+    marked++;
+    const frag=document.createDocumentFragment();
+    if(before) frag.appendChild(document.createTextNode(before));
+    frag.appendChild(mark);
+    if(after) frag.appendChild(document.createTextNode(after));
+    parent.replaceChild(frag, node);
+  });
+}
+
+function highlightLinks(urlFragments, label){
+  document.querySelectorAll('a').forEach(a=>{
+    const href=a.href||a.getAttribute('href')||'';
+    for(const frag of urlFragments){
+      if(href.includes(frag)){
+        a.style.cssText+=STYLE;
+        if(label&&marked<10) addBadge(a, label);
+        marked++;
+        break;
+      }
+    }
+  });
+}
+
+function highlightSelector(sel, label){
+  document.querySelectorAll(sel).forEach(el=>{
+    el.style.cssText+=STYLE;
+    if(label&&marked<10) addBadge(el, label);
+    marked++;
+  });
+}
+`)
+
+	for _, ann := range annotations {
+		switch ann.Type {
+		case "text":
+			for _, kw := range ann.Keywords {
+				escaped := escapeJSString(kw)
+				label := escapeJSString(ann.Label)
+				parts = append(parts, fmt.Sprintf(`highlightTextNodes(document.body, '%s', '%s');`, escaped, label))
+			}
+		case "link":
+			if len(ann.Keywords) > 0 {
+				var escaped []string
+				for _, kw := range ann.Keywords {
+					escaped = append(escaped, "'"+escapeJSString(kw)+"'")
+				}
+				label := escapeJSString(ann.Label)
+				parts = append(parts, fmt.Sprintf(`highlightLinks([%s], '%s');`, strings.Join(escaped, ","), label))
+			}
+		case "selector":
+			if ann.Selector != "" {
+				label := escapeJSString(ann.Label)
+				parts = append(parts, fmt.Sprintf(`highlightSelector('%s', '%s');`, escapeJSString(ann.Selector), label))
+			}
+		}
+	}
+
+	parts = append(parts, `})()`)
+	return strings.Join(parts, "\n")
+}
+
+func escapeJSString(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `'`, `\'`)
+	s = strings.ReplaceAll(s, "\n", `\n`)
+	s = strings.ReplaceAll(s, "\r", `\r`)
+	return s
 }

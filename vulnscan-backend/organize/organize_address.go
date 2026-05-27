@@ -7,9 +7,13 @@ import (
 	"vulnscan-backend/model"
 )
 
-// NormalizeOrganizeAddress 合并单位地址：主地址写入 address，清空 unit_detail_address。
+// NormalizeOrganizeAddress 规范化单位地址字段。
+// 当 region_code 已设置时，保留 unit_detail_address 独立存储；否则合并到 address。
 func NormalizeOrganizeAddress(item *model.Organize) {
 	if item == nil {
+		return
+	}
+	if strings.TrimSpace(item.RegionCode) != "" {
 		return
 	}
 	addr := strings.TrimSpace(item.Address)
@@ -23,9 +27,13 @@ func NormalizeOrganizeAddress(item *model.Organize) {
 	item.UnitDetailAddress = ""
 }
 
-// NormalizeOrganizeUpdates 更新组织时合并地址字段。
+// NormalizeOrganizeUpdates 更新组织时规范化地址字段。
 func NormalizeOrganizeUpdates(updates map[string]interface{}) {
 	if updates == nil {
+		return
+	}
+	if rc, ok := updates["region_code"].(string); ok && strings.TrimSpace(rc) != "" {
+		sanitizeOrganizeCreditCodeInUpdates(updates)
 		return
 	}
 	addr, _ := updates["address"].(string)

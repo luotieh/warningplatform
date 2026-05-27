@@ -12,22 +12,26 @@ import (
 
 type SecurityIncident struct {
 	FullModel
-	IncidentNo      string         `gorm:"uniqueIndex;type:varchar(100);not null" json:"incident_no"`
-	Name            string         `gorm:"type:varchar(255);not null" json:"name"`
-	Level           int            `gorm:"default:1;comment:事件等级" json:"level"`
-	Source          int            `gorm:"default:1;comment:数据来源" json:"source"`
-	Status          int            `gorm:"default:1;comment:事件状态" json:"status"`
-	OrganizeID      string         `gorm:"type:varchar(64);index;comment:所属组织" json:"organize_id"`
-	ReportTime      time.Time      `gorm:"type:timestamp;comment:上报时间" json:"report_time"`
-	AiPreStatus     int            `gorm:"default:0;comment:AI预审状态" json:"ai_pre_status"`
-	AiOpinion       string         `gorm:"type:text;comment:AI预审意见" json:"ai_opinion"`
-	AiConfidence    float64        `gorm:"comment:AI置信度" json:"ai_confidence"`
-	RiskScore       float64        `gorm:"default:0;comment:AI风险评分(0-100)" json:"risk_score"`
-	AiTags          string         `gorm:"type:varchar(500);comment:AI标签(逗号分隔)" json:"ai_tags"`
-	AiCategory      string         `gorm:"type:varchar(100);comment:AI分类" json:"ai_category"`
-	AssetDetailID   string         `gorm:"type:varchar(80);comment:关联资产表ID" json:"asset_detail_id"`
-	EventMetadataID string         `gorm:"type:varchar(80);comment:关联元数据表ID" json:"event_metadata_id"`
-	DeletedAt       gorm.DeletedAt `gorm:"index" json:"deleted_at"`
+	IncidentNo        string         `gorm:"uniqueIndex;type:varchar(100);not null" json:"incident_no"`
+	Name              string         `gorm:"type:varchar(255);not null" json:"name"`
+	Level             int            `gorm:"default:1;comment:事件等级" json:"level"`
+	Source            int            `gorm:"default:1;comment:数据来源" json:"source"`
+	Status            int            `gorm:"default:1;comment:事件状态" json:"status"`
+	OrganizeID        string         `gorm:"type:varchar(64);index;comment:所属组织" json:"organize_id"`
+	ReportTime        time.Time      `gorm:"type:timestamp;comment:上报时间" json:"report_time"`
+	AiPreStatus       int            `gorm:"default:0;comment:AI预审状态" json:"ai_pre_status"`
+	AiOpinion         string         `gorm:"type:text;comment:AI预审意见" json:"ai_opinion"`
+	AiConfidence      float64        `gorm:"comment:AI置信度" json:"ai_confidence"`
+	RiskScore         float64        `gorm:"default:0;comment:AI风险评分(0-100)" json:"risk_score"`
+	AiTags            string         `gorm:"type:varchar(500);comment:AI标签(逗号分隔)" json:"ai_tags"`
+	AiCategory        string         `gorm:"type:varchar(100);comment:AI分类" json:"ai_category"`
+	AiVulnDesc        string         `gorm:"type:text;comment:AI漏洞描述" json:"ai_vuln_desc"`
+	AiVulnHarm        string         `gorm:"type:text;comment:AI漏洞危害" json:"ai_vuln_harm"`
+	AiFixAdvice       string         `gorm:"type:text;comment:AI修复建议" json:"ai_fix_advice"`
+	RemediationResult string         `gorm:"type:text;comment:整改结果" json:"remediation_result"`
+	AssetDetailID     string         `gorm:"type:varchar(80);comment:关联资产表ID" json:"asset_detail_id"`
+	EventMetadataID   string         `gorm:"type:varchar(80);comment:关联元数据表ID" json:"event_metadata_id"`
+	DeletedAt         gorm.DeletedAt `gorm:"index" json:"deleted_at"`
 
 	RemediationPlan     string     `gorm:"type:text;comment:整改方案" json:"remediation_plan"`
 	RemediationDeadline *time.Time `gorm:"type:timestamp;comment:整改截止日期" json:"remediation_deadline"`
@@ -269,3 +273,25 @@ type ThreatIntelRecord struct {
 }
 
 func (*ThreatIntelRecord) TableName() string { return "threat_intel_records" }
+
+// ─── 提示词模板 ───
+
+type PromptTemplate struct {
+	FullModel
+	Name         string         `gorm:"type:varchar(100);not null;uniqueIndex;comment:模板名称" json:"name"`
+	Scene        string         `gorm:"type:varchar(50);index;comment:使用场景(ai_preaudit/ai_classify/intel_analysis/custom)" json:"scene"`
+	Description  string         `gorm:"type:varchar(500);comment:模板用途说明" json:"description"`
+	SystemPrompt string         `gorm:"type:text;comment:系统提示词" json:"system_prompt"`
+	UserPrompt   string         `gorm:"type:text;comment:用户提示词模板(支持 {{.变量}} 占位)" json:"user_prompt"`
+	OutputFormat string         `gorm:"type:text;comment:期望输出格式示例(JSON Schema等)" json:"output_format"`
+	Variables    string         `gorm:"type:varchar(1000);comment:可用模板变量列表(JSON数组)" json:"variables"`
+	ModelName    string         `gorm:"type:varchar(100);comment:指定模型名称(空=自动选择)" json:"model_name"`
+	Temperature  float64        `gorm:"type:decimal(3,2);default:0.30;comment:生成温度" json:"temperature"`
+	MaxTokens    int            `gorm:"default:2000;comment:最大输出token数" json:"max_tokens"`
+	Enabled      bool           `gorm:"default:true;comment:是否启用" json:"enabled"`
+	IsBuiltin    bool           `gorm:"default:false;comment:是否内置模板" json:"is_builtin"`
+	Version      int            `gorm:"default:1;comment:版本号" json:"version"`
+	DeletedAt    gorm.DeletedAt `gorm:"index" json:"deleted_at"`
+}
+
+func (*PromptTemplate) TableName() string { return "prompt_templates" }

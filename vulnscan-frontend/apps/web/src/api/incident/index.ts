@@ -53,6 +53,9 @@ export interface SecurityIncident {
   risk_score?: number;
   ai_tags?: string | string[];
   ai_category?: string;
+  ai_vuln_desc?: string;
+  ai_vuln_harm?: string;
+  ai_fix_advice?: string;
   asset_detail_id?: string;
   event_metadata_id?: string;
   asset_detail?: IncidentAsset;

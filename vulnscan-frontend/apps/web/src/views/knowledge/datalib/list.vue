@@ -1,9 +1,7 @@
 <script lang="ts" setup>
 import type { DataTableColumns } from 'naive-ui';
-import type { FileLibrary, WordLibrary } from '#/api/sitemonitor';
-
 import { computed, h, onMounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute } from 'vue-router';
 
 import {
   NButton, NCard, NDataTable, NDrawer, NDrawerContent, NEmpty,
@@ -12,8 +10,6 @@ import {
   useMessage,
 } from 'naive-ui';
 
-import { dialog } from '#/adapter/naive';
-
 import {
   getDataLibList, getDataLibEntries, createDataLib,
   deleteDataLib, addDataLibEntry, updateDataLibEntry, deleteDataLibEntry,
@@ -21,25 +17,23 @@ import {
   type DataLibrary, type DataLibraryEntry,
 } from '#/api/datalib';
 
-import {
-  createFileLibrary, createWordLibrary, deleteFileLibrary, deleteWordLibrary,
-  getFileLibraryList, getWordLibraryList, updateFileLibrary, updateWordLibrary,
-} from '#/api/sitemonitor';
-
-import dayjs from 'dayjs';
 
 defineOptions({ name: 'DataLibManage' });
 
 const message = useMessage();
-const router = useRouter();
 const activeTab = ref('dict');
 
 const categoryOptions = [
-  { label: 'SQL注入', value: 'sqli' }, { label: 'XSS', value: 'xss' },
+  { label: 'SQL注入', value: 'sqli' }, { label: '跨站脚本(XSS)', value: 'xss' },
   { label: 'CRLF注入', value: 'crlf' }, { label: '命令注入', value: 'cmdi' },
   { label: '路径遍历', value: 'lfi' }, { label: 'SSRF', value: 'ssrf' },
-  { label: 'SSTI', value: 'ssti' }, { label: 'XXE', value: 'xxe' },
-  { label: 'NoSQL注入', value: 'nosqli' }, { label: 'JWT', value: 'jwt' },
+  { label: '模板注入(SSTI)', value: 'ssti' }, { label: 'XXE注入', value: 'xxe' },
+  { label: 'NoSQL注入', value: 'nosqli' }, { label: 'JWT安全', value: 'jwt' },
+  { label: 'XML-RPC', value: 'xmlrpc' }, { label: '点击劫持', value: 'clickjacking' },
+  { label: 'HTTP请求走私', value: 'http_smuggling' }, { label: '子域接管', value: 'subdomain_takeover' },
+  { label: '文件上传', value: 'file_upload' }, { label: '反序列化', value: 'deserialization' },
+  { label: '认证绕过', value: 'auth_bypass' }, { label: '开放重定向', value: 'open_redirect' },
+  { label: '目录遍历', value: 'dir_traversal' }, { label: 'Host头注入', value: 'host_header' },
 ];
 const categoryLabels: Record<string, string> = Object.fromEntries(categoryOptions.map(o => [o.value, o.label]));
 
@@ -104,6 +98,7 @@ async function fetchDictList() {
       page: dictPage.value, page_size: dictPageSize.value,
       keyword: dictKeyword.value || undefined,
       type: dictTypeFilter.value || undefined,
+      exclude_types: dictTypeFilter.value ? undefined : 'config,pattern,payload',
     });
     dictData.value = result.items;
     dictTotal.value = result.total;
@@ -394,135 +389,15 @@ async function handleDeleteConfigEntry(entryId: string) {
   catch (e: any) { message.error(e?.message || '删除失败'); }
 }
 
-// ═══════════════════════════════════
-// Tab 3: 敏感词库
-// ═══════════════════════════════════
-const wordLoading = ref(false);
-const wordList = ref<WordLibrary[]>([]);
-const safeWordList = computed(() => Array.isArray(wordList.value) ? wordList.value : []);
-const wordPage = ref(1);
-const wordPageSize = ref(10);
-const wordTotal = ref(0);
-const wordSearch = ref('');
-
-async function fetchWordList() {
-  wordLoading.value = true;
-  try {
-    const res = await getWordLibraryList({ index: wordPage.value, name: wordSearch.value, size: wordPageSize.value });
-    wordList.value = res.data || [];
-    wordTotal.value = (res as any).count || 0;
-  } catch { wordList.value = []; }
-  finally { wordLoading.value = false; }
-}
-
-const wordColumns = computed<DataTableColumns<WordLibrary>>(() => [
-  { key: 'name', title: '词库名称', minWidth: 160 },
-  { key: 'description', title: '描述', minWidth: 200, ellipsis: { tooltip: true } },
-  { key: 'created_at', title: '创建时间', minWidth: 160, render: (row) => row.created_at ? dayjs(row.created_at).format('YYYY-MM-DD HH:mm:ss') : '-' },
-  { key: 'op', title: '操作', width: 280, fixed: 'right', render: (row) => h(NSpace, { size: 'small' }, () => [
-    h(NButton, { text: true, type: 'primary', size: 'small', onClick: () => router.push(`/knowledge/datalib/word/${row.id}`) }, () => '详情'),
-    h(NButton, { text: true, type: 'primary', size: 'small', onClick: () => openLibDialog('word', row) }, () => '编辑'),
-    h(NButton, { text: true, type: 'error', size: 'small', onClick: () => handleDeleteWord(row) }, () => '删除'),
-  ]) },
-]);
-
-function handleDeleteWord(row: WordLibrary) {
-  dialog.warning({
-    title: '提示', content: `确认删除词库「${row.name}」？删除后不可恢复`,
-    positiveText: '确认删除', negativeText: '取消',
-    onPositiveClick: async () => {
-      try { await deleteWordLibrary(row.id); message.success('删除成功'); fetchWordList(); }
-      catch (e: any) { message.error(e?.msg || '删除失败'); }
-    },
-  });
-}
-
-// ═══════════════════════════════════
-// Tab 4: 敏感文件库
-// ═══════════════════════════════════
-const fileLoading = ref(false);
-const fileList = ref<FileLibrary[]>([]);
-const safeFileList = computed(() => Array.isArray(fileList.value) ? fileList.value : []);
-const filePage = ref(1);
-const filePageSize = ref(10);
-const fileTotal = ref(0);
-const fileSearch = ref('');
-
-async function fetchFileList() {
-  fileLoading.value = true;
-  try {
-    const res = await getFileLibraryList({ index: filePage.value, name: fileSearch.value, size: filePageSize.value });
-    fileList.value = res.data || [];
-    fileTotal.value = (res as any).count || 0;
-  } catch { fileList.value = []; }
-  finally { fileLoading.value = false; }
-}
-
-const fileColumns = computed<DataTableColumns<FileLibrary>>(() => [
-  { key: 'name', title: '文件库名称', minWidth: 160 },
-  { key: 'description', title: '描述', minWidth: 200, ellipsis: { tooltip: true } },
-  { key: 'created_at', title: '创建时间', minWidth: 160, render: (row) => row.created_at ? dayjs(row.created_at).format('YYYY-MM-DD HH:mm:ss') : '-' },
-  { key: 'op', title: '操作', width: 280, fixed: 'right', render: (row) => h(NSpace, { size: 'small' }, () => [
-    h(NButton, { text: true, type: 'primary', size: 'small', onClick: () => router.push(`/knowledge/datalib/file/${row.id}`) }, () => '详情'),
-    h(NButton, { text: true, type: 'primary', size: 'small', onClick: () => openLibDialog('file', row) }, () => '编辑'),
-    h(NButton, { text: true, type: 'error', size: 'small', onClick: () => handleDeleteFile(row) }, () => '删除'),
-  ]) },
-]);
-
-function handleDeleteFile(row: FileLibrary) {
-  dialog.warning({
-    title: '提示', content: `确认删除文件库「${row.name}」？`,
-    positiveText: '确认删除', negativeText: '取消',
-    onPositiveClick: async () => {
-      try { await deleteFileLibrary(row.id); message.success('删除成功'); fetchFileList(); }
-      catch (e: any) { message.error(e?.msg || '删除失败'); }
-    },
-  });
-}
-
-// ═══════════════════════════════════
-// 敏感词库/文件库 共享新增编辑弹窗
-// ═══════════════════════════════════
-const libDialogVisible = ref(false);
-const libDialogTitle = ref('');
-const libDialogType = ref<'file' | 'word'>('word');
-const libForm = ref({ id: '', isEdit: false, name: '', description: '' });
-const libSubmitting = ref(false);
-
-function openLibDialog(type: 'file' | 'word', row?: FileLibrary | WordLibrary) {
-  libDialogType.value = type;
-  if (row) {
-    libDialogTitle.value = type === 'word' ? '编辑词库' : '编辑文件库';
-    libForm.value = { isEdit: true, id: row.id, name: row.name, description: row.description };
-  } else {
-    libDialogTitle.value = type === 'word' ? '新增词库' : '新增文件库';
-    libForm.value = { isEdit: false, id: '', name: '', description: '' };
-  }
-  libDialogVisible.value = true;
-}
-
-async function handleLibSubmit() {
-  if (!libForm.value.name.trim()) { message.warning('请填写名称'); return; }
-  libSubmitting.value = true;
-  try {
-    const payload = { name: libForm.value.name, description: libForm.value.description };
-    if (libDialogType.value === 'word') {
-      libForm.value.isEdit ? await updateWordLibrary(libForm.value.id, payload) : await createWordLibrary(payload);
-    } else {
-      libForm.value.isEdit ? await updateFileLibrary(libForm.value.id, payload) : await createFileLibrary(payload);
-    }
-    message.success(libForm.value.isEdit ? '更新成功' : '创建成功');
-    libDialogVisible.value = false;
-    libDialogType.value === 'word' ? fetchWordList() : fetchFileList();
-  } catch (e: any) { message.error(e?.msg || '操作失败'); }
-  finally { libSubmitting.value = false; }
-}
 
 onMounted(() => {
+  const route = useRoute();
+  const tab = route.query.tab as string;
+  if (tab && ['dict', 'payload'].includes(tab)) {
+    activeTab.value = tab;
+  }
   fetchDictList();
   fetchPayloadList();
-  fetchWordList();
-  fetchFileList();
 });
 
 const headerExtraSlot = 'header-extra';
@@ -532,8 +407,8 @@ const headerExtraSlot = 'header-extra';
   <div style="padding: 16px">
     <NCard size="small">
       <NTabs v-model:value="activeTab" type="line" animated>
-        <!-- Tab 1: 扫描字典 -->
-        <NTabPane name="dict" tab="扫描字典">
+        <!-- Tab 1: 枚举字典 -->
+        <NTabPane name="dict" tab="枚举字典">
           <NSpace align="center" justify="space-between" class="mb-3">
             <NSpace :size="8" align="center">
               <NSelect v-model:value="dictTypeFilter" :options="dictTypeOptions" placeholder="字典类型" size="small" style="width: 120px" clearable @update:value="() => { dictPage = 1; fetchDictList(); }" />
@@ -545,8 +420,8 @@ const headerExtraSlot = 'header-extra';
           <NDataTable :columns="dictColumns" :data="dictData" :loading="dictLoading" :bordered="false" size="small" striped :scroll-x="900" :pagination="{ page: dictPage, pageSize: dictPageSize, itemCount: dictTotal, showSizePicker: true, pageSizes: [20, 50, 100], onUpdatePage: (p: number) => { dictPage = p; fetchDictList(); }, onUpdatePageSize: (s: number) => { dictPageSize = s; dictPage = 1; fetchDictList(); } }" />
         </NTabPane>
 
-        <!-- Tab 2: Payload -->
-        <NTabPane name="payload" tab="Payload">
+        <!-- Tab 2: 漏洞载荷 (Payload) -->
+        <NTabPane name="payload" tab="漏洞载荷">
           <NSpace align="center" justify="space-between" class="mb-3">
             <NSpace :size="8" align="center">
               <NSelect v-model:value="payloadCategoryFilter" :options="categoryOptions" placeholder="全部分类" size="small" style="width: 130px" clearable @update:value="() => { payloadPage = 1; fetchPayloadList(); }" />
@@ -557,31 +432,6 @@ const headerExtraSlot = 'header-extra';
           <NDataTable :columns="payloadColumns" :data="payloadData" :loading="payloadLoading" :bordered="false" size="small" striped :scroll-x="900" :pagination="{ page: payloadPage, pageSize: payloadPageSize, itemCount: payloadTotal, showSizePicker: true, pageSizes: [20, 50, 100], onUpdatePage: (p: number) => { payloadPage = p; fetchPayloadList(); }, onUpdatePageSize: (s: number) => { payloadPageSize = s; payloadPage = 1; fetchPayloadList(); } }" />
         </NTabPane>
 
-        <!-- Tab 3: 敏感词库 -->
-        <NTabPane name="word" tab="敏感词库">
-          <NSpace align="center" justify="space-between" class="mb-3">
-            <NSpace align="center">
-              <NInput v-model:value="wordSearch" placeholder="搜索词库名称" clearable style="width: 250px" />
-              <NButton type="primary" :loading="wordLoading" size="small" @click="fetchWordList">搜索</NButton>
-              <NButton size="small" @click="() => { wordSearch = ''; fetchWordList(); }">重置</NButton>
-            </NSpace>
-            <NButton type="primary" size="small" @click="openLibDialog('word')">新增词库</NButton>
-          </NSpace>
-          <NDataTable :columns="wordColumns" :data="safeWordList" :loading="wordLoading" :bordered="false" size="small" striped :pagination="{ page: wordPage, pageSize: wordPageSize, itemCount: wordTotal, showSizePicker: true, pageSizes: [10, 15, 20, 50], onUpdatePage: (p: number) => { wordPage = p; fetchWordList(); }, onUpdatePageSize: (s: number) => { wordPageSize = s; wordPage = 1; fetchWordList(); } }" />
-        </NTabPane>
-
-        <!-- Tab 4: 敏感文件库 -->
-        <NTabPane name="file" tab="敏感文件库">
-          <NSpace align="center" justify="space-between" class="mb-3">
-            <NSpace align="center">
-              <NInput v-model:value="fileSearch" placeholder="搜索文件库名称" clearable style="width: 250px" />
-              <NButton type="primary" :loading="fileLoading" size="small" @click="fetchFileList">搜索</NButton>
-              <NButton size="small" @click="() => { fileSearch = ''; fetchFileList(); }">重置</NButton>
-            </NSpace>
-            <NButton type="primary" size="small" @click="openLibDialog('file')">新增文件库</NButton>
-          </NSpace>
-          <NDataTable :columns="fileColumns" :data="safeFileList" :loading="fileLoading" :bordered="false" size="small" striped :pagination="{ page: filePage, pageSize: filePageSize, itemCount: fileTotal, showSizePicker: true, pageSizes: [10, 15, 20, 50], onUpdatePage: (p: number) => { filePage = p; fetchFileList(); }, onUpdatePageSize: (s: number) => { filePageSize = s; filePage = 1; fetchFileList(); } }" />
-        </NTabPane>
       </NTabs>
     </NCard>
 
@@ -651,7 +501,7 @@ const headerExtraSlot = 'header-extra';
       <NDrawerContent :title="`${currentPayloadLib?.name ?? ''} (${categoryLabels[currentPayloadLib?.category ?? ''] ?? ''})`">
         <NTabs v-model:value="drawerTab" type="line" size="small">
           <!-- 子 Tab: Payload 条目 -->
-          <NTabPane name="payload" tab="Payload">
+          <NTabPane name="payload" tab="漏洞载荷">
             <NSpace justify="space-between" align="center" style="margin-bottom: 8px">
               <NText depth="3" style="font-size: 12px">共 {{ payloadEntryTotal }} 条</NText>
               <NButton size="tiny" type="primary" @click="openPayloadEntryCreate">新建</NButton>
@@ -741,10 +591,10 @@ const headerExtraSlot = 'header-extra';
     </NDrawer>
 
     <!-- Payload 条目编辑弹窗 -->
-    <NModal v-model:show="showPayloadEntryModal" preset="card" :title="payloadEntryMode === 'create' ? '新建 Payload' : '编辑 Payload'" style="width: 600px">
+    <NModal v-model:show="showPayloadEntryModal" preset="card" :title="payloadEntryMode === 'create' ? '新建漏洞载荷' : '编辑漏洞载荷'" style="width: 600px">
       <NForm label-placement="left" label-width="80">
-        <NFormItem label="名称"><NInput v-model:value="payloadEntryForm.name" placeholder="payload 名称" /></NFormItem>
-        <NFormItem label="Payload"><NInput v-model:value="payloadEntryForm.value" type="textarea" :rows="3" placeholder="payload 内容" /></NFormItem>
+        <NFormItem label="名称"><NInput v-model:value="payloadEntryForm.name" placeholder="载荷名称" /></NFormItem>
+        <NFormItem label="载荷内容"><NInput v-model:value="payloadEntryForm.value" type="textarea" :rows="3" placeholder="载荷内容" /></NFormItem>
         <NFormItem label="类型"><NInput v-model:value="payloadEntryForm.type" placeholder="error/boolean/time/union" /></NFormItem>
         <NFormItem label="标签"><NInput v-model:value="payloadEntryForm.tags" placeholder="逗号分隔" /></NFormItem>
         <NFormItem label="优先级"><NInputNumber v-model:value="payloadEntryForm.priority" /></NFormItem>
@@ -789,18 +639,5 @@ const headerExtraSlot = 'header-extra';
       </template>
     </NModal>
 
-    <!-- 敏感词库/文件库 新增编辑弹窗 -->
-    <NModal v-model:show="libDialogVisible" preset="card" :title="libDialogTitle" style="width: 500px">
-      <NForm label-placement="left" :label-width="80">
-        <NFormItem label="名称" required><NInput v-model:value="libForm.name" placeholder="请输入名称" /></NFormItem>
-        <NFormItem label="描述"><NInput v-model:value="libForm.description" type="textarea" :rows="3" placeholder="请输入描述" /></NFormItem>
-      </NForm>
-      <template #footer>
-        <NSpace justify="end">
-          <NButton @click="libDialogVisible = false">取消</NButton>
-          <NButton type="primary" :loading="libSubmitting" @click="handleLibSubmit">确定</NButton>
-        </NSpace>
-      </template>
-    </NModal>
   </div>
 </template>

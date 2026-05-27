@@ -163,6 +163,7 @@ type ArchiveListReq struct {
 type ServiceVerifyTask interface {
 	ListTasks(req VerifyTaskListReq, scopes ...func(*gorm.DB) *gorm.DB) ([]VerifyTaskResp, int64, error)
 	CreateTasks(req VerifyTaskCreateReq, operator, organizeID string) ([]model.AssetVerifyTask, error)
+	Delete(id, operator string) error
 	Receive(id, operator, organizeID, remark string) error
 	Confirm(id, operator, remark string) error
 	Reject(id, operator, reason, remark string) error

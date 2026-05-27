@@ -36,14 +36,14 @@ function createRequestClient(baseURL: string, options?: RequestClientOptions) {
       console.warn('Access token or refresh token is invalid or expired.');
       const accessStore = useAccessStore();
       accessStore.setAccessToken(null);
+      localStorage.removeItem('iam_refresh_token');
+      localStorage.removeItem('iam_current_app_id');
       if (
         preferences.app.loginExpiredMode === 'modal' &&
         accessStore.isAccessChecked
       ) {
         accessStore.setLoginExpired(true);
       } else {
-        localStorage.removeItem('iam_refresh_token');
-        localStorage.removeItem('iam_current_app_id');
         resetAllStores();
         if (!window.location.pathname.includes(LOGIN_PATH)) {
           const current = window.location.pathname + window.location.search;
@@ -150,7 +150,7 @@ export async function probeAuthentication() {
   }
   authProbePromise = (async () => {
     try {
-      await requestClient.get('/me/profile');
+      await requestClient.get('/iam/profile');
       return true;
     } catch {
       return false;
@@ -173,14 +173,14 @@ function createBaseRequestClient(baseURL: string) {
     try {
       const accessStore = useAccessStore();
       accessStore.setAccessToken(null);
+      localStorage.removeItem('iam_refresh_token');
+      localStorage.removeItem('iam_current_app_id');
       if (
         preferences.app.loginExpiredMode === 'modal' &&
         accessStore.isAccessChecked
       ) {
         accessStore.setLoginExpired(true);
       } else {
-        localStorage.removeItem('iam_refresh_token');
-        localStorage.removeItem('iam_current_app_id');
         resetAllStores();
         if (!window.location.pathname.includes(LOGIN_PATH)) {
           const current = window.location.pathname + window.location.search;

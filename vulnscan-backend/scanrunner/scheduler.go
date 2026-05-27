@@ -224,10 +224,30 @@ func (s *Scheduler) resolveTemplate(task model.ScanTask) (*engine.TemplateInstan
 	return engine.Instantiate(tmpl, params)
 }
 
-// recoverFromDB loads queued tasks into in-memory queue at startup.
+// recoverFromDB loads queued tasks into in-memory queue at startup
+// and resets orphaned local running tasks.
 func (s *Scheduler) recoverFromDB(ctx context.Context) {
-	var tasks []model.ScanTask
+	stuckThreshold := time.Now().Add(-5 * time.Minute)
+	var stuckTasks []model.ScanTask
 	err := s.db.WithContext(ctx).
+		Where("status = ? AND (worker_id = '' OR worker_id IS NULL) AND started_at < ?",
+			model.TaskStatusRunning, stuckThreshold).
+		Find(&stuckTasks).Error
+	if err == nil && len(stuckTasks) > 0 {
+		for _, task := range stuckTasks {
+			s.db.WithContext(ctx).
+				Model(&model.ScanTask{}).
+				Where("id = ?", task.ID).
+				Updates(map[string]interface{}{
+					"status":    model.TaskStatusQueued,
+					"error_msg": "服务重启后自动恢复重新排队",
+				})
+		}
+		slog.Info("[Scheduler] 恢复卡死的本地任务", "count", len(stuckTasks))
+	}
+
+	var tasks []model.ScanTask
+	err = s.db.WithContext(ctx).
 		Where("status = ?", model.TaskStatusQueued).
 		Where("(worker_id = '' OR worker_id IS NULL)").
 		Order("priority DESC, created_at ASC").

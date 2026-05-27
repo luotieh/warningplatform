@@ -37,7 +37,9 @@ const cards = [
 .ledger-stats__card :deep(.n-card__content) {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 8px;
+  text-align: center;
 }
 
 .ledger-stats__label {

@@ -697,6 +697,40 @@ onMounted(fetchData);
                   <NTag v-for="t in eventTags" :key="t" size="small" :bordered="false">{{ t }}</NTag>
                 </NSpace>
               </NCard>
+
+              <NGrid :cols="1" :x-gap="12" :y-gap="12" style="margin-bottom:12px">
+                <NGridItem v-if="incident.ai_vuln_desc">
+                  <NCard size="small">
+                    <template #header>
+                      <NSpace align="center" :size="6">
+                        <span style="color:#d03050;font-weight:600;font-size:14px">漏洞描述</span>
+                      </NSpace>
+                    </template>
+                    <div style="line-height:1.8;font-size:13px;white-space:pre-wrap;color:var(--n-text-color-2)">{{ incident.ai_vuln_desc }}</div>
+                  </NCard>
+                </NGridItem>
+                <NGridItem v-if="incident.ai_vuln_harm">
+                  <NCard size="small">
+                    <template #header>
+                      <NSpace align="center" :size="6">
+                        <span style="color:#f0a020;font-weight:600;font-size:14px">漏洞危害</span>
+                      </NSpace>
+                    </template>
+                    <div style="line-height:1.8;font-size:13px;white-space:pre-wrap;color:var(--n-text-color-2)">{{ incident.ai_vuln_harm }}</div>
+                  </NCard>
+                </NGridItem>
+                <NGridItem v-if="incident.ai_fix_advice">
+                  <NCard size="small">
+                    <template #header>
+                      <NSpace align="center" :size="6">
+                        <span style="color:#18a058;font-weight:600;font-size:14px">修复建议</span>
+                      </NSpace>
+                    </template>
+                    <div style="line-height:1.8;font-size:13px;white-space:pre-wrap;color:var(--n-text-color-2)">{{ incident.ai_fix_advice }}</div>
+                  </NCard>
+                </NGridItem>
+              </NGrid>
+
               <NCard title="预审意见" size="small" v-if="incident.ai_opinion">
                 <div style="line-height:1.8;font-size:13px;white-space:pre-wrap">{{ incident.ai_opinion }}</div>
               </NCard>

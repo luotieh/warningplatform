@@ -131,7 +131,7 @@ const primaryStats = computed(() => [
     color: '#7c3aed',
     icon: 'lucide:shield-check',
     label: '安全评分',
-    route: '/asm/security',
+    route: '/incident/dashboard',
     sub: score.value >= 80 ? '整体态势稳定' : score.value >= 60 ? '需要持续跟进' : '建议优先处置',
     value: `${score.value}%`,
   },

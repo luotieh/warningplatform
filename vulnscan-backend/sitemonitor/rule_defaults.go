@@ -8,6 +8,7 @@ import (
 	"vulnscan-backend/model"
 
 	"code.yt-security.com/public/core/v2/db"
+	"gorm.io/gorm"
 )
 
 func InitDefaultRuleData(database *db.DB) {
@@ -38,6 +39,82 @@ func InitDefaultRuleData(database *db.DB) {
 		} else {
 			slog.Info("[RuleData] 初始化默认规则", "module", moduleKey)
 		}
+	}
+
+	migrateModuleMerge(session, ctx)
+}
+
+func migrateModuleMerge(session *gorm.DB, ctx context.Context) {
+	merges := []struct {
+		from   string
+		to     string
+		prefix string
+	}{
+		{from: "backdoor", to: "blacklink", prefix: "backdoor_code_"},
+		{from: "backdoor_path", to: "blacklink", prefix: "backdoor_"},
+		{from: "malicious_domain", to: "malware", prefix: "malicious_domains_"},
+	}
+
+	for _, m := range merges {
+		var src model.MonitorRuleData
+		if session.WithContext(ctx).Where("module_key = ?", m.from).First(&src).Error != nil {
+			continue
+		}
+		if src.Data == "" {
+			session.WithContext(ctx).Where("module_key = ?", m.from).Delete(&model.MonitorRuleData{})
+			continue
+		}
+
+		decoded, err := model.MonitorDecodeRuleData(src.Data)
+		if err != nil {
+			continue
+		}
+		var srcData map[string]any
+		if json.Unmarshal([]byte(decoded), &srcData) != nil || len(srcData) == 0 {
+			session.WithContext(ctx).Where("module_key = ?", m.from).Delete(&model.MonitorRuleData{})
+			continue
+		}
+
+		var dst model.MonitorRuleData
+		if session.WithContext(ctx).Where("module_key = ?", m.to).First(&dst).Error != nil {
+			continue
+		}
+		dstDecoded, err := model.MonitorDecodeRuleData(dst.Data)
+		if err != nil {
+			continue
+		}
+		var dstData map[string]any
+		if json.Unmarshal([]byte(dstDecoded), &dstData) != nil {
+			dstData = make(map[string]any)
+		}
+
+		merged := false
+		for k, v := range srcData {
+			newKey := m.prefix + k
+			if m.from == "backdoor_path" && k == "entries" {
+				newKey = "backdoor_paths"
+			}
+			if m.from == "backdoor" && k == "rules" {
+				newKey = "backdoor_code_rules"
+			}
+			if _, exists := dstData[newKey]; !exists {
+				dstData[newKey] = v
+				merged = true
+			}
+		}
+
+		if merged {
+			raw, _ := json.Marshal(dstData)
+			encoded, err := model.MonitorEncodeRuleData(string(raw))
+			if err != nil {
+				continue
+			}
+			session.WithContext(ctx).Model(&model.MonitorRuleData{}).
+				Where("module_key = ?", m.to).Update("data", encoded)
+			slog.Info("[RuleData] 模块合并迁移完成", "from", m.from, "to", m.to)
+		}
+
+		session.WithContext(ctx).Where("module_key = ?", m.from).Delete(&model.MonitorRuleData{})
 	}
 }
 
@@ -152,6 +229,25 @@ var defaultRuleDataMap = map[string]map[string]any{
 			{"re": "%[0-9a-fA-F]{2}", "mark": "URL编码"},
 			{"re": "\\\\u[0-9a-fA-F]{4}", "mark": "Unicode编码"},
 		},
+		"backdoor_code_rules": []map[string]string{
+			{"re": "(?i)(eval|assert|preg_replace.*e)\\s*\\(", "mark": "PHP后门"},
+			{"re": "(?i)(base64_decode|gzinflate|gzuncompress|str_rot13)", "mark": "编码混淆"},
+			{"re": "(?i)(cmd\\.exe|/bin/(ba)?sh|powershell)", "mark": "命令执行"},
+			{"re": "(?i)(WScript\\.Shell|CreateObject)", "mark": "ASP后门"},
+			{"re": "(?i)(Runtime\\.getRuntime\\(\\)\\.exec)", "mark": "Java后门"},
+		},
+		"backdoor_paths": []map[string]string{
+			{"path": "/shell.php", "mark": "PHP WebShell", "risk": "critical"},
+			{"path": "/cmd.asp", "mark": "ASP WebShell", "risk": "critical"},
+			{"path": "/backdoor.jsp", "mark": "JSP后门", "risk": "critical"},
+			{"path": "/.bash_history", "mark": "命令历史", "risk": "high"},
+			{"path": "/debug.cgi", "mark": "调试CGI", "risk": "high"},
+			{"path": "/test.php", "mark": "测试文件", "risk": "medium"},
+			{"path": "/info.php", "mark": "phpinfo", "risk": "medium"},
+			{"path": "/phpinfo.php", "mark": "phpinfo", "risk": "high"},
+			{"path": "/.DS_Store", "mark": "macOS索引", "risk": "low"},
+			{"path": "/Thumbs.db", "mark": "Windows缩略图", "risk": "low"},
+		},
 	},
 	"sf_engine": {
 		"content_patterns": []map[string]string{
@@ -198,15 +294,6 @@ var defaultRuleDataMap = map[string]map[string]any{
 			{"re": "(?i)(onclick|onerror|onload)\\s*=", "mark": "事件注入"},
 		},
 	},
-	"backdoor": {
-		"rules": []map[string]string{
-			{"re": "(?i)(eval|assert|preg_replace.*e)\\s*\\(", "mark": "PHP后门"},
-			{"re": "(?i)(base64_decode|gzinflate|gzuncompress|str_rot13)", "mark": "编码混淆"},
-			{"re": "(?i)(cmd\\.exe|/bin/(ba)?sh|powershell)", "mark": "命令执行"},
-			{"re": "(?i)(WScript\\.Shell|CreateObject)", "mark": "ASP后门"},
-			{"re": "(?i)(Runtime\\.getRuntime\\(\\)\\.exec)", "mark": "Java后门"},
-		},
-	},
 	"malware": {
 		"js_malicious_patterns": []map[string]string{
 			{"pattern": "(?i)(document\\.write\\s*\\(\\s*unescape)", "name": "写入反转义", "description": "疑似恶意代码注入", "severity": "high"},
@@ -226,33 +313,17 @@ var defaultRuleDataMap = map[string]map[string]any{
 		"fetch_patterns": []map[string]string{
 			{"pattern": "(?i)(fetch\\s*\\(\\s*['\"]https?://(?!\\w+\\.example\\.com))", "name": "外部Fetch", "description": "向外部域名发送Fetch请求", "severity": "medium"},
 		},
+		"malicious_domains_miner":        []map[string]string{{"domain": "coinhive.com"}, {"domain": "coin-hive.com"}, {"domain": "jsecoin.com"}, {"domain": "crypto-loot.com"}},
+		"malicious_domains_c2":           []map[string]string{},
+		"malicious_domains_phishing":     []map[string]string{},
+		"malicious_domains_malvertising": []map[string]string{},
+		"malicious_domains_seo_spam":     []map[string]string{},
+		"malicious_domains_generic":      []map[string]string{},
 	},
 	"whiteip": {
 		"entries": []map[string]string{
 			{"domain": "127.0.0.1", "mark": "本地回环"},
 			{"domain": "::1", "mark": "IPv6本地回环"},
 		},
-	},
-	"backdoor_path": {
-		"entries": []map[string]string{
-			{"path": "/shell.php", "mark": "PHP WebShell", "risk": "critical"},
-			{"path": "/cmd.asp", "mark": "ASP WebShell", "risk": "critical"},
-			{"path": "/backdoor.jsp", "mark": "JSP后门", "risk": "critical"},
-			{"path": "/.bash_history", "mark": "命令历史", "risk": "high"},
-			{"path": "/debug.cgi", "mark": "调试CGI", "risk": "high"},
-			{"path": "/test.php", "mark": "测试文件", "risk": "medium"},
-			{"path": "/info.php", "mark": "phpinfo", "risk": "medium"},
-			{"path": "/phpinfo.php", "mark": "phpinfo", "risk": "high"},
-			{"path": "/.DS_Store", "mark": "macOS索引", "risk": "low"},
-			{"path": "/Thumbs.db", "mark": "Windows缩略图", "risk": "low"},
-		},
-	},
-	"malicious_domain": {
-		"miner":        []map[string]string{{"domain": "coinhive.com"}, {"domain": "coin-hive.com"}, {"domain": "jsecoin.com"}, {"domain": "crypto-loot.com"}},
-		"c2":           []map[string]string{},
-		"phishing":     []map[string]string{},
-		"malvertising": []map[string]string{},
-		"seo_spam":     []map[string]string{},
-		"generic":      []map[string]string{},
 	},
 }

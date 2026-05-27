@@ -39,7 +39,7 @@ export function stripUnitProfileFromExtra(extra: Record<string, unknown> = {}): 
 export function mapOrganizeToUnitExtra(org: Organize): LedgerUnitExtra {
   const unit_address = mergeUnitAddress(org.address, org.unit_detail_address);
   const regionHint = String(org.address ?? '').trim();
-  const unit_location_code = regionHint ? regionCodeFromLabel(regionHint) : null;
+  const unit_location_code = org.region_code || (regionHint ? regionCodeFromLabel(regionHint) : null);
 
   return {
     unit_type: org.unit_type ?? '',
@@ -77,6 +77,7 @@ export function mapUnitExtraToOrganizeUpdate(extra: LedgerUnitExtra): Partial<Or
     industry_category: extra.industry_category ?? '',
     is_notification_member: extra.is_notification_member ?? false,
     address,
+    region_code: extra.unit_location_code || '',
     unit_detail_address: '',
     leader_name: extra.leader_name ?? '',
     leader_title: extra.leader_title ?? '',
@@ -117,6 +118,10 @@ function orgNodeLabel(node: any, key: string): string {
   return String(node.name ?? node.organize_name ?? node.label ?? key);
 }
 
+function orgNodeAssetCount(node: any): number {
+  return Number(node.asset_count ?? 0);
+}
+
 function orgNodeParentId(node: any): string {
   return String(node.parent_id ?? node.parentId ?? node.parentID ?? '').trim();
 }
@@ -129,7 +134,10 @@ export function buildOrgTreeFromFlat(nodes: any[] = []): TreeOption[] {
   nodes.forEach((item) => {
     const key = orgNodeKey(item);
     if (!key) return;
-    nodeMap.set(key, { key, label: orgNodeLabel(item, key), value: key, children: [] });
+    const opt: TreeOption & { assetCount?: number } = { key, label: orgNodeLabel(item, key), value: key, children: [] };
+    const count = orgNodeAssetCount(item);
+    if (count > 0) opt.assetCount = count;
+    nodeMap.set(key, opt);
   });
 
   nodes.forEach((item) => {
@@ -165,12 +173,15 @@ export function normalizeOrgTree(nodes: any[] = []): TreeOption[] {
       const key = orgNodeKey(node);
       const label = orgNodeLabel(node, key);
       const children = normalizeOrgTree(node.children ?? []);
-      return {
+      const count = orgNodeAssetCount(node);
+      const opt: TreeOption & { assetCount?: number } = {
         key,
         label,
         value: key,
         children: children.length > 0 ? children : undefined,
-      } satisfies TreeOption;
+      };
+      if (count > 0) opt.assetCount = count;
+      return opt;
     })
     .filter((node) => node.key && node.label);
 }
@@ -280,9 +291,6 @@ export type RegionScopeRow = {
   count: number;
 };
 
-function formatRegionTreeLabel(label: string, count: number) {
-  return count > 0 ? `${label} (${count})` : label;
-}
 
 /** 将区县级 code 展开为省 / 市祖先，便于裁剪完整行政区划树 */
 export function expandRegionAncestorCodes(codes: Iterable<string>): Set<string> {
@@ -328,16 +336,15 @@ function pruneRegionTreeByCodes(
     const childSum = childResults.reduce((sum, child) => sum + child.total, 0);
     const total = direct + childSum;
     if (total <= 0) continue;
-    result.push({
-      total,
-      option: {
-        key: node.value,
-        label: formatRegionTreeLabel(node.label, total),
-        value: node.value,
-        children:
-          childResults.length > 0 ? childResults.map((child) => child.option) : undefined,
-      },
-    });
+    const opt: TreeOption & { assetCount?: number } = {
+      key: node.value,
+      label: node.label,
+      value: node.value,
+      children:
+        childResults.length > 0 ? childResults.map((child) => child.option) : undefined,
+    };
+    if (total > 0) opt.assetCount = total;
+    result.push({ total, option: opt });
   }
   return result;
 }
@@ -359,15 +366,13 @@ export function buildRegionTreeFromAssetCodes(
   const tree = pruneRegionTreeByCodes(areas, allowed, countMap).map((node) => node.option);
   const known = collectRegionTreeKeys(tree);
 
-  const orphans: TreeOption[] = [];
+  const orphans: (TreeOption & { assetCount?: number })[] = [];
   for (const [code, count] of countMap) {
     if (known.has(code)) continue;
     const label = regionLabelFromCode(code) || code;
-    orphans.push({
-      key: code,
-      label: formatRegionTreeLabel(label, count),
-      value: code,
-    });
+    const opt: TreeOption & { assetCount?: number } = { key: code, label, value: code };
+    if (count > 0) opt.assetCount = count;
+    orphans.push(opt);
   }
   orphans.sort((a, b) => String(a.label).localeCompare(String(b.label), 'zh-CN'));
   return orphans.length > 0 ? [...tree, ...orphans] : tree;
@@ -411,8 +416,10 @@ export function ledgerScopeDimensionLabel(dim: LedgerScopeDimension): string {
       return '地域';
     case 'industry':
       return '行业';
+    case 'unit_type':
+      return '单位类型';
     case 'asset_family':
-      return '资产类型';
+      return '资产分类';
     default:
       return '';
   }
@@ -452,7 +459,19 @@ export function resolveLedgerFormAddress(row: Partial<Asset>) {
   return '';
 }
 
+const DATA_SOURCE_LABEL_FALLBACK: Record<string, string> = {
+  manual: '手工录入',
+  scan: '扫描发现',
+  import: '批量导入',
+  discovery: '自动探测',
+  manual_import: '手工录入',
+  auto_detect: '自动探测',
+  external: '外部同步',
+};
+
 export function optionLabelOf(options: LedgerOption[], value?: string) {
   if (!value) return '-';
-  return options.find((item) => item.value === value)?.label ?? value;
+  return options.find((item) => item.value === value)?.label
+    ?? DATA_SOURCE_LABEL_FALLBACK[value]
+    ?? value;
 }

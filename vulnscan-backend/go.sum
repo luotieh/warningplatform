@@ -36,8 +36,8 @@ cloud.google.com/go/storage v1.8.0/go.mod h1:Wv1Oy7z6Yz3DshWRJFhqM/UCfaWIRTdp0RX
 cloud.google.com/go/storage v1.10.0/go.mod h1:FLPqc6j+Ki4BU591ie1oL6qBQGu2Bl/tZ9ullr3+Kg0=
 code.gitea.io/sdk/gitea v0.21.0 h1:69n6oz6kEVHRo1+APQQyizkhrZrLsTLXey9142pfkD4=
 code.gitea.io/sdk/gitea v0.21.0/go.mod h1:tnBjVhuKJCn8ibdyyhvUyxrR1Ca2KHEoTWoukNhXQPA=
-code.yt-security.com/public/core/v2 v2.0.0 h1:MRFVbhsDaFkjmVF+9tmz3rJXTwdRpyndInZJrVunjpE=
-code.yt-security.com/public/core/v2 v2.0.0/go.mod h1:gqhRCmkUdcQq/thQxvyRZkigsNKcljIv7hBLv9BwzC8=
+code.yt-security.com/public/core/v2 v2.1.0 h1:Drg3utt60NbWddeVcZp9YAWonsxyKm4fcuZSilSmKaw=
+code.yt-security.com/public/core/v2 v2.1.0/go.mod h1:gqhRCmkUdcQq/thQxvyRZkigsNKcljIv7hBLv9BwzC8=
 code.yt-security.com/public/core/v2/cache/redis v0.1.0 h1:IvrJ1rDoGlhls7njXT8Rjb0Nf0rPM695Vha23Xgv0fI=
 code.yt-security.com/public/core/v2/cache/redis v0.1.0/go.mod h1:sJkLf8j29rpIbjKPhQC4ytNzKteTyqT56yL65TbpEoc=
 code.yt-security.com/public/core/v2/db v0.1.0 h1:AcWfxoFQKOZU9NInaImMsaoxKSs1vcYhkBnOwbfoot4=
@@ -46,8 +46,6 @@ code.yt-security.com/public/core/v2/product v0.1.0 h1:fhTjq0SND/WHM/f5aQdXtg2baF
 code.yt-security.com/public/core/v2/product v0.1.0/go.mod h1:CRZPy+1tQh8Soo7s457wRZ3+8rfhc2zr2i+ydPnFHmQ=
 code.yt-security.com/public/core/v2/web v0.2.0 h1:J72xRZo7g8M8M2EGGt28sD+2/MaWTmReLdXRgni1kOU=
 code.yt-security.com/public/core/v2/web v0.2.0/go.mod h1:CWA2L3eU+aJCiVBEaRytQ9d48E15nV4ce3iGLa2rRO0=
-code.yt-security.com/public/sdk v1.4.3 h1:y70ug9M4opyPoyB3Z7biTeFSUzAinc3BN9ELv4ervq4=
-code.yt-security.com/public/sdk v1.4.3/go.mod h1:Pa+65QoVEOBq1szhZf4tb0woBtaxI2Awh+SDNLmg9VQ=
 dario.cat/mergo v1.0.2 h1:85+piFYR1tMbRrLcDwR18y4UKJ3aH1Tbzi24VRW1TK8=
 dario.cat/mergo v1.0.2/go.mod h1:E/hbnu0NxMFBjpMIE34DRGLWqDy0g5FuKDhCb31ngxA=
 dmitri.shuralyov.com/gpu/mtl v0.0.0-20190408044501-666a987793e9/go.mod h1:H6x//7gZCb22OMCxBHrMx7a5I7Hp++hsVxbQ4BYO7hU=
@@ -557,8 +555,6 @@ github.com/google/pprof v0.0.0-20250423184734-337e5dd93bb4/go.mod h1:5hDyRhoBCxV
 github.com/google/renameio v0.1.0/go.mod h1:KWCgfxg9yswjAJkECMjeO8J8rahYeXnNhOm40UhjYkI=
 github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 h1:El6M4kTTCOh6aBiKaUGG7oYTSPP8MxqL4YI3kZKwcP4=
 github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510/go.mod h1:pupxD2MaaD3pAXIBCelhxNneeOaAeabZDe5s4K6zSpQ=
-github.com/google/subcommands v1.2.0 h1:vWQspBTo2nEqTUFita5/KeEWlUL8kQObDFbub/EN9oE=
-github.com/google/subcommands v1.2.0/go.mod h1:ZjhPrFU+Olkh9WazFPsl27BQ4UPiG37m3yTrtFlrHVk=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
 github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
 github.com/google/wire v0.7.0 h1:JxUKI6+CVBgCO2WToKy/nQk0sS+amI9z9EjVmdaocj4=

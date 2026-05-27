@@ -3,6 +3,7 @@ package model
 import (
 	"bytes"
 	"compress/zlib"
+	"crypto/md5"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -233,6 +234,9 @@ var MonitorDefaultConfigSeeds = map[string]map[string]any{
 		"enabled": true, "alert_enabled": true, "cycle_minutes": 1,
 		"incident_auto_enabled": false, "incident_min_blacklink_count": 1,
 	},
+	"screenshot": {
+		"width": 1920, "height": 1080, "quality": 80,
+	},
 }
 
 // ═══ 执行记录 ═══
@@ -263,9 +267,22 @@ type MonitorExecution struct {
 	FinishedAt        *time.Time `json:"finished_at"`
 	ReapedAt          *time.Time `json:"reaped_at"`
 	CreatedAt         time.Time  `json:"created_at"`
+	// 问题去重字段：同一 URL + 维度 + 任务的重复问题合并到一条记录
+	IssueKey        string     `json:"issue_key" gorm:"type:varchar(64);index"`
+	FirstSeenAt     *time.Time `json:"first_seen_at"`
+	OccurrenceCount int        `json:"occurrence_count" gorm:"default:1"`
 }
 
 func (MonitorExecution) TableName() string { return "monitor_executions" }
+
+// MakeIssueKey 计算问题去重键：同一 URL + 维度 + 任务标识的问题视为同一问题。
+func MakeIssueKey(url, dimension, targetID, pathTaskID string) string {
+	taskKey := pathTaskID
+	if taskKey == "" {
+		taskKey = targetID
+	}
+	return fmt.Sprintf("%x", md5.Sum([]byte(url+":"+dimension+":"+taskKey)))
+}
 
 // ═══ 告警 ═══
 
@@ -308,6 +325,7 @@ type MonitorAlertConfig struct {
 	WechatEnabled          bool   `json:"wechat_enabled" gorm:"default:false"`
 	WechatWebhook          string `json:"wechat_webhook" gorm:"type:varchar(500)"`
 	AlertEnabled           bool   `json:"alert_enabled" gorm:"default:true"`
+	MaxTamperScreenshots   int    `json:"max_tamper_screenshots" gorm:"default:10"`
 }
 
 func (MonitorAlertConfig) TableName() string { return "monitor_alert_config" }
@@ -371,7 +389,19 @@ type MonitorBaseline struct {
 	ObjKeyScreenshot      string `json:"obj_key_screenshot" gorm:"type:varchar(200)"`
 	AgentID               string `json:"agent_id" gorm:"type:varchar(100)"`
 	ConfirmedBy           string `json:"confirmed_by" gorm:"type:varchar(20);default:auto"`
+	Confidence            string `json:"confidence" gorm:"type:varchar(20);default:low"`
+	SuspicionScore        int    `json:"suspicion_score" gorm:"default:0"`
+	SuspicionDetail       string `json:"suspicion_detail" gorm:"type:text"`
+	ConsecutiveStableRuns int    `json:"consecutive_stable_runs" gorm:"default:0"`
+	WaybackVerified       bool   `json:"wayback_verified" gorm:"default:false"`
+	CrossValidated        bool   `json:"cross_validated" gorm:"default:false"`
 }
+
+const (
+	BaselineConfidenceLow    = "low"
+	BaselineConfidenceMedium = "medium"
+	BaselineConfidenceHigh   = "high"
+)
 
 func (MonitorBaseline) TableName() string { return "monitor_baselines" }
 
@@ -609,6 +639,8 @@ type MonitorBaselineMetadata struct {
 	ObjKeyHTML        string         `json:"obj_key_html,omitempty"`
 	ObjKeyText        string         `json:"obj_key_text,omitempty"`
 	ObjKeyScreenshot  string         `json:"obj_key_screenshot,omitempty"`
+	Confidence        string         `json:"confidence,omitempty"`
+	SuspicionScore    int            `json:"suspicion_score,omitempty"`
 }
 
 type MonitorBaselineUpdate struct {
@@ -627,6 +659,8 @@ type MonitorBaselineUpdate struct {
 	ObjKeyHTML        string         `json:"obj_key_html"`
 	ObjKeyText        string         `json:"obj_key_text"`
 	ObjKeyScreenshot  string         `json:"obj_key_screenshot"`
+	SuspicionScore    int            `json:"suspicion_score,omitempty"`
+	SuspicionDetail   string         `json:"suspicion_detail,omitempty"`
 }
 
 // ═══ NATS 检测结果类型（非 DB 模型） ═══
@@ -716,21 +750,20 @@ type MonitorModuleDef struct {
 	Description string
 	Type        string
 	KVKey       string
+	Group       string
+	Icon        string
 }
 
 var MonitorModuleRegistry = map[string]MonitorModuleDef{
-	"availability":     {Key: "availability", Name: "可用性检测规则", Type: "engine", KVKey: "engine/availability"},
-	"domain_hijack":    {Key: "domain_hijack", Name: "域名劫持规则", Type: "engine", KVKey: "engine/domain_hijack"},
-	"tamper":           {Key: "tamper", Name: "篡改检测规则", Type: "engine", KVKey: "engine/tamper"},
-	"blacklink":        {Key: "blacklink", Name: "暗链检测规则", Type: "engine", KVKey: "engine/blacklink"},
-	"malware":          {Key: "malware", Name: "恶意脚本规则", Type: "engine", KVKey: "engine/malware"},
-	"sf_engine":        {Key: "sf_engine", Name: "敏感文件引擎", Type: "engine", KVKey: "engine/sensitive_file"},
-	"sw_engine":        {Key: "sw_engine", Name: "敏感词引擎", Type: "engine", KVKey: "engine/sensitive_word"},
-	"backdoor":         {Key: "backdoor", Name: "后门检测规则", Type: "engine", KVKey: "engine/backdoor"},
-	"common":           {Key: "common", Name: "公共配置", Type: "engine", KVKey: "engine/common"},
-	"whiteip":          {Key: "whiteip", Name: "IP白名单", Type: "dict", KVKey: "data/whiteips"},
-	"backdoor_path":    {Key: "backdoor_path", Name: "后门路径字典", Type: "dict", KVKey: "data/backdoor_paths"},
-	"malicious_domain": {Key: "malicious_domain", Name: "恶意域名", Type: "dict", KVKey: "data/malicious_domains"},
+	"availability":  {Key: "availability", Name: "可用性检测规则", Description: "TLS 版本/加密套件、证书检查、HTTP 安全头、信息泄露头", Type: "engine", KVKey: "engine/availability", Group: "detect", Icon: "heartbeat"},
+	"domain_hijack": {Key: "domain_hijack", Name: "域名劫持规则", Description: "劫持特征匹配、停靠/过期标题、Parking IP", Type: "engine", KVKey: "engine/domain_hijack", Group: "detect", Icon: "globe"},
+	"tamper":        {Key: "tamper", Name: "篡改检测规则", Description: "噪音过滤模式、动态元素选择器、可信域名白名单", Type: "engine", KVKey: "engine/tamper", Group: "detect", Icon: "shield"},
+	"blacklink":     {Key: "blacklink", Name: "暗链/后门检测", Description: "暗链 URL 规则、行业黑词、编码绕过模式、后门代码特征、后门路径字典", Type: "engine", KVKey: "engine/blacklink", Group: "detect", Icon: "link"},
+	"malware":       {Key: "malware", Name: "恶意代码检测", Description: "恶意 JS 脚本、挖矿检测、恶意跳转、WebShell、恶意域名库", Type: "engine", KVKey: "engine/malware", Group: "detect", Icon: "bug"},
+	"sf_engine":     {Key: "sf_engine", Name: "敏感文件引擎", Description: "敏感内容匹配、软 404 识别、备份文件后缀、高危目录、安全文件白名单", Type: "engine", KVKey: "engine/sensitive_file", Group: "detect", Icon: "file"},
+	"sw_engine":     {Key: "sw_engine", Name: "敏感词引擎", Description: "违规链接检测规则", Type: "engine", KVKey: "engine/sensitive_word", Group: "detect", Icon: "search"},
+	"common":        {Key: "common", Name: "公共配置", Description: "公共 DNS 服务器列表等共享配置", Type: "engine", KVKey: "engine/common", Group: "common", Icon: "settings"},
+	"whiteip":       {Key: "whiteip", Name: "IP 白名单", Description: "可信 IP 地址，跳过检测", Type: "dict", KVKey: "data/whiteips", Group: "dict", Icon: "list"},
 }
 
 var MonitorValidSeverities = map[string]bool{
@@ -739,8 +772,8 @@ var MonitorValidSeverities = map[string]bool{
 
 var MonitorRuleDataModuleKeys = []string{
 	"availability", "domain_hijack", "tamper", "blacklink",
-	"malware", "sf_engine", "sw_engine", "backdoor",
-	"common", "whiteip", "backdoor_path", "malicious_domain",
+	"malware", "sf_engine", "sw_engine",
+	"common", "whiteip",
 }
 
 type MonitorPerfBaseline struct {

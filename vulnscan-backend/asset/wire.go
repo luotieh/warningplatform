@@ -8,6 +8,7 @@ import (
 
 var WireSet = wire.NewSet(
 	NewServiceAsset,
+	NewScreenshotService,
 	NewHandlerAsset,
 	NewEnrichHandler,
 	NewDiscoveryHandler,

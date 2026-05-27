@@ -151,20 +151,20 @@ export function previewTemplate(id: string, data?: { variables?: Record<string, 
   return requestClient.post<any>(`/messages/templates/${id}/preview`, data);
 }
 
-// ========== 通知（SDK /me/* + /notifications/* 路由） ==========
+// ========== 通知（SDK /iam/notifications/* 路由） ==========
 export async function getNotificationList(params?: any) {
-  const res = await baseRequestClient.get<any>('/me/notifications', { params });
+  const res = await baseRequestClient.get<any>('/iam/notifications', { params });
   const body = (res as Record<string, unknown>).data ?? res;
   const paged = normalizePagedResponse(res);
   const unread = (body as any)?.unread_count ?? paged.total;
   return { items: paged.items, total: paged.total, unread_count: unread };
 }
-export function getNotificationDetail(id: string) { return requestClient.get<any>(`/me/notifications/${id}`); }
-export function deleteNotification(id: string) { return requestClient.delete(`/notifications/${id}`).catch(() => {}); }
-export function markNotificationRead(id: string) { return requestClient.post(`/notifications/${id}/read`); }
-export function markAllNotificationsRead() { return requestClient.post('/notifications/read', { all: true }); }
+export function getNotificationDetail(id: string) { return requestClient.get<any>(`/iam/notifications/${id}`); }
+export function deleteNotification(id: string) { return requestClient.delete(`/iam/notifications/${id}`).catch(() => {}); }
+export function markNotificationRead(id: string) { return requestClient.post('/iam/notifications/read', { ids: [id] }); }
+export function markAllNotificationsRead() { return requestClient.post('/iam/notifications/read', { all: true }); }
 export async function getUnreadCount(): Promise<{ count: number }> {
-  const data = await requestClient.get<any>('/me/unread-count');
+  const data = await requestClient.get<any>('/iam/notifications/unread/count');
   return { count: data?.total ?? data?.count ?? 0 };
 }
 
@@ -345,30 +345,30 @@ export interface TodoStats {
 }
 
 export async function getTodoList(params?: TodoQuery) {
-  const res = await baseRequestClient.get<any>('/messages/todos', { params });
+  const res = await baseRequestClient.get<any>('/iam/todos', { params });
   return normalizePagedResponse<TodoItem>(res);
 }
 
 export function getTodoDetail(id: number) {
-  return requestClient.get<TodoItem>(`/messages/todos/${id}`);
+  return requestClient.get<TodoItem>(`/iam/todos/${id}`);
 }
 
 export function createTodo(data: Partial<TodoItem>) {
-  return requestClient.post<TodoItem>('/messages/todos', data);
+  return requestClient.post<TodoItem>('/iam/todos', data);
 }
 
 export function updateTodo(id: number, data: Partial<TodoItem>) {
-  return requestClient.put<TodoItem>(`/messages/todos/${id}`, data);
+  return requestClient.put<TodoItem>(`/iam/todos/${id}`, data);
 }
 
 export function updateTodoStatus(id: number, status: string) {
-  return requestClient.put(`/messages/todos/${id}/status`, { status });
+  return requestClient.put(`/iam/todos/${id}/status`, { status });
 }
 
 export function deleteTodo(id: number) {
-  return requestClient.delete(`/messages/todos/${id}`);
+  return requestClient.delete(`/iam/todos/${id}`);
 }
 
 export function getTodoStats() {
-  return requestClient.get<TodoStats>('/messages/todos/stats');
+  return requestClient.get<TodoStats>('/iam/todos/stats');
 }

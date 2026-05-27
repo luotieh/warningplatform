@@ -12,12 +12,13 @@ import (
 )
 
 type DataLibQuery struct {
-	Page     int    `form:"page"`
-	PageSize int    `form:"page_size"`
-	Keyword  string `form:"keyword"`
-	Type     string `form:"type"`
-	Category string `form:"category"`
-	Status   string `form:"status"`
+	Page         int    `form:"page"`
+	PageSize     int    `form:"page_size"`
+	Keyword      string `form:"keyword"`
+	Type         string `form:"type"`
+	ExcludeTypes string `form:"exclude_types"`
+	Category     string `form:"category"`
+	Status       string `form:"status"`
 }
 
 type EntryQuery struct {
@@ -51,6 +52,10 @@ func (s *ServiceDataLib) List(q DataLibQuery, scopes ...func(*gorm.DB) *gorm.DB)
 	}
 	if q.Type != "" {
 		tx = tx.Where("type = ?", q.Type)
+	}
+	if q.ExcludeTypes != "" {
+		excluded := strings.Split(q.ExcludeTypes, ",")
+		tx = tx.Where("type NOT IN ?", excluded)
 	}
 	if q.Category != "" {
 		tx = tx.Where("category = ?", q.Category)

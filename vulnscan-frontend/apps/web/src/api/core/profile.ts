@@ -42,47 +42,47 @@ export namespace ProfileApi {
 }
 
 export function getProfile() {
-  return requestClient.get<ProfileApi.ProfileInfo>('/auth/profile');
+  return requestClient.get<ProfileApi.ProfileInfo>('/iam/profile');
 }
 
 export function updateProfile(data: ProfileApi.UpdateProfileReq) {
-  return requestClient.put('/auth/profile', data);
+  return requestClient.put('/iam/profile', data);
 }
 
 export function changePassword(data: ProfileApi.ChangePasswordReq) {
-  return requestClient.post('/auth/change-password', data);
+  return requestClient.post('/iam/auth/change-password', data);
 }
 
 export function listSessions() {
-  return requestClient.get<ProfileApi.SessionItem[]>('/auth/sessions');
+  return requestClient.get<ProfileApi.SessionItem[]>('/iam/auth/sessions');
 }
 
 export function logoutAllSessions() {
-  return requestClient.post('/auth/logout-all');
+  return requestClient.post('/iam/auth/logout-all');
 }
 
 export function switchContext(data: { organize_id?: string; department_id?: string }) {
-  return requestClient.post<AuthApi.LoginResult>('/auth/switch-context', data);
+  return requestClient.post<AuthApi.LoginResult>('/iam/auth/switch-context', data);
 }
 
 export function trustDevice(data: { device_fingerprint: string; device_name?: string }) {
   return requestClient.post<{ device_hash: string; trusted: boolean; expires_in: number }>(
-    '/auth/devices/trust',
+    '/iam/auth/devices/trust',
     data,
   );
 }
 
 export function untrustDevice(data: { device_fingerprint: string }) {
-  return requestClient.delete('/auth/devices/trust', { data });
+  return requestClient.delete('/iam/auth/devices/trust', { data });
 }
 
 export function createRememberMeToken() {
-  return requestClient.post<{ remember_me_token: string; expires_in: number }>('/auth/remember-me');
+  return requestClient.post<{ remember_me_token: string; expires_in: number }>('/iam/auth/remember-me');
 }
 
 export function loginWithRememberMe(data: { remember_me_token: string }) {
   return requestClient.post<{ login: AuthApi.LoginResult; remember_me_token: string }>(
-    '/auth/remember-me/login',
+    '/iam/auth/remember-me/login',
     data,
   );
 }

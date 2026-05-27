@@ -8,7 +8,7 @@ import (
 )
 
 // FindIAMOrganizeByExactName 按名称精确匹配 IAM 组织（同名取第一条，避免重复创建）。
-func FindIAMOrganizeByExactName(ctx context.Context, svc *identity.OrganizeService, name string) (*identity.OrganizeInfo, error) {
+func FindIAMOrganizeByExactName(ctx context.Context, svc *identity.OrganizeAdminService, name string) (*identity.OrganizeInfo, error) {
 	name = strings.TrimSpace(name)
 	if name == "" || svc == nil {
 		return nil, nil
@@ -32,7 +32,7 @@ func FindIAMOrganizeByExactName(ctx context.Context, svc *identity.OrganizeServi
 	return matched, nil
 }
 
-func findIAMOrganizeByOptions(ctx context.Context, svc *identity.OrganizeService, name string) (*identity.OrganizeInfo, error) {
+func findIAMOrganizeByOptions(ctx context.Context, svc *identity.OrganizeAdminService, name string) (*identity.OrganizeInfo, error) {
 	options, err := svc.GetOrganizeOptions(ctx, name)
 	if err != nil {
 		return nil, err

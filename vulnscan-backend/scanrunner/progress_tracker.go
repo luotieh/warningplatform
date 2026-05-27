@@ -51,6 +51,14 @@ type ProgressTracker struct {
 	findings      []*core.Finding
 	startTime     time.Time
 	totalTargets  int
+
+	vulnCritical int
+	vulnHigh     int
+	vulnMedium   int
+	vulnLow      int
+	vulnInfo     int
+	aliveHosts   int
+	openPorts    int
 }
 
 func NewProgressTracker(db *gorm.DB, taskID string, totalTargets int) *ProgressTracker {
@@ -137,6 +145,29 @@ func (pt *ProgressTracker) IncrementStageDone() {
 func (pt *ProgressTracker) AppendFindings(findings []*core.Finding) {
 	pt.mu.Lock()
 	pt.findings = append(pt.findings, findings...)
+	for _, f := range findings {
+		switch f.Type {
+		case "host_alive":
+			pt.aliveHosts++
+		case "port_open", "udp_port":
+			pt.openPorts++
+		}
+		if model.InferFindingCategory(f.ModuleID, f.Type) == model.FindingCategoryRecon {
+			continue
+		}
+		switch f.Severity {
+		case "critical":
+			pt.vulnCritical++
+		case "high":
+			pt.vulnHigh++
+		case "medium":
+			pt.vulnMedium++
+		case "low":
+			pt.vulnLow++
+		case "info":
+			pt.vulnInfo++
+		}
+	}
 	pt.mu.Unlock()
 }
 
@@ -172,36 +203,18 @@ func (pt *ProgressTracker) Get() *TaskProgress {
 		TotalTargets:   pt.totalTargets,
 		ScannedTargets: scanned,
 		FindingCount:   len(pt.findings),
+		VulnCritical:   pt.vulnCritical,
+		VulnHigh:       pt.vulnHigh,
+		VulnMedium:     pt.vulnMedium,
+		VulnLow:        pt.vulnLow,
+		VulnInfo:       pt.vulnInfo,
+		AliveHosts:     pt.aliveHosts,
+		OpenPorts:      pt.openPorts,
 		Duration:       time.Since(pt.startTime).Round(time.Millisecond).String(),
 		StagesTotal:    pt.stagesTotal,
 		StagesDone:     pt.stagesDone,
 		ModulesTotal:   pt.modulesTotal,
 		ModulesDone:    done,
-	}
-
-	for _, f := range pt.findings {
-		switch f.Type {
-		case "host_alive":
-			p.AliveHosts++
-		case "port_open", "udp_port":
-			p.OpenPorts++
-		}
-
-		if model.InferFindingCategory(f.ModuleID, f.Type) == model.FindingCategoryRecon {
-			continue
-		}
-		switch f.Severity {
-		case "critical":
-			p.VulnCritical++
-		case "high":
-			p.VulnHigh++
-		case "medium":
-			p.VulnMedium++
-		case "low":
-			p.VulnLow++
-		case "info":
-			p.VulnInfo++
-		}
 	}
 
 	return p

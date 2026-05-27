@@ -1,9 +1,9 @@
 <script lang="ts" setup>
 import type { TreeOption } from 'naive-ui';
 
-import { computed, ref } from 'vue';
+import { computed, h, ref } from 'vue';
 
-import { NEmpty, NInput, NTree } from 'naive-ui';
+import { NEmpty, NInput, NTag, NTree } from 'naive-ui';
 
 defineOptions({ name: 'LedgerFilterTree' });
 
@@ -37,6 +37,12 @@ function handleSelect(keys: Array<string | number>) {
   emit('update:selectedKey', keys.length > 0 ? String(keys[0]) : null);
 }
 
+function renderSuffix({ option }: { option: TreeOption & { assetCount?: number } }) {
+  const count = option.assetCount;
+  if (!count || count <= 0) return null;
+  return h(NTag, { size: 'tiny', round: true, bordered: false, type: 'info' }, () => String(count));
+}
+
 defineExpose({
   clearSearch() {
     pattern.value = '';
@@ -67,6 +73,7 @@ defineExpose({
       :data="data"
       :pattern="pattern"
       :selected-keys="selectedKeys"
+      :render-suffix="renderSuffix"
       @update:selected-keys="handleSelect"
     />
 

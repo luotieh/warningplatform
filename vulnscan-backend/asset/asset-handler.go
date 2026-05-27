@@ -17,12 +17,13 @@ import (
 )
 
 type HandlerAsset struct {
-	svc assetContract.ServiceAsset
-	iam *iamsdk.Client
+	svc        assetContract.ServiceAsset
+	iam        *iamsdk.Client
+	screenshot *ScreenshotService
 }
 
-func NewHandlerAsset(svc assetContract.ServiceAsset, iam *iamsdk.Client) *HandlerAsset {
-	return &HandlerAsset{svc: svc, iam: iam}
+func NewHandlerAsset(svc assetContract.ServiceAsset, iam *iamsdk.Client, screenshot *ScreenshotService) *HandlerAsset {
+	return &HandlerAsset{svc: svc, iam: iam, screenshot: screenshot}
 }
 
 func firstNonEmpty(values ...string) string {
@@ -133,6 +134,10 @@ func (h *HandlerAsset) Create(c *gin.Context) {
 	if err := h.svc.Create(&item); err != nil {
 		web.Fail(c).Err(err).Send()
 		return
+	}
+
+	if h.screenshot != nil && item.Address != "" {
+		go h.screenshot.CaptureAndSave(item.ID, item.Address)
 	}
 
 	web.OK(c).Data(item).Send()
@@ -367,6 +372,10 @@ func (h *HandlerAsset) Update(c *gin.Context) {
 	if err := h.svc.Update(id, updates); err != nil {
 		web.Fail(c).Err(err).Send()
 		return
+	}
+
+	if h.screenshot != nil && req.Address != nil && *req.Address != existing.Address {
+		go h.screenshot.CaptureAndSave(id, *req.Address)
 	}
 
 	web.OK(c).Send()

@@ -148,6 +148,9 @@ type RuleDataSummary struct {
 	Type        string `json:"type"`
 	HasData     bool   `json:"has_data"`
 	UpdatedAt   string `json:"updated_at"`
+	RuleCount   int    `json:"rule_count"`
+	Group       string `json:"group"`
+	Icon        string `json:"icon"`
 }
 
 type ImportRowResult struct {

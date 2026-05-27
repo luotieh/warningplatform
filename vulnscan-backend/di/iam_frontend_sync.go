@@ -3,6 +3,7 @@ package di
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -52,10 +53,45 @@ func (h *Handlers) syncFrontendsWithServiceToken(c *gin.Context) {
 	// 清空用户 token，强制 SDK 使用 client_credentials（scope=sdk）访问 IAM
 	ctx = transport.WithForwardedToken(ctx, "")
 
+	totalRefs, emptyRefs := countFrontendRefs(req.Items, 0, 0)
+	slog.Info("[sync-frontends] 收到前端菜单", "total_items", countFrontendItems(req.Items), "backend_refs_total", totalRefs, "items_without_refs", emptyRefs)
+
 	if err := h.IAM.Authorize.SyncFrontends(ctx, h.Config.IAM.ClientID, req.Items); err != nil {
 		slog.Error("[vulnscan] sync frontends to IAM failed", "err", err, "user", user.UserID)
 		web.Resp(c, web.InternalError.SetError(err))
 		return
 	}
 	web.Resp(c, web.Success)
+}
+
+func countFrontendItems(items []authorize.FrontendItem) int {
+	n := len(items)
+	for i := range items {
+		n += countFrontendItems(items[i].Children)
+	}
+	return n
+}
+
+func countFrontendRefs(items []authorize.FrontendItem, refs, empty int) (int, int) {
+	for i := range items {
+		if len(items[i].BackendRefs) > 0 {
+			refs += len(items[i].BackendRefs)
+		} else if items[i].MenuType != 0 && items[i].Path != "" {
+			empty++
+			slog.Debug("[sync-frontends] 无 backend_refs", "name", items[i].Name, "title", items[i].Title, "path", items[i].Path, "menu_type", items[i].MenuType)
+		}
+		refs, empty = countFrontendRefs(items[i].Children, refs, empty)
+	}
+	return refs, empty
+}
+
+// dumpFrontendRefs 打印所有前端菜单项的 backend_refs（调试用）
+func dumpFrontendRefs(items []authorize.FrontendItem, parentPath string) {
+	for _, item := range items {
+		p := parentPath + "/" + item.Path
+		if len(item.BackendRefs) > 0 {
+			slog.Debug("[sync-frontends] refs", "name", item.Name, "path", p, "refs", fmt.Sprintf("%v", item.BackendRefs))
+		}
+		dumpFrontendRefs(item.Children, p)
+	}
 }

@@ -1,5 +1,12 @@
 import { defineOverridesPreferences } from '@vben/preferences';
 
+import { resolveFontFamilyStack } from '#/config/custom-fonts';
+
+const envFontFamily = import.meta.env.VITE_APP_FONT_FAMILY?.trim();
+const themeFontFamily = envFontFamily
+  ? resolveFontFamilyStack(envFontFamily)
+  : undefined;
+
 /**
  * 项目偏好配置。
  * 这里只覆盖业务子系统需要调整的部分，其余配置沿用 Vben 默认值。
@@ -20,10 +27,10 @@ export const overridesPreferences = defineOverridesPreferences({
   theme: {
     builtinType: 'default',
     mode: 'light',
-    /** 中文后台常用 14px；可在右上角「偏好设置 → 主题」里再调 */
     fontSize: 14,
     semiDarkHeader: false,
     semiDarkSidebar: false,
+    ...(themeFontFamily ? { fontFamily: themeFontFamily } : {}),
   },
   widget: {
     languageToggle: false,

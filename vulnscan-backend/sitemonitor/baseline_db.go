@@ -61,6 +61,11 @@ func SaveBaselineFromUpdate(ctx context.Context, tx *gorm.DB, executionID, url, 
 	exemptJSON, _ := json.Marshal(bu.ExemptSelectors)
 	extResJSON, _ := json.Marshal(bu.ExternalResources)
 
+	confidence := model.BaselineConfidenceLow
+	if bu.SuspicionScore == 0 {
+		confidence = model.BaselineConfidenceMedium
+	}
+
 	baseline := model.MonitorBaseline{
 		URL:                   url,
 		URLHash:               uh,
@@ -82,6 +87,9 @@ func SaveBaselineFromUpdate(ctx context.Context, tx *gorm.DB, executionID, url, 
 		ObjKeyScreenshot:      bu.ObjKeyScreenshot,
 		AgentID:               agentID,
 		ConfirmedBy:           bu.ConfirmedBy,
+		Confidence:            confidence,
+		SuspicionScore:        bu.SuspicionScore,
+		SuspicionDetail:       bu.SuspicionDetail,
 	}
 	baseline.ID = qulid.GenerateID()
 	return tx.Create(&baseline).Error
@@ -108,5 +116,7 @@ func baselineToMetadata(bl *model.MonitorBaseline) *model.MonitorBaselineMetadat
 		ObjKeyHTML:        bl.ObjKeyHTML,
 		ObjKeyText:        bl.ObjKeyText,
 		ObjKeyScreenshot:  bl.ObjKeyScreenshot,
+		Confidence:        bl.Confidence,
+		SuspicionScore:    bl.SuspicionScore,
 	}
 }

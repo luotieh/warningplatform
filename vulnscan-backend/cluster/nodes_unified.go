@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"code.yt-security.com/public/core/v2/web"
+	"code.yt-security.com/public/sdk/authorize"
 	"github.com/gin-gonic/gin"
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/mem"
@@ -53,9 +54,11 @@ type nodesAPI struct {
 	scheduler LocalScheduler
 }
 
-func RegisterUnifiedNodeRoutes(g *gin.RouterGroup, db *gorm.DB, scheduler LocalScheduler) {
+func RegisterUnifiedNodeRoutes(g *gin.RouterGroup, db *gorm.DB, scheduler LocalScheduler) []authorize.BackendItem {
 	api := &nodesAPI{db: db, scheduler: scheduler}
-	g.GET("/nodes", api.List)
+	return authorize.RegisterRoutes(g, []authorize.Route{
+		{Name: "统一节点列表", Path: "nodes", Method: "GET", Handler: api.List, Enabled: true},
+	})
 }
 
 func sanitizeFloat(v float64) float64 {

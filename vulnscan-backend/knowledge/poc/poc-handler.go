@@ -1,6 +1,7 @@
 package poc
 
 import (
+	"archive/zip"
 	"context"
 	"fmt"
 	"log/slog"
@@ -20,8 +21,8 @@ import (
 	"code.yt-security.com/public/core/v2/generate/qulid"
 	"code.yt-security.com/public/core/v2/web"
 	iamsdk "code.yt-security.com/public/sdk"
-	"code.yt-security.com/public/sdk/permission"
 	"github.com/gin-gonic/gin"
+	"vulnscan-backend/pkg/definition"
 )
 
 type HandlerPoc struct {
@@ -38,7 +39,7 @@ func (h *HandlerPoc) List(c *gin.Context) {
 		return
 	}
 
-	scope := iamsdk.DataFilterScope(c, permission.DefaultFieldMapping)
+	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
 	items, count, err := h.svc.List(query, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
@@ -158,6 +159,110 @@ func (h *HandlerPoc) ImportDir(c *gin.Context) {
 		"skipped":  skipped,
 		"errors":   errors,
 	}).Send()
+}
+
+func (h *HandlerPoc) ImportUpload(c *gin.Context) {
+	file, header, err := c.Request.FormFile("file")
+	if err != nil {
+		web.Fail(c).Msg("请上传文件").Send()
+		return
+	}
+	defer file.Close()
+
+	tmpDir, err := os.MkdirTemp("", "poc-upload-*")
+	if err != nil {
+		web.Fail(c).Msg("创建临时目录失败").Send()
+		return
+	}
+	defer os.RemoveAll(tmpDir)
+
+	name := strings.ToLower(header.Filename)
+	switch {
+	case strings.HasSuffix(name, ".zip"):
+		tmpFile := filepath.Join(tmpDir, "upload.zip")
+		if err := saveUploadedFile(c, "file", tmpFile); err != nil {
+			web.Fail(c).Msg("保存上传文件失败").Send()
+			return
+		}
+		extractDir := filepath.Join(tmpDir, "extracted")
+		if err := unzip(tmpFile, extractDir); err != nil {
+			web.Fail(c).Msg(fmt.Sprintf("解压失败: %s", err.Error())).Send()
+			return
+		}
+		imported, skipped, errCount := h.svc.ImportDir(extractDir)
+		h.svc.InvalidateCache()
+		web.OK(c).Data(gin.H{"imported": imported, "skipped": skipped, "errors": errCount}).Send()
+
+	case strings.HasSuffix(name, ".yaml") || strings.HasSuffix(name, ".yml"):
+		buf := make([]byte, header.Size)
+		if _, err := file.Read(buf); err != nil {
+			web.Fail(c).Msg("读取文件失败").Send()
+			return
+		}
+		item, err := h.svc.ImportYAML(string(buf))
+		if err != nil {
+			web.Fail(c).Err(err).Send()
+			return
+		}
+		h.svc.InvalidateCache()
+		web.OK(c).Data(gin.H{"imported": 1, "skipped": 0, "errors": 0, "item": item}).Send()
+
+	default:
+		web.Fail(c).Msg("仅支持 .zip 或 .yaml/.yml 文件").Send()
+	}
+}
+
+func saveUploadedFile(c *gin.Context, field, dst string) error {
+	file, _, err := c.Request.FormFile(field)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	_, err = out.ReadFrom(file)
+	return err
+}
+
+func unzip(src, dest string) error {
+	r, err := zip.OpenReader(src)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+
+	for _, f := range r.File {
+		fpath := filepath.Join(dest, f.Name)
+		if !strings.HasPrefix(filepath.Clean(fpath), filepath.Clean(dest)+string(os.PathSeparator)) {
+			return fmt.Errorf("非法的文件路径: %s", f.Name)
+		}
+		if f.FileInfo().IsDir() {
+			os.MkdirAll(fpath, os.ModePerm)
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(fpath), os.ModePerm); err != nil {
+			return err
+		}
+		outFile, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
+		if err != nil {
+			return err
+		}
+		rc, err := f.Open()
+		if err != nil {
+			outFile.Close()
+			return err
+		}
+		_, err = outFile.ReadFrom(rc)
+		rc.Close()
+		outFile.Close()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type createPocReq struct {

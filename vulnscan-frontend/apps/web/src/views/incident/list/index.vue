@@ -17,6 +17,7 @@ import {
   downloadOneIncidentExport,
   type IncidentExportFormat,
 } from '../incident-export';
+import IncidentPreviewDrawer from '../components/IncidentPreviewDrawer.vue';
 import { usePerm } from '#/composables/usePerm';
 import { useRoutePerm } from '#/composables/use-route-perm';
 
@@ -38,6 +39,13 @@ const levelFilter = ref<number | null>(null);
 const showCreate = ref(false);
 const checkedRowKeys = ref<DataTableRowKey[]>([]);
 const exporting = ref(false);
+const showPreview = ref(false);
+const previewId = ref<string | null>(null);
+
+function openPreview(row: SecurityIncident) {
+  previewId.value = row.id;
+  showPreview.value = true;
+}
 
 const defaultForm = (): CreateIncidentReq => ({
   name: '',
@@ -49,8 +57,8 @@ const defaultForm = (): CreateIncidentReq => ({
 });
 const createForm = ref<CreateIncidentReq>(defaultForm());
 
-const statusLabels: Record<number, string> = { 1: '待审核', 2: 'AI预审中', 3: '待人工审核', 4: '审核通过', 5: '审核不通过', 6: '整改中', 7: '已关闭' };
-const statusTypes: Record<number, string> = { 1: 'default', 2: 'info', 3: 'warning', 4: 'success', 5: 'error', 6: 'warning', 7: 'default' };
+const statusLabels: Record<number, string> = { 1: '待人工复核', 2: '复核通过', 3: '复核失败', 4: '待整改', 5: '整改中', 6: '待验证', 7: '已关闭' };
+const statusTypes: Record<number, string> = { 1: 'default', 2: 'success', 3: 'error', 4: 'warning', 5: 'info', 6: 'warning', 7: 'default' };
 const levelLabels: Record<number, string> = { 1: '低', 2: '中', 3: '高', 4: '紧急' };
 const levelColors: Record<number, string> = { 1: '#18a058', 2: '#2080f0', 3: '#f0a020', 4: '#d03050' };
 const statusOptions = Object.entries(statusLabels).map(([k, v]) => ({ label: v, value: Number(k) }));
@@ -127,10 +135,13 @@ const columns = computed(() => [
   { title: '级别', key: 'level', width: 80, align: 'center' as const, render: (row: SecurityIncident) => h('span', { style: `padding:2px 8px;border-radius:4px;font-size:12px;font-weight:600;color:#fff;background:${levelColors[row.level] ?? '#999'}` }, levelLabels[row.level] ?? '-') },
   { title: '状态', key: 'status', width: 110, render: (row: SecurityIncident) => h(NTag, { size: 'small', type: (statusTypes[row.status] || 'default') as any, bordered: false }, () => statusLabels[row.status] ?? '-') },
   { title: 'AI预审', key: 'ai_pre_status', width: 90, render: (row: SecurityIncident) => h(NTag, { size: 'small', type: row.ai_pre_status === 1 ? 'success' : 'default', bordered: false }, () => row.ai_pre_status === 1 ? '已预审' : '未预审') },
-  { title: 'SLA期限', key: 'sla_deadline', width: 170, render: (row: SecurityIncident) => { if (!row.sla_deadline) return '-'; const overdue = new Date(row.sla_deadline) < new Date(); return h('span', { style: overdue ? 'color:#d03050;font-weight:600' : '' }, row.sla_deadline); } },
-  { title: '创建时间', key: 'created_at', width: 170 },
-  { title: '操作', key: 'actions', width: 260, fixed: 'right' as const, render: (row: SecurityIncident) => h(NSpace, { size: 4 }, () => {
-    const items: any[] = [h(NButton, { size: 'tiny', type: 'info', text: true, onClick: () => router.push(`/incident/list/${row.id}`) }, () => '详情')];
+  { title: 'SLA期限', key: 'sla_deadline', width: 170, render: (row: SecurityIncident) => { if (!row.sla_deadline) return '-'; const d = new Date(row.sla_deadline); const overdue = d < new Date(); const fmt = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; return h('span', { style: overdue ? 'color:#d03050;font-weight:600' : '' }, fmt); } },
+  { title: '创建时间', key: 'created_at', width: 170, render: (row: SecurityIncident) => { if (!row.created_at) return '-'; const d = new Date(row.created_at); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; } },
+  { title: '操作', key: 'actions', width: 300, fixed: 'right' as const, render: (row: SecurityIncident) => h(NSpace, { size: 4 }, () => {
+    const items: any[] = [
+      h(NButton, { size: 'tiny', type: 'default', text: true, onClick: () => openPreview(row) }, () => '预览'),
+      h(NButton, { size: 'tiny', type: 'info', text: true, onClick: () => router.push(`/incident/list/${row.id}`) }, () => '详情'),
+    ];
     if (can(perm('export'))) {
       items.push(h(NDropdown, {
         trigger: 'click',
@@ -219,6 +230,11 @@ onMounted(fetchData);
         :row-key="(row: SecurityIncident) => row.id"
         :pagination="{ page, pageSize, itemCount: total, showSizePicker: true, pageSizes: [20,50,100], onUpdatePage:(p:number)=>{page=p;fetchData()}, onUpdatePageSize:(s:number)=>{pageSize=s;page=1;fetchData()} }" />
     </NCard>
+
+    <IncidentPreviewDrawer
+      v-model:show="showPreview"
+      :incident-id="previewId"
+    />
 
     <NModal v-model:show="showCreate" preset="card" title="新建安全事件" style="width:720px;max-width:90vw" :segmented="{ content: true }">
       <NTabs type="line" size="small">

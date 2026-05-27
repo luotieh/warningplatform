@@ -21,7 +21,7 @@ import {
 } from 'naive-ui';
 
 import { message } from '#/adapter/naive';
-import { getExecutionDetail } from '#/api/sitemonitor';
+import { getExecutionDetail, getEvidenceAssetUrl } from '#/api/sitemonitor';
 import { createIncident, type CreateIncidentReq } from '#/api/incident';
 
 import { buildMonitorIncidentDescription } from '../monitor-incident-description';
@@ -177,6 +177,21 @@ function goBack() {
   }
   router.back();
 }
+
+const screenshotUrl = computed(() =>
+  detail.value?.status === 'success'
+    ? getEvidenceAssetUrl(execId, 'screenshot')
+    : '',
+);
+const screenshotFailed = ref(false);
+
+const annotatedScreenshotUrl = computed(() =>
+  detail.value?.status === 'success' && detail.value?.has_issue
+    ? getEvidenceAssetUrl(execId, 'annotated_screenshot')
+    : '',
+);
+const annotatedFailed = ref(false);
+const showAnnotatedPreview = ref(false);
 
 onMounted(() => fetchDetail());
 onBeforeUnmount(() => resetTabTitle());
@@ -342,6 +357,42 @@ onBeforeUnmount(() => resetTabTitle());
           </NEmpty>
         </NCard>
 
+        <!-- 标注截图（发现问题时显示，红框标注问题区域） -->
+        <NCard
+          v-if="annotatedScreenshotUrl && !annotatedFailed"
+          class="mb-3"
+          size="small"
+        >
+          <template #header>
+            <div class="flex items-center gap-2">
+              <span>问题标注截图</span>
+              <NTag size="tiny" type="error" :bordered="false" round>红框标注</NTag>
+            </div>
+          </template>
+          <img
+            :src="annotatedScreenshotUrl"
+            alt="问题标注截图"
+            class="max-w-full cursor-zoom-in rounded border-2 border-red-200"
+            @error="annotatedFailed = true"
+            @click="showAnnotatedPreview = true"
+          />
+        </NCard>
+
+        <!-- 页面截图 -->
+        <NCard
+          v-if="screenshotUrl && !screenshotFailed"
+          title="页面截图"
+          class="mb-3"
+          size="small"
+        >
+          <img
+            :src="screenshotUrl"
+            alt="页面截图"
+            class="max-w-full rounded border border-gray-200"
+            @error="screenshotFailed = true"
+          />
+        </NCard>
+
         <!-- 原始 JSON -->
         <NCard
           v-if="detail.result_json"
@@ -362,5 +413,14 @@ onBeforeUnmount(() => resetTabTitle());
         </NCard>
       </template>
     </NSpin>
+
+    <!-- 标注截图放大预览 -->
+    <NModal v-model:show="showAnnotatedPreview" preset="card" title="问题标注截图" style="width: auto; max-width: 95vw">
+      <img
+        :src="annotatedScreenshotUrl"
+        alt="问题标注截图"
+        class="max-h-[80vh] max-w-full rounded"
+      />
+    </NModal>
   </Page>
 </template>

@@ -2,6 +2,7 @@ package monitoragent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -20,13 +21,26 @@ import (
 	"gorm.io/gorm"
 )
 
+// ScreenshotStoreFunc 截图存储回调，由调用方注入（通常指向 NATS Object Store）
+type ScreenshotStoreFunc func(ctx context.Context, executionID string, data []byte) error
+
+// AnnotatedUploadFunc 标注截图上传回调（上传到 IAM Storage），返回 fileID。
+type AnnotatedUploadFunc func(ctx context.Context, jpegData []byte, name string) (fileID string, err error)
+
+// FileDeleteFunc 从 IAM Storage 删除文件。
+type FileDeleteFunc func(ctx context.Context, fileID string) error
+
 type EmbeddedAgent struct {
-	db        *db.DB
-	scheduler *agent.Scheduler
-	executor  *DBExecutor
-	agentUUID string
-	cancel    context.CancelFunc
-	wg        sync.WaitGroup
+	db                  *db.DB
+	scheduler           *agent.Scheduler
+	executor            *DBExecutor
+	agentUUID           string
+	cancel              context.CancelFunc
+	wg                  sync.WaitGroup
+	screenshotStore     ScreenshotStoreFunc
+	annotatedUploader   AnnotatedUploadFunc
+	annotatedDeleter    FileDeleteFunc
+	annotatedStorageURL string
 }
 
 func NewEmbeddedAgent(database *db.DB, masterBaseURL string) *EmbeddedAgent {
@@ -34,6 +48,18 @@ func NewEmbeddedAgent(database *db.DB, masterBaseURL string) *EmbeddedAgent {
 		db:        database,
 		agentUUID: "embedded-default",
 	}
+}
+
+// SetScreenshotStore 注入截图存储回调（在 Start 前调用）
+func (e *EmbeddedAgent) SetScreenshotStore(fn ScreenshotStoreFunc) {
+	e.screenshotStore = fn
+}
+
+// SetAnnotatedUploader 注入标注截图上传到 IAM Storage 的回调。
+func (e *EmbeddedAgent) SetAnnotatedUploader(fn AnnotatedUploadFunc, delFn FileDeleteFunc, storageBaseURL string) {
+	e.annotatedUploader = fn
+	e.annotatedDeleter = delFn
+	e.annotatedStorageURL = storageBaseURL
 }
 
 func (e *EmbeddedAgent) Start() {
@@ -297,6 +323,22 @@ func (e *EmbeddedAgent) saveResultToDB(session *gorm.DB, result *agent.TaskResul
 	if agentID == "" {
 		agentID = e.agentUUID
 	}
+
+	// 截图数据存入 NATS Object Store
+	if len(result.ScreenshotData) > 0 && e.screenshotStore != nil {
+		if err := e.screenshotStore(context.Background(), result.ID, result.ScreenshotData); err != nil {
+			slog.Warn("[Monitor] 截图存储失败", "execution_id", result.ID, "error", err)
+		}
+	}
+
+	if len(result.AnnotatedScreenshotData) > 0 && e.annotatedUploader != nil {
+		result.Result = e.uploadAnnotatedScreenshot(result.ID, result.AnnotatedScreenshotData, result.Result)
+	}
+
+	if len(result.ExtraScreenshots) > 0 && e.annotatedUploader != nil {
+		result.Result = e.uploadExtraScreenshots(result.ID, result.ExtraScreenshots, result.Result)
+	}
+
 	if err := sitemonitor.FinalizeFromTaskResult(
 		context.Background(),
 		session,
@@ -319,6 +361,163 @@ func (e *EmbeddedAgent) saveResultToDB(session *gorm.DB, result *agent.TaskResul
 	session.Model(&model.Node{}).
 		Where("uuid = ?", e.agentUUID).
 		UpdateColumn("tasks_completed", gorm.Expr("tasks_completed + 1"))
+}
+
+func (e *EmbeddedAgent) uploadAnnotatedScreenshot(executionID string, jpegData []byte, resultJSON string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	name := "annotated-" + executionID
+	fid, err := e.annotatedUploader(ctx, jpegData, name)
+	if err != nil {
+		slog.Warn("[Monitor] 标注截图上传失败", "execution_id", executionID, "error", err)
+		return resultJSON
+	}
+
+	var dlURL string
+	if e.annotatedStorageURL != "" && fid != "" {
+		dlURL = e.annotatedStorageURL + "/" + fid + "/content"
+	}
+
+	var detail map[string]any
+	if resultJSON != "" {
+		_ = json.Unmarshal([]byte(resultJSON), &detail)
+	}
+	if detail == nil {
+		detail = make(map[string]any)
+	}
+	detail["tamper_screenshot_id"] = fid
+	detail["tamper_screenshot_url"] = dlURL
+	updated, _ := json.Marshal(detail)
+
+	slog.Info("[Monitor] 标注截图已上传", "execution_id", executionID, "file_id", fid)
+
+	go e.cleanupOldAnnotatedScreenshots(executionID)
+
+	return string(updated)
+}
+
+func (e *EmbeddedAgent) uploadExtraScreenshots(executionID string, extras []agent.ExtraScreenshot, resultJSON string) string {
+	var detail map[string]any
+	if resultJSON != "" {
+		_ = json.Unmarshal([]byte(resultJSON), &detail)
+	}
+	if detail == nil {
+		detail = make(map[string]any)
+	}
+
+	type extraEntry struct {
+		FileID string `json:"file_id"`
+		URL    string `json:"url"`
+		Label  string `json:"label"`
+		Target string `json:"target_url"`
+	}
+
+	var entries []extraEntry
+	for i, s := range extras {
+		if len(s.Data) == 0 {
+			continue
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		name := fmt.Sprintf("extra-%s-%d", executionID, i)
+		fid, err := e.annotatedUploader(ctx, s.Data, name)
+		cancel()
+		if err != nil {
+			slog.Warn("[Monitor] 额外截图上传失败", "label", s.Label, "target", s.URL, "error", err)
+			continue
+		}
+		var dlURL string
+		if e.annotatedStorageURL != "" && fid != "" {
+			dlURL = e.annotatedStorageURL + "/" + fid + "/content"
+		}
+		entries = append(entries, extraEntry{
+			FileID: fid,
+			URL:    dlURL,
+			Label:  s.Label,
+			Target: s.URL,
+		})
+		slog.Info("[Monitor] 额外截图已上传", "label", s.Label, "target", s.URL, "file_id", fid)
+	}
+
+	if len(entries) > 0 {
+		detail["extra_screenshots"] = entries
+	}
+
+	updated, _ := json.Marshal(detail)
+
+	if _, hasMain := detail["tamper_screenshot_id"]; !hasMain {
+		go e.cleanupOldAnnotatedScreenshots(executionID)
+	}
+
+	return string(updated)
+}
+
+func (e *EmbeddedAgent) cleanupOldAnnotatedScreenshots(currentExecID string) {
+	session, err := e.db.GetDBSession()
+	if err != nil {
+		return
+	}
+
+	var alertCfg model.MonitorAlertConfig
+	maxKeep := 10
+	if session.First(&alertCfg).Error == nil {
+		if alertCfg.MaxTamperScreenshots == 0 {
+			return
+		}
+		maxKeep = alertCfg.MaxTamperScreenshots
+	}
+
+	var currentExec model.MonitorExecution
+	if session.Where("id = ?", currentExecID).First(&currentExec).Error != nil {
+		return
+	}
+
+	var oldExecs []model.MonitorExecution
+	session.Where("url = ? AND dimension = ? AND has_issue = ? AND result_json LIKE ? AND id != ?",
+		currentExec.URL, currentExec.Dimension, true, "%screenshot_id%", currentExecID).
+		Order("created_at DESC").
+		Offset(maxKeep - 1).
+		Find(&oldExecs)
+
+	if len(oldExecs) == 0 {
+		return
+	}
+
+	for _, ex := range oldExecs {
+		var detail map[string]any
+		if json.Unmarshal([]byte(ex.ResultJSON), &detail) != nil {
+			continue
+		}
+
+		if fileID, _ := detail["tamper_screenshot_id"].(string); fileID != "" && e.annotatedDeleter != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			if err := e.annotatedDeleter(ctx, fileID); err != nil {
+				slog.Warn("[Monitor] 删除旧截图失败", "file_id", fileID, "error", err)
+			}
+			cancel()
+		}
+
+		if extras, ok := detail["extra_screenshots"].([]any); ok {
+			for _, item := range extras {
+				if m, ok := item.(map[string]any); ok {
+					if fid, _ := m["file_id"].(string); fid != "" && e.annotatedDeleter != nil {
+						ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+						_ = e.annotatedDeleter(ctx, fid)
+						cancel()
+					}
+				}
+			}
+		}
+
+		delete(detail, "tamper_screenshot_id")
+		delete(detail, "tamper_screenshot_url")
+		delete(detail, "extra_screenshots")
+		updated, _ := json.Marshal(detail)
+		session.Model(&model.MonitorExecution{}).Where("id = ?", ex.ID).
+			Update("result_json", string(updated))
+	}
+
+	slog.Info("[Monitor] 清理旧截图引用", "url", currentExec.URL, "dimension", currentExec.Dimension, "cleaned", len(oldExecs))
 }
 
 func (e *EmbeddedAgent) Stop() {

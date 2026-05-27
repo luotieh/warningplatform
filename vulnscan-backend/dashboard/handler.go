@@ -85,7 +85,7 @@ func NewDashboard(handler *Handler) *Dashboard {
 func (m *Dashboard) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
 	return authorize.RegisterRoutes(e.Group("/dashboard"), []authorize.Route{
 		{
-			Name: "仪表盘", Enabled: true,
+			Name: "安全看板", Enabled: true,
 			Children: []authorize.Route{
 				{Name: "总览", Path: "overview", Method: "GET", Handler: m.handler.Overview, Enabled: true},
 				{Name: "漏洞趋势", Path: "vuln-trend", Method: "GET", Handler: m.handler.VulnTrend, Enabled: true},

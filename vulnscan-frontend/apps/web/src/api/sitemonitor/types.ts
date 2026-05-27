@@ -177,6 +177,7 @@ export interface MonitorCrawlJob {
   started_at: null | string;
   finished_at: null | string;
   created_at: string;
+  screenshot_base_url?: string;
 }
 
 export interface CrawlPageResult {
@@ -260,6 +261,8 @@ export interface MonitorExecution {
   created_at: string;
   disposition?: string;
   disposition_remark?: string;
+  first_seen_at?: string;
+  occurrence_count?: number;
 }
 
 // ════════════════════════════════════════
@@ -305,6 +308,9 @@ export interface RuleDataSummary {
   type: string;
   has_data: boolean;
   updated_at: string;
+  rule_count: number;
+  group: string;
+  icon: string;
 }
 
 export interface RuleDataDetail {
@@ -349,6 +355,7 @@ export interface AlertConfig {
   wechat_enabled: boolean;
   wechat_webhook: string;
   alert_enabled: boolean;
+  max_tamper_screenshots: number;
 }
 
 export interface ImportRowResult {

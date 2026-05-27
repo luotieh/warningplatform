@@ -230,9 +230,20 @@ func (s *serviceMonitor) StartCrawl(ctx context.Context, targetID string, req co
 	if err := s.session().WithContext(ctx).First(&target, "id = ?", targetID).Error; err != nil {
 		return nil, fmt.Errorf("监测目标不存在")
 	}
-	ep, err := ResolveTargetRootURL(&target)
-	if err != nil {
-		return nil, err
+
+	var ep *ResolvedEndpoint
+	if customURL := strings.TrimSpace(req.StartURL); customURL != "" {
+		ep = &ResolvedEndpoint{
+			RequestURL:  customURL,
+			RequestHost: target.TargetValue,
+			DisplayURL:  customURL,
+		}
+	} else {
+		var err error
+		ep, err = ResolveTargetRootURL(&target)
+		if err != nil {
+			return nil, err
+		}
 	}
 	job := &model.MonitorCrawlJob{
 		ID:          qulid.GenerateID(),
@@ -252,16 +263,63 @@ func (s *serviceMonitor) StartCrawl(ctx context.Context, targetID string, req co
 	if err := s.session().WithContext(ctx).Create(job).Error; err != nil {
 		return nil, err
 	}
-	go s.runCrawlJob(context.Background(), job.ID, ep, req)
+	go s.runCrawlJob(job.ID, ep, req)
 	return job, nil
 }
 
-func (s *serviceMonitor) runCrawlJob(ctx context.Context, jobID string, ep *ResolvedEndpoint, req contract.CrawlStartReq) {
+func (s *serviceMonitor) runCrawlJob(jobID string, ep *ResolvedEndpoint, req contract.CrawlStartReq) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	if req.CreatorID != "" {
+		ctx = WithCreatorID(ctx, req.CreatorID)
+	}
+
 	session := s.session().WithContext(ctx)
 	now := time.Now()
 	session.Model(&model.MonitorCrawlJob{}).Where("id = ?", jobID).Updates(map[string]any{
 		"status": model.MonitorCrawlStatusRunning, "started_at": now,
 	})
+
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("[Crawl] panic recovered", "job", jobID, "panic", r)
+			s.session().Model(&model.MonitorCrawlJob{}).Where("id = ?", jobID).Updates(map[string]any{
+				"status":      model.MonitorCrawlStatusFailed,
+				"error":       fmt.Sprintf("internal panic: %v", r),
+				"finished_at": time.Now(),
+			})
+		}
+	}()
+
+	var uploader monitorcrawl.ScreenshotUploader
+	if s.crawlUploader != nil {
+		uploader = func(jpegData []byte, name string) (string, error) {
+			return s.crawlUploader(ctx, jpegData, name)
+		}
+	}
+
+	ssWidth, ssHeight, ssQuality := req.ScreenshotWidth, req.ScreenshotHeight, req.ScreenshotQuality
+	if ssWidth == 0 || ssHeight == 0 || ssQuality == 0 {
+		if cfg, err := s.GetDefaultConfig(ctx, "screenshot"); err == nil && cfg.ConfigJSON != nil {
+			if ssWidth == 0 {
+				if v, ok := cfg.ConfigJSON["width"].(float64); ok {
+					ssWidth = int(v)
+				}
+			}
+			if ssHeight == 0 {
+				if v, ok := cfg.ConfigJSON["height"].(float64); ok {
+					ssHeight = int(v)
+				}
+			}
+			if ssQuality == 0 {
+				if v, ok := cfg.ConfigJSON["quality"].(float64); ok {
+					ssQuality = int(v)
+				}
+			}
+		}
+	}
+
+	lastUpdate := time.Now()
 	crawlRes := monitorcrawl.Crawl(ctx, monitorcrawl.Options{
 		StartURL:    ep.RequestURL,
 		RequestHost: ep.RequestHost,
@@ -269,12 +327,41 @@ func (s *serviceMonitor) runCrawlJob(ctx context.Context, jobID string, ep *Reso
 		MaxDepth:    req.MaxDepth,
 		MaxPages:    req.MaxPages,
 		SameHost:    true,
+		Screenshot: monitorcrawl.ScreenshotConfig{
+			Width:   ssWidth,
+			Height:  ssHeight,
+			Quality: ssQuality,
+		},
+		Uploader: uploader,
+		OnPage: func(partial *monitorcrawl.Result) {
+			if time.Since(lastUpdate) < 2*time.Second {
+				return
+			}
+			lastUpdate = time.Now()
+			raw, _ := json.Marshal(partial)
+			s.session().Model(&model.MonitorCrawlJob{}).Where("id = ?", jobID).
+				Update("result_json", string(raw))
+		},
 	})
-	raw, _ := json.Marshal(crawlRes)
+
 	fin := time.Now()
-	session.Model(&model.MonitorCrawlJob{}).Where("id = ?", jobID).Updates(map[string]any{
-		"status":      model.MonitorCrawlStatusSuccess,
+	raw, _ := json.Marshal(crawlRes)
+
+	status := model.MonitorCrawlStatusSuccess
+	errMsg := ""
+	if ctx.Err() != nil {
+		status = model.MonitorCrawlStatusFailed
+		errMsg = "crawl timed out (5min limit)"
+		slog.Warn("[Crawl] timed out", "job", jobID)
+	} else if crawlRes == nil || len(crawlRes.Pages) == 0 {
+		status = model.MonitorCrawlStatusFailed
+		errMsg = "no pages discovered"
+	}
+
+	s.session().Model(&model.MonitorCrawlJob{}).Where("id = ?", jobID).Updates(map[string]any{
+		"status":      status,
 		"result_json": string(raw),
+		"error":       errMsg,
 		"finished_at": fin,
 	})
 }
@@ -296,8 +383,17 @@ func (s *serviceMonitor) ApplyCrawlPaths(ctx context.Context, jobID string, req 
 	if err := json.Unmarshal([]byte(job.ResultJSON), &crawlRes); err != nil {
 		return 0, fmt.Errorf("爬虫结果无效")
 	}
+	selectedSet := make(map[string]bool, len(req.SelectedURLs))
+	for _, u := range req.SelectedURLs {
+		selectedSet[u] = true
+	}
+	filterBySelection := len(selectedSet) > 0
+
 	created := 0
 	for _, p := range crawlRes.Pages {
+		if filterBySelection && !selectedSet[p.URL] {
+			continue
+		}
 		if req.SkipExisting {
 			var cnt int64
 			s.session().WithContext(ctx).Model(&model.MonitorPathTask{}).

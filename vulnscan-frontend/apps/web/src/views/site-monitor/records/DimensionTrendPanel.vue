@@ -36,8 +36,7 @@ const dimOrder = [
   'domain_hijack',
 ];
 
-/** 「全部」Tab 专用：低饱和配色 */
-const ALL_COLOR_NORMAL = '#d1d5db';
+const ALL_COLOR_NORMAL = '#22c55e';
 const ALL_COLOR_ISSUE = '#dc2626';
 const ALL_COLOR_FAILED = '#9ca3af';
 
@@ -403,7 +402,7 @@ const availTimingLineOption = computed(() => {
           <div class="panel-title">{{ dimLabel }}概览</div>
           <div class="panel-desc">
             <template v-if="dimension === 'all'">
-              各维度检测构成：灰色为正常，红色为发现问题，深灰为执行失败
+              各维度检测构成：绿色为正常，红色为发现问题，灰色为执行失败
             </template>
             <template v-else-if="dimension === 'availability'">
               可用性概览：状态条与分段响应时间趋势

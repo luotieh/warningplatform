@@ -16,7 +16,7 @@ func NewPoc(handler *HandlerPoc) *Poc {
 func (m *Poc) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
 	return authorize.RegisterRoutes(e.Group("/poc"), []authorize.Route{
 		{
-			Name: "POC管理", Enabled: true,
+			Name: "检测模板", Enabled: true,
 			Children: []authorize.Route{
 				{Name: "POC列表", Path: "list", Method: "GET", Handler: m.handler.List, Enabled: true},
 				{Name: "POC详情", Path: ":id", Method: "GET", Handler: m.handler.GetByID, Enabled: true},
@@ -26,6 +26,7 @@ func (m *Poc) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
 				{Name: "启停POC", Path: ":id/toggle", Method: "POST", Handler: m.handler.Toggle, Enabled: true},
 				{Name: "导入YAML", Path: "import", Method: "POST", Handler: m.handler.ImportYAML, Enabled: true},
 				{Name: "目录导入", Path: "import-dir", Method: "POST", Handler: m.handler.ImportDir, Enabled: true},
+				{Name: "上传导入", Path: "import-upload", Method: "POST", Handler: m.handler.ImportUpload, Enabled: true},
 				{Name: "校验YAML", Path: "validate", Method: "POST", Handler: m.handler.Validate, Enabled: true},
 				{Name: "测试POC", Path: "test", Method: "POST", Handler: m.handler.TestPoc, Enabled: true},
 				{Name: "Nuclei快捷扫描", Path: "quick-scan", Method: "POST", Handler: m.handler.QuickNucleiScan, Enabled: true},

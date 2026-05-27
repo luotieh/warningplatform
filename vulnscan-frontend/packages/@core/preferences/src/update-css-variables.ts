@@ -79,6 +79,15 @@ function updateCSSVariables(preferences: Preferences) {
       `calc(${fontSize}px * 0.875)`,
     );
   }
+
+  if (Reflect.has(theme, 'fontFamily')) {
+    const family = theme.fontFamily?.trim();
+    if (family) {
+      root.style.setProperty('--font-family', family);
+    } else {
+      root.style.removeProperty('--font-family');
+    }
+  }
 }
 
 /**

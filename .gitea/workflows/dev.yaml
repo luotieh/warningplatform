@@ -97,10 +97,7 @@ jobs:
 
       - name: (5) 准备 Docker 构建上下文
         run: |
-          rm -rf deploy-templates 2>/dev/null || true
-          git clone https://code.yt-security.com/public/deploy.git deploy-templates --depth 1
-          chmod -R +x deploy-templates/
-          cp deploy-templates/template-docker/backend ./Dockerfile
+          cp docker/Dockerfile ./Dockerfile
 
           CONFIG_SRC="vulnscan-backend/${MODE}.config.toml"
           if [ ! -f "${CONFIG_SRC}" ]; then
@@ -109,7 +106,7 @@ jobs:
           fi
           cp "${CONFIG_SRC}" ./${MODE}.config.toml
           echo "✅ Docker 构建上下文就绪"
-          echo "  - Dockerfile: ✓"
+          echo "  - Dockerfile: docker/Dockerfile ✓"
           echo "  - ${MODE}.config.toml (来源: ${CONFIG_SRC}): ✓"
           echo "  - server-amd64: $(ls -lh server-amd64 | awk '{print $5}')"
           echo "  - server-arm64: $(ls -lh server-arm64 | awk '{print $5}')"
@@ -168,7 +165,7 @@ jobs:
         if: always()
         run: |
           rm -f server-* *.tar *.tar.gz *.config.toml Dockerfile 2>/dev/null
-          rm -rf deploy-templates vulnscan-backend/frontend/dist/*
+          rm -rf vulnscan-backend/frontend/dist/*
           echo "✅ 清理完成"
 
   k8s-deploy:

@@ -129,14 +129,10 @@ function setupAccessGuard(router: Router) {
 
       const homePath = '/dashboard/overview';
       const redirectPath = (from.query.redirect ??
-        (to.path === homePath || to.path === '/'
+        (to.path === homePath || to.path === '/' || to.path === '/dashboard'
           ? (userInfo as any).homePath || homePath
           : to.fullPath)) as string;
       const resolved = decodeURIComponent(String(redirectPath));
-
-      if (resolved === to.fullPath || resolved === to.path) {
-        return true;
-      }
 
       return {
         ...router.resolve(resolved),

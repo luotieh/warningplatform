@@ -81,49 +81,49 @@ export namespace PublicApi {
 // 忘记密码 - 三步流程
 export function forgotPassword(data: PublicApi.ForgotPasswordReq) {
   return requestClient.post<PublicApi.ForgotPasswordResp>(
-    '/auth/forgot-password',
+    '/iam/auth/forgot-password',
     data,
   );
 }
 
 export function verifyResetCode(data: PublicApi.VerifyResetCodeReq) {
-  return requestClient.post('/auth/verify-reset-code', data);
+  return requestClient.post('/iam/auth/verify-reset-code', data);
 }
 
 export function resetPassword(data: PublicApi.ResetPasswordReq) {
-  return requestClient.post('/auth/reset-password', data);
+  return requestClient.post('/iam/auth/reset-password', data);
 }
 
 // 邮箱 Magic Link 登录
 export function sendMagicLink(data: PublicApi.SendMagicLinkReq) {
-  return requestClient.post('/auth/magic-link/send', data);
+  return requestClient.post('/iam/auth/magic-link/send', data);
 }
 
 export function verifyMagicLink(data: PublicApi.VerifyMagicLinkReq) {
-  return requestClient.post<any>('/auth/magic-link/verify', data);
+  return requestClient.post<any>('/iam/auth/magic-link/verify', data);
 }
 
 // 短信验证码登录
 export function sendSMSCode(data: PublicApi.SendSMSCodeReq) {
-  return requestClient.post('/auth/sms-login/send', data);
+  return requestClient.post('/iam/auth/sms-login/send', data);
 }
 
 export function verifySMSCode(data: PublicApi.VerifySMSCodeReq) {
-  return requestClient.post<any>('/auth/sms-login/verify', data);
+  return requestClient.post<any>('/iam/auth/sms-login/verify', data);
 }
 
 // 用户注册
 export function registerUser(data: PublicApi.RegisterReq) {
-  return requestClient.post('/auth/register', data);
+  return requestClient.post('/iam/auth/register', data);
 }
 
 // 验证码
 export function getCaptcha(type: 'audio' | 'click' | 'image' | 'math' | 'rotate' | 'slide' = 'math') {
-  return requestClient.get<PublicApi.CaptchaResult>(`/auth/captcha/${type}`);
+  return requestClient.get<PublicApi.CaptchaResult>(`/iam/auth/captcha/${type}`);
 }
 
 export function checkCaptcha(data: { key: string; answer?: string; point?: number[]; angle?: number }) {
-  return requestClient.post<{ success: boolean }>('/auth/captcha/check', data);
+  return requestClient.post<{ success: boolean }>('/iam/auth/captcha/check', data);
 }
 
 // 修改过期密码
@@ -132,7 +132,7 @@ export function changeExpiredPassword(data: {
   old_password: string;
   new_password: string;
 }) {
-  return requestClient.post('/auth/change-expired-password', data);
+  return requestClient.post('/iam/auth/change-expired-password', data);
 }
 
 // 登录页公开配置
@@ -149,5 +149,5 @@ export interface LoginSettings {
 }
 
 export function getLoginSettings() {
-  return requestClient.get<LoginSettings>('/auth/login-settings');
+  return requestClient.get<LoginSettings>('/iam/auth/login-settings');
 }

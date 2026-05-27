@@ -25,10 +25,11 @@ type EnrichHandler struct {
 	database      *db.DB
 	scanDB        *gorm.DB
 	scanScheduler *scanrunner.Scheduler
+	screenshot    *ScreenshotService
 }
 
-func NewEnrichHandler(database *db.DB) *EnrichHandler {
-	return &EnrichHandler{database: database}
+func NewEnrichHandler(database *db.DB, screenshot *ScreenshotService) *EnrichHandler {
+	return &EnrichHandler{database: database, screenshot: screenshot}
 }
 
 // BindScanRunner 由 DI 在扫描调度器就绪后注入，用于信息富化走漏扫引擎。
@@ -247,6 +248,11 @@ func (h *EnrichHandler) AssetDetail(c *gin.Context) {
 		Limit(50).
 		Find(&assetVulns)
 
+	screenshotB64 := asset.Screenshot
+	if screenshotB64 == "" {
+		screenshotB64 = h.findLatestScreenshot(asset.Address)
+	}
+
 	web.OK(c).Data(gin.H{
 		"asset":         asset,
 		"ports":         ports,
@@ -255,6 +261,7 @@ func (h *EnrichHandler) AssetDetail(c *gin.Context) {
 		"scan_history":  scanHistory,
 		"services":      services,
 		"monitor_tasks": monitorTasks,
+		"screenshot":    screenshotB64,
 		"summary": gin.H{
 			"port_count":    mergedOpenPortCount(ports, services),
 			"vuln_count":    len(vulns),
@@ -264,6 +271,74 @@ func (h *EnrichHandler) AssetDetail(c *gin.Context) {
 			"last_scan":     asset.LastScanAt,
 		},
 	}).Send()
+}
+
+func (h *EnrichHandler) AssetScreenshot(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		web.Err(c, web.ParamsMissingRequired).Send()
+		return
+	}
+	var asset model.Asset
+	if err := h.session().Select("id, address, screenshot").First(&asset, "id = ?", id).Error; err != nil {
+		web.Err(c, web.NotFound).Send()
+		return
+	}
+
+	refresh := c.Query("refresh") == "1" || c.Query("refresh") == "true"
+	if refresh && h.screenshot != nil && asset.Address != "" {
+		uid := ""
+		if user, ok := iamsdk.GetCurrentUser(c); ok && user != nil {
+			uid = user.UserID
+		}
+		val, _ := h.screenshot.RefreshScreenshot(c.Request.Context(), id, uid)
+		if val != "" && !isBase64Screenshot(val) {
+			web.OK(c).Data(gin.H{"screenshot_url": h.screenshot.FileDownloadURL(val)}).Send()
+		} else {
+			web.OK(c).Data(gin.H{"screenshot": val}).Send()
+		}
+		return
+	}
+
+	if asset.Screenshot != "" {
+		if !isBase64Screenshot(asset.Screenshot) {
+			web.OK(c).Data(gin.H{"screenshot_url": h.screenshot.FileDownloadURL(asset.Screenshot)}).Send()
+		} else {
+			web.OK(c).Data(gin.H{"screenshot": asset.Screenshot}).Send()
+		}
+		return
+	}
+
+	b64 := h.findLatestScreenshot(asset.Address)
+	web.OK(c).Data(gin.H{"screenshot": b64}).Send()
+}
+
+func extractBearerToken(c *gin.Context) string {
+	auth := c.GetHeader("Authorization")
+	if strings.HasPrefix(auth, "Bearer ") {
+		return strings.TrimSpace(auth[len("Bearer "):])
+	}
+	return auth
+}
+
+func (h *EnrichHandler) findLatestScreenshot(address string) string {
+	if address == "" {
+		return ""
+	}
+	var finding model.ScanFinding
+	err := h.session().
+		Where("target LIKE ? AND module_id = ? AND type = ?", "%"+address+"%", "screenshot", "web_page").
+		Order("created_at DESC").
+		First(&finding).Error
+	if err != nil {
+		return ""
+	}
+	if s, ok := finding.Data["screenshot"]; ok {
+		if str, ok := s.(string); ok {
+			return str
+		}
+	}
+	return ""
 }
 
 func (h *EnrichHandler) AggregateFromScans(c *gin.Context) {
@@ -428,6 +503,7 @@ func (h *EnrichHandler) AssetStats(c *gin.Context) {
 }
 
 // RegionScope 返回资产台账中实际出现的地域编码及数量（受数据权限约束，不含空地域）。
+// 优先使用组织表的 region_code（实时反映单位地址变动），fallback 到资产自身的 region_code。
 func (h *EnrichHandler) RegionScope(c *gin.Context) {
 	scope := iamsdk.DataFilterScope(c, assetFieldMapping)
 
@@ -438,10 +514,60 @@ func (h *EnrichHandler) RegionScope(c *gin.Context) {
 	var rows []row
 	if err := h.session().Model(&model.Asset{}).
 		Scopes(scope).
-		Where("region_code != '' AND region_code IS NOT NULL").
-		Select("region_code, COUNT(*) as count").
+		Joins("LEFT JOIN vs_organize ON vs_organize.id = vs_asset.organize_id AND vs_organize.deleted_at IS NULL").
+		Where("(vs_organize.region_code != '' AND vs_organize.region_code IS NOT NULL) OR (vs_asset.region_code != '' AND vs_asset.region_code IS NOT NULL)").
+		Select("COALESCE(NULLIF(vs_organize.region_code, ''), vs_asset.region_code) as region_code, COUNT(*) as count").
 		Group("region_code").
+		Having("region_code != '' AND region_code IS NOT NULL").
 		Order("region_code ASC").
+		Find(&rows).Error; err != nil {
+		web.Fail(c).Err(err).Send()
+		return
+	}
+
+	web.OK(c).Data(rows).Send()
+}
+
+// IndustryScope 返回资产关联组织中实际出现的行业分类及数量。
+func (h *EnrichHandler) IndustryScope(c *gin.Context) {
+	scope := iamsdk.DataFilterScope(c, assetFieldMapping)
+
+	type row struct {
+		IndustryCategory string `json:"industry_category"`
+		Count            int64  `json:"count"`
+	}
+	var rows []row
+	if err := h.session().Model(&model.Asset{}).
+		Scopes(scope).
+		Joins("LEFT JOIN vs_organize ON vs_organize.id = vs_asset.organize_id AND vs_organize.deleted_at IS NULL").
+		Where("vs_organize.industry_category != '' AND vs_organize.industry_category IS NOT NULL").
+		Select("vs_organize.industry_category as industry_category, COUNT(*) as count").
+		Group("vs_organize.industry_category").
+		Order("count DESC").
+		Find(&rows).Error; err != nil {
+		web.Fail(c).Err(err).Send()
+		return
+	}
+
+	web.OK(c).Data(rows).Send()
+}
+
+// UnitTypeScope 返回资产关联组织中实际出现的单位类型及数量。
+func (h *EnrichHandler) UnitTypeScope(c *gin.Context) {
+	scope := iamsdk.DataFilterScope(c, assetFieldMapping)
+
+	type row struct {
+		UnitType string `json:"unit_type"`
+		Count    int64  `json:"count"`
+	}
+	var rows []row
+	if err := h.session().Model(&model.Asset{}).
+		Scopes(scope).
+		Joins("LEFT JOIN vs_organize ON vs_organize.id = vs_asset.organize_id AND vs_organize.deleted_at IS NULL").
+		Where("vs_organize.unit_type != '' AND vs_organize.unit_type IS NOT NULL").
+		Select("vs_organize.unit_type as unit_type, COUNT(*) as count").
+		Group("vs_organize.unit_type").
+		Order("count DESC").
 		Find(&rows).Error; err != nil {
 		web.Fail(c).Err(err).Send()
 		return

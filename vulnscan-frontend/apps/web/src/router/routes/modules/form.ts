@@ -22,6 +22,12 @@ const routes: RouteRecordRaw[] = [
             { action: 'update', label: '编辑模板' },
             { action: 'delete', label: '删除模板' },
           ],
+          apis: ['GET /formdesign/templates'],
+          apisByAction: {
+            create: ['POST /formdesign/templates'],
+            update: ['PUT /formdesign/templates/:id'],
+            delete: ['DELETE /formdesign/templates/:id'],
+          },
         },
       },
       {

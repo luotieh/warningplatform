@@ -10,12 +10,12 @@ import (
 const iamOrganizeListPageSize = 100
 
 // ListAllIAMOrganizes 分页拉取 IAM 全部组织（供精确按名匹配，避免 Options 关键词检索漏项）。
-func ListAllIAMOrganizes(ctx context.Context, svc *identity.OrganizeService) ([]*identity.OrganizeInfo, error) {
+func ListAllIAMOrganizes(ctx context.Context, svc *identity.OrganizeAdminService) ([]*identity.OrganizeInfo, error) {
 	return listAllIAMOrganizes(ctx, svc)
 }
 
 // listAllIAMOrganizes 分页拉取 IAM 组织（避免 SDK GetOrganizeTree 使用 size=9999 触发校验失败）。
-func listAllIAMOrganizes(ctx context.Context, svc *identity.OrganizeService) ([]*identity.OrganizeInfo, error) {
+func listAllIAMOrganizes(ctx context.Context, svc *identity.OrganizeAdminService) ([]*identity.OrganizeInfo, error) {
 	if svc == nil {
 		return nil, fmt.Errorf("iam organize service not initialized")
 	}

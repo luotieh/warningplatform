@@ -218,6 +218,16 @@ const columns = computed<DataTableColumns<MonitorExecution>>(() => [
       h(NTag, { size: 'small', bordered: false }, () => dimensionLabel(row.dimension)),
   },
   {
+    key: 'occurrence_count',
+    title: '次数',
+    width: 70,
+    render: (row) => {
+      const count = row.occurrence_count ?? 1;
+      if (count <= 1) return h('span', {}, '1');
+      return h(NTag, { type: 'error', size: 'small', round: true, bordered: false }, () => `${count}`);
+    },
+  },
+  {
     key: 'has_issue',
     title: '安全问题',
     width: 90,
@@ -242,17 +252,18 @@ const columns = computed<DataTableColumns<MonitorExecution>>(() => [
     },
   },
   {
-    key: 'path_task_id',
-    title: '路径任务',
-    width: 160,
-    ellipsis: { tooltip: true },
+    key: 'first_seen_at',
+    title: '首次发现',
+    width: 150,
+    render: (row) =>
+      row.first_seen_at ? dayjs(row.first_seen_at).format('YYYY-MM-DD HH:mm') : '-',
   },
   {
     key: 'created_at',
-    title: '时间',
-    width: 160,
+    title: '最近发现',
+    width: 150,
     render: (row) =>
-      row.created_at ? dayjs(row.created_at).format('YYYY-MM-DD HH:mm:ss') : '-',
+      row.created_at ? dayjs(row.created_at).format('YYYY-MM-DD HH:mm') : '-',
   },
   {
     key: 'op',

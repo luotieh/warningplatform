@@ -1,8 +1,9 @@
 <script lang="ts" setup>
 import { h, onMounted, reactive, ref, watch } from 'vue';
-import type { DataTableColumns, FormInst } from 'naive-ui';
+import type { DataTableColumns, FormInst, PaginationProps } from 'naive-ui';
 import {
   NButton,
+  NCascader,
   NCard,
   NDataTable,
   NForm,
@@ -15,6 +16,7 @@ import {
   NSelect,
   NSpace,
   NSwitch,
+  NTag,
   useMessage,
 } from 'naive-ui';
 
@@ -22,34 +24,36 @@ import type { Organize } from '#/api/assetmgr';
 import {
   createOrganize,
   deleteOrganize,
-  getOrganizeTree,
+  getOrganizeList,
   syncIamOrganizes,
   updateOrganize,
 } from '#/api/assetmgr';
 import OrganizeTreeSelect from '#/components/organize/OrganizeTreeSelect.vue';
-import { flattenOrganizeList, mergeUnitAddress } from './ledger/utils';
 import { organizeProfileFormRules } from '#/utils/form-rules';
 import { validateUnitProfile } from '#/utils/validators';
 import { dictItemsToOptions, getSystemDictItems } from '#/api/system/dict';
+import { regionOptions } from '#/utils/region';
 
 defineOptions({ name: 'AssetOrganize' });
 
 const message = useMessage();
 const loading = ref(false);
 const syncLoading = ref(false);
-const data = ref<OrganizeRow[]>([]);
-const organizeItems = ref<Organize[]>([]);
+const data = ref<Organize[]>([]);
 const showModal = ref(false);
 const editingId = ref<null | string>(null);
 const organizeFormRef = ref<FormInst | null>(null);
 
 const searchForm = reactive({ keyword: '' });
 
-interface OrganizeRow extends Organize {
-  children?: OrganizeRow[];
-  level?: number;
-  path_names?: string[];
-}
+const pagination = reactive<PaginationProps>({
+  page: 1,
+  pageSize: 15,
+  itemCount: 0,
+  pageSizes: [10, 15, 20, 50],
+  showSizePicker: true,
+  prefix: ({ itemCount }: { itemCount: number }) => `共 ${itemCount} 条`,
+});
 
 const formData = reactive({
   name: '',
@@ -58,7 +62,8 @@ const formData = reactive({
   industry_category: '',
   unit_type: '',
   is_notification_member: false,
-  address: '',
+  region_code: '',
+  unit_detail_address: '',
   leader_name: '',
   leader_title: '',
   responsible_department_name: '',
@@ -98,29 +103,48 @@ async function loadOrganizeDictOptions() {
   }
 }
 
-const columns: DataTableColumns<OrganizeRow> = [
+const columns: DataTableColumns<Organize> = [
   {
-    title: '组织路径',
-    key: 'path_names',
-    width: 320,
+    title: '单位名称',
+    key: 'name',
+    width: 280,
     ellipsis: { tooltip: true },
-    render: (row: OrganizeRow) => row.path_names?.join(' / ') || row.name || '-',
+    render: (row: Organize) => h('div', {
+      style: { display: 'flex', flexDirection: 'column', gap: '2px' },
+    }, [
+      h('span', row.name || '-'),
+      row.parent_name
+        ? h('span', {
+            style: { color: 'var(--n-text-color-3)', fontSize: '12px' },
+          }, `上级单位：${row.parent_name}`)
+        : h('span', {
+            style: { color: 'var(--n-text-color-3)', fontSize: '12px' },
+          }, '顶级单位'),
+    ]),
   },
-  { title: '单位名称', key: 'name', width: 220, ellipsis: { tooltip: true } },
-  { title: '统一社会信用代码', key: 'unified_social_credit_code', width: 220 },
-  { title: '单位类型', key: 'unit_type', width: 120 },
-  { title: '行业分类', key: 'industry_category', width: 140 },
+  { title: '统一社会信用代码', key: 'unified_social_credit_code', width: 200, ellipsis: { tooltip: true } },
+  { title: '单位类型', key: 'unit_type', width: 110 },
+  { title: '行业分类', key: 'industry_category', width: 110 },
   {
     title: '通报成员',
     key: 'is_notification_member',
-    width: 100,
+    width: 90,
     render: (row: Organize) => (row.is_notification_member ? '是' : '否'),
   },
   { title: '网络安全责任部门', key: 'responsible_department_name', width: 160, ellipsis: { tooltip: true } },
-  { title: '联系人', key: 'contact_name', width: 120 },
-  { title: '联系人职务', key: 'contact_title', width: 140, ellipsis: { tooltip: true } },
-  { title: '联系电话', key: 'contact_phone', width: 140 },
-  { title: '资产数', key: 'asset_count', width: 90 },
+  { title: '联系人', key: 'contact_name', width: 100 },
+  { title: '联系人职务', key: 'contact_title', width: 120, ellipsis: { tooltip: true } },
+  { title: '联系电话', key: 'contact_phone', width: 130 },
+  {
+    title: '资产数',
+    key: 'asset_count',
+    width: 80,
+    align: 'center',
+    render: (row: Organize) =>
+      row.asset_count > 0
+        ? h(NTag, { size: 'small', type: 'info', round: true, bordered: false }, () => String(row.asset_count))
+        : h('span', { style: 'color: var(--n-text-color-3)' }, '0'),
+  },
   {
     title: '操作',
     key: 'actions',
@@ -136,148 +160,45 @@ const columns: DataTableColumns<OrganizeRow> = [
   },
 ];
 
-const organizeNameColumn: DataTableColumns<OrganizeRow>[number] = {
-  title: '单位名称',
-  key: 'name',
-  width: 320,
-  ellipsis: { tooltip: true },
-  render: (row: OrganizeRow) => h('div', {
-    style: {
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '2px',
-    },
-  }, [
-    h('span', row.name || '-'),
-    h('span', {
-      style: {
-        color: 'var(--n-text-color-3)',
-        fontSize: '12px',
-      },
-    }, row.path_names && row.path_names.length > 1
-      ? `上级路径：${row.path_names.slice(0, -1).join(' / ')}`
-      : '顶级单位'),
-  ]),
-};
-
-columns.splice(0, 2, organizeNameColumn);
-
-function buildTableTree(items: Organize[] = []): OrganizeRow[] {
-  const nodeMap = new Map<string, OrganizeRow>();
-  const roots: OrganizeRow[] = [];
-
-  items.forEach((item) => {
-    nodeMap.set(item.id, { ...item, children: [] });
-  });
-
-  items.forEach((item) => {
-    const node = nodeMap.get(item.id);
-    if (!node) return;
-    if (item.parent_id && nodeMap.has(item.parent_id)) {
-      nodeMap.get(item.parent_id)?.children?.push(node);
-      return;
-    }
-    roots.push(node);
-  });
-
-  const attachMeta = (nodes: OrganizeRow[], parentPath: string[] = [], level = 0): OrganizeRow[] => (
-    nodes.map((node) => {
-      const pathNames = [...parentPath, node.name || node.id];
-      return {
-        ...node,
-        children: node.children?.length ? attachMeta(node.children, pathNames, level + 1) : undefined,
-        level,
-        path_names: pathNames,
-      };
-    })
-  );
-
-  return attachMeta(roots);
-}
-
-function collectVisibleIds(items: Organize[] = [], keyword = ''): null | Set<string> {
-  const normalized = keyword.trim().toLowerCase();
-  if (!normalized) {
-    return null;
-  }
-
-  const parentMap = new Map(items.map(item => [item.id, item.parent_id]));
-  const childMap = new Map<string, string[]>();
-  const visibleIds = new Set<string>();
-
-  items.forEach((item) => {
-    if (!item.parent_id) {
-      return;
-    }
-    const siblings = childMap.get(item.parent_id) ?? [];
-    siblings.push(item.id);
-    childMap.set(item.parent_id, siblings);
-  });
-
-  const addDescendants = (id: string) => {
-    const childIds = childMap.get(id) ?? [];
-    childIds.forEach((childId) => {
-      if (visibleIds.has(childId)) {
-        return;
-      }
-      visibleIds.add(childId);
-      addDescendants(childId);
-    });
-  };
-
-  items.forEach((item) => {
-    const fields = [
-      item.name,
-      item.unified_social_credit_code,
-      item.unit_type,
-      item.industry_category,
-      item.responsible_department_name,
-      item.contact_name,
-    ]
-      .filter(Boolean)
-      .map(value => String(value).toLowerCase());
-
-    if (!fields.some(value => value.includes(normalized))) {
-      return;
-    }
-
-    let currentId = item.id;
-    while (currentId) {
-      if (visibleIds.has(currentId)) {
-        break;
-      }
-      visibleIds.add(currentId);
-      currentId = parentMap.get(currentId) || '';
-    }
-    addDescendants(item.id);
-  });
-
-  return visibleIds;
-}
-
-function refreshTableData() {
-  const visibleIds = collectVisibleIds(organizeItems.value, searchForm.keyword);
-  const filteredItems = visibleIds
-    ? organizeItems.value.filter(item => visibleIds.has(item.id))
-    : organizeItems.value;
-  data.value = buildTableTree(filteredItems);
-}
-
 async function fetchList() {
   loading.value = true;
   try {
-    const res = await getOrganizeTree();
-    const body = (res as any)?.data ?? res;
-    const raw = (body?.data ?? body ?? []) as Organize[];
-    const list = Array.isArray(raw) ? raw : [];
-    const hasNested = list.some((n) => Array.isArray((n as any).children) && (n as any).children.length > 0);
-    organizeItems.value = (hasNested ? flattenOrganizeList(list) : list) as Organize[];
-    refreshTableData();
+    const res = await getOrganizeList({
+      page: pagination.page,
+      page_size: pagination.pageSize,
+      name: searchForm.keyword || undefined,
+    });
+    const raw = res?.data ?? res;
+    const items = raw?.data;
+    data.value = Array.isArray(items) ? items : [];
+    pagination.itemCount = Number(raw?.count ?? data.value.length);
   } catch {
     message.error('加载单位列表失败');
   } finally {
     loading.value = false;
   }
+}
+
+function handlePageChange(page: number) {
+  pagination.page = page;
+  fetchList();
+}
+
+function handlePageSizeChange(pageSize: number) {
+  pagination.pageSize = pageSize;
+  pagination.page = 1;
+  fetchList();
+}
+
+function handleSearch() {
+  pagination.page = 1;
+  fetchList();
+}
+
+function handleReset() {
+  searchForm.keyword = '';
+  pagination.page = 1;
+  fetchList();
 }
 
 function resetForm() {
@@ -288,7 +209,8 @@ function resetForm() {
     industry_category: '',
     unit_type: '',
     is_notification_member: false,
-    address: '',
+    region_code: '',
+    unit_detail_address: '',
     leader_name: '',
     leader_title: '',
     responsible_department_name: '',
@@ -316,7 +238,8 @@ function onEdit(row: Organize) {
     industry_category: row.industry_category,
     unit_type: row.unit_type,
     is_notification_member: row.is_notification_member ?? false,
-    address: mergeUnitAddress(row.address, row.unit_detail_address),
+    region_code: row.region_code || '',
+    unit_detail_address: row.unit_detail_address || row.address || '',
     leader_name: row.leader_name,
     leader_title: row.leader_title,
     responsible_department_name: row.responsible_department_name,
@@ -346,7 +269,7 @@ async function onSave() {
     return;
   }
   try {
-    const payload = { ...formData, unit_detail_address: '' };
+    const payload = { ...formData };
     if (editingId.value) {
       await updateOrganize(editingId.value, payload);
       message.success('更新成功');
@@ -412,12 +335,12 @@ onMounted(() => {
 
       <NForm inline label-placement="left" :show-feedback="false" style="margin-bottom: 16px">
         <NFormItem label="关键词">
-          <NInput v-model:value="searchForm.keyword" placeholder="输入单位名称" clearable style="width: 220px" />
+          <NInput v-model:value="searchForm.keyword" placeholder="输入单位名称" clearable style="width: 220px" @keydown.enter="handleSearch" />
         </NFormItem>
         <NFormItem>
           <NSpace :size="8">
-            <NButton type="primary" @click="fetchList">搜索</NButton>
-            <NButton @click="searchForm.keyword = ''; fetchList()">重置</NButton>
+            <NButton type="primary" @click="handleSearch">搜索</NButton>
+            <NButton @click="handleReset">重置</NButton>
           </NSpace>
         </NFormItem>
       </NForm>
@@ -426,14 +349,15 @@ onMounted(() => {
         :columns="columns"
         :data="data"
         :loading="loading"
-        :row-key="(row: OrganizeRow) => row.id"
-        children-key="children"
+        :row-key="(row: Organize) => row.id"
         :bordered="false"
-        :indent="24"
         :scroll-x="1500"
-        default-expand-all
+        :pagination="pagination"
         size="small"
         striped
+        remote
+        @update:page="handlePageChange"
+        @update:page-size="handlePageSizeChange"
       />
     </NCard>
 
@@ -491,9 +415,21 @@ onMounted(() => {
               <NSwitch v-model:value="formData.is_notification_member" />
             </NFormItem>
           </NGridItem>
-          <NGridItem :span="2">
-            <NFormItem label="单位地址">
-              <NInput v-model:value="formData.address" placeholder="省市区及街道门牌等完整地址" />
+          <NGridItem>
+            <NFormItem label="省市区">
+              <NCascader
+                v-model:value="formData.region_code"
+                clearable
+                filterable
+                check-strategy="child"
+                :options="regionOptions"
+                placeholder="请选择省 / 市 / 区县"
+              />
+            </NFormItem>
+          </NGridItem>
+          <NGridItem>
+            <NFormItem label="详细地址">
+              <NInput v-model:value="formData.unit_detail_address" placeholder="街道、门牌号等" />
             </NFormItem>
           </NGridItem>
           <NGridItem>

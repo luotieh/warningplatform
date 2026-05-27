@@ -18,6 +18,15 @@ const routes: RouteRecordRaw[] = [
           icon: 'lucide:bar-chart-3',
           title: '统计概览',
           perms: [{ action: 'view', label: '查看' }],
+          apis: [
+            'GET /incident/dashboard/stats',
+            'GET /incident/dashboard/chart/type',
+            'GET /incident/dashboard/chart/level',
+            'GET /incident/dashboard/chart/trend',
+          ],
+          apisByAction: {
+            view: ['GET /incident/dashboard/stats'],
+          },
         },
       },
       {
@@ -37,6 +46,21 @@ const routes: RouteRecordRaw[] = [
             { action: 'export', label: '导出' },
             { action: 'transfer', label: '转为通报' },
           ],
+          apis: [
+            'GET /incident/incidents',
+            'GET /incident/dashboard/stats',
+            'GET /organize/tree',
+          ],
+          apisByAction: {
+            create: ['POST /incident/incidents'],
+            update: ['PUT /incident/incidents/:id'],
+            delete: ['DELETE /incident/incidents/:id'],
+            'ai-audit': ['POST /incident/incidents/:id/ai-pre-audit'],
+            'manual-audit': ['POST /incident/incidents/:id/manual-audit'],
+            import: ['POST /incident/incidents/import', 'GET /incident/incidents/import-template'],
+            export: ['POST /incident/incidents/export-batch'],
+            transfer: ['POST /circular/transfers'],
+          },
         },
       },
       {
@@ -55,6 +79,22 @@ const routes: RouteRecordRaw[] = [
             { action: 'verify', label: '验证整改' },
             { action: 'close', label: '关闭事件' },
           ],
+          apis: [
+            'GET /incident/incidents/:id',
+            'GET /incident/incidents/:id/report/preview',
+            'GET /incident/comments',
+            'GET /incident/oplogs',
+            'GET /incident/knowledge/recommend',
+          ],
+          apisByAction: {
+            export: ['GET /incident/incidents/:id/report'],
+            'ai-audit': ['POST /incident/incidents/:id/ai-pre-audit'],
+            'manual-audit': ['POST /incident/incidents/:id/manual-audit'],
+            transfer: ['POST /circular/transfers'],
+            remediate: ['POST /incident/incidents/:id/remediation'],
+            verify: ['POST /incident/incidents/:id/verify-remediation'],
+            close: ['POST /incident/incidents/:id/close'],
+          },
         },
       },
       {
@@ -65,6 +105,17 @@ const routes: RouteRecordRaw[] = [
           icon: 'lucide:file-bar-chart-2',
           title: '事件分析',
           perms: [{ action: 'view', label: '查看' }, { action: 'export', label: '导出' }],
+          apis: [
+            'GET /incident/stats/remediation',
+            'GET /incident/stats/overdue',
+            'GET /incident/stats/analysis',
+            'GET /incident/stats/trend-prediction',
+            'GET /incident/stats/ai-analysis',
+          ],
+          apisByAction: {
+            view: ['GET /incident/stats/remediation'],
+            export: ['GET /incident/stats/report'],
+          },
         },
       },
       {

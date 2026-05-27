@@ -5,8 +5,8 @@ import (
 
 	"code.yt-security.com/public/core/v2/web"
 	iamsdk "code.yt-security.com/public/sdk"
-	"code.yt-security.com/public/sdk/permission"
 	"github.com/gin-gonic/gin"
+	"vulnscan-backend/pkg/definition"
 )
 
 type HandlerCore struct {
@@ -26,7 +26,7 @@ func (h *HandlerCore) List(c *gin.Context) {
 	if !ok {
 		return
 	}
-	scope := iamsdk.DataFilterScope(c, permission.DefaultFieldMapping)
+	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
 	items, count, err := h.svc.ListIncidents(c.Request.Context(), req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()

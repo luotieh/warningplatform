@@ -18,6 +18,17 @@ const r = computed(() => props.result || {});
 const blacklinks = computed(() => r.value.blacklink_matches || []);
 const backdoors = computed(() => r.value.backdoor_findings || []);
 
+const annotatedScreenshotUrl = computed(
+  () => r.value.tamper_screenshot_url || '',
+);
+const extraScreenshots = computed<
+  Array<{ file_id: string; url: string; label: string; target_url: string }>
+>(() => r.value.extra_screenshots || []);
+
+function openImage(url: string) {
+  if (url) window.open(url, '_blank');
+}
+
 const blacklinkCols: DataTableColumns<any> = [
   {
     key: 'url',
@@ -131,6 +142,49 @@ const backdoorCols: DataTableColumns<any> = [
         size="small"
         :max-height="400"
       />
+    </NCard>
+
+    <NCard v-if="annotatedScreenshotUrl" size="small" title="页面标注截图">
+      <p class="mb-2 text-xs text-gray-500">
+        以下截图标注了在原始页面上发现的暗链/后门位置，红色边框标注了异常区域。
+      </p>
+      <div class="rounded border border-gray-200 bg-gray-50 p-2">
+        <img
+          :src="annotatedScreenshotUrl"
+          alt="页面标注截图"
+          class="max-w-full cursor-pointer rounded shadow-sm"
+          style="max-height: 600px"
+          @click="openImage(annotatedScreenshotUrl)"
+        />
+      </div>
+    </NCard>
+
+    <NCard
+      v-if="extraScreenshots.length > 0"
+      size="small"
+      :title="`暗链目标页面截图（${extraScreenshots.length} 张）`"
+    >
+      <p class="mb-2 text-xs text-gray-500">
+        以下为暗链跳转到的目标站点截图。
+      </p>
+      <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div
+          v-for="(s, idx) in extraScreenshots"
+          :key="idx"
+          class="rounded border border-gray-200 bg-gray-50 p-2"
+        >
+          <div class="mb-1 text-xs font-medium text-gray-600">
+            {{ s.label }}：<span class="font-mono">{{ s.target_url }}</span>
+          </div>
+          <img
+            :src="s.url"
+            :alt="`${s.label} - ${s.target_url}`"
+            class="max-w-full cursor-pointer rounded shadow-sm"
+            style="max-height: 400px"
+            @click="openImage(s.url)"
+          />
+        </div>
+      </div>
     </NCard>
 
     <NEmpty

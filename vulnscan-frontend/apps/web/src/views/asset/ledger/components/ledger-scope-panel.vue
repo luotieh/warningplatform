@@ -15,6 +15,7 @@ const props = defineProps<{
   assetFamilyTree: TreeOption[];
   dimension: LedgerScopeDimension;
   industryTree: TreeOption[];
+  unitTypeTree: TreeOption[];
   loading?: boolean;
   orgSearchMode?: boolean;
   orgTree: TreeOption[];
@@ -24,6 +25,7 @@ const props = defineProps<{
   selectedIndustryKey: null | string;
   selectedOrgKey: null | string;
   selectedRegionKey: null | string;
+  selectedUnitTypeKey: null | string;
 }>();
 
 const emit = defineEmits<{
@@ -32,6 +34,7 @@ const emit = defineEmits<{
   'update:selectedIndustryKey': [key: null | string];
   'update:selectedOrgKey': [key: null | string];
   'update:selectedRegionKey': [key: null | string];
+  'update:selectedUnitTypeKey': [key: null | string];
   orgReset: [];
   orgSearch: [keyword: string];
   resetAll: [];
@@ -39,6 +42,7 @@ const emit = defineEmits<{
 
 const regionTreeRef = ref<InstanceType<typeof LedgerFilterTree> | null>(null);
 const industryTreeRef = ref<InstanceType<typeof LedgerFilterTree> | null>(null);
+const unitTypeTreeRef = ref<InstanceType<typeof LedgerFilterTree> | null>(null);
 const assetFamilyTreeRef = ref<InstanceType<typeof LedgerFilterTree> | null>(null);
 
 const dimensionModel = computed({
@@ -49,6 +53,7 @@ const dimensionModel = computed({
 function handleResetAll() {
   regionTreeRef.value?.clearSearch?.();
   industryTreeRef.value?.clearSearch?.();
+  unitTypeTreeRef.value?.clearSearch?.();
   assetFamilyTreeRef.value?.clearSearch?.();
   emit('resetAll');
 }
@@ -71,7 +76,8 @@ function handleOrgReset() {
       <NTabPane name="organize" tab="组织" />
       <NTabPane name="region" tab="地域" />
       <NTabPane name="industry" tab="行业" />
-      <NTabPane name="asset_family" tab="类型" />
+      <NTabPane name="unit_type" tab="单位类型" />
+      <NTabPane name="asset_family" tab="资产分类" />
     </NTabs>
 
     <div v-if="scopeLabel" class="ledger-scope-panel__active">
@@ -110,10 +116,22 @@ function handleOrgReset() {
       <LedgerFilterTree
         ref="industryTreeRef"
         :data="industryTree"
+        :show-search="false"
         empty-text="暂无单位行业字典"
-        search-placeholder="搜索单位行业"
         :selected-key="selectedIndustryKey"
         @update:selected-key="emit('update:selectedIndustryKey', $event)"
+      />
+    </div>
+
+    <div v-show="dimension === 'unit_type'" class="ledger-scope-panel__body">
+      <p class="ledger-scope-panel__hint">按资产所属单位的单位类型筛选</p>
+      <LedgerFilterTree
+        ref="unitTypeTreeRef"
+        :data="unitTypeTree"
+        :show-search="false"
+        empty-text="暂无单位类型数据"
+        :selected-key="selectedUnitTypeKey"
+        @update:selected-key="emit('update:selectedUnitTypeKey', $event)"
       />
     </div>
 

@@ -177,12 +177,6 @@ func (cm *CheckpointManager) ClearTask(taskID string) {
 	cm.db.Where("task_id = ?", taskID).Delete(&Checkpoint{})
 
 	cm.mu.Lock()
-	for key := range cm.cache {
-		var cp Checkpoint
-		if err := json.Unmarshal([]byte(key), &cp); err == nil && cp.TaskID == taskID {
-			delete(cm.cache, key)
-		}
-	}
 	for key, cp := range cm.cache {
 		if cp.TaskID == taskID {
 			delete(cm.cache, key)

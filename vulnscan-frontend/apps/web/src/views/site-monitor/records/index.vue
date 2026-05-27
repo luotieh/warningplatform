@@ -358,8 +358,12 @@ const baseColumns: DataTableColumns<MonitorExecution> = [
           type: row.has_issue ? 'error' : 'success',
           size: 'small',
           bordered: false,
+          round: true,
         },
-        () => (row.has_issue ? '⚠ 问题' : '正常'),
+        {
+          default: () => (row.has_issue ? '有问题' : '正常'),
+          icon: () => h('span', { style: { marginRight: '2px' } }, row.has_issue ? '⚠' : '✓'),
+        },
       ),
   },
   {

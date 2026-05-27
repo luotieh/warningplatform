@@ -8,6 +8,9 @@ import {
   enforceAppShellTheme,
 } from './composables/use-theme-sync';
 import { overridesPreferences } from './preferences';
+import { registerCustomFontFaces } from './utils/apply-custom-fonts';
+
+registerCustomFontFaces();
 
 /**
  * Initialize preferences before mounting the application.

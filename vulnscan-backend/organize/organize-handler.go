@@ -10,6 +10,7 @@ import (
 
 	"vulnscan-backend/model"
 	oc "vulnscan-backend/organize/organize-contract"
+	"vulnscan-backend/pkg/definition"
 
 	"code.yt-security.com/public/core/v2/web"
 	iamsdk "code.yt-security.com/public/sdk"
@@ -57,7 +58,24 @@ func (h *HandlerOrganize) List(c *gin.Context) {
 	if end > len(filtered) {
 		end = len(filtered)
 	}
-	web.OK(c).List(count, filtered[start:end]).Send()
+
+	pageItems := filtered[start:end]
+	h.enrichParentNames(pageItems, items)
+	web.OK(c).List(count, pageItems).Send()
+}
+
+func (h *HandlerOrganize) enrichParentNames(pageItems, allItems []model.Organize) {
+	nameMap := make(map[string]string, len(allItems))
+	for _, item := range allItems {
+		nameMap[item.ID] = item.Name
+	}
+	for i := range pageItems {
+		if pageItems[i].ParentID != "" {
+			if name, ok := nameMap[pageItems[i].ParentID]; ok {
+				pageItems[i].ParentName = name
+			}
+		}
+	}
 }
 
 func (h *HandlerOrganize) GetByID(c *gin.Context) {
@@ -234,11 +252,11 @@ func (h *HandlerOrganize) fetchIAMOrganizeTree(c *gin.Context) ([]*identity.Orga
 	userCtx, userCancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
 	defer userCancel()
 
-	infos, err := listAllIAMOrganizes(userCtx, h.iam.Organize)
+	infos, err := listAllIAMOrganizes(userCtx, h.iam.Admin.Organize)
 	if err != nil && isIAMUnauthorized(err) {
 		serviceCtx, serviceCancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer serviceCancel()
-		infos, err = listAllIAMOrganizes(serviceCtx, h.iam.Organize)
+		infos, err = listAllIAMOrganizes(serviceCtx, h.iam.Admin.Organize)
 	}
 	if err != nil {
 		return nil, err
@@ -253,7 +271,7 @@ func (h *HandlerOrganize) fetchIAMOrganizeTree(c *gin.Context) ([]*identity.Orga
 }
 
 func (h *HandlerOrganize) fetchIAMOrganizeInfos(ctx context.Context) ([]*identity.OrganizeInfo, error) {
-	options, err := h.iam.Organize.GetOrganizeOptions(ctx, "")
+	options, err := h.iam.Admin.Organize.GetOrganizeOptions(ctx, "")
 	if err != nil {
 		return nil, err
 	}
@@ -266,7 +284,7 @@ func (h *HandlerOrganize) fetchIAMOrganizeInfos(ctx context.Context) ([]*identit
 		if _, exists := seen[option.ID]; exists {
 			continue
 		}
-		info, err := h.iam.Organize.GetOrganize(ctx, option.ID)
+		info, err := h.iam.Admin.Organize.GetOrganize(ctx, option.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -283,7 +301,7 @@ func (h *HandlerOrganize) enrichEnsureReqFromIAM(c *gin.Context, req *oc.EnsureO
 	if req == nil || req.ID == "" || h.iam == nil {
 		return
 	}
-	info, err := h.iam.Organize.GetOrganize(c.Request.Context(), req.ID)
+	info, err := h.iam.Admin.Organize.GetOrganize(c.Request.Context(), req.ID)
 	if err != nil || info == nil {
 		return
 	}
@@ -472,7 +490,7 @@ func (h *HandlerOrganize) ensureIAMOrganizeForCreate(c *gin.Context, item *model
 			ParentID:   firstNonEmpty(item.ParentID, defaultParentID),
 			CreditCode: item.UnifiedSocialCreditCode,
 		}
-		info, err = h.iam.Organize.CreateOrganize(c.Request.Context(), req)
+		info, err = h.iam.Admin.Organize.CreateOrganize(c.Request.Context(), req)
 		if err != nil {
 			return fmt.Errorf("create IAM organize failed: %w", err)
 		}
@@ -489,7 +507,7 @@ func (h *HandlerOrganize) findIAMOrganizeByName(c *gin.Context, name string) (*i
 	if h.iam == nil || name == "" {
 		return nil, nil
 	}
-	info, err := FindIAMOrganizeByExactName(c.Request.Context(), h.iam.Organize, name)
+	info, err := FindIAMOrganizeByExactName(c.Request.Context(), h.iam.Admin.Organize, name)
 	if err != nil {
 		return nil, fmt.Errorf("query IAM organize failed: %w", err)
 	}
@@ -500,7 +518,7 @@ func (h *HandlerOrganize) organizeFromIAM(c *gin.Context, id string) *model.Orga
 	if id == "" || h.iam == nil {
 		return nil
 	}
-	info, err := h.iam.Organize.GetOrganize(c.Request.Context(), id)
+	info, err := h.iam.Admin.Organize.GetOrganize(c.Request.Context(), id)
 	if err != nil || info == nil {
 		return nil
 	}
@@ -514,7 +532,7 @@ func (h *HandlerOrganize) mergeOrganizeFromIAM(c *gin.Context, item *model.Organ
 	if item.Name != "" && item.ParentID != "" && item.UnifiedSocialCreditCode != "" {
 		return
 	}
-	info, err := h.iam.Organize.GetOrganize(c.Request.Context(), item.ID)
+	info, err := h.iam.Admin.Organize.GetOrganize(c.Request.Context(), item.ID)
 	if err != nil || info == nil {
 		return
 	}
@@ -649,7 +667,7 @@ func (h *HandlerConstruction) List(c *gin.Context) {
 	if !ok {
 		return
 	}
-	scope := iamsdk.DataFilterScope(c, permission.DefaultFieldMapping)
+	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
 	items, count, err := h.svc.List(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()

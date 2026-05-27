@@ -21,7 +21,7 @@ func NewFingerprintFull(handler *HandlerFingerprint, webHandler *HandlerWebFinge
 func (m *Fingerprint) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
 	routes := []authorize.Route{
 		{
-			Name: "服务指纹管理", Enabled: true,
+			Name: "服务识别指纹", Enabled: true,
 			Children: []authorize.Route{
 				{Name: "服务指纹列表", Path: "list", Method: "GET", Handler: m.handler.List, Enabled: true},
 				{Name: "服务指纹详情", Path: ":id", Method: "GET", Handler: m.handler.GetByID, Enabled: true},
@@ -38,7 +38,7 @@ func (m *Fingerprint) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendIte
 	if m.webHandler != nil {
 		webRoutes := []authorize.Route{
 			{
-				Name: "Web指纹管理", Enabled: true,
+				Name: "Web识别指纹", Enabled: true,
 				Children: []authorize.Route{
 					{Name: "Web指纹列表", Method: "GET", Handler: m.webHandler.List, Enabled: true},
 					{Name: "Web指纹详情", Path: ":id", Method: "GET", Handler: m.webHandler.GetByID, Enabled: true},

@@ -63,7 +63,7 @@ export function countVisibleMenuRoutes(
 }
 
 /**
- * 兼容 IAM 多种 /me/menus 响应结构
+ * 兼容 IAM 多种 /iam/menus 响应结构
  */
 export function normalizeMenuGroups(raw: unknown): IamAppMenuGroup[] {
   if (!raw) return [];

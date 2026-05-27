@@ -18,6 +18,11 @@ const routes: RouteRecordRaw[] = [
           title: '系统设置',
           icon: 'lucide:sliders-horizontal',
           perms: [{ action: 'view', label: '查看' }, { action: 'update', label: '保存' }],
+          apis: ['GET /setting/list'],
+          apisByAction: {
+            view: ['GET /setting/list'],
+            update: ['PUT /setting/batch'],
+          },
         },
       },
       {
@@ -32,6 +37,12 @@ const routes: RouteRecordRaw[] = [
             { action: 'update', label: '编辑' },
             { action: 'delete', label: '删除' },
           ],
+          apis: ['GET /system/dict'],
+          apisByAction: {
+            create: ['POST /system/dict'],
+            update: ['PUT /system/dict/detail/:id'],
+            delete: ['DELETE /system/dict/detail/:id'],
+          },
         },
       },
       {
@@ -42,6 +53,10 @@ const routes: RouteRecordRaw[] = [
           title: '系统初始化',
           icon: 'lucide:database',
           perms: [{ action: 'sync-menu', label: '同步菜单到IAM' }],
+          apis: [],
+          apisByAction: {
+            'sync-menu': ['POST /system/iam/sync-frontends'],
+          },
         },
       },
     ],

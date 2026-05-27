@@ -106,6 +106,8 @@ func (h *Handlers) autoMigrate() {
 		// Federation 同步版本管理
 		&model.SyncVersion{},
 		&model.SyncLog{},
+		// 提示词模板
+		&model.PromptTemplate{},
 	}
 
 	if migrateErr := session.AutoMigrate(tables...); migrateErr != nil {

@@ -29,6 +29,9 @@ type AIPreAuditResp struct {
 	RiskScore    float64         `json:"risk_score"`
 	AiTags       string          `json:"ai_tags"`
 	AiCategory   string          `json:"ai_category"`
+	AiVulnDesc   string          `json:"ai_vuln_desc"`
+	AiVulnHarm   string          `json:"ai_vuln_harm"`
+	AiFixAdvice  string          `json:"ai_fix_advice"`
 	RiskDetail   RiskScoreResult `json:"risk_detail"`
 }
 

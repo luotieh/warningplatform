@@ -25,6 +25,15 @@ const routes: RouteRecordRaw[] = [
             { action: 'export', label: '导出' },
             { action: 'submit', label: '提交核验' },
           ],
+          apis: ['GET /circular/inputs', 'GET /organize/tree'],
+          apisByAction: {
+            create: ['POST /circular/inputs'],
+            update: ['PUT /circular/inputs/:id'],
+            delete: ['DELETE /circular/inputs/:id'],
+            import: ['POST /circular/inputs/import'],
+            export: ['POST /circular/inputs/export'],
+            submit: ['POST /circular/inputs/:id/submit'],
+          },
         },
       },
       {
@@ -36,6 +45,10 @@ const routes: RouteRecordRaw[] = [
           hideInTab: true,
           title: '新建通报',
           activePath: '/circular/input',
+          apis: ['GET /organize/tree'],
+          apisByAction: {
+            create: ['POST /circular/inputs'],
+          },
         },
       },
       {
@@ -46,6 +59,13 @@ const routes: RouteRecordRaw[] = [
           hideInMenu: true,
           title: '通报详情',
           activePath: '/circular/input',
+          apis: [
+            'GET /circular/inputs/:id',
+            'GET /circular/oplogs/:id',
+          ],
+          apisByAction: {
+            update: ['PUT /circular/inputs/:id'],
+          },
         },
       },
       {
@@ -59,6 +79,8 @@ const routes: RouteRecordRaw[] = [
           perms: [
             { action: 'verify', label: '核验' },
           ],
+          apis: ['GET /circular/verifications'],
+          apisByAction: { verify: ['POST /circular/verifications'] },
         },
       },
       {
@@ -72,6 +94,8 @@ const routes: RouteRecordRaw[] = [
           perms: [
             { action: 'distribute', label: '派发' },
           ],
+          apis: ['GET /circular/distributions'],
+          apisByAction: { distribute: ['POST /circular/distributions'] },
         },
       },
       {
@@ -85,6 +109,11 @@ const routes: RouteRecordRaw[] = [
             { action: 'dispose', label: '处置' },
             { action: 'redistribute', label: '转派' },
           ],
+          apis: ['GET /circular/disposals'],
+          apisByAction: {
+            dispose: ['POST /circular/disposals/:id'],
+            redistribute: ['POST /circular/disposals/redistribute'],
+          },
         },
       },
       {
@@ -95,6 +124,10 @@ const routes: RouteRecordRaw[] = [
           hideInMenu: true,
           title: '处置通报',
           activePath: '/circular/disposal',
+          apis: ['GET /circular/disposals'],
+          apisByAction: {
+            dispose: ['POST /circular/disposals/:id'],
+          },
         },
       },
       {
@@ -108,6 +141,8 @@ const routes: RouteRecordRaw[] = [
           perms: [
             { action: 'review', label: '审核' },
           ],
+          apis: ['GET /circular/reviews'],
+          apisByAction: { review: ['POST /circular/reviews/:id'] },
         },
       },
       {
@@ -118,6 +153,11 @@ const routes: RouteRecordRaw[] = [
           icon: 'lucide:book-open',
           title: '通报台账',
           perms: [{ action: 'view', label: '查看' }, { action: 'export', label: '导出' }],
+          apis: ['GET /circular/ledgers'],
+          apisByAction: {
+            view: ['GET /circular/ledgers'],
+            export: ['POST /circular/inputs/export'],
+          },
         },
       },
       {
@@ -128,6 +168,11 @@ const routes: RouteRecordRaw[] = [
           hideInMenu: true,
           title: '台账详情',
           activePath: '/circular/ledger',
+          apis: [
+            'GET /circular/ledgers/:id',
+            'GET /circular/oplogs/:id',
+            'GET /circular/transfers/reports/:id/:format',
+          ],
         },
       },
     ],

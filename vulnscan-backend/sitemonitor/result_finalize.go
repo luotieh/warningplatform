@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"vulnscan-backend/model"
 
@@ -78,6 +79,22 @@ func FinalizeMonitorResult(ctx context.Context, db *gorm.DB, ar *model.MonitorAg
 			exec.Disposition = model.MonitorDispositionValid
 		}
 
+		// 问题去重：同一 URL + 维度 + 任务的未处置问题合并到一条记录
+		if exec.HasIssue {
+			issueKey := model.MakeIssueKey(exec.URL, exec.Dimension, exec.TargetID, exec.PathTaskID)
+			exec.IssueKey = issueKey
+			now := time.Now()
+			merged, mergeErr := mergeIntoExistingIssue(tx, &exec, issueKey, now)
+			if mergeErr != nil {
+				slog.Warn("[Monitor] issue merge failed, keeping as new", "eid", exec.ID, "err", mergeErr)
+			}
+			if merged {
+				return tx.Where("id = ?", exec.ID).Delete(&model.MonitorExecution{}).Error
+			}
+			exec.FirstSeenAt = &now
+			exec.OccurrenceCount = 1
+		}
+
 		if err := tx.Save(&exec).Error; err != nil {
 			return err
 		}
@@ -86,8 +103,40 @@ func FinalizeMonitorResult(ctx context.Context, db *gorm.DB, ar *model.MonitorAg
 			execCopy := exec
 			go monitorIssueNotifier(context.Background(), &execCopy)
 		}
+
 		return nil
 	})
+}
+
+// mergeIntoExistingIssue 查找同一问题键下的已有未处置记录，
+// 将本次执行结果合并到已有记录（更新结果、递增次数），返回 true 表示已合并。
+func mergeIntoExistingIssue(tx *gorm.DB, exec *model.MonitorExecution, issueKey string, now time.Time) (bool, error) {
+	var existing model.MonitorExecution
+	err := tx.Where("issue_key = ? AND disposition = ? AND id != ? AND has_issue = ?",
+		issueKey, model.MonitorDispositionPending, exec.ID, true).
+		Order("created_at DESC").
+		First(&existing).Error
+	if err != nil {
+		return false, nil
+	}
+
+	updates := map[string]any{
+		"result_json":      exec.ResultJSON,
+		"started_at":       exec.StartedAt,
+		"finished_at":      exec.FinishedAt,
+		"agent_id":         exec.AgentID,
+		"error":            exec.Error,
+		"created_at":       now,
+		"occurrence_count": existing.OccurrenceCount + 1,
+	}
+	if err := tx.Model(&model.MonitorExecution{}).Where("id = ?", existing.ID).Updates(updates).Error; err != nil {
+		return false, fmt.Errorf("update existing issue: %w", err)
+	}
+
+	slog.Info("[Monitor] merged duplicate issue into existing",
+		"existing_id", existing.ID, "new_id", exec.ID,
+		"issue_key", issueKey, "count", existing.OccurrenceCount+1)
+	return true, nil
 }
 
 func applyResultSemantics(tx *gorm.DB, exec *model.MonitorExecution, ar *model.MonitorAgentResult) {

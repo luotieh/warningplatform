@@ -101,8 +101,14 @@ func (s *serviceVerifyTask) CreateTasks(req ac.VerifyTaskCreateReq, operator, or
 				targetOrganizeID = asset.OrganizeID
 			}
 			status := model.AssetVerifyTaskPendingDispatch
+			selfDispatch := false
 			if targetOrganizeID != "" {
-				status = model.AssetVerifyTaskPendingReceive
+				if targetOrganizeID == organizeID {
+					status = model.AssetVerifyTaskPendingVerify
+					selfDispatch = true
+				} else {
+					status = model.AssetVerifyTaskPendingReceive
+				}
 			}
 
 			now := time.Now()
@@ -130,7 +136,14 @@ func (s *serviceVerifyTask) CreateTasks(req ac.VerifyTaskCreateReq, operator, or
 			if err := s.writeTaskLog(tx, task, model.AssetVerifyActionCreate, "", string(status), operator, req.Remark); err != nil {
 				return err
 			}
-			if status == model.AssetVerifyTaskPendingReceive {
+			if selfDispatch {
+				if err := s.writeTaskLog(tx, task, model.AssetVerifyActionDispatch, "", string(model.AssetVerifyTaskPendingVerify), operator, req.Remark); err != nil {
+					return err
+				}
+				if err := s.writeTaskLog(tx, task, model.AssetVerifyActionReceive, string(model.AssetVerifyTaskPendingVerify), string(model.AssetVerifyTaskPendingVerify), operator, "本单位自动接收"); err != nil {
+					return err
+				}
+			} else if status == model.AssetVerifyTaskPendingReceive {
 				if err := s.writeTaskLog(tx, task, model.AssetVerifyActionDispatch, "", string(status), operator, req.Remark); err != nil {
 					return err
 				}
@@ -140,6 +153,32 @@ func (s *serviceVerifyTask) CreateTasks(req ac.VerifyTaskCreateReq, operator, or
 		return nil
 	})
 	return created, err
+}
+
+var deletableStatuses = map[model.AssetVerifyTaskStatus]bool{
+	model.AssetVerifyTaskPendingDispatch: true,
+	model.AssetVerifyTaskPendingReceive:  true,
+	model.AssetVerifyTaskRejected:        true,
+	model.AssetVerifyTaskReturned:        true,
+}
+
+func (s *serviceVerifyTask) Delete(id, operator string) error {
+	if id == "" {
+		return errors.New("task id cannot be empty")
+	}
+	return s.session().Transaction(func(tx *gorm.DB) error {
+		var task model.AssetVerifyTask
+		if err := tx.First(&task, "id = ?", id).Error; err != nil {
+			return err
+		}
+		if !deletableStatuses[task.Status] {
+			return fmt.Errorf("状态为「%s」的任务不允许删除", task.Status)
+		}
+		if err := tx.Where("task_id = ?", id).Delete(&model.AssetVerifyOplog{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&task).Error
+	})
 }
 
 func (s *serviceVerifyTask) Receive(id, operator, organizeID, remark string) error {

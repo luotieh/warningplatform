@@ -9,6 +9,9 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -20,12 +23,44 @@ import (
 	"github.com/go-rod/rod/lib/proto"
 )
 
+// ScreenshotConfig 截图分辨率与质量参数。
+type ScreenshotConfig struct {
+	Width   int // 视口宽度，默认 1920
+	Height  int // 视口高度，默认 1080
+	Quality int // JPEG 质量 1-100，默认 80
+}
+
+func (c ScreenshotConfig) resolvedWidth() int {
+	if c.Width > 0 {
+		return c.Width
+	}
+	return 1920
+}
+func (c ScreenshotConfig) resolvedHeight() int {
+	if c.Height > 0 {
+		return c.Height
+	}
+	return 1080
+}
+func (c ScreenshotConfig) resolvedQuality() int {
+	if c.Quality > 0 {
+		return c.Quality
+	}
+	return 80
+}
+
 type ScreenshotModule struct {
 	client *http.Client
+	Config ScreenshotConfig
 }
 
 func New() *ScreenshotModule {
+	return NewWithConfig(ScreenshotConfig{})
+}
+
+func NewWithConfig(cfg ScreenshotConfig) *ScreenshotModule {
 	return &ScreenshotModule{
+		Config: cfg,
 		client: &http.Client{
 			Timeout: 15 * time.Second,
 			Transport: &http.Transport{
@@ -44,6 +79,22 @@ func New() *ScreenshotModule {
 	}
 }
 
+func (m *ScreenshotModule) resolveConfig(runtime map[string]interface{}) ScreenshotConfig {
+	cfg := m.Config
+	if runtime != nil {
+		if v, ok := runtime["screenshot_width"].(float64); ok && v > 0 {
+			cfg.Width = int(v)
+		}
+		if v, ok := runtime["screenshot_height"].(float64); ok && v > 0 {
+			cfg.Height = int(v)
+		}
+		if v, ok := runtime["screenshot_quality"].(float64); ok && v > 0 {
+			cfg.Quality = int(v)
+		}
+	}
+	return cfg
+}
+
 func (m *ScreenshotModule) ID() string       { return "screenshot" }
 func (m *ScreenshotModule) Name() string     { return "Web 首页截图" }
 func (m *ScreenshotModule) Category() string { return "recon" }
@@ -52,6 +103,7 @@ func (m *ScreenshotModule) Run(ctx context.Context, targets []*core.Target, conf
 	start := time.Now()
 	result := &core.ModuleResult{ModuleID: m.ID()}
 
+	cfg := m.resolveConfig(config)
 	browser := initBrowser()
 
 	var mu sync.Mutex
@@ -83,7 +135,7 @@ func (m *ScreenshotModule) Run(ctx context.Context, targets []*core.Target, conf
 				}
 
 				if browser != nil {
-					info.screenshotB64 = captureScreenshot(ctx, browser, u)
+					info.screenshotB64 = captureScreenshot(ctx, browser, u, cfg)
 				}
 
 				mu.Lock()
@@ -113,21 +165,67 @@ func (m *ScreenshotModule) Run(ctx context.Context, targets []*core.Target, conf
 	return result, nil
 }
 
-func initBrowser() *rod.Browser {
-	path, found := launcher.LookPath()
-	if !found {
-		slog.Warn("[-] 未找到 Chrome/Chromium，跳过页面截图")
-		return nil
+var browserFallbackPaths = []string{
+	`C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`,
+	`C:\Program Files\Microsoft\Edge\Application\msedge.exe`,
+	`/usr/bin/microsoft-edge`,
+	`/usr/bin/microsoft-edge-stable`,
+	`/usr/bin/chromium-browser`,
+	`/usr/bin/chromium`,
+	`/usr/bin/google-chrome`,
+	`/usr/bin/google-chrome-stable`,
+}
+
+func findBrowserPath() string {
+	if env := os.Getenv("CHROME_BIN"); env != "" {
+		if _, err := exec.LookPath(env); err == nil {
+			return env
+		}
 	}
-	u, err := launcher.New().Bin(path).
+	if path, found := launcher.LookPath(); found {
+		return path
+	}
+	for _, p := range browserFallbackPaths {
+		if _, err := exec.LookPath(p); err == nil {
+			return p
+		}
+	}
+	return ""
+}
+
+func newLauncher(path, userDataDir string) *launcher.Launcher {
+	return launcher.New().Bin(path).
 		Headless(true).
+		UserDataDir(userDataDir).
 		Set("no-sandbox").
 		Set("disable-gpu").
 		Set("ignore-certificate-errors").
 		Set("disable-dev-shm-usage").
-		Launch()
+		Set("disable-extensions").
+		Set("disable-background-networking").
+		Set("disable-default-apps").
+		Set("no-first-run").
+		Set("no-default-browser-check").
+		Set("disable-features", "EdgeCollections,msEdgeSidebarV2,msEdgeWalletCheckout,msEdgeWorkspacesRedesign")
+}
+
+func initBrowser() *rod.Browser {
+	path := findBrowserPath()
+	if path == "" {
+		slog.Warn("[-] 未找到 Chrome/Chromium/Edge，跳过页面截图")
+		return nil
+	}
+	slog.Info("[*] 使用浏览器进行截图", "path", path)
+
+	userDataDir := filepath.Join(os.TempDir(), fmt.Sprintf("vulnscan-rod-%d", os.Getpid()))
+	_ = os.RemoveAll(userDataDir)
+
+	l := newLauncher(path, userDataDir)
+	l.Logger(os.Stderr)
+	u, err := l.Launch()
 	if err != nil {
-		slog.Warn("[-] 启动浏览器失败，跳过页面截图", "error", err)
+		slog.Warn("[-] 启动浏览器失败，跳过页面截图", "error", err, "path", path)
+		_ = os.RemoveAll(userDataDir)
 		return nil
 	}
 	b := rod.New().ControlURL(u)
@@ -139,7 +237,7 @@ func initBrowser() *rod.Browser {
 	return b
 }
 
-func captureScreenshot(ctx context.Context, browser *rod.Browser, rawURL string) string {
+func captureScreenshot(ctx context.Context, browser *rod.Browser, rawURL string, cfg ScreenshotConfig) string {
 	defer func() {
 		if r := recover(); r != nil {
 			slog.Debug("截图异常恢复", "url", rawURL, "error", r)
@@ -161,10 +259,10 @@ func captureScreenshot(ctx context.Context, browser *rod.Browser, rawURL string)
 	_ = page.WaitStable(800 * time.Millisecond)
 
 	_ = page.SetViewport(&proto.EmulationSetDeviceMetricsOverride{
-		Width: 1280, Height: 720, DeviceScaleFactor: 1,
+		Width: cfg.resolvedWidth(), Height: cfg.resolvedHeight(), DeviceScaleFactor: 1,
 	})
 
-	quality := 70
+	quality := cfg.resolvedQuality()
 	data, err := page.Screenshot(false, &proto.PageCaptureScreenshot{
 		Format:  proto.PageCaptureScreenshotFormatJpeg,
 		Quality: &quality,

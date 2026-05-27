@@ -29,10 +29,10 @@ export const DEFAULT_ASSET_FAMILY_OPTIONS: LedgerOption[] = [
 ];
 
 export const DEFAULT_SOURCE_OPTIONS: LedgerOption[] = [
-  { label: '手工录入', value: 'manual_import' },
-  { label: '自动探测', value: 'auto_detect' },
-  { label: '外部同步', value: 'external' },
-  { label: '其他', value: 'other' },
+  { label: '手工录入', value: 'manual' },
+  { label: '扫描发现', value: 'scan' },
+  { label: '批量导入', value: 'import' },
+  { label: '自动探测', value: 'discovery' },
 ];
 
 export const DEFAULT_UNIT_TYPE_OPTIONS: LedgerOption[] = [
@@ -93,7 +93,7 @@ export const EMPTY_LEDGER_FORM = (): LedgerFormModel => ({
   isOnline: true,
   isKey: false,
   responsibleUserName: '',
-  dataSource: 'manual_import',
+  dataSource: 'manual',
   securityProtectionLevel: '',
   filingCertNumber: '',
   icpFilingNumber: '',

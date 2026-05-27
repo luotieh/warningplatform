@@ -110,30 +110,63 @@ func (d *DeltaScanEngine) Compare(currentTaskID, baseTaskID string) (*DeltaResul
 }
 
 func (d *DeltaScanEngine) FindBaseline(targets []string) (string, error) {
-	var task model.ScanTask
-	err := d.db.Where("status = 'completed'").
-		Order("finished_at DESC").
-		First(&task).Error
-	if err != nil {
+	return d.FindBaselineByTemplate(targets, "")
+}
+
+func (d *DeltaScanEngine) FindBaselineByTemplate(targets []string, templateID string) (string, error) {
+	query := d.db.Where("status = 'completed'").Order("finished_at DESC").Limit(20)
+	if strings.TrimSpace(templateID) != "" {
+		query = query.Where("template_id = ?", templateID)
+	}
+
+	var candidates []model.ScanTask
+	if err := query.Find(&candidates).Error; err != nil || len(candidates) == 0 {
 		return "", fmt.Errorf("无基线任务: %w", err)
 	}
 
-	overlap := 0
-	taskTargetSet := make(map[string]bool)
-	for _, t := range task.Targets {
-		taskTargetSet[t] = true
-	}
+	inputSet := make(map[string]struct{}, len(targets))
 	for _, t := range targets {
-		if taskTargetSet[t] {
-			overlap++
+		inputSet[t] = struct{}{}
+	}
+
+	bestID := ""
+	bestScore := 0.0
+
+	for _, task := range candidates {
+		taskTargetSet := make(map[string]struct{}, len(task.Targets))
+		for _, t := range task.Targets {
+			taskTargetSet[t] = struct{}{}
+		}
+
+		overlap := 0
+		for _, t := range targets {
+			if _, ok := taskTargetSet[t]; ok {
+				overlap++
+			}
+		}
+		if overlap == 0 {
+			continue
+		}
+
+		union := len(inputSet)
+		for t := range taskTargetSet {
+			if _, ok := inputSet[t]; !ok {
+				union++
+			}
+		}
+		jaccard := float64(overlap) / float64(union)
+
+		if jaccard > bestScore {
+			bestScore = jaccard
+			bestID = task.ID
 		}
 	}
 
-	if overlap == 0 {
+	if bestID == "" {
 		return "", fmt.Errorf("无重叠目标的基线任务")
 	}
 
-	return task.ID, nil
+	return bestID, nil
 }
 
 func (d *DeltaScanEngine) Timeline(target string, limit int) ([]TimelineEntry, error) {

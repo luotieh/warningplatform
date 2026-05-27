@@ -18,6 +18,15 @@ const routes: RouteRecordRaw[] = [
           title: '监测中心',
           icon: 'ri:dashboard-line',
           perms: [{ action: 'view', label: '查看' }],
+          apis: [
+            'GET /sitemonitor/dashboard/stats',
+            'GET /sitemonitor/execution-stats',
+            'GET /sitemonitor/targets',
+            'GET /sitemonitor/executions',
+          ],
+          apisByAction: {
+            view: ['GET /sitemonitor/dashboard/stats'],
+          },
         },
       },
       {
@@ -32,6 +41,18 @@ const routes: RouteRecordRaw[] = [
             { action: 'dispose', label: '处置' },
             { action: 'export', label: '导出' },
           ],
+          apis: [
+            'GET /sitemonitor/executions',
+            'GET /sitemonitor/executions/:id',
+          ],
+          apisByAction: {
+            view: ['GET /sitemonitor/executions'],
+            dispose: [
+              'PUT /sitemonitor/executions/:id/disposition',
+              'PUT /sitemonitor/executions/batch/disposition',
+            ],
+            export: ['GET /sitemonitor/executions/export'],
+          },
         },
       },
       {
@@ -42,6 +63,11 @@ const routes: RouteRecordRaw[] = [
           title: '监测报告',
           icon: 'lucide:file-bar-chart-2',
           perms: [{ action: 'view', label: '查看' }, { action: 'export', label: '导出' }],
+          apis: ['GET /sitemonitor/reports'],
+          apisByAction: {
+            view: ['GET /sitemonitor/reports'],
+            export: ['POST /sitemonitor/reports/generate'],
+          },
         },
       },
       {
@@ -49,7 +75,7 @@ const routes: RouteRecordRaw[] = [
         path: 'targets',
         component: () => import('#/views/site-monitor/targets/index.vue'),
         meta: {
-          title: '网站监测',
+          title: '监测任务',
           icon: 'ri:task-line',
           perms: [
             { action: 'create', label: '新建目标' },
@@ -58,6 +84,21 @@ const routes: RouteRecordRaw[] = [
             { action: 'run', label: '手动执行' },
             { action: 'import', label: '批量导入' },
           ],
+          apis: [
+            'GET /sitemonitor/targets',
+            'GET /sitemonitor/path-tasks',
+            'GET /sitemonitor/fetch-meta',
+          ],
+          apisByAction: {
+            create: ['POST /sitemonitor/targets', 'POST /sitemonitor/path-tasks'],
+            update: ['PUT /sitemonitor/targets/:id', 'PUT /sitemonitor/path-tasks/:id'],
+            delete: ['DELETE /sitemonitor/targets/:id', 'DELETE /sitemonitor/path-tasks/:id'],
+            run: [
+              'POST /sitemonitor/targets/run/:id',
+              'POST /sitemonitor/path-tasks/run/:id',
+            ],
+            import: ['POST /sitemonitor/import'],
+          },
         },
       },
       {
@@ -68,6 +109,13 @@ const routes: RouteRecordRaw[] = [
           title: '目标详情',
           hideInMenu: true,
           activePath: '/monitor/targets',
+          apis: [
+            'GET /sitemonitor/targets/:id',
+            'GET /sitemonitor/path-tasks',
+            'GET /sitemonitor/path-tasks/:id',
+            'GET /sitemonitor/executions',
+            'GET /sitemonitor/crawl-jobs/:jobId',
+          ],
         },
       },
       {
@@ -103,6 +151,10 @@ const routes: RouteRecordRaw[] = [
           title: '监测记录详情',
           activePath: '/monitor/targets',
           hideInMenu: true,
+          apis: [
+            'GET /sitemonitor/executions/:id',
+            'GET /sitemonitor/executions/:id/evidence/:type',
+          ],
         },
       },
       {
@@ -123,6 +175,7 @@ const routes: RouteRecordRaw[] = [
           icon: 'ri:file-list-line',
           hideInMenu: true,
           activePath: '/monitor/targets',
+          apis: ['GET /sitemonitor/executions', 'GET /sitemonitor/path-tasks/:id'],
         },
       },
       {
@@ -136,6 +189,22 @@ const routes: RouteRecordRaw[] = [
             { action: 'view', label: '查看' },
             { action: 'update', label: '保存配置' },
           ],
+          apis: [
+            'GET /sitemonitor/word-libraries',
+            'GET /sitemonitor/file-libraries',
+            'GET /sitemonitor/default-configs',
+            'GET /sitemonitor/rule-data',
+            'GET /sitemonitor/alert-config',
+            'GET /sitemonitor/agents',
+          ],
+          apisByAction: {
+            view: ['GET /sitemonitor/default-configs', 'GET /sitemonitor/rule-data'],
+            update: [
+              'PUT /sitemonitor/default-configs/:dimension',
+              'PUT /sitemonitor/alert-config',
+              'PUT /sitemonitor/rule-data/:moduleKey',
+            ],
+          },
         },
       },
     ],

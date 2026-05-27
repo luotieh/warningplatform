@@ -10,9 +10,9 @@ import (
 	"code.yt-security.com/public/core/v2/generate/qulid"
 	"code.yt-security.com/public/core/v2/web"
 	iamsdk "code.yt-security.com/public/sdk"
-	"code.yt-security.com/public/sdk/permission"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
+	"vulnscan-backend/pkg/definition"
 )
 
 type Handler struct {
@@ -39,7 +39,7 @@ func (h *Handler) List(c *gin.Context) {
 		q.Page = 1
 	}
 
-	scope := iamsdk.DataFilterScope(c, permission.DefaultFieldMapping)
+	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
 	tx := h.db.Model(&model.ScanTemplate{}).Scopes(scope)
 	if q.Keyword != "" {
 		tx = tx.Where("name LIKE ? OR description LIKE ?", "%"+q.Keyword+"%", "%"+q.Keyword+"%")

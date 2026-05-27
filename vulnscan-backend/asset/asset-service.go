@@ -27,7 +27,7 @@ func (s *serviceAsset) session() *gorm.DB {
 
 // buildAssetListQuery 与资产列表 List 使用相同的过滤条件（不含分页），供统计接口等复用。
 func buildAssetListQuery(sess *gorm.DB, query assetContract.AssetQuery, scopes ...func(*gorm.DB) *gorm.DB) *gorm.DB {
-	tx := sess.Model(&model.Asset{}).Scopes(scopes...)
+	tx := sess.Model(&model.Asset{}).Omit("screenshot").Scopes(scopes...)
 
 	if query.Keyword != "" {
 		tx = tx.Where("name LIKE ? OR address LIKE ?", "%"+query.Keyword+"%", "%"+query.Keyword+"%")
@@ -60,15 +60,26 @@ func buildAssetListQuery(sess *gorm.DB, query assetContract.AssetQuery, scopes .
 		tx = applyAssetFamilyFilter(tx, query.AssetFamily)
 	}
 	if query.RegionPrefix != "" {
-		tx = tx.Where("region_code LIKE ?", query.RegionPrefix+"%")
+		tx = tx.Where(
+			"(vs_asset.region_code LIKE ? OR vs_asset.organize_id IN (SELECT id FROM vs_organize WHERE region_code LIKE ? AND deleted_at IS NULL))",
+			query.RegionPrefix+"%", query.RegionPrefix+"%",
+		)
 	} else if query.RegionCode != "" {
-		tx = tx.Where("region_code = ?", query.RegionCode)
+		tx = tx.Where(
+			"(vs_asset.region_code = ? OR vs_asset.organize_id IN (SELECT id FROM vs_organize WHERE region_code = ? AND deleted_at IS NULL))",
+			query.RegionCode, query.RegionCode,
+		)
 	}
 	if query.IndustryCategory != "" {
-		// 用子查询避免 JOIN 后 created_at / name 等列歧义（SQLite）
 		tx = tx.Where(
 			"organize_id IN (SELECT id FROM vs_organize WHERE industry_category = ? AND deleted_at IS NULL)",
 			query.IndustryCategory,
+		)
+	}
+	if query.UnitType != "" {
+		tx = tx.Where(
+			"organize_id IN (SELECT id FROM vs_organize WHERE unit_type = ? AND deleted_at IS NULL)",
+			query.UnitType,
 		)
 	}
 	return tx
@@ -109,7 +120,18 @@ func (s *serviceAsset) GetByID(id string) (*model.Asset, error) {
 	return &item, nil
 }
 
+func (s *serviceAsset) fillRegionCodeFromOrganize(item *model.Asset) {
+	if item.RegionCode != "" || item.OrganizeID == "" {
+		return
+	}
+	var org model.Organize
+	if err := s.session().Select("region_code").Where("id = ? AND deleted_at IS NULL", item.OrganizeID).First(&org).Error; err == nil && org.RegionCode != "" {
+		item.RegionCode = org.RegionCode
+	}
+}
+
 func (s *serviceAsset) Create(item *model.Asset) error {
+	s.fillRegionCodeFromOrganize(item)
 	if err := s.session().Create(item).Error; err != nil {
 		return err
 	}

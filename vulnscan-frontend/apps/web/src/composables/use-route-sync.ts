@@ -2,14 +2,39 @@ import type { RouteRecordRaw } from 'vue-router';
 
 import type { SyncMenuItem } from '#/api/authorize/menu';
 
+import { $t } from '#/locales';
 import {
+  getRouteApisByAction,
+  getRouteApisForPageAccess,
   getRoutePerms,
-  pathToNamespace,
+  resolvePermNamespace,
   buildPermCode,
+  validateRoutePermBindings,
 } from '#/permissions/route-perm';
 import { accessRoutes } from '#/router/routes';
 
-function resolveComponentPath(route: RouteRecordRaw): string | undefined {
+function resolveTitle(raw: unknown): string {
+  if (!raw) return '';
+  const s = String(raw);
+  if (/^[a-z]+(\.[a-z_]+)+$/i.test(s)) {
+    const translated = $t(s);
+    return translated && translated !== s ? translated : s;
+  }
+  return s;
+}
+
+/**
+ * 从路由组件中提取组件路径字符串。
+ *
+ * 优先级：
+ * 1. meta.component（手动声明的字符串路径）
+ * 2. 从动态 import 函数的 toString() 中正则提取（仅开发环境可靠）
+ *    例如 () => import('#/views/dashboard/analytics/index.vue')
+ *    提取后得到 views/dashboard/analytics/index.vue
+ */
+function resolveComponentPath(
+  route: RouteRecordRaw,
+): string | undefined {
   const meta = (route.meta || {}) as Record<string, any>;
   if (meta.component && typeof meta.component === 'string') {
     return meta.component;
@@ -31,36 +56,64 @@ function routeToSyncItem(
   const meta = (route.meta || {}) as Record<string, any>;
 
   const name = (route.name as string) || '';
-  const title = (meta.title as string) || name;
+  const title = resolveTitle(meta.title) || name;
   if (!name) return null;
 
   let fullPath = route.path || '';
   if (parentPath && !fullPath.startsWith('/')) {
     fullPath = `${parentPath}/${fullPath}`.replace(/\/+/g, '/');
   }
+  // 清理路由参数前缀 ':' 避免 IAM 权限码产生双冒号（如 :id → id）
+  const cleanPath = fullPath
+    .split('/')
+    .map((s) => (s.startsWith(':') ? s.slice(1) : s))
+    .join('/');
 
   const componentPath = resolveComponentPath(route);
-
-  // 纯重定向兼容项不同步到 IAM（避免在仪表盘等模块下多出「扫描报告」等菜单）
-  if (route.redirect && !componentPath && !(route.children?.length)) {
-    return null;
-  }
 
   const isDetailPage =
     meta.hideInMenu === true && !!(meta.activePath || !meta.icon);
 
+  if (import.meta.env.DEV) {
+    for (const issue of validateRoutePermBindings(meta)) {
+      console.warn(`[route-sync] ${fullPath}: ${issue.message}`);
+    }
+  }
+
+  const pageApis = getRouteApisForPageAccess(meta);
+
+  let redirect: string | undefined;
+  const rawRedirect = route.redirect;
+  if (typeof rawRedirect === 'string') {
+    redirect = rawRedirect;
+  } else if (
+    rawRedirect &&
+    typeof rawRedirect === 'object' &&
+    'path' in rawRedirect
+  ) {
+    const loc = rawRedirect as { path?: string; query?: Record<string, unknown> };
+    const base = String(loc.path || '').trim();
+    if (base) {
+      const qs = loc.query
+        ? new URLSearchParams(
+            Object.entries(loc.query).map(([k, v]) => [k, String(v ?? '')]),
+          ).toString()
+        : '';
+      redirect = qs ? `${base}?${qs}` : base;
+    }
+  }
+
   const item: SyncMenuItem = {
     name,
     title,
-    path: fullPath,
+    path: cleanPath,
     component: componentPath,
     icon: (meta.icon as string) || undefined,
     rank: (meta.order as number) || (meta.rank as number) || undefined,
-    redirect: (route.redirect as string) || undefined,
+    redirect,
     hide_in_menu: isDetailPage ? true : undefined,
-    // IAM FrontendItem.show_link 缺省为 false，同步时必须显式 true 才能在侧栏显示
-    show_link: isDetailPage ? false : true,
     menu_type: 1,
+    backend_refs: pageApis.length > 0 ? pageApis : undefined,
   };
 
   const children: SyncMenuItem[] = [];
@@ -73,14 +126,21 @@ function routeToSyncItem(
   }
 
   const perms = getRoutePerms(meta);
+  const apisByAction = getRouteApisByAction(meta);
   if (perms.length > 0) {
-    const ns = pathToNamespace(fullPath);
+    const ns = resolvePermNamespace(meta, cleanPath);
+    const existed = new Set<string>();
     for (const p of perms) {
+      const code = buildPermCode(ns, p.action);
+      if (existed.has(code)) continue;
+      existed.add(code);
+      const btnRefs = apisByAction[p.action];
       children.push({
         name: `${name}__${p.action}`,
         title: p.title,
-        unique_value: buildPermCode(ns, p.action),
+        unique_value: code,
         menu_type: 4,
+        backend_refs: btnRefs?.length ? btnRefs : undefined,
       });
     }
   }
@@ -129,7 +189,7 @@ function walkAudit(
     const perms = getRoutePerms(meta);
     rows.push({
       path: fullPath,
-      title: (meta.title as string) || name,
+      title: resolveTitle(meta.title) || name,
       name,
       buttonCount: perms.length,
       missingPerms: perms.length === 0,

@@ -19,13 +19,13 @@
   max-conn-life-time = 600
 
 [iam]
- base_url = "http://iam.dev.yt-security.com:32000"
- client_id = "01KR3C53FQNJYRSH6AKCM7AK0K"
- client_secret = "sk-eb3d9b09f7537aa14f36e1ddd89c2575"
- path_prefix = "/api"
+  base_url = "http://iam.dev.yt-security.com:32000"
+  client_id = "01KSM36602167DKAAAJE6RM2AD"
+  client_secret = "sk-8e2d04476200152902974dbffcdf66ed"
+  path_prefix = "/api"
 
 [sso]
   callback_uri = "http://localhost:8900/callback"
-  success_redirect         = "http://localhost:5890/auth/sso-callback"
-  cookie_secret            = "at-least-16-bytes-secret-key!!"
-  token_relay_callback_uri = "http://localhost:8900/callback"
+  success_redirect = "http://localhost:5890/auth/sso-callback"
+  cookie_secret = "pp8v7vWsPgaeviINPd4Dio9fb$StZxML"
+  token_relay_callback_uri = "http://localhost:8900/callback

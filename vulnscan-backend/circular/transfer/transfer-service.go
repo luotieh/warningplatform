@@ -60,7 +60,7 @@ func (s *serviceTransfer) ReceiveIncident(ctx context.Context, req transferContr
 		Code: circularCode, Title: req.Name, CustomCode: req.IncidentNo,
 		Source:           model.CircularSourceSuperiorTransfer,
 		Organize:         scope.ResolveOrganize(unitOrganize, ownerOrganize),
-		CircularTemplate: defaultTemplate.ID, CircularData: circularData, Status: model.CircularToBeVerified,
+		CircularTemplate: defaultTemplate.ID, CircularData: circularData, Status: model.CircularToBeDistributed,
 	}
 	circular.Id = circularCode
 	circular.CreatedBy = actor.ID
@@ -87,7 +87,16 @@ func (s *serviceTransfer) ReceiveIncident(ctx context.Context, req transferContr
 		opLog := model.BuildCircularOperationLog(circularCode, model.CircularOpThirdPartyImport, actor.ID, actor.Name, "安全事件流转成功", "", map[string]interface{}{
 			"incident_no": req.IncidentNo, "incident_id": req.IncidentID, "incident_name": req.Name, "source_system": req.SourceSystem,
 		})
-		return session.Create(&opLog).Error
+		if err := session.Create(&opLog).Error; err != nil {
+			return err
+		}
+
+		verifyLog := model.BuildCircularOperationLog(circularCode, model.CircularOpVerifyPass, actor.ID, actor.Name, "自动核验（安全事件已复核）", "", map[string]interface{}{
+			"auto":          true,
+			"reason":        "源安全事件已通过人工复核，跳过通报核验环节",
+			"source_system": req.SourceSystem,
+		})
+		return session.Create(&verifyLog).Error
 	})
 
 	if err != nil {

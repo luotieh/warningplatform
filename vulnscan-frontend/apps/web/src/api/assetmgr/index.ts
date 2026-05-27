@@ -55,6 +55,7 @@ export interface Organize {
   unit_type: string;
   is_notification_member: boolean;
   address: string;
+  region_code: string;
   unit_detail_address: string;
   leader_name: string;
   leader_title: string;
@@ -66,6 +67,7 @@ export interface Organize {
   contact_title: string;
   contact_phone: string;
   asset_count: number;
+  parent_name?: string;
 }
 
 export function getOrganizeList(params?: Record<string, any>) {
@@ -312,6 +314,10 @@ export function forwardVerifyTask(id: string, data: { target_organize_id: string
 
 export function returnVerifyTask(id: string, data?: Record<string, any>) {
   return requestClient.put(`/assetmgr/verify/tasks/${id}/return`, data ?? {});
+}
+
+export function deleteVerifyTask(id: string) {
+  return requestClient.delete(`/assetmgr/verify/tasks/${id}`);
 }
 
 export function archiveVerifyTask(id: string, data?: Record<string, any>) {

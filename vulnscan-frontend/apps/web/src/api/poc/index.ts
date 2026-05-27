@@ -57,6 +57,14 @@ export function importPocsFromDir(dir: string) {
   return requestClient.post('/poc/import-dir', { dir });
 }
 
+export function importPocUpload(file: File) {
+  const formData = new FormData();
+  formData.append('file', file);
+  return requestClient.post<{ imported: number; skipped: number; errors: number }>('/poc/import-upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+}
+
 export interface ValidateResult {
   valid: boolean;
   error?: string;

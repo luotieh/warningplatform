@@ -208,6 +208,10 @@ export const startCrawl = (
     max_depth?: number;
     max_pages?: number;
     same_host?: boolean;
+    start_url?: string;
+    screenshot_width?: number;
+    screenshot_height?: number;
+    screenshot_quality?: number;
   },
 ) =>
   requestClient.post<MonitorCrawlJob>(base(`/targets/${targetId}/crawl`), data);
@@ -217,7 +221,7 @@ export const getCrawlJob = (jobId: string) =>
 
 export const applyCrawlPaths = (
   jobId: string,
-  data: { skip_existing?: boolean } = {},
+  data: { skip_existing?: boolean; selected_urls?: string[] } = {},
 ) =>
   requestClient.post<{ created: number }>(
     base(`/crawl-jobs/${jobId}/apply`),
@@ -429,7 +433,7 @@ export const batchUpdateDisposition = (
 
 export const getEvidenceAssetUrl = (
   executionId: string,
-  type: 'html' | 'screenshot',
+  type: 'annotated_screenshot' | 'html' | 'screenshot',
 ) => base(`/executions/${executionId}/evidence/${type}`);
 
 export const getDashboardStats = () =>

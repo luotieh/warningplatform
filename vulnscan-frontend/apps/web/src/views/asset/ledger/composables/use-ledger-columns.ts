@@ -46,18 +46,18 @@ function rowActionButton(
 }
 
 function renderReachableStatus(row: Asset) {
+  if (row.reachable_checked_at != null && row.reachable_checked_at !== '') {
+    const online = row.reachable === true;
+    return h(
+      NTag,
+      { bordered: false, size: 'small', type: online ? 'success' : 'error' },
+      { default: () => (online ? '在线' : '离线') },
+    );
+  }
   if (row.is_online === false) {
-    return h('span', { class: 'ledger-cell ledger-cell--muted' }, '—');
+    return h('span', { class: 'ledger-cell ledger-cell--muted' }, '未联网');
   }
-  if (row.reachable_checked_at == null || row.reachable_checked_at === '') {
-    return h('span', { class: 'ledger-cell ledger-cell--muted' }, '检测中');
-  }
-  const online = row.reachable === true;
-  return h(
-    NTag,
-    { bordered: false, size: 'small', type: online ? 'success' : 'default' },
-    { default: () => (online ? '在线' : '离线') },
-  );
+  return h('span', { class: 'ledger-cell ledger-cell--muted' }, '待检测');
 }
 
 export function useLedgerColumns(options: UseLedgerColumnsOptions): DataTableColumns<Asset> {
@@ -73,12 +73,14 @@ export function useLedgerColumns(options: UseLedgerColumnsOptions): DataTableCol
       title: '资产分类',
       key: 'asset_family',
       width: 120,
+      align: 'center',
       render: (row) => renderText(options.assetFamilyLabel(row.asset_family)),
     },
     {
       title: '地址',
       key: 'address',
       minWidth: 220,
+      align: 'center',
       ellipsis: { tooltip: true },
       render: (row) => renderText(options.assetIdentifier(row)),
     },
@@ -86,40 +88,42 @@ export function useLedgerColumns(options: UseLedgerColumnsOptions): DataTableCol
       title: '所属单位',
       key: 'organize_id',
       minWidth: 180,
+      align: 'center',
       ellipsis: { tooltip: true },
       render: (row) => renderText(options.organizeLabel(row.organize_id)),
     },
     {
       title: '在线状态',
       key: 'reachable',
-      width: 96,
+      width: 84,
       align: 'center',
       render: (row) => renderReachableStatus(row),
     },
     {
       title: '风险分',
       key: 'risk_score',
-      width: 90,
+      width: 76,
       align: 'center',
       render: (row) => renderText(row.risk_score ?? '-'),
     },
     {
       title: '漏洞数',
       key: 'vuln_count',
-      width: 90,
+      width: 76,
       align: 'center',
       render: (row) => renderText(row.vuln_count ?? '-'),
     },
     {
       title: '来源',
       key: 'data_source',
-      width: 120,
+      width: 90,
+      align: 'center',
       render: (row) => renderText(options.sourceLabel(row.data_source)),
     },
     {
       title: '操作',
       key: 'actions',
-      width: 248,
+      width: 280,
       fixed: 'right',
       align: 'center',
       render: (row) =>

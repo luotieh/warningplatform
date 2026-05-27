@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"vulnscan-backend/agent"
+	"vulnscan-backend/sitemonitor/analyzer"
 
 	"gorm.io/gorm"
 )
@@ -70,10 +71,14 @@ func (e *DBExecutor) Execute(ctx context.Context, payload json.RawMessage) *agen
 
 	result.Status = "success"
 	if snap != nil {
+		if len(snap.Screenshot) > 0 {
+			result.ScreenshotData = snap.Screenshot
+		}
+
 		raw, _ := json.Marshal(snap)
 		snapshotJSON := string(raw)
 
-		analyzed, aErr := e.analysis.Analyze(ctx, msg.Dimension, snapshotJSON, msg.URL, &msg)
+		analyzed, output, aErr := e.analysis.AnalyzeWithOutput(ctx, msg.Dimension, snapshotJSON, msg.URL, &msg)
 		if aErr != nil {
 			slog.Warn("analysis failed, using raw snapshot", "dimension", msg.Dimension, "error", aErr)
 			if msg.Dimension == "availability" {
@@ -84,9 +89,56 @@ func (e *DBExecutor) Execute(ctx context.Context, payload json.RawMessage) *agen
 		} else {
 			result.Result = analyzed
 		}
+
+		if output != nil && output.HasIssue {
+			annotations := BuildAnnotationsFromOutput(msg.Dimension, output)
+			if len(annotations) > 0 {
+				annotatedData := e.pageService.CaptureAnnotatedScreenshot(ctx, msg.URL, annotations)
+				if len(annotatedData) > 0 {
+					result.AnnotatedScreenshotData = annotatedData
+					slog.Info("[Monitor] 标注截图已生成", "dimension", msg.Dimension, "url", msg.URL, "annotations", len(annotations))
+				}
+			}
+
+			if msg.Dimension == "blacklink" {
+				result.ExtraScreenshots = e.captureBlacklinkTargets(ctx, output)
+			}
+		}
 	}
 
 	return result
+}
+
+func (e *DBExecutor) captureBlacklinkTargets(ctx context.Context, output *analyzer.Output) []agent.ExtraScreenshot {
+	if output == nil || output.DetailsJSON == "" {
+		return nil
+	}
+	var details struct {
+		BlacklinkMatches []struct {
+			URL string `json:"url"`
+		} `json:"blacklink_matches"`
+	}
+	if json.Unmarshal([]byte(output.DetailsJSON), &details) != nil {
+		return nil
+	}
+
+	const maxTargets = 5
+	var screenshots []agent.ExtraScreenshot
+	for i, m := range details.BlacklinkMatches {
+		if i >= maxTargets || m.URL == "" {
+			break
+		}
+		data := e.pageService.CaptureSimpleScreenshot(ctx, m.URL)
+		if len(data) > 0 {
+			screenshots = append(screenshots, agent.ExtraScreenshot{
+				Label: "暗链目标",
+				URL:   m.URL,
+				Data:  data,
+			})
+			slog.Info("[Monitor] 暗链目标截图已生成", "target_url", m.URL)
+		}
+	}
+	return screenshots
 }
 
 func (e *DBExecutor) Close() error {

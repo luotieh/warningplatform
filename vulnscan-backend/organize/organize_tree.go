@@ -17,11 +17,7 @@ func buildOrganizeTreeFromFlat(items []model.Organize) []*oc.OrganizeNode {
 		if item.ID == "" {
 			continue
 		}
-		nodeMap[item.ID] = &oc.OrganizeNode{
-			ID:       item.ID,
-			Name:     item.Name,
-			ParentID: item.ParentID,
-		}
+		nodeMap[item.ID] = organizeToNode(item)
 	}
 
 	roots := make([]*oc.OrganizeNode, 0)
@@ -40,4 +36,29 @@ func buildOrganizeTreeFromFlat(items []model.Organize) []*oc.OrganizeNode {
 		roots = append(roots, node)
 	}
 	return roots
+}
+
+func organizeToNode(item model.Organize) *oc.OrganizeNode {
+	return &oc.OrganizeNode{
+		ID:                        item.ID,
+		Name:                      item.Name,
+		ParentID:                  item.ParentID,
+		UnifiedSocialCreditCode:   item.UnifiedSocialCreditCode,
+		UnitType:                  item.UnitType,
+		IndustryCategory:          item.IndustryCategory,
+		IsNotificationMember:      item.IsNotificationMember,
+		Address:                   item.Address,
+		RegionCode:                item.RegionCode,
+		UnitDetailAddress:         item.UnitDetailAddress,
+		LeaderName:                item.LeaderName,
+		LeaderTitle:               item.LeaderTitle,
+		ResponsibleDepartmentName: item.ResponsibleDepartmentName,
+		DepartmentLeaderName:      item.DepartmentLeaderName,
+		DepartmentLeaderTitle:     item.DepartmentLeaderTitle,
+		DepartmentLeaderPhone:     item.DepartmentLeaderPhone,
+		ContactName:               item.ContactName,
+		ContactTitle:              item.ContactTitle,
+		ContactPhone:              item.ContactPhone,
+		AssetCount:                item.AssetCount,
+	}
 }

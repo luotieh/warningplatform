@@ -7,8 +7,10 @@ import {
   createAsset,
   deleteAsset,
   getAssetList,
+  getAssetIndustryScope,
   getAssetRegionScope,
   getAssetStats,
+  getAssetUnitTypeScope,
   downloadImportTemplate,
   importAssets,
   updateAsset,
@@ -147,6 +149,9 @@ export function useLedgerPage() {
   const selectedRegionKey = ref<string | null>(null);
   const selectedIndustryKey = ref<string | null>(null);
   const selectedAssetFamilyKey = ref<string | null>(null);
+  const selectedUnitTypeKey = ref<string | null>(null);
+  const industryScopeItems = ref<Array<{ industry_category: string; count: number }>>([]);
+  const unitTypeScopeItems = ref<Array<{ unit_type: string; count: number }>>([]);
   const templates = ref<ScanTemplate[]>([]);
   const enginePresets = ref<ScanEnginePreset[]>([]);
   const moduleConfigs = ref<Record<string, Record<string, any>>>({});
@@ -193,7 +198,22 @@ export function useLedgerPage() {
   const isEditing = computed(() => !!editingId.value);
   const regionScopeItems = ref<Array<{ count: number; region_code: string }>>([]);
   const regionTreeOptions = computed(() => buildRegionTreeFromAssetCodes(regionScopeItems.value));
-  const industryTreeOptions = computed(() => buildDictTreeOptions(industryCategoryOptions.value));
+  const industryTreeOptions = computed(() =>
+    industryScopeItems.value.map((item) => ({
+      key: item.industry_category,
+      label: item.industry_category,
+      value: item.industry_category,
+      assetCount: item.count || undefined,
+    })),
+  );
+  const unitTypeTreeOptions = computed(() =>
+    unitTypeScopeItems.value.map((item) => ({
+      key: item.unit_type,
+      label: item.unit_type,
+      value: item.unit_type,
+      assetCount: item.count || undefined,
+    })),
+  );
   const assetFamilyScopeTreeOptions = computed(() => buildDictTreeOptions(assetFamilyOptions.value));
   const scopeLabel = computed(() => {
     switch (scopeDimension.value) {
@@ -206,9 +226,9 @@ export function useLedgerPage() {
           ? regionScopeLabelFromCode(selectedRegionKey.value)
           : '';
       case 'industry':
-        return selectedIndustryKey.value
-          ? optionLabelOf(industryCategoryOptions.value, selectedIndustryKey.value)
-          : '';
+        return selectedIndustryKey.value ?? '';
+      case 'unit_type':
+        return selectedUnitTypeKey.value ?? '';
       case 'asset_family':
         return selectedAssetFamilyKey.value
           ? optionLabelOf(assetFamilyOptions.value, selectedAssetFamilyKey.value)
@@ -264,7 +284,7 @@ export function useLedgerPage() {
   function resetForm() {
     Object.assign(formModel, EMPTY_LEDGER_FORM(), {
       assetFamily: assetFamilyOptions.value[0]?.value ?? 'ip',
-      dataSource: sourceOptions.value[0]?.value ?? 'manual_import',
+      dataSource: sourceOptions.value[0]?.value ?? 'manual',
       extra: EMPTY_LEDGER_EXTRA(),
     });
     editingId.value = null;
@@ -387,7 +407,7 @@ export function useLedgerPage() {
       industryCategoryOptions.value,
     ] = await Promise.all([
       loadDictOptions('asset_family', DEFAULT_ASSET_FAMILY_OPTIONS, { label: '其他', value: 'other' }),
-      loadDictOptions('asset_data_source', DEFAULT_SOURCE_OPTIONS, { label: '其他', value: 'other' }),
+      loadDictOptions('asset_data_source', DEFAULT_SOURCE_OPTIONS),
       loadDictOptions('asset_security_level'),
       loadDictOptions('organize_unit_type', DEFAULT_UNIT_TYPE_OPTIONS, { label: '其他', value: '其他' }),
       loadDictOptions('organize_industry_category', DEFAULT_INDUSTRY_CATEGORY_OPTIONS, { label: '其他', value: '其他' }),
@@ -399,6 +419,22 @@ export function useLedgerPage() {
       regionScopeItems.value = await getAssetRegionScope();
     } catch {
       regionScopeItems.value = [];
+    }
+  }
+
+  async function loadIndustryScope() {
+    try {
+      industryScopeItems.value = await getAssetIndustryScope();
+    } catch {
+      industryScopeItems.value = [];
+    }
+  }
+
+  async function loadUnitTypeScope() {
+    try {
+      unitTypeScopeItems.value = await getAssetUnitTypeScope();
+    } catch {
+      unitTypeScopeItems.value = [];
     }
   }
 
@@ -484,6 +520,7 @@ export function useLedgerPage() {
     selectedRegionKey.value = null;
     selectedIndustryKey.value = null;
     selectedAssetFamilyKey.value = null;
+    selectedUnitTypeKey.value = null;
     orgSearchKeyword.value = '';
     orgTreeSearchOptions.value = [];
   }
@@ -523,6 +560,10 @@ export function useLedgerPage() {
       industry_category:
         scopeDimension.value === 'industry' && selectedIndustryKey.value
           ? selectedIndustryKey.value
+          : undefined,
+      unit_type:
+        scopeDimension.value === 'unit_type' && selectedUnitTypeKey.value
+          ? selectedUnitTypeKey.value
           : undefined,
       asset_family:
         scopeDimension.value === 'asset_family' && selectedAssetFamilyKey.value
@@ -612,6 +653,12 @@ export function useLedgerPage() {
     void reload();
   }
 
+  function selectUnitType(key: string | null) {
+    selectedUnitTypeKey.value = key;
+    pagination.page = 1;
+    void reload();
+  }
+
   function selectAssetFamily(key: string | null) {
     selectedAssetFamilyKey.value = key;
     pagination.page = 1;
@@ -670,7 +717,7 @@ export function useLedgerPage() {
       isOnline: row.is_online ?? true,
       isKey: row.is_key ?? false,
       responsibleUserName: row.responsible_user_name ?? '',
-      dataSource: row.data_source ?? sourceOptions.value[0]?.value ?? 'manual_import',
+      dataSource: row.data_source ?? sourceOptions.value[0]?.value ?? 'manual',
       securityProtectionLevel: row.security_protection_level ?? '',
       filingCertNumber: row.filing_cert_number ?? '',
       icpFilingNumber: row.icp_filing_number ?? '',
@@ -778,6 +825,7 @@ export function useLedgerPage() {
         filing_cert_number: formModel.filingCertNumber.trim() || undefined,
         icp_filing_number: formModel.icpFilingNumber.trim() || undefined,
         public_security_filing: formModel.publicSecurityFiling.trim() || undefined,
+        region_code: formModel.extra.unit_location_code || undefined,
         data_source: formModel.dataSource,
         operation_org_id: formModel.operationOrgId || undefined,
         extra: Object.keys(extraPayload).length > 0 ? extraPayload : undefined,
@@ -1074,11 +1122,17 @@ export function useLedgerPage() {
     await fetchList();
   }
 
+  async function refreshScopeData() {
+    await Promise.all([loadOptions(), loadOrgTree(), loadRegionScope(), loadIndustryScope(), loadUnitTypeScope()]);
+  }
+
   async function init() {
     await Promise.all([
       loadOptions(),
       loadOrgTree(),
       loadRegionScope(),
+      loadIndustryScope(),
+      loadUnitTypeScope(),
       loadConstructionOptions(),
       loadTemplates(),
       loadEnginePresets(),
@@ -1125,6 +1179,7 @@ export function useLedgerPage() {
     scopeDimension,
     regionTreeOptions,
     industryTreeOptions,
+    unitTypeTreeOptions,
     assetFamilyScopeTreeOptions,
     scopeUsesAssetFamily,
     scopeLabel,
@@ -1134,8 +1189,10 @@ export function useLedgerPage() {
     selectedRegionKey,
     selectedIndustryKey,
     selectedAssetFamilyKey,
+    selectedUnitTypeKey,
     selectRegion,
     selectIndustry,
+    selectUnitType,
     selectAssetFamily,
     scanAssets,
     stats,
@@ -1218,6 +1275,7 @@ export function useLedgerPage() {
     downloadImportTemplateFile,
     submitImport,
     init,
+    refreshScopeData,
     probeReachabilityAndReload,
   };
 }

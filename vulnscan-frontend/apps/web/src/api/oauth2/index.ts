@@ -46,7 +46,7 @@ export async function fetchSSOCode(
 ): Promise<OAuth2Api.SSOCodeResp> {
   try {
     const res = await baseRequestClient.post<any>(
-      '/auth/oauth2/sso/code',
+      '/iam/auth/oauth2/sso/code',
       data,
     );
     const body = res?.data ?? res;

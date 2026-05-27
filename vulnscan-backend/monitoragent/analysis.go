@@ -214,6 +214,49 @@ func (e *AnalysisEngine) Analyze(ctx context.Context, dimension, snapshotJSON, u
 	return e.formatResult(dimension, output, snapshotJSON, url), nil
 }
 
+// AnalyzeWithOutput 同 Analyze，但额外返回原始 Output（供标注截图等后续处理使用）。
+func (e *AnalysisEngine) AnalyzeWithOutput(ctx context.Context, dimension, snapshotJSON, url string, task *TaskMessage) (string, *analyzer.Output, error) {
+	a, ok := e.registry.Get(dimension)
+	if !ok {
+		return snapshotJSON, nil, nil
+	}
+
+	scopeID := task.PathTaskID
+	if scopeID == "" {
+		scopeID = task.TargetID
+	}
+	input := &analyzer.Input{
+		ExecutionID:  task.ExecutionID,
+		TaskID:       scopeID,
+		URL:          url,
+		SnapshotJSON: snapshotJSON,
+		Config:       task.Config,
+	}
+	if dimension == "tamper" && e.gormDB != nil && strings.TrimSpace(url) != "" {
+		if bl, err := sitemonitor.GetActiveBaseline(ctx, e.gormDB, url); err == nil && bl != nil {
+			input.Baseline = bl
+		}
+	} else if task.Baseline != nil && strings.TrimSpace(task.Baseline.ContentHash) != "" {
+		input.Baseline = &model.MonitorBaseline{
+			Version:           task.Baseline.Version,
+			Simhash:           task.Baseline.Simhash,
+			ContentHash:       task.Baseline.ContentHash,
+			DomStructureHash:  task.Baseline.DomStructureHash,
+			VisualHash:        task.Baseline.VisualHash,
+			Title:             task.Baseline.Title,
+			StatusCode:        task.Baseline.StatusCode,
+			VisibleTextLength: task.Baseline.VisibleTextLength,
+		}
+	}
+
+	output, err := a.Analyze(ctx, input)
+	if err != nil {
+		return "", nil, fmt.Errorf("analyze %s: %w", dimension, err)
+	}
+
+	return e.formatResult(dimension, output, snapshotJSON, url), output, nil
+}
+
 func (e *AnalysisEngine) formatResult(dimension string, output *analyzer.Output, snapshotJSON, pageURL string) string {
 	switch dimension {
 	case "sensitive_word":

@@ -2,6 +2,7 @@ package sitemonitor
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 
@@ -51,19 +52,40 @@ func (s *serviceMonitor) ListRuleDataSummary(ctx context.Context) ([]contract.Ru
 	summaries := make([]contract.RuleDataSummary, 0, len(model.MonitorRuleDataModuleKeys))
 	for _, key := range model.MonitorRuleDataModuleKeys {
 		def := model.MonitorModuleRegistry[key]
-		s := contract.RuleDataSummary{
+		item := contract.RuleDataSummary{
 			ModuleKey:   key,
 			Name:        def.Name,
 			Description: def.Description,
 			Type:        def.Type,
+			Group:       def.Group,
+			Icon:        def.Icon,
 		}
 		if d, ok := dataMap[key]; ok {
-			s.HasData = d.Data != ""
-			s.UpdatedAt = d.UpdatedAt.Format("2006-01-02 15:04:05")
+			item.HasData = d.Data != ""
+			item.UpdatedAt = d.UpdatedAt.Format("2006-01-02 15:04:05")
+			item.RuleCount = countRuleEntries(d)
 		}
-		summaries = append(summaries, s)
+		summaries = append(summaries, item)
 	}
 	return summaries, nil
+}
+
+func countRuleEntries(rd model.MonitorRuleData) int {
+	decoded, err := model.MonitorDecodeRuleData(rd.Data)
+	if err != nil || decoded == "" {
+		return 0
+	}
+	var raw map[string]any
+	if json.Unmarshal([]byte(decoded), &raw) != nil {
+		return 0
+	}
+	total := 0
+	for _, v := range raw {
+		if arr, ok := v.([]any); ok {
+			total += len(arr)
+		}
+	}
+	return total
 }
 
 func (s *serviceMonitor) SyncAllRuleData(ctx context.Context) error {

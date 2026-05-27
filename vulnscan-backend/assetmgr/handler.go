@@ -9,8 +9,8 @@ import (
 	"code.yt-security.com/public/core/v2/generate/qulid"
 	"code.yt-security.com/public/core/v2/web"
 	iamsdk "code.yt-security.com/public/sdk"
-	"code.yt-security.com/public/sdk/permission"
 	"github.com/gin-gonic/gin"
+	"vulnscan-backend/pkg/definition"
 )
 
 type Handler struct {
@@ -51,7 +51,7 @@ func NewHandler(
 
 func (h *Handler) LifecycleList(c *gin.Context) {
 	req, _ := web.BindQuery[ac.LifecycleListReq](c)
-	scope := iamsdk.DataFilterScope(c, permission.DefaultFieldMapping)
+	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
 	items, count, err := h.lifecycle.ListTransitions(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
@@ -77,7 +77,7 @@ func (h *Handler) LifecycleTransition(c *gin.Context) {
 
 func (h *Handler) RiskList(c *gin.Context) {
 	req, _ := web.BindQuery[ac.RiskListReq](c)
-	scope := iamsdk.DataFilterScope(c, permission.DefaultFieldMapping)
+	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
 	items, count, err := h.risk.List(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
@@ -116,7 +116,7 @@ func (h *Handler) RiskRecalculateAll(c *gin.Context) {
 
 func (h *Handler) AlertList(c *gin.Context) {
 	req, _ := web.BindQuery[ac.AlertListReq](c)
-	scope := iamsdk.DataFilterScope(c, permission.DefaultFieldMapping)
+	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
 	items, count, err := h.alert.List(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
@@ -160,7 +160,7 @@ func (h *Handler) AlertResolve(c *gin.Context) {
 
 func (h *Handler) VerifyList(c *gin.Context) {
 	req, _ := web.BindQuery[ac.VerifyListReq](c)
-	scope := iamsdk.DataFilterScope(c, permission.DefaultFieldMapping)
+	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
 	items, count, err := h.verify.List(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
@@ -204,7 +204,7 @@ func (h *Handler) VerifyTaskList(c *gin.Context) {
 	if !ok {
 		return
 	}
-	scope := iamsdk.DataFilterScope(c, permission.DefaultFieldMapping)
+	scope := iamsdk.DataFilterScope(c, definition.VerifyTaskFieldMapping)
 	items, count, err := h.verifyTask.ListTasks(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
@@ -225,6 +225,15 @@ func (h *Handler) VerifyTaskCreate(c *gin.Context) {
 		return
 	}
 	web.OK(c).Data(gin.H{"items": items, "count": len(items)}).Send()
+}
+
+func (h *Handler) VerifyTaskDelete(c *gin.Context) {
+	user, _ := iamsdk.GetCurrentUser(c)
+	if err := h.verifyTask.Delete(c.Param("id"), user.UserID); err != nil {
+		web.Fail(c).Err(err).Send()
+		return
+	}
+	web.OK(c).Send()
 }
 
 func (h *Handler) VerifyTaskReceive(c *gin.Context) {
@@ -326,8 +335,7 @@ func (h *Handler) VerifyTaskLogs(c *gin.Context) {
 	if req.TaskID == "" {
 		req.TaskID = c.Param("id")
 	}
-	scope := iamsdk.DataFilterScope(c, permission.DefaultFieldMapping)
-	items, count, err := h.verifyTask.ListLogs(req, scope)
+	items, count, err := h.verifyTask.ListLogs(req)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
@@ -340,7 +348,7 @@ func (h *Handler) ArchiveList(c *gin.Context) {
 	if !ok {
 		return
 	}
-	scope := iamsdk.DataFilterScope(c, permission.DefaultFieldMapping)
+	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
 	items, count, err := h.verifyTask.ListArchives(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
@@ -360,7 +368,7 @@ func (h *Handler) ArchiveDetail(c *gin.Context) {
 
 func (h *Handler) ComplianceList(c *gin.Context) {
 	req, _ := web.BindQuery[ac.ComplianceItemReq](c)
-	scope := iamsdk.DataFilterScope(c, permission.DefaultFieldMapping)
+	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
 	items, count, err := h.compliance.List(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
@@ -407,7 +415,7 @@ func (h *Handler) ComplianceDelete(c *gin.Context) {
 
 func (h *Handler) ResponsibleList(c *gin.Context) {
 	req, _ := web.BindQuery[ac.ResponsibleListReq](c)
-	scope := iamsdk.DataFilterScope(c, permission.DefaultFieldMapping)
+	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
 	items, count, err := h.responsible.List(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
@@ -454,7 +462,7 @@ func (h *Handler) ResponsibleDelete(c *gin.Context) {
 
 func (h *Handler) TemplateList(c *gin.Context) {
 	req, _ := web.BindQuery[ac.TemplateListReq](c)
-	scope := iamsdk.DataFilterScope(c, permission.DefaultFieldMapping)
+	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
 	items, count, err := h.tmpl.List(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
@@ -502,7 +510,7 @@ func (h *Handler) TemplateItemCreate(c *gin.Context) {
 
 func (h *Handler) CheckResultList(c *gin.Context) {
 	req, _ := web.BindQuery[ac.CheckResultListReq](c)
-	scope := iamsdk.DataFilterScope(c, permission.DefaultFieldMapping)
+	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
 	items, count, err := h.check.List(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
@@ -529,7 +537,7 @@ func (h *Handler) CheckResultUpsert(c *gin.Context) {
 
 func (h *Handler) IntSourceList(c *gin.Context) {
 	req, _ := web.BindQuery[ac.IntSourceListReq](c)
-	scope := iamsdk.DataFilterScope(c, permission.DefaultFieldMapping)
+	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
 	items, count, err := h.integration.ListSources(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
@@ -576,7 +584,7 @@ func (h *Handler) IntSourceDelete(c *gin.Context) {
 
 func (h *Handler) WorkflowList(c *gin.Context) {
 	req, _ := web.BindQuery[ac.WorkflowListReq](c)
-	scope := iamsdk.DataFilterScope(c, permission.DefaultFieldMapping)
+	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
 	items, count, err := h.workflow.List(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
@@ -623,7 +631,7 @@ func (h *Handler) WorkflowDelete(c *gin.Context) {
 
 func (h *Handler) WorkflowExecutions(c *gin.Context) {
 	req, _ := web.BindQuery[ac.ExecutionListReq](c)
-	scope := iamsdk.DataFilterScope(c, permission.DefaultFieldMapping)
+	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
 	items, count, err := h.workflow.ListExecutions(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()

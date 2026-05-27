@@ -29,44 +29,55 @@ func (a *SensitiveWordAnalyzer) Analyze(ctx context.Context, input *Input) (*Out
 
 	words := a.loadSensitiveWords()
 	searchText := combineSearchText(snap)
-	lowerSearch := strings.ToLower(searchText)
-	lowerTitle := strings.ToLower(snap.Title)
+	fullText := searchText + " " + snap.Title
+	lowerFull := strings.ToLower(fullText)
 
+	seen := make(map[string]bool, len(words))
 	matches := make([]map[string]any, 0)
 	totalMatches := 0
 
 	for _, word := range words {
 		lw := strings.ToLower(word.Word)
-		count := strings.Count(lowerSearch, lw)
-		titleCount := strings.Count(lowerTitle, lw)
-		total := count + titleCount
-
-		if total > 0 {
-			ctx, ctxList, evidenceHTML := extractSensitiveWordEvidence(searchText, word.Word, word.Severity)
-			matchInfo := map[string]any{
-				"word":          word.Word,
-				"category":      word.Category,
-				"severity":      word.Severity,
-				"count":         total,
-				"context":       ctx,
-				"contexts":      ctxList,
-				"evidence_html": evidenceHTML,
-			}
-
-			matches = append(matches, matchInfo)
-			totalMatches += total
+		if seen[lw] {
+			continue
 		}
+		seen[lw] = true
+
+		count := strings.Count(lowerFull, lw)
+		if count == 0 {
+			continue
+		}
+
+		ctx, ctxList, evidenceHTML := extractSensitiveWordEvidence(searchText, word.Word, word.Severity)
+		matches = append(matches, map[string]any{
+			"word":          word.Word,
+			"category":      word.Category,
+			"severity":      word.Severity,
+			"count":         count,
+			"context":       ctx,
+			"contexts":      ctxList,
+			"evidence_html": evidenceHTML,
+		})
+		totalMatches += count
 	}
 
 	if len(matches) > 0 {
 		output.HasIssue = true
-		if totalMatches > 10 {
+		highSevCount := 0
+		for _, m := range matches {
+			if sev, _ := m["severity"].(string); sev == "high" || sev == "critical" {
+				highSevCount++
+			}
+		}
+		switch {
+		case highSevCount > 0 || totalMatches > 10:
 			output.Severity = "high"
-		} else if totalMatches > 3 {
+		case totalMatches > 3:
 			output.Severity = "medium"
-		} else {
+		default:
 			output.Severity = "low"
 		}
+
 		textLen := len([]rune(searchText))
 		hits := make([]wordHit, 0, len(matches))
 		for _, m := range matches {

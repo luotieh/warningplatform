@@ -1,6 +1,7 @@
 package scanrunner
 
 import (
+	"container/list"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -13,14 +14,15 @@ import (
 )
 
 type cachedResult struct {
+	key      string
 	findings []*core.Finding
 	cachedAt time.Time
 }
 
 type ResultCache struct {
 	mu      sync.RWMutex
-	items   map[string]*cachedResult
-	order   []string
+	items   map[string]*list.Element
+	order   *list.List
 	maxSize int
 	ttl     time.Duration
 	hits    atomic.Int64
@@ -29,11 +31,27 @@ type ResultCache struct {
 
 func NewResultCache(maxSize int, ttl time.Duration) *ResultCache {
 	return &ResultCache{
-		items:   make(map[string]*cachedResult, maxSize),
-		order:   make([]string, 0, maxSize),
+		items:   make(map[string]*list.Element, maxSize),
+		order:   list.New(),
 		maxSize: maxSize,
 		ttl:     ttl,
 	}
+}
+
+var cacheKeyExcludedPrefixes = []string{
+	"scan_task_id", "scan_parent_task_id",
+	"detected_products", "detected_wafs",
+	"target_count", "_shard_index", "_total_shards",
+	"worker_id", "worker_target_sharding",
+}
+
+func isCacheKeyExcluded(key string) bool {
+	for _, prefix := range cacheKeyExcludedPrefixes {
+		if key == prefix {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *ResultCache) Key(target, moduleID string, config map[string]interface{}) string {
@@ -45,7 +63,9 @@ func (c *ResultCache) Key(target, moduleID string, config map[string]interface{}
 		h.Write([]byte("|"))
 		keys := make([]string, 0, len(config))
 		for k := range config {
-			keys = append(keys, k)
+			if !isCacheKeyExcluded(k) {
+				keys = append(keys, k)
+			}
 		}
 		sort.Strings(keys)
 		for _, k := range keys {
@@ -61,7 +81,7 @@ func (c *ResultCache) Key(target, moduleID string, config map[string]interface{}
 
 func (c *ResultCache) Get(key string) ([]*core.Finding, bool) {
 	c.mu.RLock()
-	item, ok := c.items[key]
+	elem, ok := c.items[key]
 	c.mu.RUnlock()
 
 	if !ok {
@@ -69,8 +89,10 @@ func (c *ResultCache) Get(key string) ([]*core.Finding, bool) {
 		return nil, false
 	}
 
+	item := elem.Value.(*cachedResult)
 	if time.Since(item.cachedAt) > c.ttl {
 		c.mu.Lock()
+		c.order.Remove(elem)
 		delete(c.items, key)
 		c.mu.Unlock()
 		c.misses.Add(1)
@@ -85,25 +107,30 @@ func (c *ResultCache) Set(key string, findings []*core.Finding) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if _, exists := c.items[key]; exists {
-		c.items[key] = &cachedResult{findings: findings, cachedAt: time.Now()}
+	if elem, exists := c.items[key]; exists {
+		item := elem.Value.(*cachedResult)
+		item.findings = findings
+		item.cachedAt = time.Now()
+		c.order.MoveToBack(elem)
 		return
 	}
 
-	if len(c.items) >= c.maxSize {
+	for c.order.Len() >= c.maxSize {
 		c.evict()
 	}
 
-	c.items[key] = &cachedResult{findings: findings, cachedAt: time.Now()}
-	c.order = append(c.order, key)
+	entry := &cachedResult{key: key, findings: findings, cachedAt: time.Now()}
+	elem := c.order.PushBack(entry)
+	c.items[key] = elem
 }
 
 func (c *ResultCache) evict() {
-	for len(c.order) > 0 && len(c.items) >= c.maxSize {
-		oldest := c.order[0]
-		c.order = c.order[1:]
-		delete(c.items, oldest)
+	front := c.order.Front()
+	if front == nil {
+		return
 	}
+	item := c.order.Remove(front).(*cachedResult)
+	delete(c.items, item.key)
 }
 
 func (c *ResultCache) HitRate() float64 {

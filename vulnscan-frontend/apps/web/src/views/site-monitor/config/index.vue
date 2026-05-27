@@ -50,6 +50,7 @@ const alertConfig = reactive<AlertConfig>({
   email_enabled: false,
   email_receivers: '',
   max_alerts_per_hour: 100,
+  max_tamper_screenshots: 10,
   silence_duration_minutes: 60,
   webhook_secret: '',
   webhook_url: '',
@@ -463,6 +464,21 @@ onMounted(() => {
                     :max="1000"
                   />
                   <span class="text-muted-foreground text-xs">防止告警风暴</span>
+                </NSpace>
+              </NFormItem>
+
+              <NDivider title-placement="left">截图管理</NDivider>
+
+              <NFormItem label="截图保留数">
+                <NSpace align="center">
+                  <NInputNumber
+                    v-model:value="alertConfig.max_tamper_screenshots"
+                    :min="0"
+                    :max="1000"
+                  />
+                  <span class="text-muted-foreground text-xs">
+                    每个监测 URL 保留的标注截图数量，超出后自动清理旧截图；设为 0 则不限制
+                  </span>
                 </NSpace>
               </NFormItem>
 

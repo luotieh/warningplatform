@@ -24,7 +24,7 @@ export async function getUserInfoApi(): Promise<UserInfo> {
   } catch (err: unknown) {
     const status = (err as { response?: { status?: number } })?.response?.status;
     if (status === 403) {
-      console.error('[UserInfo] 无权访问用户画像（/me/profile），请检查 IAM 角色与菜单权限');
+      console.error('[UserInfo] 无权访问用户画像（/iam/profile），请检查 IAM 角色与菜单权限');
       throw err;
     }
     console.warn('[UserInfo] IAM 接口不可用，使用本地降级用户');

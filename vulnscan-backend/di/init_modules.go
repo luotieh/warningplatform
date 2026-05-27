@@ -17,6 +17,7 @@ import (
 	"vulnscan-backend/knowledge/datalib"
 	kfp "vulnscan-backend/knowledge/fingerprint"
 	"vulnscan-backend/knowledge/poc"
+	kprompt "vulnscan-backend/knowledge/prompt"
 	"vulnscan-backend/model"
 	"vulnscan-backend/nodeapi"
 	"vulnscan-backend/pkg/clusterconn"
@@ -64,7 +65,7 @@ func (h *Handlers) initScheduler(authGroup *gin.RouterGroup, backends *[]authori
 	reportAPI.RegisterRoutes(authGroup)
 
 	pipelineAPI := scanrunner.NewPipelineAPI(session)
-	pipelineAPI.RegisterRoutes(authGroup)
+	*backends = append(*backends, pipelineAPI.RoutesWithGroup(authGroup)...)
 
 	h.Asset.BindScanRunner(session, h.sched)
 	if h.Vuln != nil {
@@ -123,7 +124,14 @@ func (h *Handlers) initKnowledgeAPIs(authGroup *gin.RouterGroup, backends *[]aut
 	dlRoutes := datalib.NewDataLib(dlHandler)
 	*backends = append(*backends, dlRoutes.RoutesWithGroup(authGroup)...)
 
-	slog.Info("[+] POC + Fingerprint + DataLib 知识库 API 已注册")
+	promptSvc := kprompt.NewService(h.DB)
+	promptHandler := kprompt.NewHandler(promptSvc)
+	promptRoutes := kprompt.NewPrompt(promptHandler)
+	*backends = append(*backends, promptRoutes.RoutesWithGroup(authGroup)...)
+
+	kprompt.SeedBuiltinTemplates(session)
+
+	slog.Info("[+] POC + Fingerprint + DataLib + PromptTemplate 知识库 API 已注册")
 }
 
 func (h *Handlers) initTemplateAPI(authGroup *gin.RouterGroup, backends *[]authorize.BackendItem) {
@@ -212,20 +220,20 @@ func (h *Handlers) initWSHub() *ws.Hub {
 	return hub
 }
 
-func (h *Handlers) initUnifiedNodes(authGroup *gin.RouterGroup) {
+func (h *Handlers) initUnifiedNodes(authGroup *gin.RouterGroup) []authorize.BackendItem {
 	session, err := h.DB.GetDBSession()
 	if err != nil {
-		return
+		return nil
 	}
-	cluster.RegisterUnifiedNodeRoutes(authGroup, session, h.sched)
+	return cluster.RegisterUnifiedNodeRoutes(authGroup, session, h.sched)
 }
 
-func (h *Handlers) initFederationManageAPI(authGroup *gin.RouterGroup) {
+func (h *Handlers) initFederationManageAPI(authGroup *gin.RouterGroup) []authorize.BackendItem {
 	session, err := h.DB.GetDBSession()
 	if err != nil {
-		return
+		return nil
 	}
-	server.RegisterManageRoutes(authGroup, session)
+	return server.RegisterManageRoutes(authGroup, session)
 }
 
 func (h *Handlers) initFederation() {

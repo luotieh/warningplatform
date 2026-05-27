@@ -13,6 +13,7 @@ import {
   getAssetDetail,
   getAssetEnrich,
   getAssetRiskTrend,
+  getAssetScreenshot,
   recalcAssetRisk,
 } from '#/api/asset';
 import { getAssetChangeLogs, getConstructionList, getOrganizeDetail } from '#/api/assetmgr';
@@ -28,6 +29,7 @@ import {
   NEmpty,
   NGrid,
   NGridItem,
+  NModal,
   NPopconfirm,
   NSelect,
   NSpace,
@@ -59,6 +61,18 @@ const activeTab = ref('basic');
 
 const changeLogs = ref<any[]>([]);
 const changeLogsLoading = ref(false);
+const screenshotRefreshing = ref(false);
+const showScreenshotPreview = ref(false);
+
+const screenshotUrl = ref('');
+const screenshotObjectUrl = ref('');
+
+const screenshotSrc = computed(() => {
+  if (screenshotObjectUrl.value) return screenshotObjectUrl.value;
+  const b64 = asset.value?.screenshot || enrich.value?.screenshot;
+  if (!b64 || b64.length < 100) return '';
+  return `data:image/jpeg;base64,${b64}`;
+});
 /** 所属单位名称（接口仅返回 organize_id，名称需单独查组织） */
 const organizeName = ref('');
 const operationOrgName = ref('');
@@ -296,6 +310,7 @@ async function fetchDetail() {
       fetchOrganizeName(asset.value?.organize_id),
       fetchOperationOrgName(asset.value?.operation_org_id),
       syncTabTitleWithAsset(),
+      fetchScreenshotStatus(),
     ]);
   } catch {
     message.error('获取资产详情失败');
@@ -305,6 +320,38 @@ async function fetchDetail() {
     await syncTabTitleWithAsset();
   } finally {
     loading.value = false;
+  }
+}
+
+async function fetchScreenshotStatus() {
+  try {
+    const res = await getAssetScreenshot(assetId.value);
+    if (res?.screenshot_url) {
+      screenshotUrl.value = res.screenshot_url;
+      await loadScreenshotFromStorage();
+    } else {
+      screenshotUrl.value = '';
+    }
+  } catch {
+    screenshotUrl.value = '';
+  }
+}
+
+async function loadScreenshotFromStorage() {
+  if (!screenshotUrl.value) return;
+  try {
+    const { useAccessStore } = await import('@vben/stores');
+    const accessStore = useAccessStore();
+    const token = accessStore.accessToken;
+    const resp = await fetch(screenshotUrl.value, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!resp.ok) return;
+    const blob = await resp.blob();
+    if (screenshotObjectUrl.value) URL.revokeObjectURL(screenshotObjectUrl.value);
+    screenshotObjectUrl.value = URL.createObjectURL(blob);
+  } catch {
+    screenshotObjectUrl.value = '';
   }
 }
 
@@ -343,6 +390,29 @@ async function onEnrich() {
     message.error('富化失败');
   } finally {
     enrichLoading.value = false;
+  }
+}
+
+async function onRefreshScreenshot() {
+  screenshotRefreshing.value = true;
+  try {
+    const res = await getAssetScreenshot(assetId.value, true);
+    if (res?.screenshot_url) {
+      screenshotUrl.value = res.screenshot_url;
+      if (asset.value) asset.value.screenshot = '';
+      await loadScreenshotFromStorage();
+      message.success('截图已刷新');
+    } else if (res?.screenshot && asset.value) {
+      screenshotUrl.value = '';
+      asset.value.screenshot = res.screenshot;
+      message.success('截图已刷新');
+    } else {
+      message.warning('未能采集到截图（可能目标地址不可达或服务器未安装浏览器）');
+    }
+  } catch {
+    message.error('截图刷新失败');
+  } finally {
+    screenshotRefreshing.value = false;
   }
 }
 
@@ -439,6 +509,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   void resetTabTitle();
+  if (screenshotObjectUrl.value) URL.revokeObjectURL(screenshotObjectUrl.value);
 });
 </script>
 
@@ -552,6 +623,26 @@ onBeforeUnmount(() => {
           </NCard>
         </NGridItem>
       </NGrid>
+
+      <!-- 首页截图 -->
+      <NCard size="small" title="首页截图">
+        <template #header-extra>
+          <NButton size="small" :loading="screenshotRefreshing" @click="onRefreshScreenshot">
+            {{ screenshotSrc ? '刷新截图' : '采集截图' }}
+          </NButton>
+        </template>
+        <div v-if="screenshotSrc" class="asset-detail__screenshot" @click="showScreenshotPreview = true">
+          <img :src="screenshotSrc" alt="首页截图" />
+          <div class="asset-detail__screenshot-hint">点击查看大图</div>
+        </div>
+        <NEmpty v-else description="暂无截图，点击「采集截图」获取" />
+      </NCard>
+
+      <NModal v-model:show="showScreenshotPreview" preset="card" title="首页截图" style="width: 90vw; max-width: 1200px;">
+        <div style="text-align: center;">
+          <img :src="screenshotSrc" alt="首页截图" style="max-width: 100%; height: auto; border-radius: 4px;" />
+        </div>
+      </NModal>
 
       <!-- 详情标签页 -->
       <NCard size="small" :bordered="false">
@@ -789,5 +880,46 @@ onBeforeUnmount(() => {
 .asset-detail__mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
   font-size: 12px;
+}
+
+.asset-detail__screenshot {
+  position: relative;
+  border: 1px solid var(--n-border-color);
+  border-radius: 8px;
+  max-width: 720px;
+  margin: 0 auto;
+  overflow: hidden;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 6%);
+  transition: box-shadow 0.2s, transform 0.2s;
+}
+
+.asset-detail__screenshot:hover {
+  box-shadow: 0 4px 16px rgb(0 0 0 / 12%);
+  transform: translateY(-1px);
+}
+
+.asset-detail__screenshot img {
+  display: block;
+  height: auto;
+  width: 100%;
+}
+
+.asset-detail__screenshot-hint {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  padding: 4px 0;
+  font-size: 12px;
+  color: #fff;
+  text-align: center;
+  background: linear-gradient(transparent, rgb(0 0 0 / 40%));
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.asset-detail__screenshot:hover .asset-detail__screenshot-hint {
+  opacity: 1;
 }
 </style>

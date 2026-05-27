@@ -67,7 +67,7 @@ func (s *serviceMonitor) DeleteAgent(ctx context.Context, agentUUID string) erro
 func (s *serviceMonitor) GetAlertConfig(ctx context.Context) (*model.MonitorAlertConfig, error) {
 	var cfg model.MonitorAlertConfig
 	if err := s.session().WithContext(ctx).First(&cfg).Error; err != nil {
-		return &model.MonitorAlertConfig{AlertEnabled: true, SilenceDurationMinutes: 60, MaxAlertsPerHour: 100}, nil
+		return &model.MonitorAlertConfig{AlertEnabled: true, SilenceDurationMinutes: 60, MaxAlertsPerHour: 100, MaxTamperScreenshots: 10}, nil
 	}
 	return &cfg, nil
 }

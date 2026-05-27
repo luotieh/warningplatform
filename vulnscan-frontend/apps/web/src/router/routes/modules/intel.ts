@@ -14,7 +14,7 @@ const routes: RouteRecordRaw[] = [
         name: 'IntelCVECompat',
         path: 'cve',
         component: () => import('#/views/intel/index.vue'),
-        meta: { hideInMenu: true, title: '情报库', activePath: '/knowledge/intel' },
+        meta: { hideInMenu: true, title: '威胁情报', activePath: '/knowledge/intel' },
       },
     ],
   },

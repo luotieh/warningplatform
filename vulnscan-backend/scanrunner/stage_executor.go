@@ -371,6 +371,15 @@ func executeConcurrentWithOpts(
 				return
 			}
 
+			if opts.Cache != nil && len(targets) == 1 {
+				cacheKey := opts.Cache.Key(targets[0].Host, m.ID(), config)
+				if cached, hit := opts.Cache.Get(cacheKey); hit {
+					slog.Info("[Executor] 并发缓存命中", "task", taskID, "module", m.ID())
+					results <- moduleResult{moduleID: m.ID(), findings: cached}
+					return
+				}
+			}
+
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
@@ -454,6 +463,10 @@ func executeConcurrentWithOpts(
 						Findings: findings,
 						Targets:  res.Targets,
 					})
+				}
+				if opts.Cache != nil && len(targets) == 1 {
+					cacheKey := opts.Cache.Key(targets[0].Host, m.ID(), config)
+					opts.Cache.Set(cacheKey, findings)
 				}
 			}
 			results <- mr

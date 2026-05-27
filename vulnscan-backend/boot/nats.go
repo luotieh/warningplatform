@@ -23,7 +23,7 @@ type NatsClient struct {
 
 func LoadNats(config *Config) *NatsClient {
 	if config.Nats.URL == "" {
-		slog.Info("[NATS] 未配置，站点监控消息功能不可用")
+		slog.Debug("[NATS] 未配置，站点监控消息功能不可用")
 		return &NatsClient{Config: config.Nats}
 	}
 

@@ -4,15 +4,20 @@
 
 ## 0. 权限（只看这一节）
 
-**IAM 管页面，子系统管 API。** 例外清单只在 `vulnscan-backend/di/module_authorization.go` 顶部注释，无其它配置文件。
+**IAM 统一管页面 + API。** 前端在路由 `meta.apis` / `meta.apisByAction` 声明接口，同步菜单时写入 IAM `backend_refs`；子系统网关用 SDK `IAMAuthorization()`（AllowedPaths）。
 
 | 你要做的事 | 在哪做 |
 |-----------|--------|
-| 发版后同步菜单 | IAM 管理员 → vulnscan → 系统初始化 → 同步 |
-| 谁能看到哪些模块 | IAM → 角色 → 勾选 vulnscan 菜单 |
-| 新增跨模块只读 API | 改 `module_authorization.go` 里 `supportReadGETExact` 或 organize/scan 规则 |
+| 页面依赖哪些 API | 路由 `meta.apis`（自动加 `/api` 前缀同步） |
+| 发版后同步菜单 | 特权账号 → 系统初始化 → 同步到 IAM |
+| 角色授权 | IAM 角色勾选 **`{模块}:access`**（如 `scan:task:access`）或具体按钮权限 |
+| 登录即可的支撑 API | `di/iam_authorization.go` 的 `loginOnlyAPIPrefixes` |
 
-上线四步：注册应用 → 管理员同步菜单 → 角色勾菜单 → 用户重登。
+上线：SyncBackends → 同步菜单（含 apis）→ 角色勾 `:access` → 用户重登。
+
+路由 `meta.apis` 已覆盖：仪表盘、资产、扫描、事件、通报、监测、通知、系统、集群、知识库、ASM 等；写法为 `GET /task/list`（同步时自动补 `/api` 前缀）。
+
+`module_authorization.go` 已废弃，勿再改。
 
 ---
 
@@ -39,7 +44,7 @@ func (h *Handlers) RouteLoad() {
     apiAuthenticated := apiGroup.Group("/", h.IAM.Middleware().Authentication())
     h.IAM.RegisterDefaultRoutes(engine, apiAuthenticated, iamsdk.DefaultRoutesOptions{...})
 
-    apiAuthorized := apiAuthenticated.Group("", h.ModuleAuthorization())
+    apiAuthorized := apiAuthenticated.Group("", h.IAMAuthorization())
     backends = append(backends, h.YourModule.RoutesWithGroup(apiAuthorized)...)
 
     frontend.SetupSPA(engine, web.MiddlewareNotFound())

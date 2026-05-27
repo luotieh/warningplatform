@@ -86,6 +86,9 @@ func (h *HandlerMonitor) StartCrawl(c *gin.Context) {
 	if !ok {
 		return
 	}
+	if user, ok := iamsdk.GetCurrentUser(c); ok && user != nil {
+		req.CreatorID = user.UserID
+	}
 	job, err := h.svc.StartCrawl(c.Request.Context(), targetID, req)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
@@ -100,7 +103,15 @@ func (h *HandlerMonitor) GetCrawlJob(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(job).Send()
+	type crawlJobResp struct {
+		*model.MonitorCrawlJob
+		ScreenshotBaseURL string `json:"screenshot_base_url,omitempty"`
+	}
+	resp := crawlJobResp{MonitorCrawlJob: job}
+	if impl, ok := h.svc.(*serviceMonitor); ok && impl.screenshotBaseURL != "" {
+		resp.ScreenshotBaseURL = impl.screenshotBaseURL
+	}
+	web.OK(c).Data(resp).Send()
 }
 
 func (h *HandlerMonitor) ApplyCrawlPaths(c *gin.Context) {

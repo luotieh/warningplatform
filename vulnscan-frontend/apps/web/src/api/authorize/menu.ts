@@ -12,6 +12,7 @@ export interface SyncMenuItem {
   show_link?: boolean;
   hide_in_menu?: boolean;
   unique_value?: string;
+  backend_refs?: string[];
   children?: SyncMenuItem[];
 }
 

@@ -8,22 +8,25 @@ import { useAccessStore, useUserStore } from '@vben/stores';
 
 import { message } from '#/adapter/naive';
 import { getAllMenusApi } from '#/api';
+import { syncFrontendRoutes } from '#/api/authorize/menu';
 import { countVisibleMenuRoutes } from '#/api/core/menu';
+import { collectRouteManifest } from '#/composables/use-route-sync';
 import { BasicLayout, IFrameView } from '#/layouts';
 import { $t } from '#/locales';
-import {
-  allowFrontendAccessFallback,
-  isBackendAccessConfigured,
-} from '#/permissions/access-check';
+import { allowFrontendAccessFallback } from '#/permissions/access-check';
+import { isBackendAccessMode } from '#/permissions/access-mode';
 import { shouldUseLocalFullMenus } from '#/permissions/admin-role';
 
 const forbiddenComponent = () => import('#/views/_core/fallback/forbidden.vue');
+
+/** 变更菜单结构时需 bump，以触发重新同步 */
+const SYNC_DONE_KEY = 'vulnscan_menu_synced_v3';
 
 const EMPTY_MENU_HINT =
   '后端未返回可用菜单。请联系管理员在「系统初始化」同步菜单到 IAM 并分配角色权限。';
 
 const MENU_API_FAIL_HINT =
-  '无法从 IAM 加载菜单（/me/menus）。请确认已登录且后端 IAM 代理正常。';
+  '无法从 IAM 加载菜单（/iam/menus）。请确认已登录且后端 IAM 代理正常。';
 
 function loadFrontendRoutes(options: GenerateMenuAndRoutesOptions) {
   const pageMap: ComponentRecordType = import.meta.glob('../views/**/*.vue');
@@ -58,7 +61,7 @@ async function generateAccess(options: GenerateMenuAndRoutesOptions) {
 
   const { roles, useLocalMenus } = resolveMenuContext(options);
 
-  if (!isBackendAccessConfigured()) {
+  if (!isBackendAccessMode()) {
     return loadFrontendRoutes(options);
   }
 
@@ -70,11 +73,38 @@ async function generateAccess(options: GenerateMenuAndRoutesOptions) {
   message.loading(`${$t('common.loadingMenu')}...`, { duration: 1.5 });
 
   try {
-    const menus = await getAllMenusApi();
-    const needFallback =
-      !menus?.length || countVisibleMenuRoutes(menus) === 0;
+    let menus = await getAllMenusApi();
+    let hasMenuRoutes = menus?.length > 0 && countVisibleMenuRoutes(menus) > 0;
 
-    if (needFallback) {
+    const manifest = collectRouteManifest();
+    const manifestHash =
+      String(manifest.length) +
+      ':' +
+      manifest
+        .map((m) => m.name)
+        .sort()
+        .join(',');
+    const lastSyncHash = sessionStorage.getItem(SYNC_DONE_KEY);
+    const needsSync = manifestHash !== lastSyncHash && manifest.length > 0;
+
+    if (needsSync) {
+      try {
+        await syncFrontendRoutes(manifest);
+        sessionStorage.setItem(SYNC_DONE_KEY, manifestHash);
+        if (!hasMenuRoutes) {
+          message.success('菜单初始化完成，正在加载...');
+        }
+        const retryMenus = await getAllMenusApi();
+        if (retryMenus?.length > 0 && countVisibleMenuRoutes(retryMenus) > 0) {
+          menus = retryMenus;
+          hasMenuRoutes = true;
+        }
+      } catch (e) {
+        console.warn('[Menu Auto-Sync] failed:', e);
+      }
+    }
+
+    if (!hasMenuRoutes) {
       if (allowFrontendAccessFallback() || !import.meta.env.PROD) {
         message.warning(
           `${EMPTY_MENU_HINT} 开发环境已临时加载本地全量菜单。`,

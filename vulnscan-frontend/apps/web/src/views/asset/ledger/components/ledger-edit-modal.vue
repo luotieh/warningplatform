@@ -27,6 +27,7 @@ import {
 } from 'naive-ui';
 
 import type { DynamicFormSubmissionDetail, DynamicFormTemplate } from '#/api/formdesign';
+import { probeAssetAddress } from '#/api/asset';
 import DynamicFormRenderer from '#/components/dynamic-form/DynamicFormRenderer.vue';
 import { assetAddressFormRule, ledgerAssetFormRules } from '#/utils/form-rules';
 import {
@@ -144,6 +145,24 @@ function normalizeAddressField() {
   if (merged.port != null) props.form.port = merged.port;
 }
 
+const probing = ref(false);
+const probeResult = ref<boolean | null>(null);
+
+async function handleProbeAddress() {
+  const addr = props.form.address.trim();
+  if (!addr) return;
+  probing.value = true;
+  probeResult.value = null;
+  try {
+    const res = await probeAssetAddress(addr);
+    probeResult.value = res.reachable;
+  } catch {
+    probeResult.value = false;
+  } finally {
+    probing.value = false;
+  }
+}
+
 const formRef = ref<FormInst | null>(null);
 
 /** 表单间距：标准 / 紧凑（本地记忆） */
@@ -173,7 +192,17 @@ const panelHeadClass = computed(() => [
 watch(
   () => props.show,
   (visible) => {
-    if (!visible) formRef.value?.restoreValidation();
+    if (!visible) {
+      formRef.value?.restoreValidation();
+      probeResult.value = null;
+    }
+  },
+);
+
+watch(
+  () => props.form.address,
+  () => {
+    probeResult.value = null;
   },
 );
 
@@ -311,11 +340,27 @@ async function handleSubmit() {
                 path="address"
                 :required="accessAddressRequired"
               >
-                <NInput
-                  v-model:value="form.address"
-                  placeholder="单个域名、URL 或 IP:端口（勿用逗号填多个）"
-                  @blur="normalizeAddressField"
-                />
+                <div style="display: flex; gap: 8px; width: 100%; align-items: flex-start">
+                  <NInput
+                    v-model:value="form.address"
+                    placeholder="单个域名、URL 或 IP:端口（勿用逗号填多个）"
+                    style="flex: 1"
+                    @blur="normalizeAddressField"
+                  />
+                  <NTooltip v-if="form.isOnline && form.address.trim()">
+                    <template #trigger>
+                      <NButton
+                        size="small"
+                        :loading="probing"
+                        :type="probeResult === true ? 'success' : probeResult === false ? 'error' : 'default'"
+                        @click="handleProbeAddress"
+                      >
+                        {{ probeResult === true ? '可达' : probeResult === false ? '不可达' : '检测' }}
+                      </NButton>
+                    </template>
+                    点击检测该地址是否可达
+                  </NTooltip>
+                </div>
               </NFormItem>
             </NGridItem>
 

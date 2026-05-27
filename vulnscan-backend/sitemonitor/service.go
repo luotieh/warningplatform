@@ -11,10 +11,30 @@ import (
 	"gorm.io/gorm"
 )
 
+// CrawlScreenshotUploader 爬虫截图上传函数签名：JPEG 数据 + 文件标识 → 存储 ID/URL
+type CrawlScreenshotUploader func(ctx context.Context, jpegData []byte, name string) (string, error)
+
+type ctxKeyCreatorID struct{}
+
+// WithCreatorID 将操作者 ID 注入 context，供异步任务使用。
+func WithCreatorID(ctx context.Context, uid string) context.Context {
+	return context.WithValue(ctx, ctxKeyCreatorID{}, uid)
+}
+
+// CreatorIDFromContext 从 context 获取操作者 ID。
+func CreatorIDFromContext(ctx context.Context) string {
+	if v, ok := ctx.Value(ctxKeyCreatorID{}).(string); ok {
+		return v
+	}
+	return ""
+}
+
 type serviceMonitor struct {
-	db          *db.DB
-	nats        *NatsServiceImpl
-	eventBridge *MonitorEventBridge
+	db                *db.DB
+	nats              *NatsServiceImpl
+	eventBridge       *MonitorEventBridge
+	screenshotBaseURL string
+	crawlUploader     CrawlScreenshotUploader
 }
 
 func NewServiceMonitor(database *db.DB, incidentSvc coreContract.ServiceCore) *serviceMonitor {
@@ -22,6 +42,20 @@ func NewServiceMonitor(database *db.DB, incidentSvc coreContract.ServiceCore) *s
 	bridge := NewMonitorEventBridge(session, incidentSvc)
 	SetMonitorIssueNotifier(bridge.OnIssueDetected)
 	return &serviceMonitor{db: database, eventBridge: bridge}
+}
+
+// SetCrawlScreenshotUploader 注入截图上传能力（IAM Storage）
+func (s *serviceMonitor) SetCrawlScreenshotUploader(fn CrawlScreenshotUploader, baseURL string) {
+	s.crawlUploader = fn
+	s.screenshotBaseURL = baseURL
+}
+
+// CrawlScreenshotURL 返回截图下载地址
+func (s *serviceMonitor) CrawlScreenshotURL(fileID string) string {
+	if fileID == "" || s.screenshotBaseURL == "" {
+		return ""
+	}
+	return s.screenshotBaseURL + "/" + fileID + "/content"
 }
 
 func (s *serviceMonitor) GetDB() *db.DB { return s.db }

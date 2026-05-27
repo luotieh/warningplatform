@@ -7,6 +7,7 @@ import (
 	"vulnscan-backend/template/engine"
 
 	"code.yt-security.com/public/core/v2/web"
+	"code.yt-security.com/public/sdk/authorize"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -31,13 +32,21 @@ type StageInfo struct {
 	Modules []ModuleInfo `json:"modules"`
 }
 
+func (a *PipelineAPI) RoutesWithGroup(g *gin.RouterGroup) []authorize.BackendItem {
+	return authorize.RegisterRoutes(g.Group("/pipeline"), []authorize.Route{
+		{
+			Name: "扫描流水线", Enabled: true,
+			Children: []authorize.Route{
+				{Name: "模块列表", Path: "modules", Method: "GET", Handler: a.ListModules, Enabled: true},
+				{Name: "模块配置", Path: "modules/config", Method: "GET", Handler: a.ListModuleConfigs, Enabled: true},
+				{Name: "流水线模板", Path: "templates", Method: "GET", Handler: a.ListTemplates, Enabled: true},
+			},
+		},
+	})
+}
+
 func (a *PipelineAPI) RegisterRoutes(g *gin.RouterGroup) {
-	pg := g.Group("/pipeline")
-	{
-		pg.GET("/modules", a.ListModules)
-		pg.GET("/modules/config", a.ListModuleConfigs)
-		pg.GET("/templates", a.ListTemplates)
-	}
+	a.RoutesWithGroup(g)
 }
 
 func (a *PipelineAPI) ListModules(c *gin.Context) {

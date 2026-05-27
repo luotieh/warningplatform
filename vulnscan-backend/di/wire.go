@@ -21,8 +21,14 @@ import (
 	"vulnscan-backend/task"
 	"vulnscan-backend/vuln"
 
+	iamsdk "code.yt-security.com/public/sdk"
+	"code.yt-security.com/public/sdk/ai"
 	"github.com/google/wire"
 )
+
+func provideChatService(client *iamsdk.Client) *ai.ChatService {
+	return client.Chat
+}
 
 func InitializeHandlers() *Handlers {
 	wire.Build(
@@ -33,6 +39,7 @@ func InitializeHandlers() *Handlers {
 		boot.LoadDB,
 		boot.LoadIAM,
 		boot.LoadNats,
+		provideChatService,
 
 		asset.WireSet,
 		task.WireSet,

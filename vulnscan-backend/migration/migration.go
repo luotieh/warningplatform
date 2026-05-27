@@ -5,8 +5,6 @@ import (
 	"sort"
 	"time"
 
-	"vulnscan-backend/model"
-
 	"gorm.io/gorm"
 )
 
@@ -70,75 +68,4 @@ func RunAll(db *gorm.DB) error {
 	}
 
 	return nil
-}
-
-func init() {
-	Register("001_init_indexes", "创建关键索引", func(tx *gorm.DB) error {
-		indexes := []string{
-			"CREATE INDEX IF NOT EXISTS idx_scan_finding_task_type ON vs_scan_finding(task_id, type)",
-			"CREATE INDEX IF NOT EXISTS idx_scan_finding_task_module ON vs_scan_finding(task_id, module_id)",
-			"CREATE INDEX IF NOT EXISTS idx_scan_finding_target ON vs_scan_finding(target)",
-			"CREATE INDEX IF NOT EXISTS idx_vulnerability_task_severity ON vs_vulnerability(task_id, severity)",
-			"CREATE INDEX IF NOT EXISTS idx_vulnerability_status ON vs_vulnerability(status)",
-			"CREATE INDEX IF NOT EXISTS idx_asset_host ON vs_asset(host)",
-			"CREATE INDEX IF NOT EXISTS idx_scan_log_task ON vs_scan_log(task_id)",
-			"CREATE INDEX IF NOT EXISTS idx_notification_user_read ON vs_notification(user_id, read)",
-		}
-		for _, sql := range indexes {
-			if err := tx.Exec(sql).Error; err != nil {
-				slog.Warn("[Migration] 索引创建跳过", "sql", sql, "error", err)
-			}
-		}
-		return nil
-	})
-
-	Register("002_add_asset_fingerprint", "资产表增加指纹字段", func(tx *gorm.DB) error {
-		columns := []struct {
-			table  string
-			column string
-			colDef string
-		}{
-			{"vs_asset", "fingerprint", "VARCHAR(500) DEFAULT ''"},
-			{"vs_asset", "last_scan_at", "TIMESTAMP"},
-			{"vs_asset", "vuln_count", "INTEGER DEFAULT 0"},
-			{"vs_asset", "risk_score", "FLOAT DEFAULT 0"},
-		}
-		for _, col := range columns {
-			if !tx.Migrator().HasColumn(col.table, col.column) {
-				tx.Exec("ALTER TABLE " + col.table + " ADD COLUMN " + col.column + " " + col.colDef)
-			}
-		}
-		return nil
-	})
-
-	Register("003_add_vuln_payloads", "添加漏洞扫描 Payload 管理表", func(tx *gorm.DB) error {
-		if err := tx.AutoMigrate(
-			&model.VulnPayload{},
-			&model.VulnPayloadPattern{},
-			&model.VulnPayloadConfig{},
-		); err != nil {
-			return err
-		}
-
-		if err := seedDefaultPayloads(tx); err != nil {
-			return err
-		}
-
-		return nil
-	})
-
-	Register("004_add_service_fingerprint_enhanced", "扩展服务指纹表，添加 HTTP 深度识别和 TLS 证书分析字段", func(tx *gorm.DB) error {
-		if err := tx.AutoMigrate(
-			&model.ServiceFingerprint{},
-			&model.PortServiceMap{},
-		); err != nil {
-			return err
-		}
-
-		if err := seedDefaultServiceFingerprints(tx); err != nil {
-			return err
-		}
-
-		return nil
-	})
 }

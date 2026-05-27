@@ -241,6 +241,11 @@ interface ThemePreferences {
   colorSuccess: string;
   /** 警告色 */
   colorWarning: string;
+  /**
+   * 自定义 font-family 栈（含 @font-face 注册的字体名），写入 CSS 变量 --font-family
+   * 示例：'Source Han Sans SC', -apple-system, sans-serif
+   */
+  fontFamily?: string;
   /** 字体大小（单位：px） */
   fontSize: number;
   /** 当前主题 */

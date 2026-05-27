@@ -19,6 +19,7 @@ type NatsServiceImpl struct {
 	nats     *boot.NatsClient
 	db       *db.DB
 	objStore *objStoreWrapper
+	svc      *serviceMonitor
 }
 
 func NewNatsServiceImpl(natsClient *boot.NatsClient, database *db.DB) *NatsServiceImpl {
@@ -222,6 +223,20 @@ func (s *NatsServiceImpl) ObjGetRaw(ctx context.Context, key string) ([]byte, er
 		return nil, fmt.Errorf("Object Store 未初始化")
 	}
 	return s.objStore.GetRaw(ctx, key)
+}
+
+// ObjPutRaw 存储原始二进制数据到 Object Store
+func (s *NatsServiceImpl) ObjPutRaw(ctx context.Context, key string, data []byte) error {
+	if s.objStore == nil {
+		return fmt.Errorf("Object Store 未初始化")
+	}
+	return s.objStore.PutRaw(ctx, key, data)
+}
+
+// StoreEvidenceScreenshot 存储执行记录的截图数据
+func (s *NatsServiceImpl) StoreEvidenceScreenshot(ctx context.Context, executionID string, data []byte) error {
+	key := fmt.Sprintf("evidence/%s/screenshot", executionID)
+	return s.ObjPutRaw(ctx, key, data)
 }
 
 func (s *NatsServiceImpl) ObjDeleteSilent(ctx context.Context, key string) {

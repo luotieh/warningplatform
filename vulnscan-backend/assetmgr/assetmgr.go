@@ -49,6 +49,7 @@ func (m *AssetMgr) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
 				{Name: "审批", Path: ":id/review", Method: "PUT", Handler: m.handler.VerifyReview, Enabled: true},
 				{Name: "核验任务列表", Path: "tasks/list", Method: "GET", Handler: m.handler.VerifyTaskList, Enabled: true},
 				{Name: "创建核验任务", Path: "tasks", Method: "POST", Handler: m.handler.VerifyTaskCreate, Enabled: true},
+				{Name: "删除核验任务", Path: "tasks/:id", Method: "DELETE", Handler: m.handler.VerifyTaskDelete, Enabled: true},
 				{Name: "接收核验任务", Path: "tasks/:id/receive", Method: "PUT", Handler: m.handler.VerifyTaskReceive, Enabled: true},
 				{Name: "确认核验任务", Path: "tasks/:id/confirm", Method: "PUT", Handler: m.handler.VerifyTaskConfirm, Enabled: true},
 				{Name: "驳回核验任务", Path: "tasks/:id/reject", Method: "PUT", Handler: m.handler.VerifyTaskReject, Enabled: true},

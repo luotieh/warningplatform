@@ -3,8 +3,6 @@ package main
 import (
 	"context"
 	"log/slog"
-	"net/http"
-	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"strings"
@@ -18,17 +16,6 @@ import (
 
 func main() {
 	setupLogger()
-
-	go func() {
-		pprofAddr := os.Getenv("PPROF_ADDR")
-		if pprofAddr == "" {
-			pprofAddr = "127.0.0.1:6060"
-		}
-		slog.Info("[+] pprof 已启动", "addr", "http://"+pprofAddr+"/debug/pprof/")
-		if err := http.ListenAndServe(pprofAddr, nil); err != nil {
-			slog.Warn("[!] pprof 启动失败", "error", err)
-		}
-	}()
 
 	handlers := di.InitializeHandlers()
 	handlers.RouteLoad()

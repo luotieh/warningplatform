@@ -197,7 +197,7 @@ onMounted(fetchData);
 
 <template>
   <div style="padding: 16px">
-    <NCard title="指纹库" size="small">
+    <NCard title="识别指纹" size="small">
       <template #header-extra>
         <NSpace :size="8">
           <NSelect v-model:value="protocolFilter" :options="protocolOpts" placeholder="协议" size="small" style="width: 90px" clearable @update:value="() => { page = 1; fetchData(); }" />

@@ -116,7 +116,15 @@ func (s *serviceMonitor) GetEvidenceAsset(ctx context.Context, executionID, asse
 		if err != nil {
 			return nil, "", err
 		}
-		contentType = "image/png"
+		contentType = "image/jpeg"
+		return data, contentType, nil
+	case "annotated_screenshot":
+		annotatedKey := fmt.Sprintf("evidence/%s_annotated/screenshot", executionID)
+		data, err := s.nats.ObjGetRaw(ctx, annotatedKey)
+		if err != nil {
+			return nil, "", err
+		}
+		contentType = "image/jpeg"
 		return data, contentType, nil
 	default:
 		data, err := s.nats.ObjGetRaw(ctx, objKey)

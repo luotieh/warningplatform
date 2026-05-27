@@ -1,7 +1,7 @@
 <script lang="ts" setup>
-import type { DataTableColumns, UploadFileInfo } from 'naive-ui';
+import type { DataTableColumns, DataTableRowKey, UploadFileInfo } from 'naive-ui';
 
-import type { MonitorTarget } from '#/api/sitemonitor';
+import type { MonitorPathTask, MonitorTarget } from '#/api/sitemonitor';
 
 import { computed, h, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
@@ -21,7 +21,9 @@ import {
   NRadioGroup,
   NSelect,
   NSpace,
+  NSpin,
   NTag,
+  NTooltip,
   NUpload,
   NUploadDragger,
 } from 'naive-ui';
@@ -34,6 +36,7 @@ import {
   deleteTarget,
   downloadImportTemplate,
   fetchPageMeta,
+  getPathTaskList,
   getTargetList,
   importTargets,
   runTarget,
@@ -77,39 +80,62 @@ const columns = computed<DataTableColumns<MonitorTarget>>(() => [
   {
     key: 'name',
     title: '名称',
-    minWidth: 140,
+    minWidth: 160,
     ellipsis: { tooltip: true },
+    render: (row) =>
+      h('div', { class: 'flex flex-col gap-0.5' }, [
+        h(
+          'a',
+          {
+            class: 'cursor-pointer font-medium text-primary hover:underline',
+            onClick: () =>
+              router.push({ name: 'MonitorTargetDetail', params: { id: row.id } }),
+          },
+          row.name,
+        ),
+        h('span', { class: 'text-xs text-gray-400' }, row.target_value),
+      ]),
   },
   {
     key: 'target_type',
     title: '类型',
-    width: 80,
+    width: 72,
+    align: 'center',
     render: (row) =>
       h(
         NTag,
-        { size: 'small', bordered: false },
+        {
+          size: 'tiny',
+          bordered: false,
+          round: true,
+          type: row.target_type === 'ip' ? 'warning' : 'info',
+        },
         { default: () => (row.target_type === 'ip' ? 'IP' : '域名') },
       ),
-  },
-  {
-    key: 'target_value',
-    title: '目标值',
-    minWidth: 160,
-    ellipsis: { tooltip: true },
   },
   {
     key: 'virtual_host',
     title: '虚拟 Host',
     minWidth: 140,
     ellipsis: { tooltip: true },
-    render: (row) => row.virtual_host || '-',
+    render: (row) =>
+      h(
+        'span',
+        { class: row.virtual_host ? '' : 'text-gray-300' },
+        row.virtual_host || '-',
+      ),
   },
   {
     key: 'expected_ips',
     title: '期望 IP',
     minWidth: 120,
     ellipsis: { tooltip: true },
-    render: (row) => row.expected_ips || '-',
+    render: (row) =>
+      h(
+        'span',
+        { class: row.expected_ips ? '' : 'text-gray-300' },
+        row.expected_ips || '-',
+      ),
   },
   {
     key: 'enabled',
@@ -117,35 +143,33 @@ const columns = computed<DataTableColumns<MonitorTarget>>(() => [
     width: 72,
     align: 'center',
     render: (row) =>
-      h(
-        NTag,
-        {
-          type: row.enabled ? 'success' : 'default',
-          size: 'small',
-          bordered: false,
-        },
-        { default: () => (row.enabled ? '启用' : '停用') },
-      ),
+      h('div', { class: 'flex items-center justify-center gap-1.5' }, [
+        h('span', {
+          class: `inline-block h-2 w-2 rounded-full ${row.enabled ? 'bg-green-500' : 'bg-gray-300'}`,
+        }),
+        h('span', { class: 'text-xs' }, row.enabled ? '监测中' : '已停用'),
+      ]),
   },
   {
     key: 'op',
     title: '操作',
-    width: 280,
+    width: 220,
     fixed: 'right',
     align: 'center',
     render: (row) =>
-      h(NSpace, { size: 'small', justify: 'center' }, () => [
+      h(NSpace, { size: 4, justify: 'center' }, () => [
         h(
           NButton,
           {
             text: true,
             type: 'primary',
-            size: 'small',
+            size: 'tiny',
             onClick: () =>
               router.push({ name: 'MonitorTargetDetail', params: { id: row.id } }),
           },
-          { default: () => '路径任务' },
+          { default: () => '管理' },
         ),
+        h('span', { class: 'text-gray-200' }, '|'),
         h(
           NPopconfirm,
           { onPositiveClick: () => handleRunTarget(row) },
@@ -153,12 +177,13 @@ const columns = computed<DataTableColumns<MonitorTarget>>(() => [
             trigger: () =>
               h(
                 NButton,
-                { text: true, type: 'info', size: 'small' },
-                { default: () => '目标检测' },
+                { text: true, type: 'info', size: 'tiny' },
+                { default: () => '检测' },
               ),
-            default: () => '执行域名劫持 / 敏感文件等目标级维度？',
+            default: () => '立即执行域名劫持/敏感文件检测？',
           },
         ),
+        h('span', { class: 'text-gray-200' }, '|'),
         h(
           NPopconfirm,
           { onPositiveClick: () => handleToggle(row) },
@@ -169,13 +194,14 @@ const columns = computed<DataTableColumns<MonitorTarget>>(() => [
                 {
                   text: true,
                   type: row.enabled ? 'warning' : 'success',
-                  size: 'small',
+                  size: 'tiny',
                 },
                 { default: () => (row.enabled ? '停用' : '启用') },
               ),
-            default: () => `确认${row.enabled ? '停用' : '启用'}？`,
+            default: () => `确认${row.enabled ? '停用' : '启用'}该目标？`,
           },
         ),
+        h('span', { class: 'text-gray-200' }, '|'),
         h(
           NPopconfirm,
           { onPositiveClick: () => handleDelete(row) },
@@ -183,7 +209,7 @@ const columns = computed<DataTableColumns<MonitorTarget>>(() => [
             trigger: () =>
               h(
                 NButton,
-                { text: true, type: 'error', size: 'small' },
+                { text: true, type: 'error', size: 'tiny' },
                 { default: () => '删除' },
               ),
             default: () => '将删除目标及全部路径任务，不可恢复',
@@ -401,49 +427,254 @@ async function handleImportUpload(options: { file: UploadFileInfo }) {
   }
 }
 
+// ═════ 展开行：显示路径任务与维度状态 ═════
+const expandedRowKeys = ref<DataTableRowKey[]>([]);
+const expandedPathTasks = ref<Record<string, MonitorPathTask[]>>({});
+const expandLoading = ref<Record<string, boolean>>({});
+
+const dimensionLabels: Record<string, string> = {
+  availability: '可用性',
+  tamper: '篡改',
+  sensitive_word: '敏感词',
+  blacklink: '暗链',
+  domain_hijack: '域名劫持',
+  sensitive_file: '敏感文件',
+};
+
+async function handleExpandChange(keys: DataTableRowKey[]) {
+  expandedRowKeys.value = keys;
+  for (const key of keys) {
+    const id = String(key);
+    if (expandedPathTasks.value[id]) continue;
+    expandLoading.value[id] = true;
+    try {
+      const res = await getPathTaskList({ target_id: id, size: 200, index: 1 });
+      expandedPathTasks.value[id] = res.data || [];
+    } catch {
+      expandedPathTasks.value[id] = [];
+    } finally {
+      expandLoading.value[id] = false;
+    }
+  }
+}
+
+function renderExpand(row: MonitorTarget) {
+  const id = row.id;
+  if (expandLoading.value[id]) {
+    return h('div', { class: 'flex items-center justify-center py-4' }, [
+      h(NSpin, { size: 'small' }),
+      h('span', { class: 'ml-2 text-sm text-gray-400' }, '加载中...'),
+    ]);
+  }
+  const tasks = expandedPathTasks.value[id] || [];
+
+  const targetDims = ['domain_hijack', 'sensitive_file'];
+  const targetDimTags = targetDims.map((dim) => {
+    const cfg = row[`config_${dim}` as keyof MonitorTarget] as any;
+    const enabled = cfg?.enabled;
+    return h(
+      NTooltip,
+      {},
+      {
+        trigger: () =>
+          h(
+            NTag,
+            {
+              size: 'tiny',
+              round: true,
+              bordered: false,
+              type: enabled ? 'success' : 'default',
+              style: enabled ? '' : 'opacity: 0.5',
+            },
+            { default: () => dimensionLabels[dim] || dim },
+          ),
+        default: () => `目标级 · ${enabled ? '已启用' : '未启用'}`,
+      },
+    );
+  });
+
+  if (tasks.length === 0) {
+    return h(
+      'div',
+      { class: 'rounded-lg bg-gray-50 p-4 dark:bg-gray-800/30' },
+      [
+        h('div', { class: 'mb-2 flex items-center gap-2' }, [
+          h('span', { class: 'text-xs font-medium text-gray-500' }, '目标级维度：'),
+          ...targetDimTags,
+        ]),
+        h(
+          'div',
+          { class: 'text-center text-sm text-gray-400' },
+          '暂无路径任务，请点击"管理"添加',
+        ),
+      ],
+    );
+  }
+
+  const pathDims = ['availability', 'tamper', 'sensitive_word', 'blacklink'];
+
+  const taskRows = tasks.map((task) => {
+    const dimTags = pathDims.map((dim) => {
+      const cfg = task[`config_${dim}` as keyof MonitorPathTask] as any;
+      const enabled = cfg?.enabled;
+      return h(
+        NTooltip,
+        {},
+        {
+          trigger: () =>
+            h(
+              NTag,
+              {
+                size: 'tiny',
+                round: true,
+                bordered: false,
+                type: enabled ? 'info' : 'default',
+                style: enabled ? '' : 'opacity: 0.4',
+              },
+              { default: () => dimensionLabels[dim] || dim },
+            ),
+          default: () =>
+            `${enabled ? '已启用' : '未启用'}${cfg?.cycle_minutes ? ` · ${cfg.cycle_minutes}分钟` : ''}`,
+        },
+      );
+    });
+
+    return h(
+      'div',
+      {
+        class:
+          'flex items-center gap-3 rounded px-3 py-2 transition-colors hover:bg-white dark:hover:bg-gray-700/30',
+      },
+      [
+        h('span', {
+          class: `inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full ${task.enabled ? 'bg-green-400' : 'bg-gray-300'}`,
+        }),
+        h(
+          'span',
+          {
+            class: 'w-32 flex-shrink-0 truncate text-sm font-medium',
+            title: task.name,
+          },
+          task.name,
+        ),
+        h(
+          'span',
+          {
+            class: 'min-w-0 flex-1 truncate text-xs text-gray-400',
+            title: task.url_override || task.path || '/',
+          },
+          task.url_override || task.path || '/',
+        ),
+        h('div', { class: 'flex flex-shrink-0 gap-1' }, dimTags),
+        h(
+          NButton,
+          {
+            text: true,
+            type: 'primary',
+            size: 'tiny',
+            class: 'flex-shrink-0',
+            onClick: () =>
+              router.push({
+                name: 'MonitorRecords',
+                params: { pathTaskId: task.id },
+              }),
+          },
+          { default: () => '记录' },
+        ),
+      ],
+    );
+  });
+
+  return h(
+    'div',
+    { class: 'rounded-lg bg-gray-50 p-3 dark:bg-gray-800/30' },
+    [
+      h('div', { class: 'mb-2 flex items-center gap-2' }, [
+        h('span', { class: 'text-xs font-medium text-gray-500' }, '目标级维度：'),
+        ...targetDimTags,
+      ]),
+      h('div', { class: 'mb-1.5 flex items-center justify-between' }, [
+        h('span', { class: 'text-xs font-medium text-gray-500' }, `路径任务 (${tasks.length})`),
+        h(
+          NButton,
+          {
+            text: true,
+            type: 'primary',
+            size: 'tiny',
+            onClick: () =>
+              router.push({ name: 'MonitorTargetDetail', params: { id } }),
+          },
+          { default: () => '全部管理 →' },
+        ),
+      ]),
+      h('div', { class: 'flex flex-col gap-0.5' }, taskRows),
+    ],
+  );
+}
+
 onMounted(onSearch);
 </script>
 
 <template>
   <Page auto-content-height>
-    <NCard title="监测目标" :bordered="false">
+    <NCard :bordered="false">
+      <template #header>
+        <div class="flex items-center gap-2">
+          <span class="text-lg font-semibold">监测任务</span>
+          <NTag size="small" :bordered="false" type="info" round>
+            {{ pagination.itemCount }} 个目标
+          </NTag>
+        </div>
+      </template>
       <template #header-extra>
         <NSpace>
-          <NButton @click="importVisible = true">批量导入</NButton>
-          <NButton type="primary" @click="createVisible = true">新建目标</NButton>
+          <NButton size="small" @click="importVisible = true">批量导入</NButton>
+          <NButton type="primary" size="small" @click="createVisible = true">+ 新建目标</NButton>
         </NSpace>
       </template>
 
-      <NSpace class="mb-4" wrap>
+      <div class="mb-4 flex flex-wrap items-center gap-3 rounded-lg bg-gray-50 px-4 py-3 dark:bg-gray-800/50">
         <NInput
           v-model:value="form.name"
-          placeholder="名称"
+          placeholder="搜索名称"
           clearable
+          size="small"
           style="width: 160px"
           @keyup.enter="onSearch"
-        />
+        >
+          <template #prefix>
+            <span class="text-xs text-gray-400">名称</span>
+          </template>
+        </NInput>
+        <NInput
+          v-model:value="form.target_value"
+          placeholder="搜索域名/IP"
+          clearable
+          size="small"
+          style="width: 200px"
+          @keyup.enter="onSearch"
+        >
+          <template #prefix>
+            <span class="text-xs text-gray-400">目标</span>
+          </template>
+        </NInput>
         <NSelect
           v-model:value="form.target_type"
           :options="targetTypeOptions"
-          placeholder="类型"
+          placeholder="全部类型"
           clearable
+          size="small"
           style="width: 120px"
-        />
-        <NInput
-          v-model:value="form.target_value"
-          placeholder="目标值"
-          clearable
-          style="width: 180px"
-          @keyup.enter="onSearch"
         />
         <NSelect
           v-model:value="form.enabled"
           :options="enabledOptions"
+          size="small"
           style="width: 100px"
         />
-        <NButton type="primary" @click="onSearch">查询</NButton>
-        <NButton @click="resetForm">重置</NButton>
-      </NSpace>
+        <NButton type="primary" size="small" @click="onSearch">查询</NButton>
+        <NButton size="small" quaternary @click="resetForm">重置</NButton>
+      </div>
 
       <NDataTable
         :columns="columns"
@@ -451,7 +682,14 @@ onMounted(onSearch);
         :loading="loading"
         :pagination="pagination"
         :row-key="(row: MonitorTarget) => row.id"
+        :expanded-row-keys="expandedRowKeys"
+        :render-expand="renderExpand as any"
+        :bordered="false"
+        :single-line="false"
+        striped
         remote
+        size="small"
+        @update:expanded-row-keys="handleExpandChange"
         @update:page="(p: number) => { pagination.page = p; onSearch(); }"
         @update:page-size="(s: number) => { pagination.pageSize = s; pagination.page = 1; onSearch(); }"
       />
@@ -464,13 +702,33 @@ onMounted(onSearch);
       style="width: 560px"
       @after-leave="resetCreateForm"
     >
+      <div class="mb-4 flex gap-2">
+        <div
+          :class="[
+            'flex-1 cursor-pointer rounded-lg border-2 p-3 text-center transition-all',
+            createMode === 'single_url'
+              ? 'border-primary bg-primary/5'
+              : 'border-gray-200 hover:border-gray-300',
+          ]"
+          @click="createMode = 'single_url'"
+        >
+          <div class="text-sm font-medium">快速添加</div>
+          <div class="text-xs text-gray-400">输入 URL 自动识别</div>
+        </div>
+        <div
+          :class="[
+            'flex-1 cursor-pointer rounded-lg border-2 p-3 text-center transition-all',
+            createMode === 'advanced'
+              ? 'border-primary bg-primary/5'
+              : 'border-gray-200 hover:border-gray-300',
+          ]"
+          @click="createMode = 'advanced'"
+        >
+          <div class="text-sm font-medium">高级配置</div>
+          <div class="text-xs text-gray-400">手动填写域名/IP</div>
+        </div>
+      </div>
       <NForm label-placement="left" label-width="100">
-        <NFormItem label="创建方式">
-          <NRadioGroup v-model:value="createMode">
-            <NRadioButton value="single_url">单 URL（推荐）</NRadioButton>
-            <NRadioButton value="advanced">高级（域名/IP）</NRadioButton>
-          </NRadioGroup>
-        </NFormItem>
         <template v-if="createMode === 'single_url'">
           <NFormItem label="监测 URL" required>
             <NSpace style="width: 100%">
@@ -478,19 +736,20 @@ onMounted(onSearch);
                 v-model:value="singleHomepageUrl"
                 placeholder="https://www.example.com"
                 style="flex: 1"
+                @keyup.enter="handleCreate"
               />
-              <NButton @click="handleFetchTitle">自动填充</NButton>
+              <NButton size="small" @click="handleFetchTitle">自动填充</NButton>
             </NSpace>
           </NFormItem>
-          <NFormItem label="名称" required>
-            <NInput v-model:value="createForm.name" placeholder="系统名称" />
+          <NFormItem label="名称">
+            <NInput v-model:value="createForm.name" placeholder="留空将自动获取页面标题" />
           </NFormItem>
         </template>
         <template v-else>
         <NFormItem label="名称" required>
           <NSpace>
             <NInput v-model:value="createForm.name" placeholder="系统名称" />
-            <NButton @click="handleFetchTitle">抓取标题</NButton>
+            <NButton size="small" @click="handleFetchTitle">抓取标题</NButton>
           </NSpace>
         </NFormItem>
         <NFormItem label="目标类型" required>
@@ -505,7 +764,7 @@ onMounted(onSearch);
         <NFormItem v-if="createForm.target_type === 'ip'" label="虚拟 Host" required>
           <NInput
             v-model:value="createForm.virtual_host"
-            placeholder="访问 IP 时 HTTP Host 头，如 www.example.com"
+            placeholder="访问 IP 时 HTTP Host 头"
           />
         </NFormItem>
         <NFormItem label="期望 IP">

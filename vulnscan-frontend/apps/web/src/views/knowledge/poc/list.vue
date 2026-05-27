@@ -28,6 +28,9 @@ import {
   NTabPane,
   NTabs,
   NTag,
+  NText,
+  NUpload,
+  NUploadDragger,
   useMessage,
 } from "naive-ui";
 
@@ -36,6 +39,7 @@ import {
   deletePoc,
   getPocDetail,
   getPocList,
+  importPocUpload,
   importPocYaml,
   testPoc,
   togglePoc,
@@ -74,6 +78,27 @@ const severityFilter = ref<string | null>(null);
 const showImport = ref(false);
 const importing = ref(false);
 const yamlContent = ref("");
+
+// Upload
+const showUpload = ref(false);
+const uploading = ref(false);
+
+async function handleUploadFile(file: File) {
+  uploading.value = true;
+  try {
+    const res = await importPocUpload(file) as any;
+    const imported = res?.imported ?? 0;
+    const skipped = res?.skipped ?? 0;
+    const errors = res?.errors ?? 0;
+    message.success(`导入完成：成功 ${imported}，跳过 ${skipped}，失败 ${errors}`);
+    showUpload.value = false;
+    await fetchData();
+  } catch (e: any) {
+    message.error(e?.message || "上传导入失败");
+  } finally {
+    uploading.value = false;
+  }
+}
 
 // Editor
 const showEditor = ref(false);
@@ -512,7 +537,7 @@ onMounted(fetchData);
 
 <template>
   <div style="padding: 16px">
-    <NCard title="PoC 管理" size="small">
+    <NCard title="检测模板" size="small">
       <template #header-extra>
         <NSpace :size="8">
           <NSelect
@@ -555,6 +580,7 @@ onMounted(fetchData);
             搜索
           </NButton>
           <NButton size="small" @click="showImport = true">导入 YAML</NButton>
+          <NButton size="small" @click="showUpload = true">上传模板</NButton>
           <NButton size="small" type="primary" @click="openCreate">
             新建
           </NButton>
@@ -613,6 +639,45 @@ onMounted(fetchData);
           </NButton>
         </NSpace>
       </template>
+    </NModal>
+
+    <!-- Upload Modal -->
+    <NModal
+      v-model:show="showUpload"
+      title="上传检测模板"
+      preset="card"
+      style="width: 520px"
+    >
+      <NUpload
+        :max="1"
+        accept=".zip,.yaml,.yml"
+        :custom-request="({ file: uploadFile }) => {
+          if (uploadFile?.file) handleUploadFile(uploadFile.file);
+        }"
+        :show-file-list="false"
+        :disabled="uploading"
+        directory-dnd
+      >
+        <NUploadDragger style="padding: 32px 24px">
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 12px">
+            <div v-if="uploading" style="font-size: 36px; animation: spin 1s linear infinite">⏳</div>
+            <div v-else style="font-size: 36px">📦</div>
+            <NText style="font-size: 15px; font-weight: 600">
+              {{ uploading ? '正在导入模板...' : '拖拽文件到此处，或点击选择' }}
+            </NText>
+            <NText depth="3" style="font-size: 12px; text-align: center; line-height: 1.8">
+              支持 <NTag size="tiny" :bordered="false" type="primary">.zip</NTag>
+              压缩包（批量导入）和
+              <NTag size="tiny" :bordered="false" type="info">.yaml</NTag>
+              <NTag size="tiny" :bordered="false" type="info">.yml</NTag>
+              单文件导入
+            </NText>
+            <NText depth="3" style="font-size: 11px; color: #999">
+              ZIP 包内所有 Nuclei YAML 模板将被自动解析导入
+            </NText>
+          </div>
+        </NUploadDragger>
+      </NUpload>
     </NModal>
 
     <!-- Editor Modal (Full-featured) -->

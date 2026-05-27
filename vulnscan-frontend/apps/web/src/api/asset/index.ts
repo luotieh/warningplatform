@@ -70,6 +70,7 @@ export interface Asset {
   last_scan_at?: string;
   ssl_expires_at?: string;
   domain_expires_at?: string;
+  screenshot?: string;
   extra?: Record<string, any>;
   remark?: string;
 }
@@ -118,6 +119,14 @@ export function syncAssetOnlineStatus(
   }>('/asset/sync-online-status', body, { params });
 }
 
+/** 单地址可达性检测（不写入数据库）。 */
+export function probeAssetAddress(address: string) {
+  return requestClient.post<{ address: string; reachable: boolean }>(
+    '/asset/probe-address',
+    { address },
+  );
+}
+
 export function getAssetGroups(params?: Record<string, any>) {
   return requestClient.get('/asset/group/list', { params });
 }
@@ -142,6 +151,7 @@ export interface AssetEnrichDetail {
   scan_history: { id: string; name: string; status: string; created_at: string; finished_at?: string }[];
   services: { service_name: string; version: string; port: string; protocol?: string; count: number }[];
   monitor_tasks: { id: string; task_name: string; target_homepage: string; enabled: boolean; next_run_at?: string }[];
+  screenshot?: string | null;
   summary: { port_count: number; vuln_count: number; scan_count: number; risk_score: number; last_scan?: string };
 }
 
@@ -149,6 +159,11 @@ export async function getAssetEnrich(id: string) {
   const res = await baseRequestClient.get<any>(`/asset/${id}/enrich`);
   const body = (res as Record<string, unknown>).data ?? res;
   return (body as { data?: AssetEnrichDetail }).data;
+}
+
+export function getAssetScreenshot(id: string, refresh?: boolean) {
+  const params = refresh ? { refresh: '1' } : undefined;
+  return requestClient.get<{ screenshot?: string | null; screenshot_url?: string | null }>(`/asset/${id}/screenshot`, { params });
 }
 
 export interface AssetStats {
@@ -178,6 +193,25 @@ export async function getAssetRegionScope() {
   const body = (res as Record<string, unknown>).data ?? res;
   const data = (body as { data?: AssetRegionScopeItem[] }).data ?? body;
   return Array.isArray(data) ? data : [];
+}
+
+export type AssetScopeItem = {
+  count: number;
+  [key: string]: number | string;
+};
+
+export async function getAssetIndustryScope() {
+  const res = await baseRequestClient.get<any>('/asset/industry-scope');
+  const body = (res as Record<string, unknown>).data ?? res;
+  const data = (body as { data?: AssetScopeItem[] }).data ?? body;
+  return Array.isArray(data) ? (data as Array<{ industry_category: string; count: number }>) : [];
+}
+
+export async function getAssetUnitTypeScope() {
+  const res = await baseRequestClient.get<any>('/asset/unit-type-scope');
+  const body = (res as Record<string, unknown>).data ?? res;
+  const data = (body as { data?: AssetScopeItem[] }).data ?? body;
+  return Array.isArray(data) ? (data as Array<{ unit_type: string; count: number }>) : [];
 }
 
 export function aggregateAssets() {
@@ -338,10 +372,6 @@ export function recalcAllRisk() {
 
 export function dedupAssets() {
   return requestClient.post('/asset/dedup');
-}
-
-export function importFromCyberspace(data: Record<string, any>) {
-  return requestClient.post('/asset/import-cyberspace', data);
 }
 
 export function getComplianceReport(params?: Record<string, any>) {

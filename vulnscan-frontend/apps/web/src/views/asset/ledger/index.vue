@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { computed, onActivated, onMounted, ref } from 'vue';
+import { computed, onActivated, onMounted, ref, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 
 import ModuleConfigPanel from '#/views/scan/components/module-config-panel.vue';
@@ -50,6 +50,7 @@ const {
   scopeDimension,
   regionTreeOptions,
   industryTreeOptions,
+  unitTypeTreeOptions,
   assetFamilyScopeTreeOptions,
   scopeUsesAssetFamily,
   scopeLabel,
@@ -59,8 +60,10 @@ const {
   selectedRegionKey,
   selectedIndustryKey,
   selectedAssetFamilyKey,
+  selectedUnitTypeKey,
   selectRegion,
   selectIndustry,
+  selectUnitType,
   selectAssetFamily,
   scanAssets,
   stats,
@@ -171,18 +174,47 @@ onActivated(async () => {
   if (skipNextActivatedProbe.value) {
     return;
   }
-  await page.probeReachabilityAndReload();
+  await Promise.all([page.refreshScopeData(), page.probeReachabilityAndReload()]);
+});
+
+const asideWidth = ref(300);
+const isResizing = ref(false);
+
+function onResizeStart(e: MouseEvent) {
+  e.preventDefault();
+  isResizing.value = true;
+  const startX = e.clientX;
+  const startWidth = asideWidth.value;
+
+  function onMouseMove(ev: MouseEvent) {
+    const delta = ev.clientX - startX;
+    asideWidth.value = Math.min(Math.max(startWidth + delta, 200), 500);
+  }
+
+  function onMouseUp() {
+    isResizing.value = false;
+    document.removeEventListener('mousemove', onMouseMove);
+    document.removeEventListener('mouseup', onMouseUp);
+  }
+
+  document.addEventListener('mousemove', onMouseMove);
+  document.addEventListener('mouseup', onMouseUp);
+}
+
+onUnmounted(() => {
+  isResizing.value = false;
 });
 </script>
 
 <template>
-  <div class="ledger-page">
+  <div class="ledger-page" :style="{ gridTemplateColumns: `${asideWidth}px auto minmax(0, 1fr)` }">
     <aside class="ledger-page__aside">
       <LedgerScopePanel
         :dimension="scopeDimension"
         :org-tree="orgTreeDisplay"
         :region-tree="regionTreeOptions"
         :industry-tree="industryTreeOptions"
+        :unit-type-tree="unitTypeTreeOptions"
         :asset-family-tree="assetFamilyScopeTreeOptions"
         :loading="treeLoading"
         :org-search-mode="orgTreeSearchMode"
@@ -190,6 +222,7 @@ onActivated(async () => {
         :selected-org-key="selectedOrgKey"
         :selected-region-key="selectedRegionKey"
         :selected-industry-key="selectedIndustryKey"
+        :selected-unit-type-key="selectedUnitTypeKey"
         :selected-asset-family-key="selectedAssetFamilyKey"
         @update:dimension="setScopeDimension"
         @org-search="searchOrganizes"
@@ -198,9 +231,16 @@ onActivated(async () => {
         @update:selected-org-key="selectOrg"
         @update:selected-region-key="selectRegion"
         @update:selected-industry-key="selectIndustry"
+        @update:selected-unit-type-key="selectUnitType"
         @update:selected-asset-family-key="selectAssetFamily"
       />
     </aside>
+
+    <div
+      class="ledger-page__divider"
+      :class="{ 'ledger-page__divider--active': isResizing }"
+      @mousedown="onResizeStart"
+    />
 
     <section class="ledger-page__main">
       <LedgerStatsGrid :stats="stats" />
@@ -385,14 +425,44 @@ onActivated(async () => {
 <style scoped>
 .ledger-page {
   display: grid;
-  gap: 16px;
-  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 0;
+  grid-template-columns: 300px auto minmax(0, 1fr);
   min-height: calc(100vh - 120px);
   padding: 16px;
+  column-gap: 0;
 }
 
 .ledger-page__aside {
   min-width: 0;
+  padding-right: 0;
+}
+
+.ledger-page__divider {
+  width: 8px;
+  cursor: col-resize;
+  position: relative;
+  flex-shrink: 0;
+  user-select: none;
+  z-index: 1;
+}
+
+.ledger-page__divider::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 2px;
+  height: 32px;
+  border-radius: 1px;
+  background: var(--n-border-color, #e0e0e6);
+  transition: background 0.2s, height 0.2s;
+}
+
+.ledger-page__divider:hover::after,
+.ledger-page__divider--active::after {
+  background: var(--n-primary-color, #2080f0);
+  height: 48px;
 }
 
 .ledger-page__main {
@@ -401,9 +471,9 @@ onActivated(async () => {
   gap: 16px;
   min-height: 0;
   min-width: 0;
+  padding-left: 8px;
 }
 
-/** 主列在栅格内可收缩，避免内部表格按「最小内容宽度」把布局撑破 */
 .ledger-page__table-shell {
   min-width: 0;
 }
@@ -422,7 +492,15 @@ onActivated(async () => {
 
 @media (max-width: 1100px) {
   .ledger-page {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr !important;
+  }
+
+  .ledger-page__divider {
+    display: none;
+  }
+
+  .ledger-page__main {
+    padding-left: 0;
   }
 }
 </style>

@@ -11,6 +11,9 @@ import (
 
 const ctxKeyAccessCodes = "vulnscan_access_codes"
 
+// 已废弃：请使用 di/iam_authorization.go（SDK Authorization + IAM AllowedPaths）。
+// 保留本文件仅供对照，不再挂载到路由。
+//
 // 业务 API 鉴权（唯一例外清单，无独立配置文件）
 //
 // 路由分组见 handlers.go：

@@ -113,7 +113,7 @@ async function handleSync() {
 
       <NAlert type="info" title="生产环境菜单权限" style="margin-bottom: 16px">
         当前系统使用 <strong>后端菜单模式</strong>：侧栏与页面路由以 IAM
-        <code>/me/menus</code> 返回为准；按钮以路由 <code>meta.perms</code> 同步到 IAM 后的权限码为准。
+        <code>/iam/menus</code> 返回为准；按钮以路由 <code>meta.perms</code> 同步到 IAM 后的权限码为准。
         若仍能看到全部菜单，请检查：① 是否在本页完成「同步菜单到 IAM」；② IAM 是否为该角色只分配了部分菜单；
         ③ 开发环境勿开启 <code>VITE_ALLOW_ACCESS_FALLBACK=true</code>（会回退为前端全量路由）。
         部署后请为各角色勾选菜单与按钮，用户需<strong>重新登录</strong>生效。

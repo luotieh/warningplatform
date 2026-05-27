@@ -176,6 +176,21 @@ func (s *NatsServiceImpl) handleAgentResult(msg jetstream.Msg) {
 					if err := s.saveBaselineFromResult(tx, ar.ExecutionID, ar.URL, ar.AgentID, tr.BaselineUpdate); err != nil {
 						return fmt.Errorf("save baseline: %w", err)
 					}
+				} else {
+					baseline, _ := GetActiveBaseline(context.Background(), tx, ar.URL)
+					if baseline != nil {
+						contentUnchanged := !tr.Tampered
+						if err := TryUpgradeBaselineConfidence(context.Background(), tx, baseline, contentUnchanged); err != nil {
+							slog.Warn("[NATS] upgrade baseline confidence failed", "error", err, "url", ar.URL)
+						}
+						if ShouldAlertOnTamper(baseline) {
+							exec.HasIssue = tr.Tampered
+						} else if tr.Tampered {
+							slog.Info("[NATS] tamper detected but baseline confidence is low, suppressing alert",
+								"url", ar.URL, "confidence", baseline.Confidence)
+							exec.HasIssue = false
+						}
+					}
 				}
 			}
 		case "blacklink":

@@ -1,6 +1,6 @@
 import { baseRequestClient, requestClient } from '#/api/request';
 import { normalizeMenuGroups } from '#/api/core/menu';
-import { isBackendAccessConfigured } from '#/permissions/access-check';
+import { isBackendAccessMode } from '#/permissions/access-mode';
 
 export namespace AuthApi {
   export interface LoginParams {
@@ -123,12 +123,12 @@ export namespace AuthApi {
 }
 
 export async function loginApi(data: AuthApi.LoginParams) {
-  return requestClient.post<AuthApi.LoginResult>('/auth/login', data);
+  return requestClient.post<AuthApi.LoginResult>('/iam/auth/login', data);
 }
 
 export async function refreshTokenApi(): Promise<AuthApi.RefreshTokenResult> {
   const refreshToken = localStorage.getItem('iam_refresh_token') || '';
-  const res = await baseRequestClient.post<{ code: number; data: AuthApi.RefreshTokenResult }>('/auth/refresh', {
+  const res = await baseRequestClient.post<{ code: number; data: AuthApi.RefreshTokenResult }>('/iam/auth/refresh', {
     refresh_token: refreshToken,
   });
   const envelope = (res as Record<string, unknown>).data as Record<string, unknown> | undefined;
@@ -136,12 +136,12 @@ export async function refreshTokenApi(): Promise<AuthApi.RefreshTokenResult> {
 }
 
 export async function logoutApi() {
-  return requestClient.post('/auth/logout');
+  return requestClient.post('/iam/auth/logout');
 }
 
 export async function getPermissionApi(appId?: string) {
   const params = appId ? { app: appId } : {};
-  return requestClient.get<AuthApi.PermissionBundle>('/me/profile', {
+  return requestClient.get<AuthApi.PermissionBundle>('/iam/profile', {
     params,
   });
 }
@@ -150,7 +150,7 @@ const menusInflight = new Map<string, Promise<AuthApi.MenuGroup[]>>();
 
 /**
  * 单独拉取当前用户可见菜单（按应用分组）
- *   GET /me/menus?app_id=
+ *   GET /iam/menus?app_id=
  */
 export async function getUserMenusApi(appId?: string) {
   const key = appId || '__default__';
@@ -159,7 +159,7 @@ export async function getUserMenusApi(appId?: string) {
 
   const params = appId ? { app_id: appId } : {};
   const req = requestClient
-    .get<AuthApi.MenuGroup[]>('/me/menus', { params })
+    .get<AuthApi.MenuGroup[]>('/iam/menus', { params })
     .finally(() => menusInflight.delete(key));
   menusInflight.set(key, req);
   return req;
@@ -171,8 +171,8 @@ export async function getUserMenusApi(appId?: string) {
  * - 菜单 path / name：粗粒度的菜单可见性
  * - 按钮（menu_type === 4）的 unique_value：细粒度的按钮级权限
  *
- * 实现：并行拉 /me/profile（取角色） + /me/menus（取菜单），
- * 避免在 /me/profile 上重复传输菜单数据。
+ * 实现：并行拉 /iam/profile（取角色） + /iam/menus（取菜单），
+ * 避免在 /iam/profile 上重复传输菜单数据。
  */
 export async function getAccessCodesApi() {
   try {
@@ -208,10 +208,10 @@ export async function getAccessCodesApi() {
   } catch (err: unknown) {
     const status = (err as { response?: { status?: number } })?.response?.status;
     if (status === 403) {
-      console.error('[AccessCodes] 无权拉取权限码（/me/profile 或 /me/menus）');
+      console.error('[AccessCodes] 无权拉取权限码（/iam/profile 或 /iam/menus）');
       throw err;
     }
-    if (isBackendAccessConfigured()) {
+    if (isBackendAccessMode()) {
       console.error('[AccessCodes] IAM 接口不可用，后端权限模式下拒绝放行');
       throw err;
     }

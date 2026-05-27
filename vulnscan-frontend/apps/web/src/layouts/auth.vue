@@ -30,8 +30,8 @@ const brandFeatures = [
 <template>
   <AuthPageLayout
     :app-name="''"
-    :logo="logo"
-    :logo-dark="logoDark"
+    logo=""
+    logo-dark=""
     class="vuln-auth-page"
     page-description=""
     page-title=""
@@ -82,6 +82,10 @@ const brandFeatures = [
 }
 
 .vuln-auth-header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 10;
   display: flex;
   gap: 10px;
   align-items: center;

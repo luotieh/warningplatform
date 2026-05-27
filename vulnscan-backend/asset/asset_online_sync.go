@@ -324,3 +324,48 @@ func persistAssetReachableFlags(sess *gorm.DB, updates map[string]bool) {
 		return nil
 	})
 }
+
+type probeAddressReq struct {
+	Address string `json:"address"`
+}
+
+// ProbeAddress 单地址轻量可达性检测，不写入数据库，仅返回探测结果。
+func (h *EnrichHandler) ProbeAddress(c *gin.Context) {
+	body, ok := web.BindJSON[probeAddressReq](c)
+	if !ok {
+		return
+	}
+	addr := strings.TrimSpace(body.Address)
+	if addr == "" {
+		web.Fail(c).Msg("address is required").Send()
+		return
+	}
+
+	target := normalizeProbeTarget(addr)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), assetOnlineSyncPerAssetTime)
+	defer cancel()
+
+	reachable := monitoragent.ProbeHTTPReachable(ctx, target)
+	if !reachable && !strings.Contains(target, "://") {
+		reachable = probeTCPReachable(ctx, target)
+	}
+
+	web.OK(c).Data(map[string]any{
+		"address":   addr,
+		"reachable": reachable,
+	}).Send()
+}
+
+func normalizeProbeTarget(addr string) string {
+	addr = strings.TrimSpace(addr)
+	if addr == "" {
+		return ""
+	}
+	if !strings.Contains(addr, "://") {
+		if strings.Contains(addr, ":") {
+			return "http://" + addr
+		}
+		return "https://" + addr
+	}
+	return addr
+}

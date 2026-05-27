@@ -100,6 +100,13 @@ type BaseModel struct {
 	UpdatedAt  time.Time `json:"updated_at"`
 }
 
+func (m *BaseModel) BeforeCreate(tx *gorm.DB) error {
+	if m.ID == "" {
+		m.ID = qulid.GenerateID()
+	}
+	return nil
+}
+
 // ─── 通报/事件模块共用嵌入基础模型 ───
 
 type FullModel struct {

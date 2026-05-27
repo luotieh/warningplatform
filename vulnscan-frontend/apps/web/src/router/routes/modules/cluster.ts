@@ -18,11 +18,19 @@ const routes: RouteRecordRaw[] = [
           icon: 'lucide:cpu',
           title: '节点管理',
           perms: [
-            { action: 'drain', label: '排干' },
-            { action: 'resume', label: '恢复' },
             { action: 'remove', label: '注销节点' },
             { action: 'stop', label: '停止节点' },
           ],
+          apis: [
+            'GET /cluster/workers',
+            'GET /nodes',
+            'GET /scan/status',
+            'GET /cluster/connectivity-modes',
+          ],
+          apisByAction: {
+            remove: ['POST /cluster/workers/:id/unregister'],
+            stop: ['DELETE /cluster/scan-nodes/:uuid'],
+          },
         },
       },
       {
@@ -32,6 +40,11 @@ const routes: RouteRecordRaw[] = [
         meta: {
           icon: 'lucide:globe',
           title: '联邦管理',
+          perms: [{ action: 'enroll', label: '注册节点' }],
+          apis: ['GET /nodes', 'GET /federation/sub-masters'],
+          apisByAction: {
+            enroll: ['POST /cluster/scan-nodes/enroll'],
+          },
         },
       },
     ],

@@ -60,7 +60,7 @@ function handleMakeAll() {
 }
 
 function handleViewAll() {
-  router.push({ name: 'NotificationCenter' });
+  router.push({ name: 'NotifyList' });
 }
 
 watch(

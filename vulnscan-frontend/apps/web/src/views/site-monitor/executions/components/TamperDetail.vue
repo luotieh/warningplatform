@@ -27,6 +27,16 @@ const isFirstRun = computed(
 
 const evidence = computed(() => r.value.evidence || null);
 
+const tamperScreenshotUrl = computed(
+  () => r.value.tamper_screenshot_url || '',
+);
+
+function openScreenshot() {
+  if (tamperScreenshotUrl.value) {
+    window.open(tamperScreenshotUrl.value, '_blank');
+  }
+}
+
 const showCompareEvidence = computed(() => {
   const ev = evidence.value;
   if (!ev) return false;
@@ -168,6 +178,21 @@ const injectedCols: DataTableColumns<any> = [
       </NDescriptions>
     </NCard>
 
+    <NCard v-if="tamperScreenshotUrl" size="small" title="篡改截图证据">
+      <p class="mb-2 text-xs text-gray-500">
+        以下截图为检测到篡改时自动抓取，红色边框标注了发生变化的区域。
+      </p>
+      <div class="rounded border border-gray-200 bg-gray-50 p-2">
+        <img
+          :src="tamperScreenshotUrl"
+          alt="篡改截图"
+          class="max-w-full cursor-pointer rounded shadow-sm"
+          style="max-height: 600px"
+          @click="openScreenshot"
+        />
+      </div>
+    </NCard>
+
     <NCard
       v-if="showCompareEvidence"
       size="small"
@@ -272,8 +297,9 @@ const injectedCols: DataTableColumns<any> = [
 
 <style scoped>
 .tp-evidence-scroll {
-  max-height: min(70vh, 520px);
-  overflow: auto;
+  max-height: min(50vh, 400px);
+  overflow-y: auto;
+  overflow-x: hidden;
   white-space: pre-wrap;
   word-break: break-word;
 }

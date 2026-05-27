@@ -45,14 +45,20 @@ type PathTaskListReq struct {
 }
 
 type CrawlStartReq struct {
-	UseHeadless bool `json:"use_headless"`
-	MaxDepth    int  `json:"max_depth"`
-	MaxPages    int  `json:"max_pages"`
-	SameHost    bool `json:"same_host"`
+	UseHeadless       bool   `json:"use_headless"`
+	MaxDepth          int    `json:"max_depth"`
+	MaxPages          int    `json:"max_pages"`
+	SameHost          bool   `json:"same_host"`
+	StartURL          string `json:"start_url"`
+	ScreenshotWidth   int    `json:"screenshot_width"`
+	ScreenshotHeight  int    `json:"screenshot_height"`
+	ScreenshotQuality int    `json:"screenshot_quality"`
+	CreatorID         string `json:"-"`
 }
 
 type CrawlApplyReq struct {
-	SkipExisting bool `json:"skip_existing"`
+	SkipExisting bool     `json:"skip_existing"`
+	SelectedURLs []string `json:"selected_urls"`
 }
 
 type RunTargetReq struct {

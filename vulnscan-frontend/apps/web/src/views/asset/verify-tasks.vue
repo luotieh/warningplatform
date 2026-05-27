@@ -3,11 +3,12 @@ import type { DataTableColumns, DataTableRowKey } from 'naive-ui';
 
 import { computed, h, onMounted, reactive, ref } from 'vue';
 
-import { getAssetList, type Asset } from '#/api/asset';
+import { getAssetDetail, getAssetList, getAssetScreenshot, type Asset } from '#/api/asset';
 import {
   archiveVerifyTask,
   confirmVerifyTask,
   createVerifyTasks,
+  deleteVerifyTask,
   forwardVerifyTask,
   getConstructionList,
   getOrganizeTree,
@@ -24,6 +25,8 @@ import {
   NButton,
   NCard,
   NDataTable,
+  NDescriptions,
+  NDescriptionsItem,
   NDrawer,
   NDrawerContent,
   NForm,
@@ -32,6 +35,7 @@ import {
   NModal,
   NSelect,
   NSpace,
+  NSpin,
   NTag,
   NTreeSelect,
   useMessage,
@@ -54,12 +58,17 @@ const organizeNameMap = ref<Record<string, string>>({});
 const constructionOrgNameMap = ref<Record<string, string>>({});
 
 const logDrawer = ref(false);
+const detailDrawer = ref(false);
+const detailLoading = ref(false);
+const detailAsset = ref<Asset | null>(null);
+const detailScreenshot = ref<string | null>(null);
+const detailScreenshotSrc = ref('');
 const createModal = ref(false);
 const actionModal = ref(false);
 const confirmModal = ref(false);
 const actionType = ref<'forward' | 'reject'>('forward');
 const activeTask = ref<AssetVerifyTask | null>(null);
-const pendingAction = ref<'archive' | 'confirm' | 'receive' | 'return' | ''>('');
+const pendingAction = ref<'archive' | 'confirm' | 'delete' | 'receive' | 'return' | ''>('');
 
 const searchForm = reactive({ keyword: '', status: '', owner_organize_id: '' });
 const assetSearchForm = reactive({ keyword: '', organize_id: '' });
@@ -181,7 +190,18 @@ const columns: DataTableColumns<AssetVerifyTask> = [
     key: 'asset_name',
     minWidth: 220,
     ellipsis: { tooltip: true },
-    render: (row) => renderMuted(row.asset_name || row.address),
+    render: (row) =>
+      h(
+        'a',
+        {
+          class: 'asset-link',
+          onClick: (e: Event) => {
+            e.preventDefault();
+            if (row.asset_id) showAssetDetail(row.asset_id);
+          },
+        },
+        row.asset_name || row.address || '-',
+      ),
   },
   { title: '访问地址', key: 'address', minWidth: 220, ellipsis: { tooltip: true }, render: (row) => renderMuted(row.address) },
   {
@@ -217,7 +237,7 @@ const columns: DataTableColumns<AssetVerifyTask> = [
   {
     title: '操作',
     key: 'actions',
-    width: 330,
+    width: 370,
     fixed: 'right',
     render: (row) =>
       h(NSpace, { size: 6, wrap: false }, () => [
@@ -227,6 +247,7 @@ const columns: DataTableColumns<AssetVerifyTask> = [
         h(NButton, { size: 'tiny', type: 'warning', disabled: !['pending_receive', 'pending_verify', 'forwarded'].includes(row.status), onClick: () => runSimple(row, 'return') }, () => '退回'),
         h(NButton, { size: 'tiny', type: 'error', disabled: !['pending_receive', 'pending_verify'].includes(row.status), onClick: () => openAction(row, 'reject') }, () => '驳回'),
         h(NButton, { size: 'tiny', disabled: !['confirmed', 'rejected', 'returned'].includes(row.status), onClick: () => runSimple(row, 'archive') }, () => '归档'),
+        h(NButton, { size: 'tiny', type: 'error', quaternary: true, disabled: !['pending_dispatch', 'pending_receive', 'rejected', 'returned'].includes(row.status), onClick: () => runSimple(row, 'delete') }, () => '删除'),
         h(NButton, { size: 'tiny', onClick: () => showLogs(row) }, () => '日志'),
       ]),
   },
@@ -375,7 +396,7 @@ async function submitAction() {
   }
 }
 
-function runSimple(row: AssetVerifyTask, type: 'archive' | 'confirm' | 'receive' | 'return') {
+function runSimple(row: AssetVerifyTask, type: 'archive' | 'confirm' | 'delete' | 'receive' | 'return') {
   activeTask.value = row;
   pendingAction.value = type;
   confirmModal.value = true;
@@ -383,9 +404,10 @@ function runSimple(row: AssetVerifyTask, type: 'archive' | 'confirm' | 'receive'
 
 function getActionText(type = pendingAction.value) {
   if (!type) return '处理';
-  const actionTextMap: Record<'archive' | 'confirm' | 'receive' | 'return', string> = {
+  const actionTextMap: Record<'archive' | 'confirm' | 'delete' | 'receive' | 'return', string> = {
     archive: '归档',
     confirm: '确认',
+    delete: '删除',
     receive: '接收',
     return: '退回',
   };
@@ -404,17 +426,51 @@ async function submitSimpleAction() {
   pendingAction.value = '';
 }
 
-async function runTaskAction(row: AssetVerifyTask, type: 'archive' | 'confirm' | 'receive' | 'return') {
+async function runTaskAction(row: AssetVerifyTask, type: 'archive' | 'confirm' | 'delete' | 'receive' | 'return') {
   try {
     if (type === 'receive') await receiveVerifyTask(row.id);
     if (type === 'confirm') await confirmVerifyTask(row.id);
     if (type === 'return') await returnVerifyTask(row.id);
     if (type === 'archive') await archiveVerifyTask(row.id);
+    if (type === 'delete') await deleteVerifyTask(row.id);
     message.success('操作成功');
     fetchList();
   } catch {
     message.error('操作失败');
   }
+}
+
+async function showAssetDetail(assetId: string) {
+  detailDrawer.value = true;
+  detailLoading.value = true;
+  detailAsset.value = null;
+  detailScreenshot.value = null;
+  detailScreenshotSrc.value = '';
+  try {
+    detailAsset.value = await getAssetDetail(assetId);
+  } catch {
+    message.error('获取资产详情失败');
+  } finally {
+    detailLoading.value = false;
+  }
+  getAssetScreenshot(assetId)
+    .then(async (res) => {
+      if (res?.screenshot_url) {
+        try {
+          const { useAccessStore } = await import('@vben/stores');
+          const token = useAccessStore().accessToken;
+          const resp = await fetch(res.screenshot_url, { headers: { Authorization: `Bearer ${token}` } });
+          if (resp.ok) {
+            const blob = await resp.blob();
+            detailScreenshotSrc.value = URL.createObjectURL(blob);
+          }
+        } catch { /* ignore */ }
+      } else if (res?.screenshot) {
+        detailScreenshot.value = res.screenshot;
+        detailScreenshotSrc.value = `data:image/jpeg;base64,${res.screenshot}`;
+      }
+    })
+    .catch(() => {});
 }
 
 async function showLogs(row: AssetVerifyTask) {
@@ -493,7 +549,7 @@ onMounted(() => {
         :data="data"
         :loading="loading"
         :pagination="pagination"
-        :scroll-x="1760"
+        :scroll-x="1800"
       />
     </NCard>
 
@@ -617,6 +673,50 @@ onMounted(() => {
         />
       </NDrawerContent>
     </NDrawer>
+
+    <NDrawer v-model:show="detailDrawer" :width="640">
+      <NDrawerContent :title="`资产详情${detailAsset?.name ? ` - ${detailAsset.name}` : ''}`">
+        <NSpin :show="detailLoading">
+          <template v-if="detailAsset">
+            <div v-if="detailScreenshotSrc" class="screenshot-preview">
+              <img :src="detailScreenshotSrc" alt="首页截图" />
+            </div>
+            <NDescriptions label-placement="left" bordered :column="2" size="small">
+              <NDescriptionsItem label="系统名称" :span="2">{{ detailAsset.name || '-' }}</NDescriptionsItem>
+              <NDescriptionsItem label="访问地址" :span="2">{{ detailAsset.address || '-' }}</NDescriptionsItem>
+              <NDescriptionsItem label="资产分类">{{ detailAsset.asset_family || '-' }}</NDescriptionsItem>
+              <NDescriptionsItem label="数据编号">{{ detailAsset.data_number || '-' }}</NDescriptionsItem>
+              <NDescriptionsItem label="域名">{{ detailAsset.domain || '-' }}</NDescriptionsItem>
+              <NDescriptionsItem label="IPv4">{{ detailAsset.ipv4 || '-' }}</NDescriptionsItem>
+              <NDescriptionsItem label="IPv6" :span="2">{{ detailAsset.ipv6 || '-' }}</NDescriptionsItem>
+              <NDescriptionsItem label="协议">{{ detailAsset.protocol || '-' }}</NDescriptionsItem>
+              <NDescriptionsItem label="端口">{{ detailAsset.port || '-' }}</NDescriptionsItem>
+              <NDescriptionsItem label="服务">{{ detailAsset.service || '-' }}</NDescriptionsItem>
+              <NDescriptionsItem label="版本">{{ detailAsset.version || '-' }}</NDescriptionsItem>
+              <NDescriptionsItem label="操作系统" :span="2">{{ detailAsset.os || '-' }}</NDescriptionsItem>
+              <NDescriptionsItem label="是否联网">{{ detailAsset.is_online ? '是' : '否' }}</NDescriptionsItem>
+              <NDescriptionsItem label="是否关基">{{ detailAsset.is_key ? '是' : '否' }}</NDescriptionsItem>
+              <NDescriptionsItem label="安全等保">{{ detailAsset.security_protection_level || '-' }}</NDescriptionsItem>
+              <NDescriptionsItem label="风险评分">{{ detailAsset.risk_score ?? '-' }}</NDescriptionsItem>
+              <NDescriptionsItem label="备案证号">{{ detailAsset.filing_cert_number || '-' }}</NDescriptionsItem>
+              <NDescriptionsItem label="ICP备案号">{{ detailAsset.icp_filing_number || '-' }}</NDescriptionsItem>
+              <NDescriptionsItem label="公安备案" :span="2">{{ detailAsset.public_security_filing || '-' }}</NDescriptionsItem>
+              <NDescriptionsItem label="所属单位" :span="2">{{ displayName(detailAsset.organize_id) }}</NDescriptionsItem>
+              <NDescriptionsItem label="建设单位">{{ displayName(detailAsset.construction_org_id, constructionOrgNameMap) }}</NDescriptionsItem>
+              <NDescriptionsItem label="运维单位">{{ displayName(detailAsset.operation_org_id, constructionOrgNameMap) }}</NDescriptionsItem>
+              <NDescriptionsItem label="责任人">{{ detailAsset.responsible_user_name || '-' }}</NDescriptionsItem>
+              <NDescriptionsItem label="数据来源">{{ displaySource(detailAsset.data_source) }}</NDescriptionsItem>
+              <NDescriptionsItem label="创建时间">{{ detailAsset.created_at || '-' }}</NDescriptionsItem>
+              <NDescriptionsItem label="更新时间">{{ detailAsset.updated_at || '-' }}</NDescriptionsItem>
+              <NDescriptionsItem v-if="detailAsset.remark" label="备注" :span="2">{{ detailAsset.remark }}</NDescriptionsItem>
+            </NDescriptions>
+          </template>
+          <template v-else-if="!detailLoading">
+            <div style="text-align: center; color: var(--n-text-color-3); padding: 40px">暂无数据</div>
+          </template>
+        </NSpin>
+      </NDrawerContent>
+    </NDrawer>
   </div>
 </template>
 
@@ -664,6 +764,30 @@ onMounted(() => {
 
 .cell-text--empty {
   color: var(--n-text-color-3);
+}
+
+.asset-link {
+  color: var(--n-text-color);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.asset-link:hover {
+  color: var(--primary-color, #18a058);
+  text-decoration: underline;
+}
+
+.screenshot-preview {
+  margin-bottom: 16px;
+  border: 1px solid var(--n-border-color);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.screenshot-preview img {
+  display: block;
+  width: 100%;
+  height: auto;
 }
 
 :global(.verify-task-modal.n-modal) {

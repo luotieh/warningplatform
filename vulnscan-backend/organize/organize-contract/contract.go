@@ -31,12 +31,29 @@ type ServiceOrganize interface {
 }
 
 type OrganizeNode struct {
-	ID       string          `json:"id"`
-	Name     string          `json:"name"`
-	ParentID string          `json:"parent_id"`
-	Sort     int             `json:"sort"`
-	Status   string          `json:"status"`
-	Children []*OrganizeNode `json:"children,omitempty"`
+	ID                        string          `json:"id"`
+	Name                      string          `json:"name"`
+	ParentID                  string          `json:"parent_id"`
+	Sort                      int             `json:"sort"`
+	Status                    string          `json:"status"`
+	UnifiedSocialCreditCode   string          `json:"unified_social_credit_code,omitempty"`
+	UnitType                  string          `json:"unit_type,omitempty"`
+	IndustryCategory          string          `json:"industry_category,omitempty"`
+	IsNotificationMember      bool            `json:"is_notification_member,omitempty"`
+	Address                   string          `json:"address,omitempty"`
+	RegionCode                string          `json:"region_code,omitempty"`
+	UnitDetailAddress         string          `json:"unit_detail_address,omitempty"`
+	LeaderName                string          `json:"leader_name,omitempty"`
+	LeaderTitle               string          `json:"leader_title,omitempty"`
+	ResponsibleDepartmentName string          `json:"responsible_department_name,omitempty"`
+	DepartmentLeaderName      string          `json:"department_leader_name,omitempty"`
+	DepartmentLeaderTitle     string          `json:"department_leader_title,omitempty"`
+	DepartmentLeaderPhone     string          `json:"department_leader_phone,omitempty"`
+	ContactName               string          `json:"contact_name,omitempty"`
+	ContactTitle              string          `json:"contact_title,omitempty"`
+	ContactPhone              string          `json:"contact_phone,omitempty"`
+	AssetCount                int64           `json:"asset_count,omitempty"`
+	Children                  []*OrganizeNode `json:"children,omitempty"`
 }
 
 type ConstructionListReq struct {

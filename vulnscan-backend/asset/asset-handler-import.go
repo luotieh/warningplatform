@@ -771,10 +771,10 @@ func (r *assetImportResolver) findIAMOrganizeByName(ctx context.Context, name st
 	name = strings.TrimSpace(name)
 	if !r.iamOrganizesGot {
 		r.iamOrganizesGot = true
-		r.iamOrganizes, r.iamOrganizesErr = organize.ListAllIAMOrganizes(ctx, r.iam.Organize)
+		r.iamOrganizes, r.iamOrganizesErr = organize.ListAllIAMOrganizes(ctx, r.iam.Admin.Organize)
 	}
 	if r.iamOrganizesErr != nil {
-		return organize.FindIAMOrganizeByExactName(ctx, r.iam.Organize, name)
+		return organize.FindIAMOrganizeByExactName(ctx, r.iam.Admin.Organize, name)
 	}
 	for _, info := range r.iamOrganizes {
 		if info != nil && strings.TrimSpace(info.Name) == name {
@@ -794,7 +794,7 @@ func (r *assetImportResolver) createIAMOrganize(ctx context.Context, name string
 	} else if existing != nil {
 		return existing, nil
 	}
-	info, err := r.iam.Organize.CreateOrganize(ctx, &identity.CreateOrganizeRequest{
+	info, err := r.iam.Admin.Organize.CreateOrganize(ctx, &identity.CreateOrganizeRequest{
 		Name:     name,
 		ParentID: r.defaultParentID,
 	})
