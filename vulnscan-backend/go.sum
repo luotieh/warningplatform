@@ -46,6 +46,8 @@ code.yt-security.com/public/core/v2/product v0.1.0 h1:fhTjq0SND/WHM/f5aQdXtg2baF
 code.yt-security.com/public/core/v2/product v0.1.0/go.mod h1:CRZPy+1tQh8Soo7s457wRZ3+8rfhc2zr2i+ydPnFHmQ=
 code.yt-security.com/public/core/v2/web v0.2.0 h1:J72xRZo7g8M8M2EGGt28sD+2/MaWTmReLdXRgni1kOU=
 code.yt-security.com/public/core/v2/web v0.2.0/go.mod h1:CWA2L3eU+aJCiVBEaRytQ9d48E15nV4ce3iGLa2rRO0=
+code.yt-security.com/public/sdk v1.5.2 h1:3QOcEMC/izzpXtFul/sy8b11y47Uu/HbaNmxh4Cy5yU=
+code.yt-security.com/public/sdk v1.5.2/go.mod h1:Pa+65QoVEOBq1szhZf4tb0woBtaxI2Awh+SDNLmg9VQ=
 dario.cat/mergo v1.0.2 h1:85+piFYR1tMbRrLcDwR18y4UKJ3aH1Tbzi24VRW1TK8=
 dario.cat/mergo v1.0.2/go.mod h1:E/hbnu0NxMFBjpMIE34DRGLWqDy0g5FuKDhCb31ngxA=
 dmitri.shuralyov.com/gpu/mtl v0.0.0-20190408044501-666a987793e9/go.mod h1:H6x//7gZCb22OMCxBHrMx7a5I7Hp++hsVxbQ4BYO7hU=

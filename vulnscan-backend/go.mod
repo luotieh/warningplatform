@@ -8,7 +8,7 @@ require (
 	code.yt-security.com/public/core/v2/db v0.1.0
 	code.yt-security.com/public/core/v2/product v0.1.0
 	code.yt-security.com/public/core/v2/web v0.2.0
-	code.yt-security.com/public/sdk v1.5.1
+	code.yt-security.com/public/sdk v1.5.2
 	github.com/PuerkitoBio/goquery v1.11.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/go-pdf/fpdf v0.9.0
@@ -429,5 +429,3 @@ require (
 	modernc.org/sqlite v1.40.1 // indirect
 	moul.io/http2curl v1.0.0 // indirect
 )
-
-replace code.yt-security.com/public/sdk => F:\code\sdk
