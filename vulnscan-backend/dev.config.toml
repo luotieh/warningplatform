@@ -28,4 +28,4 @@
   callback_uri = "http://localhost:8900/callback"
   success_redirect = "http://localhost:5890/auth/sso-callback"
   cookie_secret = "pp8v7vWsPgaeviINPd4Dio9fb$StZxML"
-  token_relay_callback_uri = "http://localhost:8900/callback
+  token_relay_callback_uri = "http://localhost:8900/callback"
