@@ -274,7 +274,7 @@ jobs:
       - name: (3) 验证部署
         run: |
           NAMESPACE=${APP_NAME}-${MODE}
-          kubectl rollout status statefulset/${APP_NAME}-backend -n ${NAMESPACE} --timeout=120s
+          kubectl rollout status statefulset/${APP_NAME}-backend -n ${NAMESPACE} --timeout=240s
           echo "✅ 滚动更新完成"
           kubectl get pods -n ${NAMESPACE} -l app=${APP_NAME}-backend
 
