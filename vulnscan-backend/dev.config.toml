@@ -21,11 +21,11 @@
 [iam]
   base_url = "http://iam.dev.yt-security.com:32000"
   client_id = "01KSM36602167DKAAAJE6RM2AD"
-  client_secret = "sk-8e2d04476200152902974dbffcdf66ed"
+  client_secret = "sk-711067227963316dcd6ab15d89763cfd"
   path_prefix = "/api"
 
 [sso]
-  callback_uri = "http://localhost:8900/callback"
-  success_redirect = "http://localhost:5890/auth/sso-callback"
+  callback_uri = "http://warning-platform.dev.yt-security.com:32000/callback"
+  success_redirect = "http://warning-platform.dev.yt-security.com:32000/auth/sso-callback"
   cookie_secret = "pp8v7vWsPgaeviINPd4Dio9fb$StZxML"
-  token_relay_callback_uri = "http://localhost:8900/callback"
+  token_relay_callback_uri = "http://warning-platform.dev.yt-security.com:32000/callback"
