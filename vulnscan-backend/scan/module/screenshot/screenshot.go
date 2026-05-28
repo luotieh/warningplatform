@@ -199,6 +199,8 @@ func newLauncher(path, userDataDir string) *launcher.Launcher {
 		UserDataDir(userDataDir).
 		Set("no-sandbox").
 		Set("disable-gpu").
+		Set("disable-software-rasterizer").
+		Set("disable-gpu-compositing").
 		Set("ignore-certificate-errors").
 		Set("disable-dev-shm-usage").
 		Set("disable-extensions").
@@ -206,7 +208,10 @@ func newLauncher(path, userDataDir string) *launcher.Launcher {
 		Set("disable-default-apps").
 		Set("no-first-run").
 		Set("no-default-browser-check").
-		Set("disable-features", "EdgeCollections,msEdgeSidebarV2,msEdgeWalletCheckout,msEdgeWorkspacesRedesign")
+		Set("disable-features", "EdgeCollections,msEdgeSidebarV2,msEdgeWalletCheckout,msEdgeWorkspacesRedesign,VaapiVideoDecoder,Vulkan,UseSkiaRenderer").
+		Set("use-gl", "swiftshader").
+		Set("disable-vulkan").
+		Set("disable-dbus")
 }
 
 func initBrowser() *rod.Browser {

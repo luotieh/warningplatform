@@ -2,7 +2,7 @@ FROM docker.1ms.run/alpine:3.21
 
 WORKDIR /app
 
-# 换源 + 安装核心依赖（已去重并补全关键图形库）
+# 换源 + 安装核心依赖
 RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apk/repositories && \
     apk update && \
     apk add --no-cache \
@@ -12,8 +12,8 @@ RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apk/re
         freetype \
         harfbuzz \
         font-noto-cjk \
-        dbus-libs \
-        mesa-vulkan-swrast \
+        dbus \
+        mesa-dri-gallium \
         libx11 \
         libxcb \
         libxcomposite \
@@ -36,8 +36,9 @@ RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apk/re
     apk del tzdata && \
     rm -rf /var/cache/apk/*
 
-# Chromium 路径供 go-rod 自动发现
+# Chromium 路径供 go-rod 自动发现；禁用 GPU/Vulkan/D-Bus 避免容器内报错
 ENV CHROME_BIN=/usr/bin/chromium-browser
+ENV DBUS_SESSION_BUS_ADDRESS=/dev/null
 
 EXPOSE 8080
 
