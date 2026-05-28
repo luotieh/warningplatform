@@ -19,11 +19,21 @@ export interface SecurityPosture {
   };
   top_risk_assets?: {
     address?: string;
+    asset_id?: string;
+    id?: string;
     alert_count?: number;
     name?: string;
     risk_score?: number;
     vuln_count?: number;
   }[];
+}
+
+export interface RecentActivity {
+  id?: string;
+  type: string;
+  title: string;
+  detail: string;
+  created_at: string;
 }
 
 export function getDashboardOverview() {
@@ -47,7 +57,7 @@ export function getTaskStatusDist() {
 }
 
 export function getRecentActivity() {
-  return requestClient.get<{ type: string; title: string; detail: string; created_at: string }[]>('/dashboard/recent-activity');
+  return requestClient.get<RecentActivity[]>('/dashboard/recent-activity');
 }
 
 export async function getRecentTasks(params?: Record<string, any>) {

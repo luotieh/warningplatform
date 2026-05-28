@@ -471,7 +471,7 @@ func (ps *PageService) CaptureSimpleScreenshot(ctx context.Context, rawURL strin
 
 // IssueAnnotation 描述需要在截图上标注的问题元素。
 type IssueAnnotation struct {
-	Type     string   `json:"type"`     // text | link | selector
+	Type     string   `json:"type"`     // text | link | selector | page
 	Keywords []string `json:"keywords"` // type=text: 需标注的文字; type=link: 需标注的 URL 片段
 	Selector string   `json:"selector"` // type=selector: CSS 选择器
 	Label    string   `json:"label"`    // 标注说明文字
@@ -527,6 +527,8 @@ func buildAnnotationJS(annotations []IssueAnnotation) string {
 	parts = append(parts, `(function(){
 const STYLE='outline:3px solid red;outline-offset:2px;background:rgba(255,0,0,0.08);position:relative;';
 const BADGE_STYLE='position:absolute;top:-18px;right:0;background:red;color:#fff;font-size:11px;padding:1px 6px;border-radius:3px;z-index:99999;white-space:nowrap;pointer-events:none;';
+const PAGE_BORDER_STYLE='position:fixed;inset:10px;border:4px solid #ef4444;border-radius:8px;box-shadow:0 0 0 9999px rgba(239,68,68,0.08),0 0 24px rgba(239,68,68,0.45);z-index:2147483646;pointer-events:none;';
+const PAGE_BADGE_STYLE='position:fixed;top:18px;left:18px;background:#dc2626;color:#fff;font:600 14px/1.4 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding:7px 12px;border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,0.22);z-index:2147483647;pointer-events:none;';
 let marked=0;
 
 function addBadge(el, text){
@@ -590,6 +592,19 @@ function highlightSelector(sel, label){
     marked++;
   });
 }
+
+function highlightPage(label){
+  const border=document.createElement('div');
+  border.style.cssText=PAGE_BORDER_STYLE;
+  document.documentElement.appendChild(border);
+  if(label){
+    const badge=document.createElement('div');
+    badge.style.cssText=PAGE_BADGE_STYLE;
+    badge.textContent=label;
+    document.documentElement.appendChild(badge);
+  }
+  marked++;
+}
 `)
 
 	for _, ann := range annotations {
@@ -614,6 +629,9 @@ function highlightSelector(sel, label){
 				label := escapeJSString(ann.Label)
 				parts = append(parts, fmt.Sprintf(`highlightSelector('%s', '%s');`, escapeJSString(ann.Selector), label))
 			}
+		case "page":
+			label := escapeJSString(ann.Label)
+			parts = append(parts, fmt.Sprintf(`highlightPage('%s');`, label))
 		}
 	}
 

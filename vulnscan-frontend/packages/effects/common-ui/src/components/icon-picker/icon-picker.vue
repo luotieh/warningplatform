@@ -4,7 +4,7 @@ import type { VNode } from 'vue';
 import { computed, ref, useAttrs, watch, watchEffect } from 'vue';
 
 import { usePagination } from '@vben/hooks';
-import { EmptyIcon, Grip, listIcons } from '@vben/icons';
+import { EmptyIcon, getOfflineIconNames, Grip } from '@vben/icons';
 import { $t } from '@vben/locales';
 
 import {
@@ -95,7 +95,7 @@ const currentList = computed(() => {
       ) {
         return innerIcons.value;
       }
-      const icons = listIcons('', props.prefix);
+      const icons = getOfflineIconNames(props.prefix);
       if (icons.length === 0) {
         console.warn(`No icons found for prefix: ${props.prefix}`);
       }

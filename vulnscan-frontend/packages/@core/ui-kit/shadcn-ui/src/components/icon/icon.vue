@@ -18,7 +18,10 @@ const props = defineProps<{
 }>();
 
 const isRemoteIcon = computed(() => {
-  return isString(props.icon) && isHttpUrl(props.icon);
+  if (isString(props.icon) && isHttpUrl(props.icon)) {
+    console.warn('Blocked remote icon URL:', props.icon);
+  }
+  return false;
 });
 
 const isComponent = computed(() => {

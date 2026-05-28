@@ -1,12 +1,9 @@
 <script setup lang="ts">
-import { useRoute } from 'vue-router';
-
 import { SvgDingDingIcon } from '@vben/icons';
 import { $t } from '@vben/locales';
 
 import { alert, useVbenModal } from '@vben-core/popup-ui';
 import { VbenIconButton } from '@vben-core/shadcn-ui';
-import { loadScript } from '@vben-core/shared/utils';
 
 interface Props {
   clientId: string;
@@ -19,8 +16,6 @@ interface Props {
 
 const props = defineProps<Props>();
 
-const route = useRoute();
-
 const [Modal, modalApi] = useVbenModal({
   header: false,
   footer: false,
@@ -31,60 +26,20 @@ const [Modal, modalApi] = useVbenModal({
   },
 });
 
-const getRedirectUri = () => {
-  const { redirectUri } = props;
-  if (redirectUri) {
-    return redirectUri;
-  }
-  return window.location.origin + route.fullPath;
-};
-
 /**
  * 内嵌二维码登录
  */
 const handleQrCodeLogin = async () => {
-  const { clientId, corpId } = props;
-  if (!(window as any).DTFrameLogin) {
-    // 二维码登录 加载资源
-    await loadScript(
-      'https://g.alicdn.com/dingding/h5-dingtalk-login/0.21.0/ddlogin.js',
-    );
-  }
-  (window as any).DTFrameLogin(
-    {
-      id: 'dingding_qrcode_login_element',
-      width: 300,
-      height: 300,
-    },
-    {
-      // 注意：redirect_uri 需为完整URL，扫码后钉钉会带code跳转到这里
-      redirect_uri: encodeURIComponent(getRedirectUri()),
-      client_id: clientId,
-      scope: 'openid corpid',
-      response_type: 'code',
-      state: '1',
-      prompt: 'consent',
-      corpId,
-    },
-    (loginResult: any) => {
-      const { redirectUrl } = loginResult;
-      // 这里可以直接进行重定向
-      window.location.href = redirectUrl;
-    },
-    (errorMsg: string) => {
-      // 这里一般需要展示登录失败的具体原因
-      alert(`Login Error: ${errorMsg}`);
-    },
-  );
+  await alert('钉钉登录依赖外部服务，当前系统已禁用前端外部网络请求。');
 };
 
 const handleLogin = () => {
-  const { clientId, corpId, isQrCode } = props;
+  const { isQrCode } = props;
   if (isQrCode) {
     // 内嵌二维码登录
     modalApi.open();
   } else {
-    window.location.href = `https://login.dingtalk.com/oauth2/auth?redirect_uri=${encodeURIComponent(getRedirectUri())}&response_type=code&client_id=${clientId}&scope=openid&corpid=${corpId}&prompt=consent`;
+    alert('钉钉登录依赖外部服务，当前系统已禁用前端外部网络请求。');
   }
 };
 </script>

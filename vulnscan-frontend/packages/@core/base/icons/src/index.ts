@@ -1,11 +1,12 @@
+export * from './offline-iconify';
+
 export * from './create-icon';
 
 export * from './lucide';
 
-export type { IconifyIcon as IconifyIconStructure } from '@iconify/vue';
+export type { IconifyIcon as IconifyIconStructure } from '@iconify/vue/offline';
 export {
   addCollection,
   addIcon,
   Icon as IconifyIcon,
-  listIcons,
-} from '@iconify/vue';
+} from '@iconify/vue/offline';

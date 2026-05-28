@@ -18,18 +18,27 @@ func NewAggregator(db *gorm.DB) *Aggregator {
 	return &Aggregator{db: db}
 }
 
-func (a *Aggregator) GetSecurityPosture(ctx context.Context) (*SecurityPosture, error) {
+func (a *Aggregator) scopedAssetIDs(ctx context.Context, scopes ...func(*gorm.DB) *gorm.DB) *gorm.DB {
+	return a.db.WithContext(ctx).
+		Model(&model.Asset{}).
+		Scopes(scopes...).
+		Select("id")
+}
+
+func (a *Aggregator) GetSecurityPosture(ctx context.Context, scopes ...func(*gorm.DB) *gorm.DB) (*SecurityPosture, error) {
 	posture := &SecurityPosture{
 		SeverityDist: make(map[string]int),
 		WorkerStatus: make(map[string]int),
 	}
 
+	assetIDs := a.scopedAssetIDs(ctx, scopes...)
+
 	var totalAssets int64
-	a.db.WithContext(ctx).Model(&model.Asset{}).Count(&totalAssets)
+	a.db.WithContext(ctx).Model(&model.Asset{}).Scopes(scopes...).Count(&totalAssets)
 	posture.TotalAssets = int(totalAssets)
 
 	var totalVulns int64
-	a.db.WithContext(ctx).Model(&model.Vulnerability{}).Count(&totalVulns)
+	a.db.WithContext(ctx).Model(&model.Vulnerability{}).Where("asset_id IN (?)", assetIDs).Count(&totalVulns)
 	posture.TotalVulns = int(totalVulns)
 
 	var severityCounts []struct {
@@ -39,6 +48,7 @@ func (a *Aggregator) GetSecurityPosture(ctx context.Context) (*SecurityPosture, 
 	a.db.WithContext(ctx).
 		Model(&model.Vulnerability{}).
 		Select("severity, count(*) as count").
+		Where("asset_id IN (?)", assetIDs).
 		Group("severity").
 		Find(&severityCounts)
 
@@ -51,6 +61,7 @@ func (a *Aggregator) GetSecurityPosture(ctx context.Context) (*SecurityPosture, 
 	var activeTasks int64
 	a.db.WithContext(ctx).
 		Model(&model.ScanTask{}).
+		Scopes(scopes...).
 		Where("status = ?", model.TaskStatusRunning).
 		Count(&activeTasks)
 	posture.ActiveScans = int(activeTasks)
@@ -69,10 +80,10 @@ func (a *Aggregator) GetSecurityPosture(ctx context.Context) (*SecurityPosture, 
 		posture.WorkerStatus[wc.Status] = wc.Count
 	}
 
-	posture.VulnTrend = a.getVulnTrend(ctx, 30)
-	posture.TopVulnAssets = a.getTopVulnAssets(ctx, 10)
+	posture.VulnTrend = a.getVulnTrend(ctx, 30, scopes...)
+	posture.TopVulnAssets = a.getTopVulnAssets(ctx, 10, scopes...)
 	posture.MonitorStats = a.getMonitorStats(ctx)
-	posture.TopRiskAssets = a.getTopRiskAssets(ctx, 10)
+	posture.TopRiskAssets = a.getTopRiskAssets(ctx, 10, scopes...)
 
 	return posture, nil
 }
@@ -100,8 +111,9 @@ func (a *Aggregator) getMonitorStats(ctx context.Context) MonitorStats {
 	return stats
 }
 
-func (a *Aggregator) getTopRiskAssets(ctx context.Context, limit int) []TopRiskAsset {
+func (a *Aggregator) getTopRiskAssets(ctx context.Context, limit int, scopes ...func(*gorm.DB) *gorm.DB) []TopRiskAsset {
 	var results []TopRiskAsset
+	assetIDs := a.scopedAssetIDs(ctx, scopes...)
 	a.db.WithContext(ctx).Raw(`
 		SELECT a.id as asset_id, a.name, a.address, a.risk_score,
 			COALESCE(v.cnt, 0) as vuln_count,
@@ -109,13 +121,15 @@ func (a *Aggregator) getTopRiskAssets(ctx context.Context, limit int) []TopRiskA
 		FROM vs_asset a
 		LEFT JOIN (SELECT asset_id, COUNT(*) as cnt FROM vs_vulnerability WHERE status != 'fixed' GROUP BY asset_id) v ON v.asset_id = a.id
 		LEFT JOIN (SELECT asset_id, COUNT(*) as cnt FROM vs_alert WHERE status = 'open' GROUP BY asset_id) al ON al.asset_id = a.id
+		WHERE a.id IN (?) AND (a.risk_score > 0 OR COALESCE(v.cnt, 0) > 0 OR COALESCE(al.cnt, 0) > 0)
 		ORDER BY a.risk_score DESC
-		LIMIT ?`, limit).Scan(&results)
+		LIMIT ?`, assetIDs, limit).Scan(&results)
 	return results
 }
 
-func (a *Aggregator) getVulnTrend(ctx context.Context, days int) []DataPoint {
+func (a *Aggregator) getVulnTrend(ctx context.Context, days int, scopes ...func(*gorm.DB) *gorm.DB) []DataPoint {
 	var points []DataPoint
+	assetIDs := a.scopedAssetIDs(ctx, scopes...)
 
 	startDate := time.Now().AddDate(0, 0, -days)
 	var trendData []struct {
@@ -127,6 +141,7 @@ func (a *Aggregator) getVulnTrend(ctx context.Context, days int) []DataPoint {
 		Model(&model.Vulnerability{}).
 		Select("DATE(created_at) as date, count(*) as count").
 		Where("created_at >= ?", startDate).
+		Where("asset_id IN (?)", assetIDs).
 		Group("DATE(created_at)").
 		Order("date").
 		Find(&trendData)
@@ -141,12 +156,14 @@ func (a *Aggregator) getVulnTrend(ctx context.Context, days int) []DataPoint {
 	return points
 }
 
-func (a *Aggregator) getTopVulnAssets(ctx context.Context, limit int) []AssetRisk {
+func (a *Aggregator) getTopVulnAssets(ctx context.Context, limit int, scopes ...func(*gorm.DB) *gorm.DB) []AssetRisk {
 	var results []AssetRisk
+	assetIDs := a.scopedAssetIDs(ctx, scopes...)
 
 	a.db.WithContext(ctx).
 		Model(&model.Vulnerability{}).
 		Select("target as host, count(*) as vuln_count").
+		Where("asset_id IN (?)", assetIDs).
 		Group("target").
 		Order("vuln_count DESC").
 		Limit(limit).
@@ -159,7 +176,7 @@ func (a *Aggregator) getTopVulnAssets(ctx context.Context, limit int) []AssetRis
 	return results
 }
 
-func (a *Aggregator) QueryMetric(ctx context.Context, query MetricQuery) (*MetricResult, error) {
+func (a *Aggregator) QueryMetric(ctx context.Context, query MetricQuery, scopes ...func(*gorm.DB) *gorm.DB) (*MetricResult, error) {
 	result := &MetricResult{
 		Name:   query.MetricName,
 		Labels: query.Filters,
@@ -167,12 +184,12 @@ func (a *Aggregator) QueryMetric(ctx context.Context, query MetricQuery) (*Metri
 
 	switch query.MetricName {
 	case "vuln_count":
-		result.Points = a.getVulnTrend(ctx, 30)
+		result.Points = a.getVulnTrend(ctx, 30, scopes...)
 	case "scan_tasks":
 		result.Points = a.getTaskTrend(ctx, 30)
 	case "asset_count":
 		var count int64
-		a.db.WithContext(ctx).Model(&model.Asset{}).Count(&count)
+		a.db.WithContext(ctx).Model(&model.Asset{}).Scopes(scopes...).Count(&count)
 		result.Total = float64(count)
 	default:
 		slog.Warn("未知指标", "metric", query.MetricName)
@@ -208,13 +225,14 @@ func (a *Aggregator) getTaskTrend(ctx context.Context, days int) []DataPoint {
 	return points
 }
 
-func (a *Aggregator) GetTaskStatusDist(ctx context.Context) map[string]int {
+func (a *Aggregator) GetTaskStatusDist(ctx context.Context, scopes ...func(*gorm.DB) *gorm.DB) map[string]int {
 	var counts []struct {
 		Status string
 		Count  int
 	}
 	a.db.WithContext(ctx).
 		Model(&model.ScanTask{}).
+		Scopes(scopes...).
 		Select("status, count(*) as count").
 		Group("status").
 		Find(&counts)
@@ -227,19 +245,22 @@ func (a *Aggregator) GetTaskStatusDist(ctx context.Context) map[string]int {
 }
 
 type Activity struct {
+	ID        string    `json:"id"`
 	Type      string    `json:"type"`
 	Title     string    `json:"title"`
 	Detail    string    `json:"detail"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
-func (a *Aggregator) GetRecentActivity(ctx context.Context) []Activity {
+func (a *Aggregator) GetRecentActivity(ctx context.Context, scopes ...func(*gorm.DB) *gorm.DB) []Activity {
 	var activities []Activity
+	assetIDs := a.scopedAssetIDs(ctx, scopes...)
 
 	var recentTasks []model.ScanTask
-	a.db.WithContext(ctx).Order("created_at DESC").Limit(5).Find(&recentTasks)
+	a.db.WithContext(ctx).Scopes(scopes...).Order("created_at DESC").Limit(5).Find(&recentTasks)
 	for _, t := range recentTasks {
 		activities = append(activities, Activity{
+			ID:        t.ID,
 			Type:      "task",
 			Title:     t.Name,
 			Detail:    t.Status,
@@ -248,9 +269,10 @@ func (a *Aggregator) GetRecentActivity(ctx context.Context) []Activity {
 	}
 
 	var recentVulns []model.Vulnerability
-	a.db.WithContext(ctx).Order("created_at DESC").Limit(5).Find(&recentVulns)
+	a.db.WithContext(ctx).Where("asset_id IN (?)", assetIDs).Order("created_at DESC").Limit(5).Find(&recentVulns)
 	for _, v := range recentVulns {
 		activities = append(activities, Activity{
+			ID:        v.ID,
 			Type:      "vuln",
 			Title:     v.Title,
 			Detail:    v.Severity,

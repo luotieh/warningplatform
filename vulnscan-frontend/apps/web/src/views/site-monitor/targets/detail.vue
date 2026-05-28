@@ -9,7 +9,15 @@ import type {
   MonitorTarget,
 } from '#/api/sitemonitor';
 
-import { computed, h, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import {
+  computed,
+  h,
+  onBeforeUnmount,
+  onMounted,
+  reactive,
+  ref,
+  watch,
+} from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useOpenTaskRecordsTab } from '../composables/useOpenTaskRecordsTab';
 
@@ -38,6 +46,7 @@ import {
 
 import { message } from '#/adapter/naive';
 import { useErrorHandler } from '#/composables/useErrorHandler';
+import { fetchAuthImageObjectUrl } from '#/composables/useAuthImageObjectUrl';
 import {
   applyCrawlPaths,
   batchDeletePathTasks,
@@ -68,7 +77,9 @@ const targetId = computed(() => String(route.params.id ?? ''));
 const target = ref<MonitorTarget | null>(null);
 const pathTasks = ref<MonitorPathTask[]>([]);
 const loading = ref(false);
-const statsMap = ref<Record<string, Record<string, { total: number; issue_count: number }>>>({});
+const statsMap = ref<
+  Record<string, Record<string, { total: number; issue_count: number }>>
+>({});
 const fileLibraries = ref<FileLibrary[]>([]);
 
 const pathDimensions = [
@@ -161,7 +172,11 @@ const columns = computed<DataTableColumns<MonitorPathTask>>(() => [
     render: (row) =>
       h(
         NTag,
-        { size: 'small', type: row.enabled ? 'success' : 'default', bordered: false },
+        {
+          size: 'small',
+          type: row.enabled ? 'success' : 'default',
+          bordered: false,
+        },
         { default: () => (row.enabled ? '启用' : '停用') },
       ),
   },
@@ -209,7 +224,11 @@ const columns = computed<DataTableColumns<MonitorPathTask>>(() => [
           { onPositiveClick: () => handleRunPath(row) },
           {
             trigger: () =>
-              h(NButton, { text: true, size: 'small' }, { default: () => '执行' }),
+              h(
+                NButton,
+                { text: true, size: 'small' },
+                { default: () => '执行' },
+              ),
             default: () => '执行全部已启用路径维度？',
           },
         ),
@@ -218,7 +237,11 @@ const columns = computed<DataTableColumns<MonitorPathTask>>(() => [
           { onPositiveClick: () => handleDeletePath(row) },
           {
             trigger: () =>
-              h(NButton, { text: true, type: 'error', size: 'small' }, { default: () => '删除' }),
+              h(
+                NButton,
+                { text: true, type: 'error', size: 'small' },
+                { default: () => '删除' },
+              ),
             default: () => '确认删除？',
           },
         ),
@@ -234,7 +257,10 @@ function normalizePathDimConfig(
   dim: string,
   cfg?: DimensionConfig,
 ): DimensionConfig {
-  const base: DimensionConfig = { ...(cfg || {}), enabled: cfg?.enabled ?? false };
+  const base: DimensionConfig = {
+    ...(cfg || {}),
+    enabled: cfg?.enabled ?? false,
+  };
   if (['availability', 'tamper', 'sensitive_word', 'blacklink'].includes(dim)) {
     const mins = base.cycle_minutes ?? 1;
     const cronMin = mins > 59 ? 59 : mins;
@@ -249,7 +275,9 @@ function openDrawer(row?: MonitorPathTask) {
   if (row) {
     editingPath.value = row;
     for (const d of pathDimensions) {
-      const cfg = row[`config_${d.key}` as keyof MonitorPathTask] as DimensionConfig;
+      const cfg = row[
+        `config_${d.key}` as keyof MonitorPathTask
+      ] as DimensionConfig;
       pathConfigs[d.key] = normalizePathDimConfig(d.key, cfg);
     }
   } else {
@@ -325,10 +353,19 @@ async function savePathTask() {
     url_override: pathForm.url_override,
     enabled: pathForm.enabled,
     schedule_enabled: true,
-    config_availability: normalizePathDimConfig('availability', pathConfigs.availability),
+    config_availability: normalizePathDimConfig(
+      'availability',
+      pathConfigs.availability,
+    ),
     config_tamper: normalizePathDimConfig('tamper', pathConfigs.tamper),
-    config_sensitive_word: normalizePathDimConfig('sensitive_word', pathConfigs.sensitive_word),
-    config_blacklink: normalizePathDimConfig('blacklink', pathConfigs.blacklink),
+    config_sensitive_word: normalizePathDimConfig(
+      'sensitive_word',
+      pathConfigs.sensitive_word,
+    ),
+    config_blacklink: normalizePathDimConfig(
+      'blacklink',
+      pathConfigs.blacklink,
+    ),
   };
   try {
     if (editingPath.value) {
@@ -374,7 +411,9 @@ const targetConfigs = reactive<Record<string, DimensionConfig>>({});
 function openTargetConfig() {
   if (!target.value) return;
   for (const d of targetDimensions) {
-    const cfg = target.value[`config_${d.key}` as keyof MonitorTarget] as DimensionConfig;
+    const cfg = target.value[
+      `config_${d.key}` as keyof MonitorTarget
+    ] as DimensionConfig;
     targetConfigs[d.key] = { ...(cfg || {}), enabled: cfg?.enabled ?? false };
   }
   targetDrawerVisible.value = true;
@@ -470,7 +509,9 @@ function parseCrawlPages() {
     const result = JSON.parse(crawlJob.value.result_json);
     const newPages: CrawlPage[] = result.pages || [];
     const existingUrls = new Set(crawlPages.value.map((p) => p.url));
-    const newlyDiscovered = newPages.filter((p: CrawlPage) => !existingUrls.has(p.url));
+    const newlyDiscovered = newPages.filter(
+      (p: CrawlPage) => !existingUrls.has(p.url),
+    );
     crawlPages.value = newPages;
     for (const p of newlyDiscovered) {
       if (!crawlSelectedUrls.value.includes(p.url)) {
@@ -573,17 +614,13 @@ function isBase64(val: string): boolean {
 const thumbnailObjectUrls = ref<Record<string, string>>({});
 
 async function loadThumbnailFromStorage(fileId: string): Promise<string> {
-  if (thumbnailObjectUrls.value[fileId]) return thumbnailObjectUrls.value[fileId];
+  if (thumbnailObjectUrls.value[fileId])
+    return thumbnailObjectUrls.value[fileId];
   if (!screenshotBaseUrl.value) return '';
   try {
-    const { useAccessStore } = await import('@vben/stores');
-    const accessStore = useAccessStore();
-    const resp = await fetch(`${screenshotBaseUrl.value}/${fileId}/content`, {
-      headers: { Authorization: `Bearer ${accessStore.accessToken}` },
-    });
-    if (!resp.ok) return '';
-    const blob = await resp.blob();
-    const url = URL.createObjectURL(blob);
+    const url = await fetchAuthImageObjectUrl(
+      `${screenshotBaseUrl.value}/${fileId}/content`,
+    );
     thumbnailObjectUrls.value[fileId] = url;
     return url;
   } catch {
@@ -593,7 +630,8 @@ async function loadThumbnailFromStorage(fileId: string): Promise<string> {
 
 function getThumbnailSrc(page: CrawlPage): string {
   if (!page.thumbnail) return '';
-  if (isBase64(page.thumbnail)) return `data:image/jpeg;base64,${page.thumbnail}`;
+  if (isBase64(page.thumbnail))
+    return `data:image/jpeg;base64,${page.thumbnail}`;
   return thumbnailObjectUrls.value[page.thumbnail] || '';
 }
 
@@ -635,9 +673,14 @@ watch(targetId, refresh);
       <NCard v-if="target" :bordered="false" class="mb-4">
         <template #header>
           <NSpace align="center">
-            <NButton text @click="router.push({ name: 'MonitorTargets' })">← 返回</NButton>
+            <NButton text @click="router.push({ name: 'MonitorTargets' })"
+              >← 返回</NButton
+            >
             <span class="text-lg font-medium">{{ target.name }}</span>
-            <NTag size="small" :type="target.target_type === 'ip' ? 'warning' : 'info'">
+            <NTag
+              size="small"
+              :type="target.target_type === 'ip' ? 'warning' : 'info'"
+            >
               {{ target.target_type === 'ip' ? 'IP' : '域名' }}
             </NTag>
           </NSpace>
@@ -645,13 +688,21 @@ watch(targetId, refresh);
         <template #header-extra>
           <NSpace>
             <NButton @click="openTargetConfig">目标级配置</NButton>
-            <NButton type="primary" @click="crawlVisible = true">站点爬虫</NButton>
+            <NButton type="primary" @click="crawlVisible = true"
+              >站点爬虫</NButton
+            >
           </NSpace>
         </template>
         <NSpace wrap>
-          <span>目标值：<b>{{ target.target_value }}</b></span>
-          <span v-if="target.virtual_host">虚拟 Host：<b>{{ target.virtual_host }}</b></span>
-          <span v-if="target.expected_ips">期望 IP：{{ target.expected_ips }}</span>
+          <span
+            >目标值：<b>{{ target.target_value }}</b></span
+          >
+          <span v-if="target.virtual_host"
+            >请求 Host：<b>{{ target.virtual_host }}</b></span
+          >
+          <span v-if="target.expected_ips"
+            >期望 IP：{{ target.expected_ips }}</span
+          >
         </NSpace>
       </NCard>
 
@@ -670,7 +721,15 @@ watch(targetId, refresh);
               确定删除选中的 {{ checkedRowKeys.length }} 条路径任务？
             </NPopconfirm>
             <NButton type="primary" @click="openDrawer()">单 URL 添加</NButton>
-            <NButton @click="() => { pathInputMode = 'path'; openDrawer(); }">添加路径</NButton>
+            <NButton
+              @click="
+                () => {
+                  pathInputMode = 'path';
+                  openDrawer();
+                }
+              "
+              >添加路径</NButton
+            >
           </NSpace>
         </template>
         <NDataTable
@@ -682,16 +741,31 @@ watch(targetId, refresh);
           :row-key="(r: MonitorPathTask) => r.id"
           remote
           size="small"
-          @update:page="(p: number) => { pathPagination.page = p; loadPathTasks(); }"
-          @update:page-size="(s: number) => { pathPagination.pageSize = s; pathPagination.page = 1; loadPathTasks(); }"
+          @update:page="
+            (p: number) => {
+              pathPagination.page = p;
+              loadPathTasks();
+            }
+          "
+          @update:page-size="
+            (s: number) => {
+              pathPagination.pageSize = s;
+              pathPagination.page = 1;
+              loadPathTasks();
+            }
+          "
         />
       </NCard>
     </NSpin>
 
     <NDrawer v-model:show="drawerVisible" :width="640" placement="right">
-      <NDrawerContent :title="editingPath ? '编辑路径任务' : '新建路径任务'" closable>
+      <NDrawerContent
+        :title="editingPath ? '编辑路径任务' : '新建路径任务'"
+        closable
+      >
         <NAlert type="info" class="mb-3" :bordered="false">
-          单 URL 模式：填写完整地址即可监测该页面（等同旧版「首页 URL」任务）；路径模式：按目标主机 + 路径拼接访问。
+          单 URL 模式：填写完整地址即可监测该页面（等同旧版「首页
+          URL」任务）；路径模式：按目标主机 + 路径拼接访问。
         </NAlert>
         <NForm label-placement="left" label-width="96">
           <NFormItem label="配置模式">
@@ -711,7 +785,9 @@ watch(targetId, refresh);
                   placeholder="https://www.example.com/page"
                   style="flex: 1"
                 />
-                <NButton :loading="fetchingPathTitle" @click="fetchTitleForPath">自动填充</NButton>
+                <NButton :loading="fetchingPathTitle" @click="fetchTitleForPath"
+                  >自动填充</NButton
+                >
               </NSpace>
             </NFormItem>
           </template>
@@ -757,7 +833,12 @@ watch(targetId, refresh);
       </NDrawerContent>
     </NDrawer>
 
-    <NModal v-model:show="crawlVisible" preset="card" title="站点爬虫" style="width: 860px; max-height: 85vh">
+    <NModal
+      v-model:show="crawlVisible"
+      preset="card"
+      title="站点爬虫"
+      style="width: 860px; max-height: 85vh"
+    >
       <div class="mb-3 flex items-center gap-2">
         <NInput
           v-model:value="crawlForm.start_url"
@@ -771,16 +852,37 @@ watch(targetId, refresh);
           <template #unchecked>HTTP</template>
         </NSwitch>
         <span class="text-xs text-gray-500 whitespace-nowrap">深度</span>
-        <NInputNumber v-model:value="crawlForm.max_depth" :min="1" :max="5" size="small" style="width: 70px" />
+        <NInputNumber
+          v-model:value="crawlForm.max_depth"
+          :min="1"
+          :max="5"
+          size="small"
+          style="width: 70px"
+        />
         <span class="text-xs text-gray-500 whitespace-nowrap">页数</span>
-        <NInputNumber v-model:value="crawlForm.max_pages" :min="1" :max="200" size="small" style="width: 80px" />
-        <NButton :loading="crawlPolling" type="primary" size="small" class="flex-shrink-0" @click="handleStartCrawl">
+        <NInputNumber
+          v-model:value="crawlForm.max_pages"
+          :min="1"
+          :max="200"
+          size="small"
+          style="width: 80px"
+        />
+        <NButton
+          :loading="crawlPolling"
+          type="primary"
+          size="small"
+          class="flex-shrink-0"
+          @click="handleStartCrawl"
+        >
           {{ crawlJob ? '重新爬取' : '开始爬取' }}
         </NButton>
       </div>
 
       <!-- 截图配置（仅无头模式显示） -->
-      <div v-if="crawlForm.use_headless" class="mt-2 flex items-center gap-2 text-xs text-gray-500">
+      <div
+        v-if="crawlForm.use_headless"
+        class="mt-2 flex items-center gap-2 text-xs text-gray-500"
+      >
         <span>截图分辨率</span>
         <NSelect
           :value="`${crawlForm.screenshot_width}x${crawlForm.screenshot_height}`"
@@ -803,10 +905,29 @@ watch(targetId, refresh);
 
       <div v-if="crawlJob" class="mt-2 text-sm">
         状态：
-        <NTag size="small" :type="crawlJob.status === 'success' ? 'success' : crawlJob.status === 'failed' ? 'error' : 'default'">
-          {{ crawlJob.status === 'success' ? '完成' : crawlJob.status === 'failed' ? '失败' : crawlJob.status === 'running' ? '爬取中...' : crawlJob.status }}
+        <NTag
+          size="small"
+          :type="
+            crawlJob.status === 'success'
+              ? 'success'
+              : crawlJob.status === 'failed'
+                ? 'error'
+                : 'default'
+          "
+        >
+          {{
+            crawlJob.status === 'success'
+              ? '完成'
+              : crawlJob.status === 'failed'
+                ? '失败'
+                : crawlJob.status === 'running'
+                  ? '爬取中...'
+                  : crawlJob.status
+          }}
         </NTag>
-        <span v-if="crawlJob.error" class="ml-2 text-red-500">{{ crawlJob.error }}</span>
+        <span v-if="crawlJob.error" class="ml-2 text-red-500">{{
+          crawlJob.error
+        }}</span>
         <span v-if="crawlPolling" class="ml-2 text-gray-400">轮询中…</span>
       </div>
 
@@ -814,37 +935,58 @@ watch(targetId, refresh);
       <div v-if="crawlPages.length > 0" class="mt-3">
         <div class="mb-2 flex items-center justify-between">
           <span class="text-sm font-medium">
-            发现 {{ crawlPages.length }} 个页面，已选 {{ crawlSelectedUrls.length }} 个
+            发现 {{ crawlPages.length }} 个页面，已选
+            {{ crawlSelectedUrls.length }} 个
           </span>
-          <NButton text type="primary" size="small" @click="toggleCrawlSelectAll">
-            {{ crawlSelectedUrls.length === crawlPages.length ? '取消全选' : '全选' }}
+          <NButton
+            text
+            type="primary"
+            size="small"
+            @click="toggleCrawlSelectAll"
+          >
+            {{
+              crawlSelectedUrls.length === crawlPages.length
+                ? '取消全选'
+                : '全选'
+            }}
           </NButton>
         </div>
-        <div style="max-height: 400px; overflow-y: auto" class="rounded border border-gray-200 dark:border-gray-700">
+        <div
+          style="max-height: 400px; overflow-y: auto"
+          class="rounded border border-gray-200 dark:border-gray-700"
+        >
           <div
             v-for="(page, idx) in crawlPages"
             :key="page.url"
             :class="[
               'flex cursor-pointer items-center gap-3 px-3 py-2 text-sm transition-colors hover:bg-gray-50 dark:hover:bg-gray-800',
-              idx !== crawlPages.length - 1 ? 'border-b border-gray-100 dark:border-gray-700' : '',
-              crawlSelectedUrls.includes(page.url) ? 'bg-blue-50/50 dark:bg-blue-900/10' : '',
+              idx !== crawlPages.length - 1
+                ? 'border-b border-gray-100 dark:border-gray-700'
+                : '',
+              crawlSelectedUrls.includes(page.url)
+                ? 'bg-blue-50/50 dark:bg-blue-900/10'
+                : '',
             ]"
-            @click="() => {
-              const i = crawlSelectedUrls.indexOf(page.url);
-              if (i >= 0) crawlSelectedUrls.splice(i, 1);
-              else crawlSelectedUrls.push(page.url);
-            }"
+            @click="
+              () => {
+                const i = crawlSelectedUrls.indexOf(page.url);
+                if (i >= 0) crawlSelectedUrls.splice(i, 1);
+                else crawlSelectedUrls.push(page.url);
+              }
+            "
           >
             <input
               type="checkbox"
               :checked="crawlSelectedUrls.includes(page.url)"
               class="flex-shrink-0"
               @click.stop
-              @change="() => {
-                const i = crawlSelectedUrls.indexOf(page.url);
-                if (i >= 0) crawlSelectedUrls.splice(i, 1);
-                else crawlSelectedUrls.push(page.url);
-              }"
+              @change="
+                () => {
+                  const i = crawlSelectedUrls.indexOf(page.url);
+                  if (i >= 0) crawlSelectedUrls.splice(i, 1);
+                  else crawlSelectedUrls.push(page.url);
+                }
+              "
             />
             <img
               v-if="page.thumbnail && getThumbnailSrc(page)"
@@ -890,7 +1032,12 @@ watch(targetId, refresh);
     </NModal>
 
     <!-- 截图预览 -->
-    <NModal v-model:show="previewVisible" preset="card" :title="previewTitle" style="width: auto; max-width: 90vw">
+    <NModal
+      v-model:show="previewVisible"
+      preset="card"
+      :title="previewTitle"
+      style="width: auto; max-width: 90vw"
+    >
       <img
         :src="previewImage"
         alt="页面截图"

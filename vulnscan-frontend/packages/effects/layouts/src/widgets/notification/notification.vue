@@ -74,8 +74,7 @@ function navigateTo(
   state?: Record<string, any>,
 ) {
   if (link.startsWith('http://') || link.startsWith('https://')) {
-    // 外部链接，在新标签页打开
-    window.open(link, '_blank');
+    console.warn('Blocked external notification link:', link);
   } else {
     // 内部路由链接，支持 query 参数和 state
     router.push({

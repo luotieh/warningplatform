@@ -6,8 +6,11 @@ import (
 
 	"code.yt-security.com/public/core/v2/db"
 	"code.yt-security.com/public/core/v2/web"
+	iamsdk "code.yt-security.com/public/sdk"
 	"code.yt-security.com/public/sdk/authorize"
 	"github.com/gin-gonic/gin"
+
+	"vulnscan-backend/pkg/definition"
 )
 
 type Handler struct {
@@ -25,7 +28,8 @@ func (h *Handler) Overview(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 
-	posture, err := h.agg.GetSecurityPosture(ctx)
+	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
+	posture, err := h.agg.GetSecurityPosture(ctx, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
@@ -38,7 +42,8 @@ func (h *Handler) VulnTrend(c *gin.Context) {
 	defer cancel()
 
 	days := 30
-	trend := h.agg.getVulnTrend(ctx, days)
+	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
+	trend := h.agg.getVulnTrend(ctx, days, scope)
 	web.OK(c).Data(trend).Send()
 }
 
@@ -54,7 +59,8 @@ func (h *Handler) TopVulnAssets(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 
-	assets := h.agg.getTopVulnAssets(ctx, 10)
+	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
+	assets := h.agg.getTopVulnAssets(ctx, 10, scope)
 	web.OK(c).Data(assets).Send()
 }
 
@@ -62,7 +68,8 @@ func (h *Handler) TaskStatusDist(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 
-	result := h.agg.GetTaskStatusDist(ctx)
+	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
+	result := h.agg.GetTaskStatusDist(ctx, scope)
 	web.OK(c).Data(result).Send()
 }
 
@@ -70,7 +77,8 @@ func (h *Handler) RecentActivity(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 
-	activities := h.agg.GetRecentActivity(ctx)
+	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
+	activities := h.agg.GetRecentActivity(ctx, scope)
 	web.OK(c).Data(activities).Send()
 }
 

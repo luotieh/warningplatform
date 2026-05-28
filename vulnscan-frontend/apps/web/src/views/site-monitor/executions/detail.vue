@@ -15,14 +15,16 @@ import {
   NDescriptionsItem,
   NEmpty,
   NInput,
+  NModal,
   NSpace,
   NSpin,
   NTag,
 } from 'naive-ui';
 
 import { message } from '#/adapter/naive';
-import { getExecutionDetail, getEvidenceAssetUrl } from '#/api/sitemonitor';
 import { createIncident, type CreateIncidentReq } from '#/api/incident';
+import { getExecutionDetail, getEvidenceAssetUrl } from '#/api/sitemonitor';
+import { fetchAuthImageObjectUrl } from '#/composables/useAuthImageObjectUrl';
 
 import { buildMonitorIncidentDescription } from '../monitor-incident-description';
 
@@ -40,7 +42,9 @@ const router = useRouter();
 const { setTabTitle, resetTabTitle } = useTabs();
 const execId = route.params.id as string;
 const returnTaskId = computed(() => String(route.query.taskId ?? '').trim());
-const returnTaskName = computed(() => String(route.query.taskName ?? '').trim());
+const returnTaskName = computed(() =>
+  String(route.query.taskName ?? '').trim(),
+);
 const loading = ref(false);
 const detail = ref<any>(null);
 
@@ -93,7 +97,7 @@ async function fetchDetail() {
   }
 }
 
-const formatTime = (t: string) =>
+const formatTime = (t?: string) =>
   t ? dayjs(t).format('YYYY-MM-DD HH:mm:ss') : '-';
 
 const durationSec = computed(() => {
@@ -141,7 +145,11 @@ async function convertToIncident() {
     },
     metadata: {
       incident_type: dimensionToIncidentType[d.dimension] ?? 'other',
-      incident_description: buildMonitorIncidentDescription(d, result, formatTime),
+      incident_description: buildMonitorIncidentDescription(
+        d,
+        result,
+        formatTime,
+      ),
       incident_url: d.url,
       discovery_time: d.started_at || d.created_at || undefined,
     },
@@ -184,6 +192,8 @@ const screenshotUrl = computed(() =>
     : '',
 );
 const screenshotFailed = ref(false);
+const screenshotObjectUrl = ref('');
+const showScreenshotPreview = ref(false);
 
 const annotatedScreenshotUrl = computed(() =>
   detail.value?.status === 'success' && detail.value?.has_issue
@@ -191,10 +201,44 @@ const annotatedScreenshotUrl = computed(() =>
     : '',
 );
 const annotatedFailed = ref(false);
+const annotatedObjectUrl = ref('');
 const showAnnotatedPreview = ref(false);
 
 onMounted(() => fetchDetail());
-onBeforeUnmount(() => resetTabTitle());
+
+function revokeObjectUrl(value: string) {
+  if (value) URL.revokeObjectURL(value);
+}
+
+watch(screenshotUrl, async (url) => {
+  revokeObjectUrl(screenshotObjectUrl.value);
+  screenshotObjectUrl.value = '';
+  screenshotFailed.value = false;
+  if (!url) return;
+  try {
+    screenshotObjectUrl.value = await fetchAuthImageObjectUrl(url);
+  } catch {
+    screenshotFailed.value = true;
+  }
+});
+
+watch(annotatedScreenshotUrl, async (url) => {
+  revokeObjectUrl(annotatedObjectUrl.value);
+  annotatedObjectUrl.value = '';
+  annotatedFailed.value = false;
+  if (!url) return;
+  try {
+    annotatedObjectUrl.value = await fetchAuthImageObjectUrl(url);
+  } catch {
+    annotatedFailed.value = true;
+  }
+});
+
+onBeforeUnmount(() => {
+  resetTabTitle();
+  revokeObjectUrl(screenshotObjectUrl.value);
+  revokeObjectUrl(annotatedObjectUrl.value);
+});
 </script>
 
 <template>
@@ -269,7 +313,9 @@ onBeforeUnmount(() => resetTabTitle());
               <span class="font-mono text-xs">{{ detail.task_id }}</span>
             </NDescriptionsItem>
             <NDescriptionsItem label="Agent ID">
-              <span class="font-mono text-xs">{{ detail.agent_id || '-' }}</span>
+              <span class="font-mono text-xs">{{
+                detail.agent_id || '-'
+              }}</span>
             </NDescriptionsItem>
             <NDescriptionsItem label="目标URL" :span="3">
               <span class="font-mono text-xs break-all">{{ detail.url }}</span>
@@ -303,7 +349,9 @@ onBeforeUnmount(() => resetTabTitle());
               {{ formatTime(detail.created_at) }}
             </NDescriptionsItem>
             <NDescriptionsItem v-if="detail.error" label="执行错误" :span="3">
-              <span class="text-error font-mono text-sm">{{ detail.error }}</span>
+              <span class="text-error font-mono text-sm">{{
+                detail.error
+              }}</span>
             </NDescriptionsItem>
           </NDescriptions>
         </NCard>
@@ -343,11 +391,7 @@ onBeforeUnmount(() => resetTabTitle());
           />
         </template>
 
-        <NCard
-          v-else-if="detail.status === 'failed'"
-          class="mb-3"
-          size="small"
-        >
+        <NCard v-else-if="detail.status === 'failed'" class="mb-3" size="small">
           <NEmpty description="执行失败，无结果数据">
             <template #extra>
               <div class="text-error mt-2 text-sm">
@@ -366,14 +410,22 @@ onBeforeUnmount(() => resetTabTitle());
           <template #header>
             <div class="flex items-center gap-2">
               <span>问题标注截图</span>
-              <NTag size="tiny" type="error" :bordered="false" round>红框标注</NTag>
+              <NTag size="tiny" type="error" :bordered="false" round
+                >红框标注</NTag
+              >
             </div>
           </template>
+          <div
+            v-if="!annotatedObjectUrl"
+            class="py-8 text-center text-sm text-gray-400"
+          >
+            正在加载截图...
+          </div>
           <img
-            :src="annotatedScreenshotUrl"
+            v-else
+            :src="annotatedObjectUrl"
             alt="问题标注截图"
             class="max-w-full cursor-zoom-in rounded border-2 border-red-200"
-            @error="annotatedFailed = true"
             @click="showAnnotatedPreview = true"
           />
         </NCard>
@@ -385,20 +437,23 @@ onBeforeUnmount(() => resetTabTitle());
           class="mb-3"
           size="small"
         >
+          <div
+            v-if="!screenshotObjectUrl"
+            class="py-8 text-center text-sm text-gray-400"
+          >
+            正在加载截图...
+          </div>
           <img
-            :src="screenshotUrl"
+            v-else
+            :src="screenshotObjectUrl"
             alt="页面截图"
-            class="max-w-full rounded border border-gray-200"
-            @error="screenshotFailed = true"
+            class="max-w-full cursor-zoom-in rounded border border-gray-200"
+            @click="showScreenshotPreview = true"
           />
         </NCard>
 
         <!-- 原始 JSON -->
-        <NCard
-          v-if="detail.result_json"
-          class="mb-3"
-          size="small"
-        >
+        <NCard v-if="detail.result_json" class="mb-3" size="small">
           <NCollapse>
             <NCollapseItem title="原始 result_json（调试用）" name="raw">
               <NInput
@@ -415,10 +470,28 @@ onBeforeUnmount(() => resetTabTitle());
     </NSpin>
 
     <!-- 标注截图放大预览 -->
-    <NModal v-model:show="showAnnotatedPreview" preset="card" title="问题标注截图" style="width: auto; max-width: 95vw">
+    <NModal
+      v-model:show="showAnnotatedPreview"
+      preset="card"
+      title="问题标注截图"
+      style="width: auto; max-width: 95vw"
+    >
       <img
-        :src="annotatedScreenshotUrl"
+        :src="annotatedObjectUrl"
         alt="问题标注截图"
+        class="max-h-[80vh] max-w-full rounded"
+      />
+    </NModal>
+
+    <NModal
+      v-model:show="showScreenshotPreview"
+      preset="card"
+      title="页面截图"
+      style="width: auto; max-width: 95vw"
+    >
+      <img
+        :src="screenshotObjectUrl"
+        alt="页面截图"
         class="max-h-[80vh] max-w-full rounded"
       />
     </NModal>

@@ -105,6 +105,7 @@ func buildBlacklinkAnnotations(details map[string]any) []IssueAnnotation {
 
 func buildTamperAnnotations(details map[string]any) []IssueAnnotation {
 	var annotations []IssueAnnotation
+	hasGlobalDiff := false
 
 	if diffs, ok := details["diffs"].([]any); ok {
 		for _, d := range diffs {
@@ -112,7 +113,11 @@ func buildTamperAnnotations(details map[string]any) []IssueAnnotation {
 			if !ok {
 				continue
 			}
-			if dtype, _ := dm["type"].(string); dtype == "injected_elements" {
+			if dtype, _ := dm["type"].(string); dtype != "" {
+				hasGlobalDiff = true
+				if dtype != "injected_elements" {
+					continue
+				}
 				if elems, ok := dm["elements"].([]any); ok {
 					for _, item := range elems {
 						m, ok := item.(map[string]any)
@@ -143,6 +148,13 @@ func buildTamperAnnotations(details map[string]any) []IssueAnnotation {
 				})
 			}
 		}
+	}
+
+	if hasGlobalDiff {
+		annotations = append(annotations, IssueAnnotation{
+			Type:  "page",
+			Label: "检测到页面内容变化",
+		})
 	}
 
 	return annotations

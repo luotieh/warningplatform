@@ -1,9 +1,22 @@
 <script lang="ts" setup>
 import type { DataTableColumns, DataTableRowKey } from 'naive-ui';
 
-import { computed, h, onMounted, reactive, ref } from 'vue';
+import {
+  computed,
+  h,
+  onBeforeUnmount,
+  onMounted,
+  reactive,
+  ref,
+  watch,
+} from 'vue';
 
-import { getAssetDetail, getAssetList, getAssetScreenshot, type Asset } from '#/api/asset';
+import {
+  getAssetDetail,
+  getAssetList,
+  getAssetScreenshot,
+  type Asset,
+} from '#/api/asset';
 import {
   archiveVerifyTask,
   confirmVerifyTask,
@@ -21,6 +34,7 @@ import {
   type AssetVerifyTask,
 } from '#/api/assetmgr';
 import { buildOrgTreeOptions, flattenOrgTree } from './ledger/utils';
+import { fetchAuthImageObjectUrl } from '#/composables/useAuthImageObjectUrl';
 import {
   NButton,
   NCard,
@@ -63,17 +77,28 @@ const detailLoading = ref(false);
 const detailAsset = ref<Asset | null>(null);
 const detailScreenshot = ref<string | null>(null);
 const detailScreenshotSrc = ref('');
+const detailScreenshotObjectUrl = ref('');
 const createModal = ref(false);
 const actionModal = ref(false);
 const confirmModal = ref(false);
 const actionType = ref<'forward' | 'reject'>('forward');
 const activeTask = ref<AssetVerifyTask | null>(null);
-const pendingAction = ref<'archive' | 'confirm' | 'delete' | 'receive' | 'return' | ''>('');
+const pendingAction = ref<
+  'archive' | 'confirm' | 'delete' | 'receive' | 'return' | ''
+>('');
 
 const searchForm = reactive({ keyword: '', status: '', owner_organize_id: '' });
 const assetSearchForm = reactive({ keyword: '', organize_id: '' });
-const createForm = reactive({ target_organize_id: '', source_type: 'manual', remark: '' });
-const actionForm = reactive({ target_organize_id: '', reject_reason: '', remark: '' });
+const createForm = reactive({
+  target_organize_id: '',
+  source_type: 'manual',
+  remark: '',
+});
+const actionForm = reactive({
+  target_organize_id: '',
+  reject_reason: '',
+  remark: '',
+});
 
 const pagination = reactive({
   page: 1,
@@ -97,7 +122,10 @@ const selectedAssets = computed(() => {
   return assetOptions.value.filter((item) => selected.has(item.id));
 });
 
-const statusMap: Record<string, { label: string; type: 'default' | 'error' | 'info' | 'success' | 'warning' }> = {
+const statusMap: Record<
+  string,
+  { label: string; type: 'default' | 'error' | 'info' | 'success' | 'warning' }
+> = {
   pending_dispatch: { label: '待下发', type: 'default' },
   pending_receive: { label: '待接收', type: 'warning' },
   pending_verify: { label: '待核验', type: 'info' },
@@ -127,7 +155,10 @@ const sourceMap: Record<string, string> = {
   scan: '扫描',
 };
 
-const statusOptions = Object.entries(statusMap).map(([value, item]) => ({ label: item.label, value }));
+const statusOptions = Object.entries(statusMap).map(([value, item]) => ({
+  label: item.label,
+  value,
+}));
 const sourceOptions = [
   { label: sourceMap.manual, value: 'manual' },
   { label: sourceMap.import, value: 'import' },
@@ -142,7 +173,6 @@ const sourceAliasMap: Record<string, string> = {
   external: 'external',
 };
 
-
 function parseListBody<T>(res: unknown): { count: number; data: T[] } {
   const body = (res as any)?.data ?? res;
   return {
@@ -151,7 +181,10 @@ function parseListBody<T>(res: unknown): { count: number; data: T[] } {
   };
 }
 
-function displayName(value?: string, map: Record<string, string> = organizeNameMap.value) {
+function displayName(
+  value?: string,
+  map: Record<string, string> = organizeNameMap.value,
+) {
   if (!value) return '-';
   return map[value] ?? value;
 }
@@ -171,8 +204,15 @@ function displayStatus(value?: string) {
 }
 
 function renderStatus(row: AssetVerifyTask) {
-  const item = statusMap[row.status] ?? { label: row.status, type: 'default' as const };
-  return h(NTag, { bordered: false, size: 'small', type: item.type }, () => item.label);
+  const item = statusMap[row.status] ?? {
+    label: row.status,
+    type: 'default' as const,
+  };
+  return h(
+    NTag,
+    { bordered: false, size: 'small', type: item.type },
+    () => item.label,
+  );
 }
 
 function getForwardActionText(row?: AssetVerifyTask | null) {
@@ -180,7 +220,11 @@ function getForwardActionText(row?: AssetVerifyTask | null) {
 }
 
 function renderMuted(value?: string) {
-  return h('span', { class: value ? 'cell-text' : 'cell-text cell-text--empty' }, value || '-');
+  return h(
+    'span',
+    { class: value ? 'cell-text' : 'cell-text cell-text--empty' },
+    value || '-',
+  );
 }
 
 const columns: DataTableColumns<AssetVerifyTask> = [
@@ -203,7 +247,13 @@ const columns: DataTableColumns<AssetVerifyTask> = [
         row.asset_name || row.address || '-',
       ),
   },
-  { title: '访问地址', key: 'address', minWidth: 220, ellipsis: { tooltip: true }, render: (row) => renderMuted(row.address) },
+  {
+    title: '访问地址',
+    key: 'address',
+    minWidth: 220,
+    ellipsis: { tooltip: true },
+    render: (row) => renderMuted(row.address),
+  },
   {
     title: '资产所属单位',
     key: 'owner_organize_id',
@@ -223,17 +273,34 @@ const columns: DataTableColumns<AssetVerifyTask> = [
     key: 'construction_org_id',
     minWidth: 150,
     ellipsis: { tooltip: true },
-    render: (row) => renderMuted(displayName(row.construction_org_id, constructionOrgNameMap.value)),
+    render: (row) =>
+      renderMuted(
+        displayName(row.construction_org_id, constructionOrgNameMap.value),
+      ),
   },
   {
     title: '运维单位',
     key: 'operation_org_id',
     minWidth: 150,
     ellipsis: { tooltip: true },
-    render: (row) => renderMuted(displayName(row.operation_org_id, constructionOrgNameMap.value)),
+    render: (row) =>
+      renderMuted(
+        displayName(row.operation_org_id, constructionOrgNameMap.value),
+      ),
   },
-  { title: '来源', key: 'source_type', width: 100, render: (row) => renderMuted(displaySource(row.source_type)) },
-  { title: '更新时间', key: 'updated_at', width: 170, ellipsis: { tooltip: true }, render: (row) => renderMuted(row.updated_at) },
+  {
+    title: '来源',
+    key: 'source_type',
+    width: 100,
+    render: (row) => renderMuted(displaySource(row.source_type)),
+  },
+  {
+    title: '更新时间',
+    key: 'updated_at',
+    width: 170,
+    ellipsis: { tooltip: true },
+    render: (row) => renderMuted(row.updated_at),
+  },
   {
     title: '操作',
     key: 'actions',
@@ -241,22 +308,116 @@ const columns: DataTableColumns<AssetVerifyTask> = [
     fixed: 'right',
     render: (row) =>
       h(NSpace, { size: 6, wrap: false }, () => [
-        h(NButton, { size: 'tiny', disabled: !['pending_receive', 'forwarded'].includes(row.status), onClick: () => runSimple(row, 'receive') }, () => '接收'),
-        h(NButton, { size: 'tiny', type: 'primary', disabled: row.status !== 'pending_verify', onClick: () => runSimple(row, 'confirm') }, () => '确认'),
-        h(NButton, { size: 'tiny', disabled: !['pending_dispatch', 'pending_receive', 'pending_verify'].includes(row.status), onClick: () => openAction(row, 'forward') }, () => getForwardActionText(row)),
-        h(NButton, { size: 'tiny', type: 'warning', disabled: !['pending_receive', 'pending_verify', 'forwarded'].includes(row.status), onClick: () => runSimple(row, 'return') }, () => '退回'),
-        h(NButton, { size: 'tiny', type: 'error', disabled: !['pending_receive', 'pending_verify'].includes(row.status), onClick: () => openAction(row, 'reject') }, () => '驳回'),
-        h(NButton, { size: 'tiny', disabled: !['confirmed', 'rejected', 'returned'].includes(row.status), onClick: () => runSimple(row, 'archive') }, () => '归档'),
-        h(NButton, { size: 'tiny', type: 'error', quaternary: true, disabled: !['pending_dispatch', 'pending_receive', 'rejected', 'returned'].includes(row.status), onClick: () => runSimple(row, 'delete') }, () => '删除'),
-        h(NButton, { size: 'tiny', onClick: () => showLogs(row) }, () => '日志'),
+        h(
+          NButton,
+          {
+            size: 'tiny',
+            disabled: !['pending_receive', 'forwarded'].includes(row.status),
+            onClick: () => runSimple(row, 'receive'),
+          },
+          () => '接收',
+        ),
+        h(
+          NButton,
+          {
+            size: 'tiny',
+            type: 'primary',
+            disabled: row.status !== 'pending_verify',
+            onClick: () => runSimple(row, 'confirm'),
+          },
+          () => '确认',
+        ),
+        h(
+          NButton,
+          {
+            size: 'tiny',
+            disabled: ![
+              'pending_dispatch',
+              'pending_receive',
+              'pending_verify',
+            ].includes(row.status),
+            onClick: () => openAction(row, 'forward'),
+          },
+          () => getForwardActionText(row),
+        ),
+        h(
+          NButton,
+          {
+            size: 'tiny',
+            type: 'warning',
+            disabled: ![
+              'pending_receive',
+              'pending_verify',
+              'forwarded',
+            ].includes(row.status),
+            onClick: () => runSimple(row, 'return'),
+          },
+          () => '退回',
+        ),
+        h(
+          NButton,
+          {
+            size: 'tiny',
+            type: 'error',
+            disabled: !['pending_receive', 'pending_verify'].includes(
+              row.status,
+            ),
+            onClick: () => openAction(row, 'reject'),
+          },
+          () => '驳回',
+        ),
+        h(
+          NButton,
+          {
+            size: 'tiny',
+            disabled: !['confirmed', 'rejected', 'returned'].includes(
+              row.status,
+            ),
+            onClick: () => runSimple(row, 'archive'),
+          },
+          () => '归档',
+        ),
+        h(
+          NButton,
+          {
+            size: 'tiny',
+            type: 'error',
+            quaternary: true,
+            disabled: ![
+              'pending_dispatch',
+              'pending_receive',
+              'rejected',
+              'returned',
+            ].includes(row.status),
+            onClick: () => runSimple(row, 'delete'),
+          },
+          () => '删除',
+        ),
+        h(
+          NButton,
+          { size: 'tiny', onClick: () => showLogs(row) },
+          () => '日志',
+        ),
       ]),
   },
 ];
 
 const assetColumns: DataTableColumns<Asset> = [
   { type: 'selection', width: 44 },
-  { title: '系统名称', key: 'name', minWidth: 180, ellipsis: { tooltip: true }, render: (row) => renderMuted(row.name || row.address) },
-  { title: '访问地址', key: 'address', minWidth: 220, ellipsis: { tooltip: true }, render: (row) => renderMuted(row.address) },
+  {
+    title: '系统名称',
+    key: 'name',
+    minWidth: 180,
+    ellipsis: { tooltip: true },
+    render: (row) => renderMuted(row.name || row.address),
+  },
+  {
+    title: '访问地址',
+    key: 'address',
+    minWidth: 220,
+    ellipsis: { tooltip: true },
+    render: (row) => renderMuted(row.address),
+  },
   {
     title: '资产所属单位',
     key: 'organize_id',
@@ -264,13 +425,33 @@ const assetColumns: DataTableColumns<Asset> = [
     ellipsis: { tooltip: true },
     render: (row) => renderMuted(displayName(row.organize_id)),
   },
-  { title: '资产分类', key: 'asset_family', width: 120, render: (row) => renderMuted(row.asset_family) },
+  {
+    title: '资产分类',
+    key: 'asset_family',
+    width: 120,
+    render: (row) => renderMuted(row.asset_family),
+  },
 ];
 
 const logColumns: DataTableColumns<AssetVerifyOplog> = [
-  { title: '动作', key: 'action', width: 110, render: (row) => renderMuted(actionMap[row.action] ?? row.action) },
-  { title: '原状态', key: 'from_status', width: 110, render: (row) => renderMuted(displayStatus(row.from_status)) },
-  { title: '新状态', key: 'to_status', width: 110, render: (row) => renderMuted(displayStatus(row.to_status)) },
+  {
+    title: '动作',
+    key: 'action',
+    width: 110,
+    render: (row) => renderMuted(actionMap[row.action] ?? row.action),
+  },
+  {
+    title: '原状态',
+    key: 'from_status',
+    width: 110,
+    render: (row) => renderMuted(displayStatus(row.from_status)),
+  },
+  {
+    title: '新状态',
+    key: 'to_status',
+    width: 110,
+    render: (row) => renderMuted(displayStatus(row.to_status)),
+  },
   {
     title: '目标单位',
     key: 'target_organize_id',
@@ -278,9 +459,27 @@ const logColumns: DataTableColumns<AssetVerifyOplog> = [
     ellipsis: { tooltip: true },
     render: (row) => renderMuted(displayName(row.target_organize_id)),
   },
-  { title: '操作人', key: 'operator', width: 130, ellipsis: { tooltip: true }, render: (row) => renderMuted(row.operator) },
-  { title: '备注', key: 'remark', minWidth: 180, ellipsis: { tooltip: true }, render: (row) => renderMuted(row.remark) },
-  { title: '时间', key: 'created_at', width: 170, ellipsis: { tooltip: true }, render: (row) => renderMuted(row.created_at) },
+  {
+    title: '操作人',
+    key: 'operator',
+    width: 130,
+    ellipsis: { tooltip: true },
+    render: (row) => renderMuted(row.operator),
+  },
+  {
+    title: '备注',
+    key: 'remark',
+    minWidth: 180,
+    ellipsis: { tooltip: true },
+    render: (row) => renderMuted(row.remark),
+  },
+  {
+    title: '时间',
+    key: 'created_at',
+    width: 170,
+    ellipsis: { tooltip: true },
+    render: (row) => renderMuted(row.created_at),
+  },
 ];
 
 async function fetchList() {
@@ -321,7 +520,9 @@ async function fetchAssets() {
 async function loadOrganizeTree() {
   try {
     const res = await getOrganizeTree();
-    const nodes = Array.isArray(res) ? res : ((res as any)?.data ?? (res as any)?.items ?? []);
+    const nodes = Array.isArray(res)
+      ? res
+      : ((res as any)?.data ?? (res as any)?.items ?? []);
     const options = buildOrgTreeOptions(nodes);
     organizeTreeOptions.value = options;
     organizeNameMap.value = flattenOrgTree(options);
@@ -335,7 +536,9 @@ async function loadConstructionOrgs() {
   try {
     const res = await getConstructionList({ page: 1, page_size: 1000 });
     const body = parseListBody<{ id: string; name: string }>(res);
-    constructionOrgNameMap.value = Object.fromEntries(body.data.map((item) => [item.id, item.name]));
+    constructionOrgNameMap.value = Object.fromEntries(
+      body.data.map((item) => [item.id, item.name]),
+    );
   } catch {
     constructionOrgNameMap.value = {};
   }
@@ -365,7 +568,11 @@ async function submitCreate() {
 function openAction(row: AssetVerifyTask, type: 'forward' | 'reject') {
   activeTask.value = row;
   actionType.value = type;
-  Object.assign(actionForm, { target_organize_id: '', reject_reason: '', remark: '' });
+  Object.assign(actionForm, {
+    target_organize_id: '',
+    reject_reason: '',
+    remark: '',
+  });
   actionModal.value = true;
 }
 
@@ -381,7 +588,9 @@ async function submitAction() {
         target_organize_id: actionForm.target_organize_id,
         remark: actionForm.remark,
       });
-      message.success(activeTask.value.status === 'pending_dispatch' ? '已下发' : '已转发');
+      message.success(
+        activeTask.value.status === 'pending_dispatch' ? '已下发' : '已转发',
+      );
     } else {
       await rejectVerifyTask(activeTask.value.id, {
         reject_reason: actionForm.reject_reason,
@@ -396,7 +605,10 @@ async function submitAction() {
   }
 }
 
-function runSimple(row: AssetVerifyTask, type: 'archive' | 'confirm' | 'delete' | 'receive' | 'return') {
+function runSimple(
+  row: AssetVerifyTask,
+  type: 'archive' | 'confirm' | 'delete' | 'receive' | 'return',
+) {
   activeTask.value = row;
   pendingAction.value = type;
   confirmModal.value = true;
@@ -404,7 +616,10 @@ function runSimple(row: AssetVerifyTask, type: 'archive' | 'confirm' | 'delete' 
 
 function getActionText(type = pendingAction.value) {
   if (!type) return '处理';
-  const actionTextMap: Record<'archive' | 'confirm' | 'delete' | 'receive' | 'return', string> = {
+  const actionTextMap: Record<
+    'archive' | 'confirm' | 'delete' | 'receive' | 'return',
+    string
+  > = {
     archive: '归档',
     confirm: '确认',
     delete: '删除',
@@ -426,7 +641,10 @@ async function submitSimpleAction() {
   pendingAction.value = '';
 }
 
-async function runTaskAction(row: AssetVerifyTask, type: 'archive' | 'confirm' | 'delete' | 'receive' | 'return') {
+async function runTaskAction(
+  row: AssetVerifyTask,
+  type: 'archive' | 'confirm' | 'delete' | 'receive' | 'return',
+) {
   try {
     if (type === 'receive') await receiveVerifyTask(row.id);
     if (type === 'confirm') await confirmVerifyTask(row.id);
@@ -445,6 +663,7 @@ async function showAssetDetail(assetId: string) {
   detailLoading.value = true;
   detailAsset.value = null;
   detailScreenshot.value = null;
+  revokeDetailScreenshot();
   detailScreenshotSrc.value = '';
   try {
     detailAsset.value = await getAssetDetail(assetId);
@@ -457,20 +676,25 @@ async function showAssetDetail(assetId: string) {
     .then(async (res) => {
       if (res?.screenshot_url) {
         try {
-          const { useAccessStore } = await import('@vben/stores');
-          const token = useAccessStore().accessToken;
-          const resp = await fetch(res.screenshot_url, { headers: { Authorization: `Bearer ${token}` } });
-          if (resp.ok) {
-            const blob = await resp.blob();
-            detailScreenshotSrc.value = URL.createObjectURL(blob);
-          }
-        } catch { /* ignore */ }
+          const url = await fetchAuthImageObjectUrl(res.screenshot_url);
+          detailScreenshotObjectUrl.value = url;
+          detailScreenshotSrc.value = url;
+        } catch {
+          /* ignore */
+        }
       } else if (res?.screenshot) {
         detailScreenshot.value = res.screenshot;
         detailScreenshotSrc.value = `data:image/jpeg;base64,${res.screenshot}`;
       }
     })
     .catch(() => {});
+}
+
+function revokeDetailScreenshot() {
+  if (detailScreenshotObjectUrl.value) {
+    URL.revokeObjectURL(detailScreenshotObjectUrl.value);
+    detailScreenshotObjectUrl.value = '';
+  }
 }
 
 async function showLogs(row: AssetVerifyTask) {
@@ -494,7 +718,11 @@ function resetSearch() {
 }
 
 function openCreateModal() {
-  Object.assign(createForm, { target_organize_id: '', source_type: 'manual', remark: '' });
+  Object.assign(createForm, {
+    target_organize_id: '',
+    source_type: 'manual',
+    remark: '',
+  });
   Object.assign(assetSearchForm, { keyword: '', organize_id: '' });
   selectedAssetIds.value = [];
   assetOptions.value = [];
@@ -507,21 +735,44 @@ onMounted(() => {
   loadOrganizeTree();
   loadConstructionOrgs();
 });
+
+watch(detailDrawer, (show) => {
+  if (!show) revokeDetailScreenshot();
+});
+
+onBeforeUnmount(revokeDetailScreenshot);
 </script>
 
 <template>
   <div class="asset-workspace">
     <NCard title="资产核验任务" size="small" :bordered="false">
       <template #header-extra>
-        <NButton type="primary" size="small" @click="openCreateModal">新建任务</NButton>
+        <NButton type="primary" size="small" @click="openCreateModal"
+          >新建任务</NButton
+        >
       </template>
 
-      <NForm inline label-placement="left" :show-feedback="false" class="asset-toolbar">
+      <NForm
+        inline
+        label-placement="left"
+        :show-feedback="false"
+        class="asset-toolbar"
+      >
         <NFormItem label="关键词">
-          <NInput v-model:value="searchForm.keyword" clearable placeholder="系统名称 / 访问地址" @keyup.enter="fetchList" />
+          <NInput
+            v-model:value="searchForm.keyword"
+            clearable
+            placeholder="系统名称 / 访问地址"
+            @keyup.enter="fetchList"
+          />
         </NFormItem>
         <NFormItem label="状态">
-          <NSelect v-model:value="searchForm.status" clearable :options="statusOptions" placeholder="全部状态" />
+          <NSelect
+            v-model:value="searchForm.status"
+            clearable
+            :options="statusOptions"
+            placeholder="全部状态"
+          />
         </NFormItem>
         <NFormItem label="所属单位">
           <NTreeSelect
@@ -553,7 +804,12 @@ onMounted(() => {
       />
     </NCard>
 
-    <NModal v-model:show="createModal" preset="dialog" title="新建核验任务" class="verify-task-modal">
+    <NModal
+      v-model:show="createModal"
+      preset="dialog"
+      title="新建核验任务"
+      class="verify-task-modal"
+    >
       <NForm label-placement="left" label-width="96" class="modal-form">
         <NFormItem label="选择资产" required>
           <div class="asset-picker">
@@ -584,18 +840,27 @@ onMounted(() => {
               :row-key="(row: Asset) => row.id"
               :checked-row-keys="selectedAssetIds"
               :scroll-x="900"
-              @update:checked-row-keys="(keys: DataTableRowKey[]) => selectedAssetIds = keys"
+              @update:checked-row-keys="
+                (keys: DataTableRowKey[]) => (selectedAssetIds = keys)
+              "
             />
             <div class="selection-tip">
               已选择 {{ selectedAssetIds.length }} 个资产
               <template v-if="selectedAssets.length > 0">
-                ：{{ selectedAssets.map((item) => item.name || item.address).join('、') }}
+                ：{{
+                  selectedAssets
+                    .map((item) => item.name || item.address)
+                    .join('、')
+                }}
               </template>
             </div>
           </div>
         </NFormItem>
         <NFormItem label="数据来源">
-          <NSelect v-model:value="createForm.source_type" :options="sourceOptions" />
+          <NSelect
+            v-model:value="createForm.source_type"
+            :options="sourceOptions"
+          />
         </NFormItem>
         <NFormItem label="目标单位">
           <NTreeSelect
@@ -607,7 +872,12 @@ onMounted(() => {
           />
         </NFormItem>
         <NFormItem label="备注">
-          <NInput v-model:value="createForm.remark" type="textarea" :rows="2" placeholder="可填写下发说明或核验要求" />
+          <NInput
+            v-model:value="createForm.remark"
+            type="textarea"
+            :rows="2"
+            placeholder="可填写下发说明或核验要求"
+          />
         </NFormItem>
       </NForm>
       <template #action>
@@ -621,7 +891,11 @@ onMounted(() => {
     <NModal
       v-model:show="actionModal"
       preset="dialog"
-      :title="actionType === 'forward' ? `${getForwardActionText(activeTask)}核验任务` : '驳回核验任务'"
+      :title="
+        actionType === 'forward'
+          ? `${getForwardActionText(activeTask)}核验任务`
+          : '驳回核验任务'
+      "
       style="width: 480px"
     >
       <NForm label-placement="left" label-width="90" class="modal-form">
@@ -631,11 +905,20 @@ onMounted(() => {
             clearable
             filterable
             :options="organizeTreeOptions"
-            :placeholder="activeTask?.status === 'pending_dispatch' ? '选择负责确认资产归属的 IAM 单位' : '选择 IAM 单位'"
+            :placeholder="
+              activeTask?.status === 'pending_dispatch'
+                ? '选择负责确认资产归属的 IAM 单位'
+                : '选择 IAM 单位'
+            "
           />
         </NFormItem>
         <NFormItem v-if="actionType === 'reject'" label="驳回原因">
-          <NInput v-model:value="actionForm.reject_reason" type="textarea" :rows="3" placeholder="请说明资产信息无法确认的原因" />
+          <NInput
+            v-model:value="actionForm.reject_reason"
+            type="textarea"
+            :rows="3"
+            placeholder="请说明资产信息无法确认的原因"
+          />
         </NFormItem>
         <NFormItem label="备注">
           <NInput v-model:value="actionForm.remark" type="textarea" :rows="2" />
@@ -661,7 +944,9 @@ onMounted(() => {
     </NModal>
 
     <NDrawer v-model:show="logDrawer" :width="760">
-      <NDrawerContent :title="`流转日志${activeTask?.asset_name ? ` - ${activeTask.asset_name}` : ''}`">
+      <NDrawerContent
+        :title="`流转日志${activeTask?.asset_name ? ` - ${activeTask.asset_name}` : ''}`"
+      >
         <NDataTable
           size="small"
           :bordered="false"
@@ -675,44 +960,122 @@ onMounted(() => {
     </NDrawer>
 
     <NDrawer v-model:show="detailDrawer" :width="640">
-      <NDrawerContent :title="`资产详情${detailAsset?.name ? ` - ${detailAsset.name}` : ''}`">
+      <NDrawerContent
+        :title="`资产详情${detailAsset?.name ? ` - ${detailAsset.name}` : ''}`"
+      >
         <NSpin :show="detailLoading">
           <template v-if="detailAsset">
             <div v-if="detailScreenshotSrc" class="screenshot-preview">
               <img :src="detailScreenshotSrc" alt="首页截图" />
             </div>
-            <NDescriptions label-placement="left" bordered :column="2" size="small">
-              <NDescriptionsItem label="系统名称" :span="2">{{ detailAsset.name || '-' }}</NDescriptionsItem>
-              <NDescriptionsItem label="访问地址" :span="2">{{ detailAsset.address || '-' }}</NDescriptionsItem>
-              <NDescriptionsItem label="资产分类">{{ detailAsset.asset_family || '-' }}</NDescriptionsItem>
-              <NDescriptionsItem label="数据编号">{{ detailAsset.data_number || '-' }}</NDescriptionsItem>
-              <NDescriptionsItem label="域名">{{ detailAsset.domain || '-' }}</NDescriptionsItem>
-              <NDescriptionsItem label="IPv4">{{ detailAsset.ipv4 || '-' }}</NDescriptionsItem>
-              <NDescriptionsItem label="IPv6" :span="2">{{ detailAsset.ipv6 || '-' }}</NDescriptionsItem>
-              <NDescriptionsItem label="协议">{{ detailAsset.protocol || '-' }}</NDescriptionsItem>
-              <NDescriptionsItem label="端口">{{ detailAsset.port || '-' }}</NDescriptionsItem>
-              <NDescriptionsItem label="服务">{{ detailAsset.service || '-' }}</NDescriptionsItem>
-              <NDescriptionsItem label="版本">{{ detailAsset.version || '-' }}</NDescriptionsItem>
-              <NDescriptionsItem label="操作系统" :span="2">{{ detailAsset.os || '-' }}</NDescriptionsItem>
-              <NDescriptionsItem label="是否联网">{{ detailAsset.is_online ? '是' : '否' }}</NDescriptionsItem>
-              <NDescriptionsItem label="是否关基">{{ detailAsset.is_key ? '是' : '否' }}</NDescriptionsItem>
-              <NDescriptionsItem label="安全等保">{{ detailAsset.security_protection_level || '-' }}</NDescriptionsItem>
-              <NDescriptionsItem label="风险评分">{{ detailAsset.risk_score ?? '-' }}</NDescriptionsItem>
-              <NDescriptionsItem label="备案证号">{{ detailAsset.filing_cert_number || '-' }}</NDescriptionsItem>
-              <NDescriptionsItem label="ICP备案号">{{ detailAsset.icp_filing_number || '-' }}</NDescriptionsItem>
-              <NDescriptionsItem label="公安备案" :span="2">{{ detailAsset.public_security_filing || '-' }}</NDescriptionsItem>
-              <NDescriptionsItem label="所属单位" :span="2">{{ displayName(detailAsset.organize_id) }}</NDescriptionsItem>
-              <NDescriptionsItem label="建设单位">{{ displayName(detailAsset.construction_org_id, constructionOrgNameMap) }}</NDescriptionsItem>
-              <NDescriptionsItem label="运维单位">{{ displayName(detailAsset.operation_org_id, constructionOrgNameMap) }}</NDescriptionsItem>
-              <NDescriptionsItem label="责任人">{{ detailAsset.responsible_user_name || '-' }}</NDescriptionsItem>
-              <NDescriptionsItem label="数据来源">{{ displaySource(detailAsset.data_source) }}</NDescriptionsItem>
-              <NDescriptionsItem label="创建时间">{{ detailAsset.created_at || '-' }}</NDescriptionsItem>
-              <NDescriptionsItem label="更新时间">{{ detailAsset.updated_at || '-' }}</NDescriptionsItem>
-              <NDescriptionsItem v-if="detailAsset.remark" label="备注" :span="2">{{ detailAsset.remark }}</NDescriptionsItem>
+            <NDescriptions
+              label-placement="left"
+              bordered
+              :column="2"
+              size="small"
+            >
+              <NDescriptionsItem label="系统名称" :span="2">{{
+                detailAsset.name || '-'
+              }}</NDescriptionsItem>
+              <NDescriptionsItem label="访问地址" :span="2">{{
+                detailAsset.address || '-'
+              }}</NDescriptionsItem>
+              <NDescriptionsItem label="资产分类">{{
+                detailAsset.asset_family || '-'
+              }}</NDescriptionsItem>
+              <NDescriptionsItem label="数据编号">{{
+                detailAsset.data_number || '-'
+              }}</NDescriptionsItem>
+              <NDescriptionsItem label="域名">{{
+                detailAsset.domain || '-'
+              }}</NDescriptionsItem>
+              <NDescriptionsItem label="IPv4">{{
+                detailAsset.ipv4 || '-'
+              }}</NDescriptionsItem>
+              <NDescriptionsItem label="IPv6" :span="2">{{
+                detailAsset.ipv6 || '-'
+              }}</NDescriptionsItem>
+              <NDescriptionsItem label="协议">{{
+                detailAsset.protocol || '-'
+              }}</NDescriptionsItem>
+              <NDescriptionsItem label="端口">{{
+                detailAsset.port || '-'
+              }}</NDescriptionsItem>
+              <NDescriptionsItem label="服务">{{
+                detailAsset.service || '-'
+              }}</NDescriptionsItem>
+              <NDescriptionsItem label="版本">{{
+                detailAsset.version || '-'
+              }}</NDescriptionsItem>
+              <NDescriptionsItem label="操作系统" :span="2">{{
+                detailAsset.os || '-'
+              }}</NDescriptionsItem>
+              <NDescriptionsItem label="是否联网">{{
+                detailAsset.is_online ? '是' : '否'
+              }}</NDescriptionsItem>
+              <NDescriptionsItem label="是否关基">{{
+                detailAsset.is_key ? '是' : '否'
+              }}</NDescriptionsItem>
+              <NDescriptionsItem label="安全等保">{{
+                detailAsset.security_protection_level || '-'
+              }}</NDescriptionsItem>
+              <NDescriptionsItem label="风险评分">{{
+                detailAsset.risk_score ?? '-'
+              }}</NDescriptionsItem>
+              <NDescriptionsItem label="备案证号">{{
+                detailAsset.filing_cert_number || '-'
+              }}</NDescriptionsItem>
+              <NDescriptionsItem label="ICP备案号">{{
+                detailAsset.icp_filing_number || '-'
+              }}</NDescriptionsItem>
+              <NDescriptionsItem label="公安备案" :span="2">{{
+                detailAsset.public_security_filing || '-'
+              }}</NDescriptionsItem>
+              <NDescriptionsItem label="所属单位" :span="2">{{
+                displayName(detailAsset.organize_id)
+              }}</NDescriptionsItem>
+              <NDescriptionsItem label="建设单位">{{
+                displayName(
+                  detailAsset.construction_org_id,
+                  constructionOrgNameMap,
+                )
+              }}</NDescriptionsItem>
+              <NDescriptionsItem label="运维单位">{{
+                displayName(
+                  detailAsset.operation_org_id,
+                  constructionOrgNameMap,
+                )
+              }}</NDescriptionsItem>
+              <NDescriptionsItem label="责任人">{{
+                detailAsset.responsible_user_name || '-'
+              }}</NDescriptionsItem>
+              <NDescriptionsItem label="数据来源">{{
+                displaySource(detailAsset.data_source)
+              }}</NDescriptionsItem>
+              <NDescriptionsItem label="创建时间">{{
+                detailAsset.created_at || '-'
+              }}</NDescriptionsItem>
+              <NDescriptionsItem label="更新时间">{{
+                detailAsset.updated_at || '-'
+              }}</NDescriptionsItem>
+              <NDescriptionsItem
+                v-if="detailAsset.remark"
+                label="备注"
+                :span="2"
+                >{{ detailAsset.remark }}</NDescriptionsItem
+              >
             </NDescriptions>
           </template>
           <template v-else-if="!detailLoading">
-            <div style="text-align: center; color: var(--n-text-color-3); padding: 40px">暂无数据</div>
+            <div
+              style="
+                text-align: center;
+                color: var(--n-text-color-3);
+                padding: 40px;
+              "
+            >
+              暂无数据
+            </div>
           </template>
         </NSpin>
       </NDrawerContent>

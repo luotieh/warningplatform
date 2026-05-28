@@ -15,8 +15,13 @@ const themeFontFamily = envFontFamily
 export const overridesPreferences = defineOverridesPreferences({
   app: {
     accessMode: 'backend',
+    defaultAvatar: '/avatar.webp',
     defaultHomePath: '/dashboard/overview',
+    enableCheckUpdates: false,
     name: import.meta.env.VITE_APP_TITLE,
+  },
+  copyright: {
+    companySiteLink: '',
   },
   logo: {
     source: '/logo.webp',

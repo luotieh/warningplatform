@@ -1,41 +1,98 @@
 <script lang="ts" setup>
 import type { DataTableColumns } from 'naive-ui';
 
-import { computed, h } from 'vue';
+import { computed, h, onBeforeUnmount, ref, watch } from 'vue';
 
 import {
+  NAlert,
   NCard,
   NDataTable,
   NDescriptions,
   NDescriptionsItem,
   NEmpty,
+  NModal,
   NTag,
 } from 'naive-ui';
+
+import { getEvidenceAssetUrl } from '#/api/sitemonitor';
+import { fetchAuthImageObjectUrl } from '#/composables/useAuthImageObjectUrl';
 
 const props = defineProps<{ executionId?: string; result: any }>();
 
 const r = computed(() => props.result || {});
-const diffs = computed(
-  () => r.value.diffs || r.value.diff?.diffs || [],
-);
+const diffs = computed(() => r.value.diffs || r.value.diff?.diffs || []);
 const baselineUpdate = computed(() => r.value.baseline_update || null);
 const isFirstRun = computed(
   () =>
-    r.value.is_first_run === true ||
-    baselineUpdate.value?.action === 'init',
+    r.value.is_first_run === true || baselineUpdate.value?.action === 'init',
 );
 
 const evidence = computed(() => r.value.evidence || null);
 
-const tamperScreenshotUrl = computed(
-  () => r.value.tamper_screenshot_url || '',
+const tamperScreenshotUrl = computed(() => r.value.tamper_screenshot_url || '');
+const tamperScreenshotId = computed(() => r.value.tamper_screenshot_id || '');
+const hasScreenshotEvidence = computed(() =>
+  Boolean(tamperScreenshotUrl.value || tamperScreenshotId.value),
 );
+const screenshotObjectUrl = ref('');
+const screenshotLoading = ref(false);
+const screenshotError = ref('');
+const previewVisible = ref(false);
 
-function openScreenshot() {
-  if (tamperScreenshotUrl.value) {
-    window.open(tamperScreenshotUrl.value, '_blank');
+function revokeScreenshotObjectUrl() {
+  if (screenshotObjectUrl.value) {
+    URL.revokeObjectURL(screenshotObjectUrl.value);
+    screenshotObjectUrl.value = '';
   }
 }
+
+function openScreenshot() {
+  if (screenshotObjectUrl.value) {
+    previewVisible.value = true;
+  }
+}
+
+async function loadScreenshot() {
+  revokeScreenshotObjectUrl();
+  screenshotError.value = '';
+
+  const urls = [
+    tamperScreenshotUrl.value,
+    props.executionId
+      ? getEvidenceAssetUrl(props.executionId, 'annotated_screenshot')
+      : '',
+  ].filter(Boolean);
+
+  if (urls.length === 0) return;
+
+  screenshotLoading.value = true;
+  try {
+    let lastError = '';
+    for (const url of urls) {
+      try {
+        screenshotObjectUrl.value = await fetchAuthImageObjectUrl(url);
+        return;
+      } catch (error: any) {
+        lastError = error?.message || String(error);
+      }
+    }
+    screenshotError.value = `截图引用存在，但文件下载失败：${lastError || 'unknown error'}`;
+  } finally {
+    screenshotLoading.value = false;
+  }
+}
+
+watch(
+  () => [
+    tamperScreenshotUrl.value,
+    tamperScreenshotId.value,
+    props.executionId,
+  ],
+  loadScreenshot,
+  { immediate: true },
+);
+
+onBeforeUnmount(revokeScreenshotObjectUrl);
 
 const showCompareEvidence = computed(() => {
   const ev = evidence.value;
@@ -110,10 +167,22 @@ const diffCols: DataTableColumns<any> = [
     width: 100,
     render: (row) => {
       if (row.type === 'injected_elements')
-        return h(NTag, { type: 'error', size: 'small', bordered: false }, { default: () => '严重' });
+        return h(
+          NTag,
+          { type: 'error', size: 'small', bordered: false },
+          { default: () => '严重' },
+        );
       if (row.ratio != null && row.ratio > 0.5)
-        return h(NTag, { type: 'error', size: 'small', bordered: false }, { default: () => '高危' });
-      return h(NTag, { type: 'warning', size: 'small', bordered: false }, { default: () => '中危' });
+        return h(
+          NTag,
+          { type: 'error', size: 'small', bordered: false },
+          { default: () => '高危' },
+        );
+      return h(
+        NTag,
+        { type: 'warning', size: 'small', bordered: false },
+        { default: () => '中危' },
+      );
     },
   },
 ];
@@ -130,8 +199,7 @@ const injectedCols: DataTableColumns<any> = [
     title: '资源地址',
     minWidth: 280,
     ellipsis: { tooltip: true },
-    render: (row) =>
-      h('span', { class: 'font-mono text-xs' }, row.src || '-'),
+    render: (row) => h('span', { class: 'font-mono text-xs' }, row.src || '-'),
   },
   {
     key: 'domain',
@@ -178,20 +246,55 @@ const injectedCols: DataTableColumns<any> = [
       </NDescriptions>
     </NCard>
 
-    <NCard v-if="tamperScreenshotUrl" size="small" title="篡改截图证据">
+    <NCard v-if="hasScreenshotEvidence" size="small" title="篡改截图证据">
       <p class="mb-2 text-xs text-gray-500">
         以下截图为检测到篡改时自动抓取，红色边框标注了发生变化的区域。
       </p>
+      <NAlert
+        v-if="screenshotError"
+        type="warning"
+        :bordered="false"
+        class="mb-2"
+      >
+        {{ screenshotError }}
+      </NAlert>
       <div class="rounded border border-gray-200 bg-gray-50 p-2">
+        <div
+          v-if="screenshotLoading"
+          class="py-8 text-center text-sm text-gray-400"
+        >
+          正在加载截图...
+        </div>
         <img
-          :src="tamperScreenshotUrl"
+          v-else-if="screenshotObjectUrl"
+          :src="screenshotObjectUrl"
           alt="篡改截图"
-          class="max-w-full cursor-pointer rounded shadow-sm"
+          class="max-w-full cursor-pointer rounded shadow-sm transition hover:shadow-md"
           style="max-height: 600px"
           @click="openScreenshot"
         />
+        <NEmpty v-else description="暂无可展示截图" />
       </div>
     </NCard>
+
+    <NModal
+      v-model:show="previewVisible"
+      preset="card"
+      title="篡改截图预览"
+      class="tamper-preview-modal"
+      :bordered="false"
+      :segmented="{ content: true }"
+    >
+      <div class="tamper-preview-frame">
+        <img
+          v-if="screenshotObjectUrl"
+          :src="screenshotObjectUrl"
+          alt="篡改截图预览"
+          class="tamper-preview-image"
+        />
+        <NEmpty v-else description="截图已失效，请重新打开详情" />
+      </div>
+    </NModal>
 
     <NCard
       v-if="showCompareEvidence"
@@ -199,8 +302,11 @@ const injectedCols: DataTableColumns<any> = [
       :title="isFirstRun ? '基线内容（首次建立）' : '篡改对比证据'"
     >
       <p v-if="!isFirstRun" class="mb-2 text-xs text-gray-500">
-        左侧为上一次基线内容（<span class="text-red-600">删除</span> 标记为本次移除部分）；
-        右侧为本次抓取内容（<span class="text-green-600">新增</span> 标记为本次新增部分）。
+        左侧为上一次基线内容（<span class="text-red-600">删除</span>
+        标记为本次移除部分）； 右侧为本次抓取内容（<span class="text-green-600"
+          >新增</span
+        >
+        标记为本次新增部分）。
       </p>
       <p v-else class="mb-2 text-xs text-gray-500">
         首次运行已保存以下全文作为后续篡改对比基线。
@@ -233,7 +339,11 @@ const injectedCols: DataTableColumns<any> = [
       </div>
     </NCard>
 
-    <NCard v-if="isFirstRun && !showCompareEvidence" size="small" title="首次运行">
+    <NCard
+      v-if="isFirstRun && !showCompareEvidence"
+      size="small"
+      title="首次运行"
+    >
       <div class="text-sm text-gray-500">
         首次运行，已建立基线。后续监测将以此为基准进行对比。
       </div>
@@ -314,5 +424,26 @@ const injectedCols: DataTableColumns<any> = [
   background: #dcfce7;
   color: #15803d;
   font-weight: 600;
+}
+
+.tamper-preview-frame {
+  display: flex;
+  max-height: min(78vh, 900px);
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  border-radius: 10px;
+  background: var(--n-color);
+}
+
+.tamper-preview-image {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 18%);
+}
+
+:global(.tamper-preview-modal) {
+  width: min(92vw, 1280px);
 }
 </style>

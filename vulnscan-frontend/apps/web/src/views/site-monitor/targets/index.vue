@@ -17,8 +17,6 @@ import {
   NInput,
   NModal,
   NPopconfirm,
-  NRadioButton,
-  NRadioGroup,
   NSelect,
   NSpace,
   NSpin,
@@ -76,11 +74,35 @@ const enabledOptions = [
   { label: '停用', value: 'false' },
 ];
 
+function getTargetAddress(row: MonitorTarget) {
+  const scheme = row.default_scheme || 'https';
+  if (row.target_type === 'domain') {
+    return `${scheme}://${row.target_value}`;
+  }
+  return row.target_value;
+}
+
+function getHostHeaderText(row: MonitorTarget) {
+  if (row.target_type === 'domain') {
+    return '同目标域名';
+  }
+  return row.virtual_host || '未配置';
+}
+
+function getHostHeaderHint(row: MonitorTarget) {
+  if (row.target_type === 'domain') {
+    return '域名目标会直接使用目标域名作为请求 Host';
+  }
+  return row.virtual_host
+    ? '访问 IP 时发送给服务端的 HTTP Host 头'
+    : 'IP 目标建议配置站点域名，否则部分站点无法命中正确虚拟主机';
+}
+
 const columns = computed<DataTableColumns<MonitorTarget>>(() => [
   {
     key: 'name',
     title: '名称',
-    minWidth: 160,
+    minWidth: 220,
     ellipsis: { tooltip: true },
     render: (row) =>
       h('div', { class: 'flex flex-col gap-0.5' }, [
@@ -93,7 +115,18 @@ const columns = computed<DataTableColumns<MonitorTarget>>(() => [
           },
           row.name,
         ),
-        h('span', { class: 'text-xs text-gray-400' }, row.target_value),
+        h('span', { class: 'text-xs text-gray-400' }, `更新于 ${row.updated_at?.slice(0, 16) || '-'}`),
+      ]),
+  },
+  {
+    key: 'target',
+    title: '监测目标',
+    minWidth: 220,
+    ellipsis: { tooltip: true },
+    render: (row) =>
+      h('div', { class: 'flex flex-col gap-0.5' }, [
+        h('span', { class: 'font-medium text-gray-700 dark:text-gray-100' }, getTargetAddress(row)),
+        h('span', { class: 'text-xs text-gray-400' }, row.target_type === 'ip' ? '按 IP 访问' : '按域名访问'),
       ]),
   },
   {
@@ -115,27 +148,49 @@ const columns = computed<DataTableColumns<MonitorTarget>>(() => [
   },
   {
     key: 'virtual_host',
-    title: '虚拟 Host',
-    minWidth: 140,
+    title: () =>
+      h('div', { class: 'inline-flex items-center gap-1' }, [
+        h('span', '请求 Host'),
+        h(
+          NTooltip,
+          {},
+          {
+            trigger: () => h('span', { class: 'cursor-help text-xs text-gray-400' }, '?'),
+            default: () => 'HTTP 请求的 Host 头。常用于访问 IP:端口时指定实际站点域名。',
+          },
+        ),
+      ]),
+    minWidth: 180,
     ellipsis: { tooltip: true },
     render: (row) =>
-      h(
-        'span',
-        { class: row.virtual_host ? '' : 'text-gray-300' },
-        row.virtual_host || '-',
-      ),
+      h('div', { class: 'flex flex-col gap-0.5' }, [
+        h(
+          'span',
+          {
+            class:
+              row.target_type === 'ip' && !row.virtual_host
+                ? 'font-medium text-orange-500'
+                : 'text-gray-700 dark:text-gray-100',
+          },
+          getHostHeaderText(row),
+        ),
+        h('span', { class: 'text-xs text-gray-400' }, getHostHeaderHint(row)),
+      ]),
   },
   {
     key: 'expected_ips',
-    title: '期望 IP',
-    minWidth: 120,
+    title: 'DNS 期望 IP',
+    minWidth: 160,
     ellipsis: { tooltip: true },
     render: (row) =>
-      h(
-        'span',
-        { class: row.expected_ips ? '' : 'text-gray-300' },
-        row.expected_ips || '-',
-      ),
+      h('div', { class: 'flex flex-col gap-0.5' }, [
+        h(
+          'span',
+          { class: row.expected_ips ? 'text-gray-700 dark:text-gray-100' : 'text-gray-300' },
+          row.expected_ips || '-',
+        ),
+        h('span', { class: 'text-xs text-gray-400' }, row.expected_ips ? '用于域名劫持判断' : '未配置劫持基线'),
+      ]),
   },
   {
     key: 'enabled',
@@ -153,11 +208,11 @@ const columns = computed<DataTableColumns<MonitorTarget>>(() => [
   {
     key: 'op',
     title: '操作',
-    width: 220,
+    width: 190,
     fixed: 'right',
     align: 'center',
     render: (row) =>
-      h(NSpace, { size: 4, justify: 'center' }, () => [
+      h(NSpace, { size: 8, justify: 'center', wrap: false }, () => [
         h(
           NButton,
           {
@@ -169,7 +224,6 @@ const columns = computed<DataTableColumns<MonitorTarget>>(() => [
           },
           { default: () => '管理' },
         ),
-        h('span', { class: 'text-gray-200' }, '|'),
         h(
           NPopconfirm,
           { onPositiveClick: () => handleRunTarget(row) },
@@ -183,7 +237,6 @@ const columns = computed<DataTableColumns<MonitorTarget>>(() => [
             default: () => '立即执行域名劫持/敏感文件检测？',
           },
         ),
-        h('span', { class: 'text-gray-200' }, '|'),
         h(
           NPopconfirm,
           { onPositiveClick: () => handleToggle(row) },
@@ -201,7 +254,6 @@ const columns = computed<DataTableColumns<MonitorTarget>>(() => [
             default: () => `确认${row.enabled ? '停用' : '启用'}该目标？`,
           },
         ),
-        h('span', { class: 'text-gray-200' }, '|'),
         h(
           NPopconfirm,
           { onPositiveClick: () => handleDelete(row) },
@@ -341,7 +393,7 @@ async function handleCreate() {
     return;
   }
   if (createForm.target_type === 'ip' && !createForm.virtual_host.trim()) {
-    message.warning('IP 目标必须填写虚拟 Host');
+    message.warning('IP 目标必须填写请求 Host');
     return;
   }
   try {
@@ -676,6 +728,11 @@ onMounted(onSearch);
         <NButton size="small" quaternary @click="resetForm">重置</NButton>
       </div>
 
+      <div class="mb-3 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200">
+        <strong>请求 Host</strong>
+        是发起 HTTP/HTTPS 检测时写入的 Host 头。域名目标默认使用目标域名；IP 目标用于“访问某个 IP:端口，但让服务端按指定站点域名响应”的场景。
+      </div>
+
       <NDataTable
         :columns="columns"
         :data="dataList"
@@ -761,11 +818,14 @@ onMounted(onSearch);
             :placeholder="createForm.target_type === 'ip' ? '1.2.3.4' : 'www.example.com'"
           />
         </NFormItem>
-        <NFormItem v-if="createForm.target_type === 'ip'" label="虚拟 Host" required>
+        <NFormItem v-if="createForm.target_type === 'ip'" label="请求 Host" required>
           <NInput
             v-model:value="createForm.virtual_host"
-            placeholder="访问 IP 时 HTTP Host 头"
+            placeholder="例如 www.example.com 或 www.example.com:8443"
           />
+          <div class="mt-1 text-xs text-gray-400">
+            访问 IP 时写入 HTTP Host 头，用于命中该 IP 上承载的具体站点。
+          </div>
         </NFormItem>
         <NFormItem label="期望 IP">
           <NInput
@@ -804,7 +864,7 @@ onMounted(onSearch);
     <NModal v-model:show="importVisible" preset="card" title="批量导入" style="width: 480px">
       <p class="text-muted-foreground mb-3 text-sm">
         <a :href="downloadImportTemplate()" target="_blank">下载模板</a>
-        后按列填写；支持域名或 IP（IP 需填虚拟 Host）。
+        后按列填写；支持域名或 IP（IP 目标需填写请求 Host）。
       </p>
       <NUpload :custom-request="handleImportUpload as any" :show-file-list="false">
         <NUploadDragger>

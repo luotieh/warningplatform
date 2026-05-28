@@ -1,16 +1,20 @@
 <script lang="ts" setup>
 import type { DataTableColumns } from 'naive-ui';
 
-import { computed, h } from 'vue';
+import { computed, h, onBeforeUnmount, ref, watch } from 'vue';
 
 import {
+  NAlert,
   NCard,
   NDataTable,
   NDescriptions,
   NDescriptionsItem,
   NEmpty,
+  NModal,
   NTag,
 } from 'naive-ui';
+
+import { fetchAuthImageObjectUrl } from '#/composables/useAuthImageObjectUrl';
 
 const props = defineProps<{ result: any }>();
 const r = computed(() => props.result || {});
@@ -25,9 +29,73 @@ const extraScreenshots = computed<
   Array<{ file_id: string; url: string; label: string; target_url: string }>
 >(() => r.value.extra_screenshots || []);
 
-function openImage(url: string) {
-  if (url) window.open(url, '_blank');
+const screenshotObjectUrls = ref<Record<string, string>>({});
+const screenshotErrors = ref<Record<string, string>>({});
+const previewVisible = ref(false);
+const previewImage = ref('');
+const previewTitle = ref('');
+
+function screenshotKey(url: string, fallback = '') {
+  return url || fallback;
 }
+
+function revokeScreenshot(key: string) {
+  const url = screenshotObjectUrls.value[key];
+  if (url) {
+    URL.revokeObjectURL(url);
+    delete screenshotObjectUrls.value[key];
+  }
+}
+
+async function loadScreenshot(url: string, fallbackKey = '') {
+  const key = screenshotKey(url, fallbackKey);
+  if (!url || !key || screenshotObjectUrls.value[key]) return;
+  try {
+    screenshotObjectUrls.value[key] = await fetchAuthImageObjectUrl(url);
+    delete screenshotErrors.value[key];
+  } catch (error: any) {
+    screenshotErrors.value[key] = error?.message || String(error);
+  }
+}
+
+function openImage(key: string, title: string) {
+  const url = screenshotObjectUrls.value[key];
+  if (!url) return;
+  previewImage.value = url;
+  previewTitle.value = title;
+  previewVisible.value = true;
+}
+
+watch(
+  annotatedScreenshotUrl,
+  async (url, oldUrl) => {
+    if (oldUrl && oldUrl !== url) revokeScreenshot(oldUrl);
+    if (url) await loadScreenshot(url);
+  },
+  { immediate: true },
+);
+
+watch(
+  extraScreenshots,
+  async (items) => {
+    const activeKeys = new Set(
+      items.map((item) => screenshotKey(item.url, item.file_id)),
+    );
+    for (const key of Object.keys(screenshotObjectUrls.value)) {
+      if (key !== annotatedScreenshotUrl.value && !activeKeys.has(key)) {
+        revokeScreenshot(key);
+      }
+    }
+    await Promise.all(
+      items.map((item) => loadScreenshot(item.url, item.file_id)),
+    );
+  },
+  { immediate: true },
+);
+
+onBeforeUnmount(() => {
+  Object.values(screenshotObjectUrls.value).forEach(URL.revokeObjectURL);
+});
 
 const blacklinkCols: DataTableColumns<any> = [
   {
@@ -35,8 +103,7 @@ const blacklinkCols: DataTableColumns<any> = [
     title: '链接地址',
     minWidth: 280,
     ellipsis: { tooltip: true },
-    render: (row) =>
-      h('span', { class: 'font-mono text-xs' }, row.url || '-'),
+    render: (row) => h('span', { class: 'font-mono text-xs' }, row.url || '-'),
   },
   {
     key: 'domain',
@@ -81,8 +148,7 @@ const backdoorCols: DataTableColumns<any> = [
     title: '资源地址',
     minWidth: 280,
     ellipsis: { tooltip: true },
-    render: (row) =>
-      h('span', { class: 'font-mono text-xs' }, row.src || '-'),
+    render: (row) => h('span', { class: 'font-mono text-xs' }, row.src || '-'),
   },
   {
     key: 'context',
@@ -148,13 +214,33 @@ const backdoorCols: DataTableColumns<any> = [
       <p class="mb-2 text-xs text-gray-500">
         以下截图标注了在原始页面上发现的暗链/后门位置，红色边框标注了异常区域。
       </p>
+      <NAlert
+        v-if="screenshotErrors[annotatedScreenshotUrl]"
+        type="warning"
+        :bordered="false"
+        class="mb-2"
+      >
+        截图引用存在，但文件下载失败：{{
+          screenshotErrors[annotatedScreenshotUrl]
+        }}
+      </NAlert>
       <div class="rounded border border-gray-200 bg-gray-50 p-2">
+        <div
+          v-if="
+            !screenshotObjectUrls[annotatedScreenshotUrl] &&
+            !screenshotErrors[annotatedScreenshotUrl]
+          "
+          class="py-8 text-center text-sm text-gray-400"
+        >
+          正在加载截图...
+        </div>
         <img
-          :src="annotatedScreenshotUrl"
+          v-else-if="screenshotObjectUrls[annotatedScreenshotUrl]"
+          :src="screenshotObjectUrls[annotatedScreenshotUrl]"
           alt="页面标注截图"
-          class="max-w-full cursor-pointer rounded shadow-sm"
+          class="max-w-full cursor-pointer rounded shadow-sm transition hover:shadow-md"
           style="max-height: 600px"
-          @click="openImage(annotatedScreenshotUrl)"
+          @click="openImage(annotatedScreenshotUrl, '页面标注截图')"
         />
       </div>
     </NCard>
@@ -164,9 +250,7 @@ const backdoorCols: DataTableColumns<any> = [
       size="small"
       :title="`暗链目标页面截图（${extraScreenshots.length} 张）`"
     >
-      <p class="mb-2 text-xs text-gray-500">
-        以下为暗链跳转到的目标站点截图。
-      </p>
+      <p class="mb-2 text-xs text-gray-500">以下为暗链跳转到的目标站点截图。</p>
       <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
         <div
           v-for="(s, idx) in extraScreenshots"
@@ -177,15 +261,52 @@ const backdoorCols: DataTableColumns<any> = [
             {{ s.label }}：<span class="font-mono">{{ s.target_url }}</span>
           </div>
           <img
-            :src="s.url"
+            v-if="screenshotObjectUrls[screenshotKey(s.url, s.file_id)]"
+            :src="screenshotObjectUrls[screenshotKey(s.url, s.file_id)]"
             :alt="`${s.label} - ${s.target_url}`"
-            class="max-w-full cursor-pointer rounded shadow-sm"
+            class="max-w-full cursor-pointer rounded shadow-sm transition hover:shadow-md"
             style="max-height: 400px"
-            @click="openImage(s.url)"
+            @click="
+              openImage(
+                screenshotKey(s.url, s.file_id),
+                `${s.label} - ${s.target_url}`,
+              )
+            "
           />
+          <NAlert
+            v-else-if="screenshotErrors[screenshotKey(s.url, s.file_id)]"
+            type="warning"
+            :bordered="false"
+          >
+            截图下载失败：{{
+              screenshotErrors[screenshotKey(s.url, s.file_id)]
+            }}
+          </NAlert>
+          <div v-else class="py-8 text-center text-sm text-gray-400">
+            正在加载截图...
+          </div>
         </div>
       </div>
     </NCard>
+
+    <NModal
+      v-model:show="previewVisible"
+      preset="card"
+      :title="previewTitle || '截图预览'"
+      class="blacklink-preview-modal"
+      :bordered="false"
+      :segmented="{ content: true }"
+    >
+      <div class="blacklink-preview-frame">
+        <img
+          v-if="previewImage"
+          :src="previewImage"
+          alt="截图预览"
+          class="blacklink-preview-image"
+        />
+        <NEmpty v-else description="截图已失效，请重新打开详情" />
+      </div>
+    </NModal>
 
     <NEmpty
       v-if="!r.has_black && blacklinks.length === 0 && backdoors.length === 0"
@@ -194,3 +315,26 @@ const backdoorCols: DataTableColumns<any> = [
     />
   </div>
 </template>
+
+<style scoped>
+.blacklink-preview-frame {
+  display: flex;
+  max-height: min(78vh, 900px);
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  border-radius: 10px;
+  background: var(--n-color);
+}
+
+.blacklink-preview-image {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 18%);
+}
+
+:global(.blacklink-preview-modal) {
+  width: min(92vw, 1280px);
+}
+</style>

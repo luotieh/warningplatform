@@ -373,6 +373,11 @@ func (e *EmbeddedAgent) uploadAnnotatedScreenshot(executionID string, jpegData [
 		slog.Warn("[Monitor] 标注截图上传失败", "execution_id", executionID, "error", err)
 		return resultJSON
 	}
+	if e.screenshotStore != nil {
+		if err := e.screenshotStore(ctx, executionID+"_annotated", jpegData); err != nil {
+			slog.Warn("[Monitor] 标注截图写入证据仓库失败", "execution_id", executionID, "error", err)
+		}
+	}
 
 	var dlURL string
 	if e.annotatedStorageURL != "" && fid != "" {

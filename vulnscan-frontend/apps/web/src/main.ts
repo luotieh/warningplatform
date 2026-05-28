@@ -9,7 +9,9 @@ import {
 } from './composables/use-theme-sync';
 import { overridesPreferences } from './preferences';
 import { registerCustomFontFaces } from './utils/apply-custom-fonts';
+import { installFrontendNetworkGuard } from './utils/network-guard';
 
+installFrontendNetworkGuard();
 registerCustomFontFaces();
 
 /**
