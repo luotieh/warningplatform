@@ -18,6 +18,7 @@ export const overridesPreferences = defineOverridesPreferences({
     defaultAvatar: '/avatar.webp',
     defaultHomePath: '/dashboard/overview',
     enableCheckUpdates: false,
+    enableRefreshToken: true,
     name: import.meta.env.VITE_APP_TITLE,
   },
   copyright: {

@@ -24,8 +24,7 @@ RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apk/re
         libxrender \
         libxshmfence \
         libxxf86vm \
-        atk \
-        at-spi2-atk \
+        at-spi2-core \
         cups-libs \
         pango \
         cairo \
