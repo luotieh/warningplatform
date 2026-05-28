@@ -2,7 +2,7 @@ FROM docker.1ms.run/alpine:3.21
 
 WORKDIR /app
 
-# 换源 + 时区 + Chromium（截图功能依赖浏览器）+ 中文字体
+# 换源 + 安装核心依赖（已去重并补全关键图形库）
 RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apk/repositories && \
     apk update && \
     apk add --no-cache \
@@ -11,7 +11,26 @@ RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apk/re
         nss \
         freetype \
         harfbuzz \
-        font-noto-cjk && \
+        font-noto-cjk \
+        dbus-libs \
+        mesa-vulkan-swrast \
+        libx11 \
+        libxcb \
+        libxcomposite \
+        libxdamage \
+        libxext \
+        libxfixes \
+        libxrandr \
+        libxrender \
+        libxshmfence \
+        libxxf86vm \
+        atk \
+        at-spi2-atk \
+        cups-libs \
+        pango \
+        cairo \
+        libepoxy \
+        glib && \
     cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
     echo "Asia/Shanghai" > /etc/timezone && \
     apk del tzdata && \
