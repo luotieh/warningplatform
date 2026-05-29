@@ -35,6 +35,7 @@ func (h *Handlers) autoMigrate() {
 		&model.DictionaryEntry{},
 		&model.ScanRule{},
 		&model.PocTemplate{},
+		&model.Product{},
 		&model.FederationSyncState{},
 		&model.FederationReportBuffer{},
 		&model.ScanLog{},

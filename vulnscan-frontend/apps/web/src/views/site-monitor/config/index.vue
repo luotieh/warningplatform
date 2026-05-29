@@ -27,6 +27,8 @@ import {
   NTimePicker,
 } from 'naive-ui';
 
+import MonitorCapabilities from '#/views/site-monitor/capabilities.vue';
+
 import { message } from '#/adapter/naive';
 import {
   getAlertConfig,
@@ -565,6 +567,11 @@ onMounted(() => {
                 </NButton>
               </NFormItem>
             </NForm>
+          </NTabPane>
+
+          <!-- 能力总览 Tab -->
+          <NTabPane name="capabilities" tab="能力总览">
+            <MonitorCapabilities :embedded="true" />
           </NTabPane>
         </NTabs>
       </NCard>

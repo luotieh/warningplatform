@@ -17,7 +17,7 @@ export async function getUserInfoApi(): Promise<UserInfo> {
       realName: u.nick_name || u.user_name,
       avatar: u.avatar || '',
       desc: '',
-      homePath: '/dashboard',
+      homePath: '/workbench',
       token: '',
       roles,
     };
@@ -34,7 +34,7 @@ export async function getUserInfoApi(): Promise<UserInfo> {
       realName: '用户',
       avatar: '',
       desc: '',
-      homePath: '/dashboard',
+      homePath: '/workbench',
       token: '',
       roles: [],
     };

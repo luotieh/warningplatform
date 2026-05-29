@@ -9,6 +9,7 @@ import (
 
 type snapshotData struct {
 	URL              string            `json:"url"`
+	FinalURL         string            `json:"final_url"`
 	StatusCode       int               `json:"status_code"`
 	Headers          map[string]string `json:"headers"`
 	Title            string            `json:"title"`
@@ -17,6 +18,10 @@ type snapshotData struct {
 	ContentHash      string            `json:"content_hash"`
 	Links            []linkInfo        `json:"links"`
 	Scripts          []scriptInfo      `json:"scripts"`
+	Iframes          []iframeInfo      `json:"iframes"`
+	MetaRedirect     *metaRedirect     `json:"meta_redirect,omitempty"`
+	JSRedirects      []jsRedirect      `json:"js_redirects,omitempty"`
+	Cloaking         *cloakingData     `json:"cloaking,omitempty"`
 	ResolvedIPs      []string          `json:"resolved_ips"`
 	DNSMS            float64           `json:"dns_ms"`
 	TCPConnectMS     float64           `json:"tcp_connect_ms"`
@@ -51,6 +56,42 @@ type scriptInfo struct {
 	Src        string `json:"src"`
 	IsExternal bool   `json:"is_external"`
 	Snippet    string `json:"content_snippet"`
+}
+
+type iframeInfo struct {
+	Src        string `json:"src"`
+	IsExternal bool   `json:"is_external"`
+	IsHidden   bool   `json:"is_hidden"`
+	Width      string `json:"width,omitempty"`
+	Height     string `json:"height,omitempty"`
+	Style      string `json:"style,omitempty"`
+}
+
+type metaRedirect struct {
+	URL     string `json:"url"`
+	Seconds int    `json:"seconds"`
+}
+
+type jsRedirect struct {
+	Type    string `json:"type"`
+	Target  string `json:"target"`
+	Snippet string `json:"snippet"`
+	Delay   int    `json:"delay,omitempty"`
+}
+
+type cloakingData struct {
+	Detected   bool                `json:"detected"`
+	NormalHash string              `json:"normal_hash"`
+	BotResults []cloakingBotResult `json:"bot_results,omitempty"`
+	Similarity float64             `json:"similarity,omitempty"`
+}
+
+type cloakingBotResult struct {
+	BotName     string  `json:"bot_name"`
+	ContentHash string  `json:"content_hash"`
+	Similarity  float64 `json:"similarity"`
+	TitleMatch  bool    `json:"title_match"`
+	BotTitle    string  `json:"bot_title,omitempty"`
 }
 
 func parseSnapshot(raw string) (*snapshotData, error) {

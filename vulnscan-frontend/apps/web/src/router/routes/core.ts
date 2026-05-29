@@ -34,7 +34,7 @@ const coreRoutes: RouteRecordRaw[] = [
     },
     name: 'Root',
     path: '/',
-    redirect: '/dashboard/overview',
+    redirect: '/workbench/overview',
     children: [],
   },
   {

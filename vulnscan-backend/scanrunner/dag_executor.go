@@ -2,11 +2,13 @@ package scanrunner
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"sync"
 	"sync/atomic"
 
+	"vulnscan-backend/knowledge/nuclei"
 	"vulnscan-backend/model"
 	"vulnscan-backend/scan/core"
 )
@@ -174,6 +176,7 @@ func (r *Runner) executeDAG(
 				}
 			}
 
+			r.logPocMatchDecisions(config, stage.name)
 			r.applyEngineRuntimeGating(config, stageCtx)
 
 			r.progress.SetScanned(len(targets))
@@ -285,6 +288,8 @@ func (r *Runner) executeSequential(
 			}
 		}
 
+		r.logPocMatchDecisions(config, stage.name)
+
 		r.applyEngineRuntimeGating(config, stageCtx)
 
 		r.progress.SetScanned(len(targets))
@@ -311,4 +316,31 @@ func (r *Runner) executeSequential(
 			"stage_num", i+1, "total_stages", len(stages),
 			"findings_in_stage", len(stageFindings))
 	}
+}
+
+// logPocMatchDecisions writes PoC match decision log entries and clears the transient config key.
+func (r *Runner) logPocMatchDecisions(config map[string]interface{}, stage string) {
+	raw, ok := config["_poc_match_decisions"]
+	if !ok {
+		return
+	}
+	delete(config, "_poc_match_decisions")
+
+	decisions, ok := raw.([]nuclei.MatchDecision)
+	if !ok || len(decisions) == 0 {
+		return
+	}
+
+	matchedCount := 0
+	for _, d := range decisions {
+		if d.Matched {
+			matchedCount++
+		}
+	}
+
+	summary := fmt.Sprintf("[PoC匹配] 共评估 %d 条 PoC，命中 %d 条", len(decisions), matchedCount)
+	r.writeLog("info", summary, stage, "nuclei-poc")
+
+	data, _ := json.Marshal(decisions)
+	r.writeLog("debug", string(data), stage, "nuclei-poc-decisions")
 }

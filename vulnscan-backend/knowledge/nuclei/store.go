@@ -1,6 +1,7 @@
 package nuclei
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -15,20 +16,33 @@ import (
 	"vulnscan-backend/model"
 )
 
+// ProductLinker resolves a product name+vendor into a ProductID.
+type ProductLinker interface {
+	MatchOrCreate(name, vendor string) string
+}
+
 type PocStore struct {
-	db       *gorm.DB
-	mu       sync.RWMutex
-	entries  []*PocEntry
-	lastLoad time.Time
-	cacheTTL time.Duration
-	version  int64
+	db               *gorm.DB
+	mu               sync.RWMutex
+	entries          []*PocEntry
+	lastLoad         time.Time
+	cacheTTL         time.Duration
+	version          int64
+	integrityChecker *TemplateIntegrityChecker
+	productLinker    ProductLinker
 }
 
 func NewPocStore(db *gorm.DB) *PocStore {
 	return &PocStore{
-		db:       db,
-		cacheTTL: 5 * time.Minute,
+		db:               db,
+		cacheTTL:         5 * time.Minute,
+		integrityChecker: NewTemplateIntegrityChecker(true),
 	}
+}
+
+// SetProductLinker enables automatic product-to-ProductID resolution on import.
+func (s *PocStore) SetProductLinker(linker ProductLinker) {
+	s.productLinker = linker
 }
 
 func NewPocStoreNoDB() *PocStore {
@@ -83,11 +97,14 @@ func (s *PocStore) LoadAll() []*PocEntry {
 			continue
 		}
 		entries = append(entries, &PocEntry{
-			ID:         tmpl.ID,
-			Name:       tmpl.Info.Name,
-			Severity:   tmpl.Info.Severity,
-			Tags:       tmpl.Info.Tags,
-			RawContent: rec.Content,
+			ID:            tmpl.ID,
+			Name:          tmpl.Info.Name,
+			Severity:      tmpl.Info.Severity,
+			Tags:          tmpl.Info.Tags,
+			Product:       rec.Product,
+			Vendor:        rec.Vendor,
+			AffectedRange: rec.AffectedRange,
+			RawContent:    rec.Content,
 		})
 	}
 
@@ -150,11 +167,14 @@ func (s *PocStore) LoadByIDs(ids []string) []*PocEntry {
 			continue
 		}
 		filtered = append(filtered, &PocEntry{
-			ID:         tmpl.ID,
-			Name:       tmpl.Info.Name,
-			Severity:   tmpl.Info.Severity,
-			Tags:       tmpl.Info.Tags,
-			RawContent: rec.Content,
+			ID:            tmpl.ID,
+			Name:          tmpl.Info.Name,
+			Severity:      tmpl.Info.Severity,
+			Tags:          tmpl.Info.Tags,
+			Product:       rec.Product,
+			Vendor:        rec.Vendor,
+			AffectedRange: rec.AffectedRange,
+			RawContent:    rec.Content,
 		})
 		seen[key] = struct{}{}
 	}
@@ -205,32 +225,101 @@ func (s *PocStore) LoadByTags(tags []string) []*PocEntry {
 	return filtered
 }
 
-func (s *PocStore) LoadByProducts(products []string) []*PocEntry {
+// LoadByProductsWithDecisions performs structured product+version matching and returns decisions.
+func (s *PocStore) LoadByProductsWithDecisions(products []string) ([]*PocEntry, []MatchDecision) {
 	all := s.LoadAll()
 	if len(products) == 0 {
-		return all
+		return all, nil
 	}
 
-	productSet := make(map[string]struct{})
-	for _, p := range products {
-		productSet[strings.ToLower(p)] = struct{}{}
+	detected := ParseDetectedProducts(products)
+
+	nameSet := make(map[string]struct{})
+	for _, dp := range detected {
+		nameSet[strings.ToLower(dp.Name)] = struct{}{}
+	}
+	detectedByName := make(map[string]DetectedProduct)
+	for _, dp := range detected {
+		key := strings.ToLower(dp.Name)
+		if existing, ok := detectedByName[key]; !ok || (dp.Version != "" && existing.Version == "") {
+			detectedByName[key] = dp
+		}
 	}
 
 	matched := make(map[int]struct{})
 	var filtered []*PocEntry
+	var decisions []MatchDecision
 
 	for i, entry := range all {
+		// Phase 1: Structured product+version match
+		if entry.Product != "" {
+			entryProduct := strings.ToLower(entry.Product)
+			for _, dp := range detected {
+				dpName := strings.ToLower(dp.Name)
+				if entryProduct != dpName && !strings.Contains(dpName, entryProduct) && !strings.Contains(entryProduct, dpName) {
+					continue
+				}
+				if entry.AffectedRange != "" && dp.Version != "" {
+					if MatchVersionRange(dp.Version, entry.AffectedRange) {
+						matched[i] = struct{}{}
+						filtered = append(filtered, entry)
+						decisions = append(decisions, MatchDecision{
+							PocID: entry.ID, PocName: entry.Name, Matched: true,
+							MatchMethod: "product+version", MatchProduct: dp.Name,
+							MatchVersion: dp.Version,
+							Reason:       "产品 " + dp.Name + ":" + dp.Version + " 在影响范围 " + entry.AffectedRange + " 内",
+						})
+						break
+					}
+				} else {
+					matched[i] = struct{}{}
+					filtered = append(filtered, entry)
+					method := "product"
+					reason := "产品名称匹配: " + dp.Name
+					if entry.AffectedRange != "" {
+						reason += " (目标未识别版本，无法验证范围 " + entry.AffectedRange + ")"
+					}
+					decisions = append(decisions, MatchDecision{
+						PocID: entry.ID, PocName: entry.Name, Matched: true,
+						MatchMethod: method, MatchProduct: dp.Name,
+						Reason: reason,
+					})
+					break
+				}
+			}
+			if _, ok := matched[i]; ok {
+				continue
+			}
+			if entry.AffectedRange != "" {
+				decisions = append(decisions, MatchDecision{
+					PocID: entry.ID, PocName: entry.Name, Matched: false,
+					MatchMethod: "product+version",
+					Reason:      "产品 " + entry.Product + " 不在检测列表中或版本不在影响范围",
+				})
+			}
+		}
+
+		if _, ok := matched[i]; ok {
+			continue
+		}
+
+		// Phase 2: Tag-based matching (fallback)
 		entryTags := strings.Split(entry.Tags, ",")
 		for _, tag := range entryTags {
 			tag = strings.ToLower(strings.TrimSpace(tag))
 			if tag == "" {
 				continue
 			}
-			for product := range productSet {
+			for product := range nameSet {
 				if tag == product || strings.Contains(tag, product) || strings.Contains(product, tag) {
 					if _, ok := matched[i]; !ok {
 						matched[i] = struct{}{}
 						filtered = append(filtered, entry)
+						decisions = append(decisions, MatchDecision{
+							PocID: entry.ID, PocName: entry.Name, Matched: true,
+							MatchMethod: "tag", MatchProduct: product,
+							Reason: "标签 \"" + tag + "\" 匹配产品 " + product,
+						})
 					}
 					break
 				}
@@ -241,20 +330,66 @@ func (s *PocStore) LoadByProducts(products []string) []*PocEntry {
 		}
 
 		if _, ok := matched[i]; !ok {
+			// Phase 3: Name/ID heuristic (weakest)
 			entryName := strings.ToLower(entry.Name)
 			entryID := strings.ToLower(entry.ID)
-			for product := range productSet {
+			for product := range nameSet {
 				if strings.Contains(entryID, product) || strings.Contains(entryName, product) {
 					matched[i] = struct{}{}
 					filtered = append(filtered, entry)
+					decisions = append(decisions, MatchDecision{
+						PocID: entry.ID, PocName: entry.Name, Matched: true,
+						MatchMethod: "heuristic", MatchProduct: product,
+						Reason: "PoC ID/名称包含产品关键词 " + product,
+					})
 					break
 				}
 			}
 		}
 	}
 
-	slog.Info("[PocStore] 按产品筛选PoC", "products", len(products), "matched", len(filtered), "total", len(all))
-	return filtered
+	// Phase 4: Tech stack exclusion — remove PoC targeting undetected tech stacks
+	exclusionSet := BuildTechExclusionSet(products)
+	if exclusionSet != nil {
+		var kept []*PocEntry
+		for _, entry := range filtered {
+			if ShouldExcludeByTechStack(entry, exclusionSet) {
+				decisions = append(decisions, MatchDecision{
+					PocID: entry.ID, PocName: entry.Name, Matched: false,
+					MatchMethod: "tech_exclusion",
+					Reason:      "目标技术栈不匹配，已排除",
+				})
+				continue
+			}
+			kept = append(kept, entry)
+		}
+		if excluded := len(filtered) - len(kept); excluded > 0 {
+			slog.Info("[PocStore] 技术栈排除",
+				"excluded", excluded, "before", len(filtered), "after", len(kept))
+		}
+		filtered = kept
+	}
+
+	slog.Info("[PocStore] 按产品筛选PoC",
+		"products", len(products), "matched", len(filtered), "total", len(all),
+		"structured_fields", countStructuredEntries(all))
+	return filtered, decisions
+}
+
+func countStructuredEntries(entries []*PocEntry) int {
+	n := 0
+	for _, e := range entries {
+		if e.Product != "" {
+			n++
+		}
+	}
+	return n
+}
+
+// LoadByProducts is the backward-compatible wrapper that discards decisions.
+func (s *PocStore) LoadByProducts(products []string) []*PocEntry {
+	entries, _ := s.LoadByProductsWithDecisions(products)
+	return entries
 }
 
 func (s *PocStore) ImportFromDir(dir string) (imported int, skipped int, errors int) {
@@ -282,33 +417,50 @@ func (s *PocStore) ImportFromDir(dir string) (imported int, skipped int, errors 
 			return nil
 		}
 
+		if s.integrityChecker != nil {
+			if checkErr := s.integrityChecker.CheckContent(data); checkErr != nil {
+				slog.Warn("[PocStore] 模板安全检查失败，跳过", "path", path, "error", checkErr)
+				errors++
+				return nil
+			}
+		}
+
 		tmpl, parseErr := ParseTemplate(data)
 		if parseErr != nil {
 			errors++
 			return nil
 		}
 
+		dirProdName := tmpl.ExtractProduct()
+		dirVendorName := tmpl.ExtractVendor()
+		dirProductID := s.resolveProductID(dirProdName, dirVendorName)
+
 		var existing model.PocTemplate
 		result := s.db.Where("poc_id = ?", tmpl.ID).First(&existing)
 
 		if result.Error == gorm.ErrRecordNotFound {
 			record := model.PocTemplate{
-				ID:          qulid.GenerateID(),
-				PocID:       tmpl.ID,
-				Name:        tmpl.Info.Name,
-				Author:      tmpl.Info.Author,
-				Severity:    tmpl.Info.Severity,
-				Description: tmpl.Info.Description,
-				Reference:   tmpl.Info.Reference,
-				Tags:        parseTags(tmpl.Info.Tags),
-				Content:     string(data),
-				Format:      "yaml",
-				Enabled:     true,
-				Builtin:     true,
-				Source:      "file_import",
-				SourceURL:   path,
-				CreatedAt:   time.Now(),
-				UpdatedAt:   time.Now(),
+				ID:            qulid.GenerateID(),
+				PocID:         tmpl.ID,
+				Name:          tmpl.Info.Name,
+				Author:        tmpl.Info.Author,
+				Severity:      tmpl.Info.Severity,
+				Description:   tmpl.Info.Description,
+				Reference:     tmpl.Info.Reference,
+				Tags:          parseTags(tmpl.Info.Tags),
+				Product:       dirProdName,
+				Vendor:        dirVendorName,
+				AffectedRange: tmpl.ExtractAffectedRange(),
+				CPE:           tmpl.ExtractCPE(),
+				ProductID:     dirProductID,
+				Content:       string(data),
+				Format:        "yaml",
+				Enabled:       true,
+				Builtin:       true,
+				Source:        "file_import",
+				SourceURL:     path,
+				CreatedAt:     time.Now(),
+				UpdatedAt:     time.Now(),
 			}
 
 			if err := s.db.Create(&record).Error; err != nil {
@@ -317,12 +469,20 @@ func (s *PocStore) ImportFromDir(dir string) (imported int, skipped int, errors 
 				imported++
 			}
 		} else if result.Error == nil {
-			s.db.Model(&existing).Updates(map[string]interface{}{
-				"content":    string(data),
-				"name":       tmpl.Info.Name,
-				"severity":   tmpl.Info.Severity,
-				"updated_at": time.Now(),
-			})
+			dirUpdates := map[string]interface{}{
+				"content":        string(data),
+				"name":           tmpl.Info.Name,
+				"severity":       tmpl.Info.Severity,
+				"product":        dirProdName,
+				"vendor":         dirVendorName,
+				"affected_range": tmpl.ExtractAffectedRange(),
+				"cpe":            tmpl.ExtractCPE(),
+				"updated_at":     time.Now(),
+			}
+			if dirProductID != "" {
+				dirUpdates["product_id"] = dirProductID
+			}
+			s.db.Model(&existing).Updates(dirUpdates)
 			skipped++
 		} else {
 			errors++
@@ -343,6 +503,12 @@ func (s *PocStore) ImportFromDir(dir string) (imported int, skipped int, errors 
 }
 
 func (s *PocStore) ImportFromYAML(yamlContent string) (*model.PocTemplate, error) {
+	if s.integrityChecker != nil {
+		if err := s.integrityChecker.CheckContent([]byte(yamlContent)); err != nil {
+			return nil, fmt.Errorf("模板安全检查失败: %w", err)
+		}
+	}
+
 	tmpl, err := ParseTemplate([]byte(yamlContent))
 	if err != nil {
 		return nil, err
@@ -351,22 +517,31 @@ func (s *PocStore) ImportFromYAML(yamlContent string) (*model.PocTemplate, error
 	var existing model.PocTemplate
 	result := s.db.Where("poc_id = ?", tmpl.ID).First(&existing)
 
+	prodName := tmpl.ExtractProduct()
+	vendorName := tmpl.ExtractVendor()
+	productID := s.resolveProductID(prodName, vendorName)
+
 	if result.Error == gorm.ErrRecordNotFound {
 		record := &model.PocTemplate{
-			ID:          qulid.GenerateID(),
-			PocID:       tmpl.ID,
-			Name:        tmpl.Info.Name,
-			Author:      tmpl.Info.Author,
-			Severity:    tmpl.Info.Severity,
-			Description: tmpl.Info.Description,
-			Reference:   tmpl.Info.Reference,
-			Tags:        parseTags(tmpl.Info.Tags),
-			Content:     yamlContent,
-			Format:      "yaml",
-			Enabled:     true,
-			Source:      "manual",
-			CreatedAt:   time.Now(),
-			UpdatedAt:   time.Now(),
+			ID:            qulid.GenerateID(),
+			PocID:         tmpl.ID,
+			Name:          tmpl.Info.Name,
+			Author:        tmpl.Info.Author,
+			Severity:      tmpl.Info.Severity,
+			Description:   tmpl.Info.Description,
+			Reference:     tmpl.Info.Reference,
+			Tags:          parseTags(tmpl.Info.Tags),
+			Product:       prodName,
+			Vendor:        vendorName,
+			AffectedRange: tmpl.ExtractAffectedRange(),
+			CPE:           tmpl.ExtractCPE(),
+			ProductID:     productID,
+			Content:       yamlContent,
+			Format:        "yaml",
+			Enabled:       true,
+			Source:        "manual",
+			CreatedAt:     time.Now(),
+			UpdatedAt:     time.Now(),
 		}
 
 		if err := s.db.Create(record).Error; err != nil {
@@ -377,12 +552,20 @@ func (s *PocStore) ImportFromYAML(yamlContent string) (*model.PocTemplate, error
 		return record, nil
 	}
 
-	s.db.Model(&existing).Updates(map[string]interface{}{
-		"content":    yamlContent,
-		"name":       tmpl.Info.Name,
-		"severity":   tmpl.Info.Severity,
-		"updated_at": time.Now(),
-	})
+	updates := map[string]interface{}{
+		"content":        yamlContent,
+		"name":           tmpl.Info.Name,
+		"severity":       tmpl.Info.Severity,
+		"product":        prodName,
+		"vendor":         vendorName,
+		"affected_range": tmpl.ExtractAffectedRange(),
+		"cpe":            tmpl.ExtractCPE(),
+		"updated_at":     time.Now(),
+	}
+	if productID != "" {
+		updates["product_id"] = productID
+	}
+	s.db.Model(&existing).Updates(updates)
 
 	s.InvalidateCache()
 	return &existing, nil
@@ -409,6 +592,13 @@ func (s *PocStore) ExportToYAML(pocID string) (string, error) {
 		return "", err
 	}
 	return record.Content, nil
+}
+
+func (s *PocStore) resolveProductID(product, vendor string) string {
+	if s.productLinker == nil || strings.TrimSpace(product) == "" {
+		return ""
+	}
+	return s.productLinker.MatchOrCreate(product, vendor)
 }
 
 func parseTags(tagStr string) model.StringArray {

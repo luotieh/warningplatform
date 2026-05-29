@@ -61,8 +61,10 @@ func NewVerifier() *Verifier {
 	return v
 }
 
+const perFindingVerifyTimeout = 30 * time.Second
+
 func (v *Verifier) VerifyFindings(ctx context.Context, findings []*core.Finding) []*core.Finding {
-	var verified []*core.Finding
+	verified := make([]*core.Finding, 0, len(findings))
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 4)
@@ -70,7 +72,9 @@ func (v *Verifier) VerifyFindings(ctx context.Context, findings []*core.Finding)
 	for _, f := range findings {
 		strategy, ok := v.strategies[f.Type]
 		if !ok {
+			mu.Lock()
 			verified = append(verified, f)
+			mu.Unlock()
 			continue
 		}
 
@@ -80,16 +84,20 @@ func (v *Verifier) VerifyFindings(ctx context.Context, findings []*core.Finding)
 			defer wg.Done()
 			defer func() { <-sem }()
 
-			result := strat.Verify(ctx, finding)
+			verifyCtx, cancel := context.WithTimeout(ctx, perFindingVerifyTimeout)
+			defer cancel()
+
+			result := strat.Verify(verifyCtx, finding)
+
+			if finding.Data == nil {
+				finding.Data = make(map[string]string)
+			}
 
 			mu.Lock()
 			defer mu.Unlock()
 
 			if result.Verified {
 				finding.Confidence = result.Confidence
-				if finding.Data == nil {
-					finding.Data = make(map[string]string)
-				}
 				finding.Data["verified"] = "true"
 				finding.Data["verify_detail"] = result.Detail
 				finding.Data["verify_variants"] = fmt.Sprintf("%d/%d", result.Confirmed, result.Variants)
@@ -411,12 +419,13 @@ func fetchBody(ctx context.Context, client *http.Client, rawURL string) string {
 }
 
 func hasDBError(body string) bool {
+	lower := strings.ToLower(body)
 	patterns := []string{
 		"sql syntax", "mysql", "postgresql", "ora-", "sqlite",
 		"sqlstate", "unclosed quotation", "odbc", "syntax error",
 	}
 	for _, p := range patterns {
-		if containsFold(body, p) {
+		if strings.Contains(lower, p) {
 			return true
 		}
 	}
@@ -424,32 +433,7 @@ func hasDBError(body string) bool {
 }
 
 func containsFold(s, substr string) bool {
-	if len(substr) > len(s) {
-		return false
-	}
-	for i := 0; i <= len(s)-len(substr); i++ {
-		match := true
-		for j := 0; j < len(substr); j++ {
-			sc := s[i+j]
-			pc := substr[j]
-			if sc != pc {
-				if sc >= 'A' && sc <= 'Z' {
-					sc += 'a' - 'A'
-				}
-				if pc >= 'A' && pc <= 'Z' {
-					pc += 'a' - 'A'
-				}
-				if sc != pc {
-					match = false
-					break
-				}
-			}
-		}
-		if match {
-			return true
-		}
-	}
-	return false
+	return strings.Contains(strings.ToLower(s), strings.ToLower(substr))
 }
 
 func extractLines(s string) map[string]struct{} {

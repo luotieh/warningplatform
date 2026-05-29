@@ -48,6 +48,16 @@ func (h *HandlerPoc) List(c *gin.Context) {
 	web.OK(c).List(count, items).Send()
 }
 
+func (h *HandlerPoc) Stats(c *gin.Context) {
+	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
+	stats, err := h.svc.Stats(scope)
+	if err != nil {
+		web.Fail(c).Err(err).Send()
+		return
+	}
+	web.OK(c).Data(stats).Send()
+}
+
 func (h *HandlerPoc) GetByID(c *gin.Context) {
 	uri, ok := web.BindUri[web.Id](c)
 	if !ok {

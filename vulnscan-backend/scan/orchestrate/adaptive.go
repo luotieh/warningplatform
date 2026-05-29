@@ -3,6 +3,7 @@ package orchestrate
 import (
 	"log/slog"
 	"math"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -20,6 +21,10 @@ type AdaptiveController struct {
 	successCount  atomic.Int64
 	failureCount  atomic.Int64
 	totalRequests atomic.Int64
+
+	// windowed counters reset each adjustment interval for accurate recent rate
+	windowSuccess int
+	windowFailure int
 
 	lastAdjust     time.Time
 	adjustInterval time.Duration
@@ -67,6 +72,7 @@ func (ac *AdaptiveController) RecordSuccess(latencyMs float64) {
 
 	ac.mu.Lock()
 	ac.failStreak = 0
+	ac.windowSuccess++
 	if ac.state == stateHalfOpen {
 		ac.halfOpenCount++
 		if ac.halfOpenCount >= ac.halfOpenLimit {
@@ -89,6 +95,7 @@ func (ac *AdaptiveController) RecordFailure(latencyMs float64) {
 
 	ac.mu.Lock()
 	ac.failStreak++
+	ac.windowFailure++
 
 	if ac.failStreak >= 3 && ac.state == stateClosed {
 		current := int(ac.current.Load())
@@ -133,6 +140,10 @@ func (ac *AdaptiveController) maybeAdjust() {
 		return
 	}
 	ac.lastAdjust = time.Now()
+	defer func() {
+		ac.windowSuccess = 0
+		ac.windowFailure = 0
+	}()
 
 	if len(ac.latencies) < 10 {
 		return
@@ -192,15 +203,7 @@ func (ac *AdaptiveController) percentile(pct float64) float64 {
 
 	sorted := make([]float64, n)
 	copy(sorted, ac.latencies)
-	for i := 1; i < n; i++ {
-		key := sorted[i]
-		j := i - 1
-		for j >= 0 && sorted[j] > key {
-			sorted[j+1] = sorted[j]
-			j--
-		}
-		sorted[j+1] = key
-	}
+	sort.Float64s(sorted)
 
 	idx := int(math.Ceil(pct/100*float64(n))) - 1
 	if idx < 0 {
@@ -212,13 +215,14 @@ func (ac *AdaptiveController) percentile(pct float64) float64 {
 	return sorted[idx]
 }
 
+// windowedSuccessRate computes the success rate over the recent latency window
+// rather than all-time counters, preventing stale history from dominating.
 func (ac *AdaptiveController) currentSuccessRate() float64 {
-	total := ac.totalRequests.Load()
-	if total == 0 {
+	windowTotal := ac.windowSuccess + ac.windowFailure
+	if windowTotal == 0 {
 		return 1.0
 	}
-	succ := ac.successCount.Load()
-	return float64(succ) / float64(total)
+	return float64(ac.windowSuccess) / float64(windowTotal)
 }
 
 func (ac *AdaptiveController) Stats() map[string]interface{} {

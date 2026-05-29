@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 
 import {
   NButton,
@@ -9,6 +9,7 @@ import {
   NDrawerContent,
   NSpace,
   NTag,
+  NTooltip,
 } from 'naive-ui';
 
 import type { ScanFinding } from '#/api/task';
@@ -80,12 +81,12 @@ const typeLabels: Record<string, string> = {
   weak_pass: '弱口令',
 };
 
-const severityConfig: Record<string, { color: string; label: string }> = {
-  critical: { color: '#d03050', label: '严重' },
-  high: { color: '#f0a020', label: '高危' },
-  medium: { color: '#2080f0', label: '中危' },
-  low: { color: '#18a058', label: '低危' },
-  info: { color: '#999', label: '信息' },
+const severityConfig: Record<string, { color: string; bg: string; label: string }> = {
+  critical: { color: '#d03050', bg: '#fff1f0', label: '严重' },
+  high: { color: '#f0a020', bg: '#fff7e6', label: '高危' },
+  medium: { color: '#2080f0', bg: '#f0f5ff', label: '中危' },
+  low: { color: '#18a058', bg: '#f6ffed', label: '低危' },
+  info: { color: '#999', bg: '#f5f5f5', label: '信息' },
 };
 
 const drawerWidth = computed(() => {
@@ -147,47 +148,68 @@ function openScreenshot(b64: string) {
     win.document.title = '页面截图';
   }
 }
+
+const evidenceCopied = ref(false);
+function copyEvidence() {
+  const text = props.finding?.evidence || props.finding?.data?.proof;
+  if (!text) return;
+  navigator.clipboard.writeText(String(text)).then(() => {
+    evidenceCopied.value = true;
+    setTimeout(() => { evidenceCopied.value = false; }, 2000);
+  }).catch(() => {});
+}
 </script>
 
 <template>
   <NDrawer :show="show" :width="drawerWidth" placement="right" @update:show="emit('update:show', $event)">
     <NDrawerContent closable>
       <template #header>
-        <div class="finding-drawer-header">
-          <div class="finding-drawer-header__title">{{ finding?.title || '发现详情' }}</div>
-          <div v-if="finding" class="finding-drawer-header__meta">
+        <div class="fd-header">
+          <div class="fd-header__title">{{ finding?.title || '发现详情' }}</div>
+          <div v-if="finding" class="fd-header__meta">
             <NTag size="small" :bordered="false" type="info">
               {{ typeLabels[finding.type] ?? finding.type }}
             </NTag>
-            <NTag
-              size="small"
-              :bordered="false"
-              :style="`background:${(severityConfig[finding.severity] ?? { color: '#999' }).color}18;color:${(severityConfig[finding.severity] ?? { color: '#999' }).color}`"
+            <span
+              class="fd-sev-badge"
+              :style="{
+                background: (severityConfig[finding.severity] ?? severityConfig.info!).bg,
+                color: (severityConfig[finding.severity] ?? severityConfig.info!).color,
+                borderColor: (severityConfig[finding.severity] ?? severityConfig.info!).color + '40',
+              }"
             >
               {{ (severityConfig[finding.severity] ?? { label: finding.severity }).label }}
-            </NTag>
+            </span>
+            <span v-if="finding.confidence" class="fd-conf-text">
+              置信度 {{ finding.confidence }}%
+            </span>
           </div>
         </div>
       </template>
 
       <template v-if="finding">
-        <section class="finding-drawer-section">
-          <div class="finding-drawer-section__title">基本信息</div>
+        <section class="fd-section">
+          <div class="fd-section__title">基本信息</div>
           <NDescriptions label-placement="left" bordered :column="1" size="small">
             <NDescriptionsItem label="目标">
-              <span class="finding-drawer-mono">
+              <span class="fd-mono">
                 {{ cleanTarget(finding.target) }}{{ finding.port > 0 ? `:${finding.port}` : '' }}
               </span>
             </NDescriptionsItem>
             <NDescriptionsItem label="模块">{{ moduleLabel || finding.module_id }}</NDescriptionsItem>
             <NDescriptionsItem label="置信度">
-              <NTag
-                size="small"
-                :bordered="false"
-                :style="`background: ${getConfColor(finding.confidence)}15; color: ${getConfColor(finding.confidence)}; font-weight: 600`"
-              >
-                {{ finding.confidence }}%
-              </NTag>
+              <div class="fd-conf-inline">
+                <div class="fd-conf-bar-track">
+                  <div class="fd-conf-bar-fill" :style="{ width: `${finding.confidence}%`, background: getConfColor(finding.confidence) }" />
+                </div>
+                <NTag
+                  size="small"
+                  :bordered="false"
+                  :style="`background: ${getConfColor(finding.confidence)}15; color: ${getConfColor(finding.confidence)}; font-weight: 600`"
+                >
+                  {{ finding.confidence }}%
+                </NTag>
+              </div>
             </NDescriptionsItem>
             <NDescriptionsItem v-if="finding.protocol" label="协议">{{ finding.protocol }}</NDescriptionsItem>
             <NDescriptionsItem label="时间">{{ formatTime(finding.created_at) }}</NDescriptionsItem>
@@ -200,37 +222,79 @@ function openScreenshot(b64: string) {
                 {{ (finding as any).verification_level === 'exploit' ? '实际利用' : '原理验证' }}
               </NTag>
             </NDescriptionsItem>
+            <NDescriptionsItem v-if="finding.data?.verified" label="验证结果">
+              <span v-if="finding.data.verified === 'true'" style="color: #389e0d; font-weight: 600">
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#389e0d" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 2px"><polyline points="20 6 9 17 4 12" /></svg>
+                已确认存在
+              </span>
+              <span v-else style="color: #8c8c8c">未确认</span>
+              <span v-if="finding.data.verify_variants" style="margin-left: 8px; font-size: 11px; color: #666">
+                (变体: {{ finding.data.verify_variants }})
+              </span>
+            </NDescriptionsItem>
           </NDescriptions>
         </section>
 
-        <section v-if="finding.confidence_reason" class="finding-drawer-section">
-          <div class="finding-drawer-section__title">置信度依据</div>
-          <pre class="finding-drawer-block">{{ finding.confidence_reason }}</pre>
+        <section v-if="finding.confidence_reason" class="fd-section">
+          <div class="fd-section__title">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#1890ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 4px"><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></svg>
+            置信度依据
+          </div>
+          <div class="fd-conf-reason-card">
+            <div class="fd-conf-reason-header">
+              <span class="fd-conf-reason-score" :style="{ color: getConfColor(finding.confidence) }">{{ finding.confidence }}%</span>
+              <span class="fd-conf-reason-level">{{ finding.confidence >= 90 ? '高置信度' : finding.confidence >= 70 ? '中高置信度' : finding.confidence >= 50 ? '中置信度' : '低置信度' }}</span>
+            </div>
+            <pre class="fd-block" style="margin: 0">{{ finding.confidence_reason }}</pre>
+          </div>
         </section>
 
-        <section v-if="finding.description" class="finding-drawer-section">
-          <div class="finding-drawer-section__title">描述</div>
-          <pre class="finding-drawer-block finding-drawer-block--text">{{ finding.description }}</pre>
+        <section v-if="finding.data?.verify_detail" class="fd-section">
+          <div class="fd-section__title">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#52c41a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 4px"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg>
+            验证详情
+          </div>
+          <pre class="fd-block">{{ finding.data.verify_detail }}</pre>
         </section>
 
-        <section v-if="finding.evidence || finding.data?.proof" class="finding-drawer-section">
-          <div class="finding-drawer-section__title">验证证据</div>
-          <pre v-if="finding.evidence" class="finding-drawer-block finding-drawer-block--code">{{ finding.evidence }}</pre>
+        <div class="fd-divider" />
+
+        <section v-if="finding.description" class="fd-section">
+          <div class="fd-section__title">描述</div>
+          <pre class="fd-block fd-block--text">{{ finding.description }}</pre>
+        </section>
+
+        <section v-if="finding.evidence || finding.data?.proof" class="fd-section">
+          <div class="fd-section__title">
+            验证证据
+            <NTooltip>
+              <template #trigger>
+                <button class="fd-copy-btn" @click="copyEvidence">
+                  <svg v-if="!evidenceCopied" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
+                  <svg v-else viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="#52c41a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                </button>
+              </template>
+              {{ evidenceCopied ? '已复制' : '复制' }}
+            </NTooltip>
+          </div>
+          <pre v-if="finding.evidence" class="fd-block fd-block--code">{{ finding.evidence }}</pre>
           <pre
             v-if="finding.data?.proof && finding.data.proof !== finding.evidence"
-            class="finding-drawer-block finding-drawer-block--code"
+            class="fd-block fd-block--code"
             style="margin-top: 8px"
           >{{ finding.data.proof }}</pre>
         </section>
 
-        <section v-if="(finding as any).verification_detail" class="finding-drawer-section">
-          <div class="finding-drawer-section__title">验证过程</div>
-          <pre class="finding-drawer-block finding-drawer-block--text">{{ (finding as any).verification_detail }}</pre>
+        <section v-if="(finding as any).verification_detail" class="fd-section">
+          <div class="fd-section__title">验证过程</div>
+          <pre class="fd-block fd-block--text">{{ (finding as any).verification_detail }}</pre>
         </section>
 
-        <section v-if="finding.data?.screenshot" class="finding-drawer-section">
-          <div class="finding-drawer-section__title">页面截图</div>
-          <div class="finding-drawer-screenshot">
+        <div class="fd-divider" />
+
+        <section v-if="finding.data?.screenshot" class="fd-section">
+          <div class="fd-section__title">页面截图</div>
+          <div class="fd-screenshot">
             <img
               :src="`data:image/jpeg;base64,${finding.data.screenshot}`"
               alt="页面截图"
@@ -239,43 +303,54 @@ function openScreenshot(b64: string) {
           </div>
         </section>
 
-        <section v-if="dataEntries.length" class="finding-drawer-section">
-          <div class="finding-drawer-section__title">扩展字段</div>
-          <div class="finding-drawer-kv">
+        <section v-if="dataEntries.length" class="fd-section">
+          <div class="fd-section__title">扩展字段</div>
+          <div class="fd-kv">
             <template v-for="[key, val] in dataEntries" :key="key">
-              <div v-if="key === 'banner'" class="finding-drawer-kv-banner">
-                <div class="finding-drawer-kv__label">{{ dataKeyLabels[key] ?? key }}</div>
-                <pre class="finding-drawer-block finding-drawer-block--code">{{ formatFindingDataValue(val) }}</pre>
+              <div v-if="key === 'banner'" class="fd-kv-banner">
+                <div class="fd-kv__label">{{ dataKeyLabels[key] ?? key }}</div>
+                <pre class="fd-block fd-block--code">{{ formatFindingDataValue(val) }}</pre>
               </div>
-              <div v-else class="finding-drawer-kv__row">
-                <div class="finding-drawer-kv__label">{{ dataKeyLabels[key] ?? key }}</div>
-                <pre class="finding-drawer-kv__value">{{ displayDataValue(key, val) }}</pre>
+              <div v-else class="fd-kv__row">
+                <div class="fd-kv__label">{{ dataKeyLabels[key] ?? key }}</div>
+                <pre class="fd-kv__value">{{ displayDataValue(key, val) }}</pre>
               </div>
             </template>
           </div>
         </section>
 
-        <section class="finding-drawer-section finding-drawer-actions">
-          <NSpace vertical :size="8">
+        <div class="fd-divider" />
+
+        <section class="fd-section fd-actions">
+          <NSpace :size="10">
             <NButton
               v-if="finding.severity && finding.severity !== 'info'"
               type="warning"
+              size="small"
               :loading="convertingToIncident"
-              block
               @click="emit('to-incident')"
             >
+              <template #icon>
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>
+              </template>
               转为安全事件
             </NButton>
             <NButton
               type="info"
+              size="small"
               secondary
               :loading="retesting"
-              block
               @click="emit('retest')"
             >
+              <template #icon>
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" /></svg>
+              </template>
               漏洞回测
             </NButton>
-            <NButton type="error" secondary :loading="markingFP" block @click="emit('mark-fp')">
+            <NButton type="error" size="small" secondary :loading="markingFP" @click="emit('mark-fp')">
+              <template #icon>
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" /></svg>
+              </template>
               标记误报
             </NButton>
           </NSpace>
@@ -286,106 +361,221 @@ function openScreenshot(b64: string) {
 </template>
 
 <style scoped>
-.finding-drawer-header__title {
-  font-size: 16px;
-  font-weight: 600;
-  line-height: 1.45;
+/* Header */
+.fd-header__title {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.4;
   word-break: break-word;
+  color: var(--n-text-color);
 }
-.finding-drawer-header__meta {
+.fd-header__meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
 }
-.finding-drawer-section {
-  margin-bottom: 20px;
+.fd-sev-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid;
+  letter-spacing: 0.3px;
 }
-.finding-drawer-section__title {
+.fd-conf-text {
+  font-size: 12px;
+  color: var(--text-color-3, #8c8c8c);
+}
+
+.fd-conf-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fd-conf-bar-track {
+  width: 60px;
+  height: 5px;
+  background: var(--border-color-light, #f0f0f0);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.fd-conf-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+
+.fd-conf-reason-card {
+  background: var(--primary-color-suppl, #f0f7ff);
+  border: 1px solid var(--primary-color-hover, #d6e4ff);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.fd-conf-reason-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.fd-conf-reason-score {
+  font-size: 18px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.fd-conf-reason-level {
+  font-size: 12px;
+  color: var(--text-color-2, #4a5568);
+  font-weight: 500;
+}
+
+/* Section */
+.fd-section {
+  margin-bottom: 24px;
+}
+.fd-section__title {
   font-size: 13px;
   font-weight: 600;
   color: var(--n-text-color);
-  margin-bottom: 10px;
-  padding-left: 8px;
-  border-left: 3px solid #1890ff;
+  margin-bottom: 12px;
+  padding-left: 10px;
+  border-left: 3px solid var(--primary-color, #1890ff);
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
-.finding-drawer-block {
+
+/* Divider */
+.fd-divider {
+  height: 1px;
+  background: linear-gradient(to right, var(--border-color, #e8e8e8), transparent);
+  margin: 8px 0 20px;
+}
+
+/* Blocks */
+.fd-block {
   margin: 0;
-  padding: 12px 14px;
+  padding: 14px 16px;
   font-size: 12px;
-  line-height: 1.65;
+  line-height: 1.7;
   white-space: pre-wrap;
   word-break: break-word;
   border-radius: 8px;
-  border: 1px solid #e8e8e8;
-  background: #fafafa;
-  color: #444;
+  border: 1px solid var(--border-color, #e8e8e8);
+  background: var(--body-color, #fafafa);
+  color: var(--text-color-2, #444);
   max-height: min(50vh, 420px);
   overflow: auto;
 }
-.finding-drawer-block--code {
+.fd-block--code {
   font-family: 'SF Mono', Consolas, Monaco, monospace;
-  font-size: 11px;
-  background: #1e1e2e;
-  color: #cdd6f4;
-  border-color: #2d2d3d;
+  font-size: 11.5px;
+  background: #0d1117;
+  color: #e6edf3;
+  border-color: #30363d;
+  line-height: 1.65;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
 }
-.finding-drawer-block--text {
-  background: #fff;
+.fd-block--text {
+  background: var(--card-color, #fff);
+  border-color: var(--border-color, #eef2f6);
 }
-.finding-drawer-mono {
+.fd-mono {
   font-family: 'SF Mono', Consolas, monospace;
   word-break: break-all;
 }
-.finding-drawer-screenshot {
-  border: 1px solid #e8e8e8;
+
+/* Copy button */
+.fd-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border-color, #e0e0e0);
+  border-radius: 5px;
+  background: var(--card-color, #fafafa);
+  cursor: pointer;
+  transition: all 0.15s;
+  padding: 0;
+}
+.fd-copy-btn:hover {
+  border-color: var(--primary-color, #1890ff);
+  background: var(--primary-color-suppl, #f0f5ff);
+}
+
+/* Screenshot */
+.fd-screenshot {
+  border: 1px solid var(--border-color, #e8e8e8);
   border-radius: 8px;
   overflow: hidden;
   cursor: zoom-in;
+  transition: box-shadow 0.2s;
 }
-.finding-drawer-screenshot img {
+.fd-screenshot:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+.fd-screenshot img {
   width: 100%;
   display: block;
 }
-.finding-drawer-kv {
-  border: 1px solid #e8e8e8;
+
+/* KV table */
+.fd-kv {
+  border: 1px solid var(--border-color, #eef2f6);
   border-radius: 8px;
   overflow: hidden;
 }
-.finding-drawer-kv__row {
+.fd-kv__row {
   display: grid;
   grid-template-columns: 130px 1fr;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--border-color-light, #f5f5f5);
   font-size: 12px;
+  transition: background 0.1s;
 }
-.finding-drawer-kv__row:last-child {
+.fd-kv__row:last-child {
   border-bottom: none;
 }
-.finding-drawer-kv__label {
-  padding: 10px 12px;
-  background: #fafafa;
-  color: #666;
+.fd-kv__row:hover {
+  background: var(--hover-color, #fafbfc);
+}
+.fd-kv__label {
+  padding: 10px 14px;
+  background: var(--body-color, #f8f9fa);
+  color: var(--text-color-3, #666);
   font-weight: 500;
   word-break: break-word;
+  border-right: 1px solid var(--border-color-light, #f0f0f0);
 }
-.finding-drawer-kv__value {
+.fd-kv__value {
   margin: 0;
-  padding: 10px 12px;
+  padding: 10px 14px;
   white-space: pre-wrap;
   word-break: break-word;
-  color: #333;
+  color: var(--text-color-1, #333);
   font-family: inherit;
   max-height: 280px;
   overflow: auto;
 }
-.finding-drawer-kv-banner {
-  border-bottom: 1px solid #f0f0f0;
+.fd-kv-banner {
+  border-bottom: 1px solid var(--border-color-light, #f0f0f0);
 }
-.finding-drawer-kv-banner .finding-drawer-kv__label {
-  padding: 8px 12px;
+.fd-kv-banner .fd-kv__label {
+  padding: 8px 14px;
 }
-.finding-drawer-actions {
-  padding-top: 8px;
-  border-top: 1px solid #eee;
+
+/* Actions */
+.fd-actions {
+  padding-top: 14px;
+  border-top: 1px solid var(--border-color, #eef2f6);
+  margin-top: 8px;
 }
 </style>

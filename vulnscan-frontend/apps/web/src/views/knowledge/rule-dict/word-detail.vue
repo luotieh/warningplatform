@@ -108,6 +108,17 @@ async function fetchCategories() {
   try {
     const res = await getWordCategoryList(libraryId);
     categories.value = Array.isArray(res) ? res : ((res as any)?.data || []);
+    if (categories.value.length === 0 && libraryInfo.value?.name) {
+      try {
+        await createWordCategory({
+          library_id: libraryId,
+          name: libraryInfo.value.name,
+          description: '自动创建的默认分类',
+        });
+        const res2 = await getWordCategoryList(libraryId);
+        categories.value = Array.isArray(res2) ? res2 : ((res2 as any)?.data || []);
+      } catch { /* 自动创建失败，用户可手动创建 */ }
+    }
     if (categories.value.length > 0 && !activeCatId.value) {
       activeCatId.value = categories.value[0]!.id;
     }
@@ -327,8 +338,8 @@ const entryColumns = computed<DataTableColumns<WordEntry>>(() => [
   },
 ]);
 
-onMounted(() => {
-  fetchLibrary();
+onMounted(async () => {
+  await fetchLibrary();
   fetchCategories();
 });
 </script>

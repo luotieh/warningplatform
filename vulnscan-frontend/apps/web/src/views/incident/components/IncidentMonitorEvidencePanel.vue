@@ -67,6 +67,7 @@ const hasVisualEvidence = computed(() => {
       <SensitiveWordDetail
         v-else-if="dimension === 'sensitive_word'"
         :result="result"
+        :execution-id="executionId"
         class="mb-3"
       />
       <SensitiveFileDetail

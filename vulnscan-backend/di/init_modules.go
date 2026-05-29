@@ -17,6 +17,7 @@ import (
 	"vulnscan-backend/knowledge/datalib"
 	kfp "vulnscan-backend/knowledge/fingerprint"
 	"vulnscan-backend/knowledge/poc"
+	kproduct "vulnscan-backend/knowledge/product"
 	kprompt "vulnscan-backend/knowledge/prompt"
 	"vulnscan-backend/model"
 	"vulnscan-backend/nodeapi"
@@ -131,7 +132,18 @@ func (h *Handlers) initKnowledgeAPIs(authGroup *gin.RouterGroup, backends *[]aut
 
 	kprompt.SeedBuiltinTemplates(session)
 
-	slog.Info("[+] POC + Fingerprint + DataLib + PromptTemplate 知识库 API 已注册")
+	productSvc := kproduct.NewServiceProduct(h.DB)
+	productHandler := kproduct.NewHandlerProduct(productSvc)
+	productRoutes := kproduct.NewProductRoutes(productHandler)
+	*backends = append(*backends, productRoutes.RoutesWithGroup(authGroup)...)
+	kproduct.SeedBuiltinProducts(session)
+
+	if h.Knowledge != nil && h.Knowledge.Poc != nil {
+		h.Knowledge.Poc.SetProductLinker(productSvc)
+	}
+	webFpSvc.SetProductLinker(productSvc)
+
+	slog.Info("[+] POC + Fingerprint + DataLib + PromptTemplate + Product 知识库 API 已注册")
 }
 
 func (h *Handlers) initTemplateAPI(authGroup *gin.RouterGroup, backends *[]authorize.BackendItem) {

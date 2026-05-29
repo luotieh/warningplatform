@@ -393,6 +393,8 @@ func (e *EmbeddedAgent) uploadAnnotatedScreenshot(executionID string, jpegData [
 	}
 	detail["tamper_screenshot_id"] = fid
 	detail["tamper_screenshot_url"] = dlURL
+	detail["annotated_screenshot_id"] = fid
+	detail["annotated_screenshot_url"] = dlURL
 	updated, _ := json.Marshal(detail)
 
 	slog.Info("[Monitor] 标注截图已上传", "execution_id", executionID, "file_id", fid)

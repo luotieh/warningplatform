@@ -3,9 +3,9 @@ package orchestrate
 import (
 	"vulnscan-backend/scan/core"
 
-	"crypto/sha256"
-	"encoding/hex"
+	"encoding/binary"
 	"fmt"
+	"hash/fnv"
 	"strings"
 	"sync"
 )
@@ -78,10 +78,15 @@ func (d *FindingDeduplicator) evictOldest() {
 	if evictCount == 0 {
 		evictCount = 1
 	}
-	for i := 0; i < evictCount && i < len(d.order); i++ {
+	if evictCount > len(d.order) {
+		evictCount = len(d.order)
+	}
+	for i := 0; i < evictCount; i++ {
 		delete(d.seen, d.order[i])
 	}
-	d.order = d.order[evictCount:]
+	remaining := len(d.order) - evictCount
+	copy(d.order, d.order[evictCount:])
+	d.order = d.order[:remaining]
 }
 
 func (d *FindingDeduplicator) Fingerprint(taskID string, f *core.Finding) string {
@@ -111,8 +116,12 @@ func (d *FindingDeduplicator) Fingerprint(taskID string, f *core.Finding) string
 	}
 
 	raw := strings.Join(parts, "|")
-	h := sha256.Sum256([]byte(raw))
-	return hex.EncodeToString(h[:16])
+	h := fnv.New128a()
+	h.Write([]byte(raw))
+	sum := h.Sum(nil)
+	hi := binary.BigEndian.Uint64(sum[:8])
+	lo := binary.BigEndian.Uint64(sum[8:])
+	return fmt.Sprintf("%016x%016x", hi, lo)
 }
 
 func (d *FindingDeduplicator) DeduplicateFindings(taskID string, findings []*core.Finding) []*core.Finding {

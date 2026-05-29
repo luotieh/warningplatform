@@ -87,6 +87,7 @@ func defaultFingerprints() []defaultFP {
 
 		// --- Database ---
 		{name: "MySQL-Banner", service: "MySQL", probeType: "passive", matchRegex: `(?i)mysql|MariaDB`, versionExpr: `([\d.]+(?:-MariaDB)?)`, priority: 85, ports: "3306"},
+		{name: "MySQL-Greeting", service: "MySQL", probeType: "passive", matchRegex: `(\d+\.\d+\.\d+[\w.-]*)`, versionExpr: `(\d+\.\d+\.\d+[\w.-]*)`, priority: 82, ports: "3306"},
 		{name: "PostgreSQL-Banner", service: "PostgreSQL", probeType: "passive", matchRegex: `(?i)PostgreSQL`, versionExpr: `([\d.]+)`, priority: 85, ports: "5432"},
 		{name: "Redis-PONG", service: "Redis", probeType: "passive", matchRegex: `\+PONG`, priority: 90, ports: "6379"},
 		{name: "Redis-Version", service: "Redis", probeType: "passive", matchRegex: `redis_version:([\d.]+)`, priority: 91, ports: "6379"},
@@ -107,7 +108,8 @@ func defaultFingerprints() []defaultFP {
 		{name: "XRDP-Banner", service: "XRDP", probeType: "passive", matchRegex: `(?i)xrdp`, priority: 85, ports: "3389"},
 
 		// --- Messaging & Queue ---
-		{name: "AMQP-Banner", service: "RabbitMQ", probeType: "passive", matchRegex: `AMQP`, priority: 80, ports: "5672"},
+		{name: "AMQP-Banner", service: "AMQP", probeType: "passive", matchRegex: `AMQP`, priority: 80, ports: "5672"},
+		{name: "AMQP-RabbitMQ", service: "RabbitMQ", probeType: "passive", matchRegex: `(?i)product.*rabbitmq|rabbitmq`, versionExpr: `version[^\d]*([\d.]+)`, priority: 85, ports: "5672"},
 		{name: "Kafka-Broker", service: "Kafka", probeType: "passive", matchRegex: `(?i)kafka`, priority: 75, ports: "9092"},
 		{name: "NATS-Info", service: "NATS", probeType: "passive", matchRegex: `(?i)^INFO\s+\{.*"server_id"`, priority: 85, ports: "4222"},
 		{name: "MQTT-ConnAck", service: "MQTT", probeType: "passive", matchRegex: `^\x20\x02`, priority: 80, ports: "1883,8883"},
@@ -226,6 +228,7 @@ func defaultFingerprints() []defaultFP {
 		{name: "Probe-Vault", service: "Vault", probeType: "active", probeData: "GET /v1/sys/health HTTP/1.0\\r\\nHost: probe\\r\\n\\r\\n", matchRegex: `(?i)"initialized"`, priority: 80, ports: "8200"},
 		{name: "Probe-Nomad", service: "Nomad", probeType: "active", probeData: "GET /v1/status/leader HTTP/1.0\\r\\nHost: probe\\r\\n\\r\\n", matchRegex: `"\d+\.\d+\.\d+\.\d+:\d+"`, priority: 78, ports: "4646"},
 		{name: "Probe-NATS", service: "NATS", probeType: "active", probeData: "PING\\r\\n", matchRegex: `PONG`, priority: 85, ports: "4222"},
+		{name: "Probe-AMQP", service: "AMQP", probeType: "active", probeData: "AMQP\\x00\\x00\\x09\\x01", matchRegex: `AMQP|connection`, priority: 85, ports: "5672"},
 
 		// --- CI/CD / DevOps ---
 		{name: "Probe-Jenkins", service: "Jenkins", probeType: "active", probeData: "GET / HTTP/1.0\\r\\nHost: probe\\r\\n\\r\\n", matchRegex: `(?i)X-Jenkins`, priority: 85, ports: "8080"},

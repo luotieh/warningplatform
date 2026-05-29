@@ -120,7 +120,7 @@ const routes: RouteRecordRaw[] = [
         component: () => import('#/views/scan/exclusions/list.vue'),
         meta: {
           icon: 'lucide:shield-off',
-          title: '例外/排除项',
+          title: '目标排除',
           perms: [
             { action: 'create', label: '创建规则' },
             { action: 'update', label: '编辑规则' },

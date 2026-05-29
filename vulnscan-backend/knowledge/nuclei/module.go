@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	nucleilib "github.com/projectdiscovery/nuclei/v3/lib"
@@ -116,40 +117,164 @@ func (m *NucleiModule) Run(ctx context.Context, targets []*core.Target, config m
 		return &core.ModuleResult{Duration: time.Since(start)}, nil
 	}
 
+	if boolFromConfig(config, "nuclei_code_templates") {
+		opts = append(opts, nucleilib.EnableCodeTemplates())
+	}
+
+	opts = append(opts, nucleilib.EnableMatcherStatus())
+
+	if boolFromConfig(config, "nuclei_passive") {
+		opts = append(opts, nucleilib.EnablePassiveMode())
+	}
+
+	if boolFromConfig(config, "nuclei_dast") {
+		opts = append(opts, nucleilib.DASTMode())
+	}
+
+	if boolFromConfig(config, "nuclei_signed_only") {
+		opts = append(opts, nucleilib.SignedTemplatesOnly())
+	}
+
 	slog.Info("[NucleiModule] 开始Nuclei扫描", append([]any{"template_sources", templateCount, "targets", len(targetURLs)}, nucleiScanLogAttrs(config)...)...)
+
+	useTSEngine := len(targetURLs) >= intFromConfig(config, "nuclei_threadsafe_threshold", 50)
+	if boolFromConfig(config, "nuclei_force_threadsafe") {
+		useTSEngine = true
+	}
 
 	var findings []*core.Finding
 	var mu sync.Mutex
+	var failedTemplates int64
 
-	ne, err := nucleilib.NewNucleiEngineCtx(ctx, opts...)
-	if err != nil {
-		mc.outcome = "init_error"
-		return nil, fmt.Errorf("初始化Nuclei引擎失败: %w", err)
+	if useTSEngine {
+		err = m.runThreadSafe(ctx, targetURLs, opts, targets, &findings, &mu, &failedTemplates)
+	} else {
+		err = m.runSingle(ctx, targetURLs, opts, targets, config, &findings, &mu, &failedTemplates)
 	}
-	defer ne.Close()
 
-	ne.LoadTargets(targetURLs, true)
-
-	err = ne.ExecuteCallbackWithCtx(ctx, func(event *output.ResultEvent) {
-		finding := convertResultToFinding(event, targets)
-		if finding != nil {
-			mu.Lock()
-			findings = append(findings, finding)
-			mu.Unlock()
-		}
-	})
 	if err != nil {
 		slog.Warn("[NucleiModule] Nuclei执行出错", "error", err)
 		mc.outcome = "execute_error"
 	}
 	mc.findings = len(findings)
 
-	slog.Info("[NucleiModule] Nuclei扫描完成", append([]any{"findings", len(findings), "duration", time.Since(start).Round(time.Millisecond)}, nucleiScanLogAttrs(config)...)...)
+	logAttrs := []any{
+		"findings", len(findings),
+		"duration", time.Since(start).Round(time.Millisecond),
+		"engine", engineLabel(useTSEngine),
+	}
+	if failedTemplates > 0 {
+		logAttrs = append(logAttrs, "failed_templates", failedTemplates)
+	}
+	slog.Info("[NucleiModule] Nuclei扫描完成", append(logAttrs, nucleiScanLogAttrs(config)...)...)
 
 	return &core.ModuleResult{
 		Findings: findings,
 		Duration: time.Since(start),
 	}, nil
+}
+
+func engineLabel(threadSafe bool) string {
+	if threadSafe {
+		return "thread-safe"
+	}
+	return "single"
+}
+
+func (m *NucleiModule) runSingle(
+	ctx context.Context,
+	targetURLs []string,
+	opts []nucleilib.NucleiSDKOptions,
+	targets []*core.Target,
+	config map[string]interface{},
+	findings *[]*core.Finding,
+	mu *sync.Mutex,
+	failedTemplates *int64,
+) error {
+	ne, err := nucleilib.NewNucleiEngineCtx(ctx, opts...)
+	if err != nil {
+		return fmt.Errorf("初始化Nuclei引擎失败: %w", err)
+	}
+	defer ne.Close()
+
+	if apiFile := configString(config, "nuclei_openapi_file", ""); apiFile != "" {
+		if loadErr := ne.LoadTargetsWithHttpData(apiFile, "openapi"); loadErr != nil {
+			slog.Warn("[NucleiModule] 加载 OpenAPI 目标失败", "file", apiFile, "error", loadErr)
+			ne.LoadTargets(targetURLs, true)
+		} else {
+			slog.Info("[NucleiModule] 已加载 OpenAPI 目标", "file", apiFile)
+		}
+	} else {
+		ne.LoadTargets(targetURLs, true)
+	}
+
+	return ne.ExecuteCallbackWithCtx(ctx, func(event *output.ResultEvent) {
+		if event.MatcherStatus {
+			finding := convertResultToFinding(event, targets)
+			if finding != nil {
+				mu.Lock()
+				*findings = append(*findings, finding)
+				mu.Unlock()
+			}
+		} else {
+			atomic.AddInt64(failedTemplates, 1)
+			if event.Error != "" {
+				slog.Debug("[NucleiModule] 模板不匹配/失败",
+					"template", event.TemplateID, "target", event.Host, "error", event.Error)
+			}
+		}
+	})
+}
+
+func (m *NucleiModule) runThreadSafe(
+	ctx context.Context,
+	targetURLs []string,
+	opts []nucleilib.NucleiSDKOptions,
+	targets []*core.Target,
+	findings *[]*core.Finding,
+	mu *sync.Mutex,
+	failedTemplates *int64,
+) error {
+	tse, err := nucleilib.NewThreadSafeNucleiEngineCtx(ctx, opts...)
+	if err != nil {
+		return fmt.Errorf("初始化 ThreadSafe Nuclei 引擎失败: %w", err)
+	}
+	defer tse.Close()
+
+	tse.GlobalResultCallback(func(event *output.ResultEvent) {
+		if event.MatcherStatus {
+			finding := convertResultToFinding(event, targets)
+			if finding != nil {
+				mu.Lock()
+				*findings = append(*findings, finding)
+				mu.Unlock()
+			}
+		} else {
+			atomic.AddInt64(failedTemplates, 1)
+		}
+	})
+
+	if err := tse.GlobalLoadAllTemplates(); err != nil {
+		slog.Warn("[NucleiModule] ThreadSafe 模板加载失败", "error", err)
+	}
+
+	chunkSize := 10
+	if len(targetURLs) > 200 {
+		chunkSize = 20
+	}
+
+	for i := 0; i < len(targetURLs); i += chunkSize {
+		end := i + chunkSize
+		if end > len(targetURLs) {
+			end = len(targetURLs)
+		}
+		chunk := targetURLs[i:end]
+		if err := tse.ExecuteNucleiWithOptsCtx(ctx, chunk); err != nil {
+			slog.Warn("[NucleiModule] ThreadSafe 分片执行失败", "chunk", i/chunkSize, "error", err)
+		}
+	}
+
+	return nil
 }
 
 func isVulnRetestConfig(config map[string]interface{}) bool {
@@ -184,7 +309,32 @@ func (m *NucleiModule) loadTemplates(config map[string]interface{}) []*PocEntry 
 
 	products := extractDetectedProducts(config)
 	if len(products) > 0 {
-		matched := m.store.LoadByProducts(products)
+		matched, decisions := m.store.LoadByProductsWithDecisions(products)
+		if len(decisions) > 0 {
+			config["_poc_match_decisions"] = decisions
+			structuredCount := 0
+			tagCount := 0
+			heuristicCount := 0
+			for _, d := range decisions {
+				if !d.Matched {
+					continue
+				}
+				switch d.MatchMethod {
+				case "product+version", "product":
+					structuredCount++
+				case "tag":
+					tagCount++
+				case "heuristic":
+					heuristicCount++
+				}
+			}
+			slog.Info("[NucleiModule] PoC 匹配决策统计",
+				"total_matched", len(matched),
+				"structured", structuredCount,
+				"tag_based", tagCount,
+				"heuristic", heuristicCount,
+				"total_decisions", len(decisions))
+		}
 		if len(matched) > 0 {
 			slog.Info("[NucleiModule] 基于指纹识别智能匹配PoC",
 				"products", len(products), "matched_templates", len(matched))
@@ -200,7 +350,20 @@ func (m *NucleiModule) loadTemplates(config map[string]interface{}) []*PocEntry 
 		return nil
 	}
 
-	return m.store.LoadAll()
+	fallbackMode := strings.ToLower(strings.TrimSpace(configString(config, "poc_no_fingerprint_fallback", "high_critical")))
+	switch fallbackMode {
+	case "all":
+		slog.Info("[NucleiModule] 未检测到产品，按配置回退全量 PoC")
+		return m.store.LoadAll()
+	case "skip":
+		slog.Info("[NucleiModule] 未检测到产品，跳过 PoC（poc_no_fingerprint_fallback=skip）")
+		return nil
+	default:
+		highCrit := m.store.LoadBySeverity([]string{"critical", "high"})
+		slog.Info("[NucleiModule] 未检测到产品，仅执行高/严重级别 PoC",
+			"count", len(highCrit), "hint", "设 poc_no_fingerprint_fallback=all 可改为全量")
+		return highCrit
+	}
 }
 
 func extractDetectedProducts(config map[string]interface{}) []string {

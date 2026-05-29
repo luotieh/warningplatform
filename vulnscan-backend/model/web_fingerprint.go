@@ -3,6 +3,7 @@ package model
 type WebFingerprint struct {
 	BaseModel
 	Product     string `gorm:"type:varchar(128);not null;index" json:"product"`
+	ProductID   string `gorm:"type:varchar(36);index" json:"product_id"`
 	Category    string `gorm:"type:varchar(64);not null;index" json:"category"`
 	Version     string `gorm:"type:varchar(64)" json:"version"`
 	Description string `gorm:"type:text" json:"description"`

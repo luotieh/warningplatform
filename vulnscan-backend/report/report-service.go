@@ -91,6 +91,8 @@ func (s *ServiceReport) BuildReportData(title, reportType, taskID string) *Repor
 		data.Title = "扫描报告"
 	}
 
+	s.enrichProducts(data)
+
 	return data
 }
 
@@ -179,6 +181,101 @@ func (s *ServiceReport) populateGlobalVulns(data *ReportData) {
 	sortVulnerabilities(data.Vulnerabilities)
 }
 
+func (s *ServiceReport) enrichProducts(data *ReportData) {
+	// Collect ProductIDs from vulnerabilities
+	productIDSet := make(map[string]struct{})
+	if taskID := ""; data.Task != nil {
+		taskID = data.Task.ID
+		var vulns []model.Vulnerability
+		s.session().Where("task_id = ? AND product_id != '' AND product_id IS NOT NULL", taskID).
+			Select("product_id").Find(&vulns)
+		for _, v := range vulns {
+			if v.ProductID != "" {
+				productIDSet[v.ProductID] = struct{}{}
+			}
+		}
+	}
+
+	if len(productIDSet) == 0 {
+		return
+	}
+
+	productIDs := make([]string, 0, len(productIDSet))
+	for pid := range productIDSet {
+		productIDs = append(productIDs, pid)
+	}
+
+	var products []model.Product
+	s.session().Where("id IN ?", productIDs).Find(&products)
+
+	productMap := make(map[string]*model.Product, len(products))
+	for i := range products {
+		productMap[products[i].ID] = &products[i]
+	}
+
+	// Count vulns per product
+	vulnCountMap := make(map[string]int)
+	if data.Task != nil {
+		type cntRow struct {
+			ProductID string `gorm:"column:product_id"`
+			Cnt       int    `gorm:"column:cnt"`
+		}
+		var counts []cntRow
+		s.session().Model(&model.Vulnerability{}).
+			Select("product_id, count(*) as cnt").
+			Where("task_id = ? AND product_id IN ?", data.Task.ID, productIDs).
+			Group("product_id").Find(&counts)
+		for _, r := range counts {
+			vulnCountMap[r.ProductID] = r.Cnt
+		}
+	}
+
+	// Count PoCs per product
+	pocCountMap := make(map[string]int)
+	{
+		type cntRow struct {
+			ProductID string `gorm:"column:product_id"`
+			Cnt       int    `gorm:"column:cnt"`
+		}
+		var counts []cntRow
+		s.session().Model(&model.PocTemplate{}).
+			Select("product_id, count(*) as cnt").
+			Where("product_id IN ?", productIDs).
+			Group("product_id").Find(&counts)
+		for _, r := range counts {
+			pocCountMap[r.ProductID] = r.Cnt
+		}
+	}
+
+	for _, pid := range productIDs {
+		p, ok := productMap[pid]
+		if !ok {
+			continue
+		}
+		data.Products = append(data.Products, ProductSection{
+			ID:          p.ID,
+			Name:        p.Name,
+			Vendor:      p.Vendor,
+			Category:    p.Category,
+			Description: p.Description,
+			Homepage:    p.Homepage,
+			VulnCount:   vulnCountMap[pid],
+			PocCount:    pocCountMap[pid],
+		})
+	}
+
+	// Enrich VulnItem with product names
+	for i := range data.Vulnerabilities {
+		vi := &data.Vulnerabilities[i]
+		if vi.ProductID == "" {
+			continue
+		}
+		if p, ok := productMap[vi.ProductID]; ok {
+			vi.ProductName = p.Name
+		}
+	}
+}
+
 func buildReportSummary(data *ReportData) ReportSummary {
 	var criticalCount, highCount, mediumCount, lowCount, infoCount int
 	for _, vuln := range data.Vulnerabilities {
@@ -253,6 +350,7 @@ func vulnerabilityToVulnItem(v model.Vulnerability) VulnItem {
 		Description: v.Description,
 		Evidence:    v.Evidence,
 		Remediation: v.Solution,
+		ProductID:   v.ProductID,
 	}
 }
 

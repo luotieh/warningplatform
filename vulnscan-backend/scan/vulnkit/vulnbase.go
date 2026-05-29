@@ -8,6 +8,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -49,33 +50,79 @@ type TargetTestFunc func(ctx context.Context, target *core.Target) []*core.Findi
 func (vs *VulnScanner) RunTargets(ctx context.Context, moduleID string, targets []*core.Target, testFn TargetTestFunc) *core.ModuleResult {
 	start := time.Now()
 	result := &core.ModuleResult{ModuleID: moduleID}
-	var mu sync.Mutex
-	var wg sync.WaitGroup
 
-	sem := make(chan struct{}, vs.Concurrency)
-
+	eligible := make([]*core.Target, 0, len(targets))
+	skipped := 0
 	for _, t := range targets {
 		if t.URL == "" {
+			skipped++
 			continue
+		}
+		eligible = append(eligible, t)
+	}
+
+	if len(eligible) == 0 {
+		result.Duration = time.Since(start)
+		if skipped > 0 {
+			slog.Debug("[VulnScanner] 无可用目标", "module", moduleID, "skipped", skipped)
+		}
+		return result
+	}
+
+	allFindings := make([]*core.Finding, 0, len(eligible))
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, vs.Concurrency)
+	var errCount int
+
+	for _, t := range eligible {
+		select {
+		case <-ctx.Done():
+			result.Error = ctx.Err().Error()
+			result.Duration = time.Since(start)
+			return result
+		case sem <- struct{}{}:
 		}
 
 		wg.Add(1)
-		sem <- struct{}{}
 		go func(target *core.Target) {
 			defer wg.Done()
 			defer func() { <-sem }()
 
+			defer func() {
+				if r := recover(); r != nil {
+					slog.Error("[VulnScanner] panic in testFn",
+						"module", moduleID,
+						"target", target.Host,
+						"panic", r,
+					)
+					mu.Lock()
+					errCount++
+					mu.Unlock()
+				}
+			}()
+
 			findings := testFn(ctx, target)
 			if len(findings) > 0 {
 				mu.Lock()
-				result.Findings = append(result.Findings, findings...)
+				allFindings = append(allFindings, findings...)
 				mu.Unlock()
 			}
 		}(t)
 	}
 
 	wg.Wait()
+	result.Findings = allFindings
 	result.Duration = time.Since(start)
+
+	if errCount > 0 {
+		slog.Warn("[VulnScanner] 部分目标出错",
+			"module", moduleID,
+			"errors", errCount,
+			"total", len(eligible),
+		)
+	}
+
 	return result
 }
 
@@ -193,57 +240,30 @@ func Similarity(a, b string) float64 {
 		return 1.0
 	}
 
-	la := min(len(a), 2000)
-	lb := min(len(b), 2000)
-	a = a[:la]
-	b = b[:lb]
-
-	common := 0
-	setA := make(map[string]int)
-	for i := 0; i < len(a); {
-		j := i
-		for j < len(a) && a[j] != '\n' {
-			j++
-		}
-		line := a[i:j]
-		setA[line]++
-		i = j + 1
+	if len(a) > 2000 {
+		a = a[:2000]
+	}
+	if len(b) > 2000 {
+		b = b[:2000]
 	}
 
-	for i := 0; i < len(b); {
-		j := i
-		for j < len(b) && b[j] != '\n' {
-			j++
-		}
-		line := b[i:j]
+	linesA := strings.Split(a, "\n")
+	linesB := strings.Split(b, "\n")
+
+	setA := make(map[string]int, len(linesA))
+	for _, line := range linesA {
+		setA[line]++
+	}
+
+	common := 0
+	for _, line := range linesB {
 		if setA[line] > 0 {
 			common++
 			setA[line]--
 		}
-		i = j + 1
 	}
 
-	lineCountA := 0
-	for i := 0; i < len(a); {
-		j := i
-		for j < len(a) && a[j] != '\n' {
-			j++
-		}
-		lineCountA++
-		i = j + 1
-	}
-
-	lineCountB := 0
-	for i := 0; i < len(b); {
-		j := i
-		for j < len(b) && b[j] != '\n' {
-			j++
-		}
-		lineCountB++
-		i = j + 1
-	}
-
-	total := lineCountA + lineCountB
+	total := len(linesA) + len(linesB)
 	if total == 0 {
 		return 1.0
 	}

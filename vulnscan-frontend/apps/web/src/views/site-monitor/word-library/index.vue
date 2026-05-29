@@ -22,6 +22,7 @@ import {
 
 import { dialog, message } from '#/adapter/naive';
 import {
+  createWordCategory,
   createWordLibrary,
   deleteWordLibrary,
   getWordLibraryList,
@@ -105,10 +106,20 @@ async function handleSubmit() {
       });
       message.success('更新成功');
     } else {
-      await createWordLibrary({
+      const res = await createWordLibrary({
         description: formData.description,
         name: formData.name,
       });
+      const newId = (res as any)?.id ?? (res as any)?.data?.id;
+      if (newId) {
+        try {
+          await createWordCategory({
+            library_id: newId,
+            name: formData.name.trim(),
+            description: '自动创建的默认分类',
+          });
+        } catch { /* 默认分类创建失败不阻塞主流程 */ }
+      }
       message.success('创建成功');
     }
     dialogVisible.value = false;

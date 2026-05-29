@@ -22,6 +22,13 @@ type PocTemplate struct {
 	CWE  string `gorm:"type:varchar(50)" json:"cwe"`
 	CVSS string `gorm:"type:varchar(20)" json:"cvss"`
 
+	// 结构化产品匹配字段
+	Product       string `gorm:"type:varchar(200);index" json:"product"`
+	Vendor        string `gorm:"type:varchar(200);index" json:"vendor"`
+	AffectedRange string `gorm:"type:varchar(200)" json:"affected_range"`
+	CPE           string `gorm:"type:varchar(300)" json:"cpe"`
+	ProductID     string `gorm:"type:varchar(36);index" json:"product_id"`
+
 	Enabled  bool  `gorm:"default:true;index" json:"enabled"`
 	Builtin  bool  `gorm:"default:false" json:"builtin"`
 	Verified bool  `gorm:"default:false" json:"verified"`

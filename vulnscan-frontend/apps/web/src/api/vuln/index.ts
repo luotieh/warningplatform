@@ -19,6 +19,7 @@ export interface Vulnerability {
   asset_id?: string;
   status: string;
   confidence?: number;
+  product_id?: string;
   first_seen_at?: string;
   last_seen_at?: string;
   created_at: string;

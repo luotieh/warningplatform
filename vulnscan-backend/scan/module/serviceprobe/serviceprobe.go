@@ -185,7 +185,8 @@ type serviceMatch struct {
 func isActiveOnlyPort(port int) bool {
 	switch port {
 	case 6379, 11211, 2181, 1080, 502, 102, 47808, 4840, 9600,
-		5432, 1883, 8883, 9042, 7687, 5632, 10050, 10051, 4222:
+		5432, 1883, 8883, 9042, 7687, 5632, 10050, 10051, 4222,
+		5672:
 		return true
 	default:
 		return false
@@ -450,6 +451,15 @@ func (m *ServiceProbe) fallbackPortMap(target *core.Target) *serviceMatch {
 		return &serviceMatch{Service: svc, Method: "port_map", Confidence: 40}
 	}
 	return nil
+}
+
+func isBannerFirstPort(port int) bool {
+	switch port {
+	case 22, 21, 25, 110, 143, 3306, 5900, 3389, 1433, 1521, 27017:
+		return true
+	default:
+		return false
+	}
 }
 
 func isTLSPort(port int) bool {

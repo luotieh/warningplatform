@@ -184,7 +184,7 @@ type MonitorCrawlJob struct {
 	MaxPages    int        `json:"max_pages" gorm:"default:50"`
 	SameHost    bool       `json:"same_host" gorm:"default:true"`
 	Error       string     `json:"error" gorm:"type:text"`
-	ResultJSON  string     `json:"result_json" gorm:"type:text"`
+	ResultJSON  string     `json:"result_json" gorm:"type:longtext"`
 	StartedAt   *time.Time `json:"started_at"`
 	FinishedAt  *time.Time `json:"finished_at"`
 	CreatedAt   time.Time  `json:"created_at"`
@@ -262,7 +262,7 @@ type MonitorExecution struct {
 	DisposedBy        string     `json:"disposed_by" gorm:"type:varchar(100)"`
 	DispositionRemark string     `json:"disposition_remark" gorm:"type:text"`
 	Error             string     `json:"error" gorm:"type:text"`
-	ResultJSON        string     `json:"result_json" gorm:"type:text"`
+	ResultJSON        string     `json:"result_json" gorm:"type:longtext"`
 	StartedAt         *time.Time `json:"started_at"`
 	FinishedAt        *time.Time `json:"finished_at"`
 	ReapedAt          *time.Time `json:"reaped_at"`

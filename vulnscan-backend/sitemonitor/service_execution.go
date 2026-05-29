@@ -2,7 +2,9 @@ package sitemonitor
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"time"
 
 	"vulnscan-backend/model"
@@ -88,12 +90,20 @@ func (s *serviceMonitor) GetExecutionDetail(ctx context.Context, id string) (*co
 }
 
 func (s *serviceMonitor) GetEvidenceAsset(ctx context.Context, executionID, assetType string) ([]byte, string, error) {
-	if s.nats == nil {
-		return nil, "", fmt.Errorf("NATS 未连接")
-	}
 	var exec model.MonitorExecution
 	if err := s.session().WithContext(ctx).Where("id = ?", executionID).First(&exec).Error; err != nil {
 		return nil, "", fmt.Errorf("执行记录不存在")
+	}
+
+	if assetType == "annotated_screenshot" {
+		data, ct, err := s.getAnnotatedScreenshot(ctx, executionID, exec.ResultJSON)
+		if err == nil {
+			return data, ct, nil
+		}
+	}
+
+	if s.nats == nil {
+		return nil, "", fmt.Errorf("存储服务不可用")
 	}
 
 	objKey := fmt.Sprintf("evidence/%s/%s", executionID, assetType)
@@ -133,6 +143,50 @@ func (s *serviceMonitor) GetEvidenceAsset(ctx context.Context, executionID, asse
 		}
 		return data, contentType, nil
 	}
+}
+
+func (s *serviceMonitor) getAnnotatedScreenshot(ctx context.Context, executionID, resultJSON string) ([]byte, string, error) {
+	if resultJSON == "" {
+		return nil, "", fmt.Errorf("no result_json")
+	}
+	var detail map[string]any
+	if err := json.Unmarshal([]byte(resultJSON), &detail); err != nil {
+		return nil, "", err
+	}
+
+	fileID, _ := detail["annotated_screenshot_id"].(string)
+	if fileID == "" {
+		fileID, _ = detail["tamper_screenshot_id"].(string)
+	}
+	if fileID == "" {
+		return nil, "", fmt.Errorf("no screenshot file id in result")
+	}
+
+	if s.fileDownloader != nil {
+		rc, ct, err := s.fileDownloader(ctx, fileID)
+		if err != nil {
+			return nil, "", fmt.Errorf("download from storage: %w", err)
+		}
+		defer rc.Close()
+		data, err := io.ReadAll(rc)
+		if err != nil {
+			return nil, "", err
+		}
+		if ct == "" {
+			ct = "image/jpeg"
+		}
+		return data, ct, nil
+	}
+
+	if s.nats != nil {
+		annotatedKey := fmt.Sprintf("evidence/%s_annotated/screenshot", executionID)
+		data, err := s.nats.ObjGetRaw(ctx, annotatedKey)
+		if err == nil {
+			return data, "image/jpeg", nil
+		}
+	}
+
+	return nil, "", fmt.Errorf("no download method available for file %s", fileID)
 }
 
 func (s *serviceMonitor) DeleteExecution(ctx context.Context, id string) error {

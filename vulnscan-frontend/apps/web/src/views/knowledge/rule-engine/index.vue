@@ -28,6 +28,7 @@ import {
 import { dialog, message } from '#/adapter/naive';
 import {
   createFileLibrary,
+  createWordCategory,
   createWordLibrary,
   deleteFileLibrary,
   deleteWordLibrary,
@@ -157,7 +158,21 @@ async function handleLibFormSubmit() {
   try {
     const payload = { name: libForm.value.name, description: libForm.value.description };
     if (libDrawerType.value === 'word') {
-      libForm.value.isEdit ? await updateWordLibrary(libForm.value.id, payload) : await createWordLibrary(payload);
+      if (libForm.value.isEdit) {
+        await updateWordLibrary(libForm.value.id, payload);
+      } else {
+        const res = await createWordLibrary(payload);
+        const newId = (res as any)?.id ?? (res as any)?.data?.id;
+        if (newId) {
+          try {
+            await createWordCategory({
+              library_id: newId,
+              name: libForm.value.name.trim(),
+              description: '自动创建的默认分类',
+            });
+          } catch { /* 默认分类创建失败不阻塞主流程 */ }
+        }
+      }
     } else {
       libForm.value.isEdit ? await updateFileLibrary(libForm.value.id, payload) : await createFileLibrary(payload);
     }
@@ -402,7 +417,7 @@ onMounted(() => {
       </template>
 
       <div
-        v-if="!searchKeyword && (wordLibraries.length > 0 || fileLibraries.length > 0)"
+        v-if="!searchKeyword"
         class="mb-6"
       >
         <div class="mb-3 flex items-center gap-2">

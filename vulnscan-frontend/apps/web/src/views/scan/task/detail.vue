@@ -20,6 +20,7 @@ import {
   NSpace,
   NEmpty,
   NPopconfirm,
+  NTooltip,
   useMessage,
 } from 'naive-ui';
 
@@ -284,8 +285,10 @@ const findingTableScrollX = computed(() =>
 );
 
 function findingRowProps(row: ScanFinding) {
+  const sevColor = (severityConfig[row.severity] ?? { color: 'transparent' }).color;
   return {
-    style: 'cursor: pointer',
+    style: `cursor: pointer; --row-sev-color: ${sevColor}`,
+    class: row.severity === 'critical' || row.severity === 'high' ? 'finding-row-high' : '',
     onClick: (e: MouseEvent) => {
       const el = e.target as HTMLElement;
       if (el.closest('button, a, .n-button')) return;
@@ -686,6 +689,10 @@ const duration = computed(() => {
 const isActive = computed(
   () => task.value?.status === 'running' || task.value?.status === 'queued',
 );
+const vulnTotal = computed(() =>
+  (task.value?.vuln_critical ?? 0) + (task.value?.vuln_high ?? 0) +
+  (task.value?.vuln_medium ?? 0) + (task.value?.vuln_low ?? 0),
+);
 
 /** 资产探测任务：结果以 host_alive 为主，需在专用 Tab 展示 */
 const isAssetDiscoveryTask = computed(
@@ -726,9 +733,15 @@ const subTabsWithCount = computed(() => {
       }
     } else if (t.key === 'vuln') {
       count = summary.value!.by_category?.['vuln'] ?? 0;
+      if (count === 0 && vulnTotal.value > 0) {
+        count = vulnTotal.value;
+      }
     } else if ('mergeTypes' in t && t.mergeTypes) {
       for (const mt of t.mergeTypes) {
         count += summary.value!.by_type[mt] ?? 0;
+      }
+      if (count === 0 && t.key === 'port_open' && (task.value?.open_ports ?? 0) > 0) {
+        count = task.value!.open_ports!;
       }
     } else {
       count = summary.value!.by_type[t.key] ?? 0;
@@ -839,13 +852,37 @@ const colSeverity = {
     return h(NTag, { size: 'small', bordered: false, round: true, style: `background: ${sc.color}18; color: ${sc.color}; font-weight: 500` }, () => sc.label);
   },
 };
+function confLabel(conf: number): string {
+  if (conf >= 90) return '高';
+  if (conf >= 70) return '中高';
+  if (conf >= 50) return '中';
+  return '低';
+}
+
 const colConfidence = {
-  title: '置信度', key: 'confidence', width: 80, align: 'center' as const,
+  title: '置信度', key: 'confidence', width: 100, align: 'center' as const,
   render: (row: ScanFinding) => {
     const color = getConfColor(row.confidence);
-    return h('div', { style: 'cursor: help', title: row.confidence_reason || '' }, [
-      h('span', { style: `padding: 2px 8px; border-radius: 10px; font-size: 12px; font-weight: 600; background: ${color}15; color: ${color}` }, `${row.confidence}%`),
+    const badge = h('div', { class: 'conf-badge', style: `--conf-color: ${color}` }, [
+      h('div', { class: 'conf-badge__bar' }, [
+        h('div', { class: 'conf-badge__fill', style: `width: ${row.confidence}%` }),
+      ]),
+      h('span', { class: 'conf-badge__text' }, `${row.confidence}% ${confLabel(row.confidence)}`),
     ]);
+
+    if (row.confidence_reason) {
+      return h(NTooltip, { placement: 'top', style: 'max-width: 320px' }, {
+        trigger: () => badge,
+        default: () => h('div', { class: 'conf-tooltip' }, [
+          h('div', { class: 'conf-tooltip__header' }, [
+            h('span', { style: `color: ${color}; font-weight: 700` }, `${row.confidence}%`),
+            h('span', { style: 'margin-left: 4px; opacity: 0.7' }, '置信度'),
+          ]),
+          h('div', { class: 'conf-tooltip__reason' }, row.confidence_reason),
+        ]),
+      });
+    }
+    return badge;
   },
 };
 const colModule = {
@@ -871,28 +908,35 @@ const colActions = {
 };
 
 const colVulnActions = {
-  title: '操作', key: 'actions', width: 120, fixed: 'right' as const,
-  render: (row: ScanFinding) => h(NSpace, { size: 4 }, () => [
-    h(NButton, {
-      size: 'tiny',
-      type: 'warning',
-      secondary: true,
-      loading: retestingFindingId.value === row.id,
-      onClick: (e: Event) => {
-        e.stopPropagation();
-        handleRetestFinding(row);
-      },
-    }, () => '回测'),
-    h(NButton, {
-      size: 'tiny',
-      type: 'primary',
-      secondary: true,
-      onClick: (e: Event) => {
-        e.stopPropagation();
-        openDetail(row);
-      },
-    }, () => '详情'),
-  ]),
+  title: '操作', key: 'actions', width: 140, fixed: 'right' as const,
+  render: (row: ScanFinding) => {
+    const isHighSev = row.severity === 'critical' || row.severity === 'high';
+    const isVerified = d(row, 'verified') === 'true';
+    const retestType = isHighSev && !isVerified ? 'warning' as const : 'default' as const;
+    const retestLabel = isHighSev && !isVerified ? '确认验证' : '回测';
+
+    return h(NSpace, { size: 4 }, () => [
+      h(NButton, {
+        size: 'tiny',
+        type: retestType,
+        secondary: !isHighSev || isVerified,
+        loading: retestingFindingId.value === row.id,
+        onClick: (e: Event) => {
+          e.stopPropagation();
+          handleRetestFinding(row);
+        },
+      }, () => retestLabel),
+      h(NButton, {
+        size: 'tiny',
+        type: 'primary',
+        secondary: true,
+        onClick: (e: Event) => {
+          e.stopPropagation();
+          openDetail(row);
+        },
+      }, () => '详情'),
+    ]);
+  },
 };
 
 function dataCol(title: string, key: string, width: number, extra?: (row: ScanFinding) => any) {
@@ -1165,11 +1209,51 @@ const findingColumns = computed(() => {
         findingCellStack(row.title || d(row, 'name'), row.description, 4),
       },
       colSeverity,
-      { title: '验证', key: 'verification_level', width: 80, render: (row: ScanFinding) => {
+      { title: '验证状态', key: 'verification_level', width: 110, render: (row: ScanFinding) => {
         const vl = (row as any).verification_level;
-        if (vl === 'exploit') return h(NTag, { size: 'small', type: 'error', bordered: false }, () => '实际利用');
-        if (vl === 'principle') return h(NTag, { size: 'small', type: 'warning', bordered: false }, () => '原理验证');
-        return h(NTag, { size: 'small', bordered: false }, () => '原理验证');
+        const vd = (row as any).verification_detail;
+        const dataVerified = d(row, 'verified');
+        const verifyDetail = d(row, 'verify_detail');
+        const verifyVariants = d(row, 'verify_variants');
+        const iconStyle = 'width: 12px; height: 12px; margin-right: 3px; vertical-align: -1px;';
+
+        const children: any[] = [];
+
+        if (vl === 'exploit') {
+          children.push(h('span', { class: 'verif-chip verif-chip--exploit' }, [
+            h('svg', { viewBox: '0 0 24 24', style: iconStyle, fill: 'none', stroke: 'currentColor', 'stroke-width': '2', innerHTML: '<path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>' }),
+            '实际利用',
+          ]));
+        } else {
+          children.push(h('span', { class: 'verif-chip verif-chip--principle' }, [
+            h('svg', { viewBox: '0 0 24 24', style: iconStyle, fill: 'none', stroke: 'currentColor', 'stroke-width': '2', innerHTML: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>' }),
+            '原理验证',
+          ]));
+        }
+
+        if (dataVerified === 'true') {
+          children.push(h('span', { class: 'verif-confirmed' }, [
+            h('svg', { viewBox: '0 0 24 24', style: 'width: 10px; height: 10px; margin-right: 2px; vertical-align: -1px;', fill: 'none', stroke: '#52c41a', 'stroke-width': '3', innerHTML: '<polyline points="20 6 9 17 4 12"/>' }),
+            '已确认',
+          ]));
+        } else if (dataVerified === 'false') {
+          children.push(h('span', { class: 'verif-unconfirmed' }, '未确认'));
+        }
+
+        const tooltipParts: string[] = [];
+        if (vd) tooltipParts.push(vd);
+        if (verifyDetail) tooltipParts.push(`验证详情: ${verifyDetail}`);
+        if (verifyVariants) tooltipParts.push(`变体测试: ${verifyVariants}`);
+
+        const inner = h('div', { class: 'verif-stack' }, children);
+
+        if (tooltipParts.length > 0) {
+          return h(NTooltip, { placement: 'top', style: 'max-width: 320px' }, {
+            trigger: () => inner,
+            default: () => h('div', { style: 'font-size: 12px; line-height: 1.6' }, tooltipParts.join('\n')),
+          });
+        }
+        return inner;
       }},
       colConfidence, colModule, colTime, colVulnActions,
     ];
@@ -1785,8 +1869,8 @@ onUnmounted(() => {
                   <NTag :type="(taskStatusTypes[task.status] || 'default') as any" size="small" round>
                     {{ taskStatusLabels[task.status] || task.status }}
                   </NTag>
-                  <NTag v-if="task.type" size="small" :bordered="false" round style="background: #f0f5ff; color: #1890ff">
-                    {{ profileLabels[task.type] ?? task.type }}
+                  <NTag v-if="task.profile || task.type" size="small" :bordered="false" round style="background: #f0f5ff; color: #1890ff">
+                    {{ profileLabels[task.profile ?? ''] ?? profileLabels[task.type] ?? task.profile ?? task.type }}
                   </NTag>
                   <NTag v-if="sseConnected && isActive" size="small" :bordered="false" type="success" round>
                     <span class="live-dot" />
@@ -1835,21 +1919,82 @@ onUnmounted(() => {
             </NSpace>
           </template>
 
-          <!-- Progress -->
-          <div class="progress-section">
+          <!-- Live Dashboard (running/queued) -->
+          <div v-if="isActive" class="live-dashboard">
+            <div class="live-dashboard__ring">
+              <svg viewBox="0 0 120 120" class="live-ring-svg">
+                <circle cx="60" cy="60" r="52" fill="none" stroke="#f0f0f0" stroke-width="8" />
+                <circle
+                  cx="60" cy="60" r="52" fill="none"
+                  :stroke="task.status === 'failed' ? '#e88080' : '#1890ff'"
+                  stroke-width="8" stroke-linecap="round"
+                  :stroke-dasharray="`${(Math.round(task.progress ?? 0) / 100) * 326.7} 326.7`"
+                  transform="rotate(-90 60 60)"
+                  class="live-ring-progress"
+                />
+              </svg>
+              <div class="live-ring-inner">
+                <div class="live-ring-pct">{{ Math.round(task.progress ?? 0) }}<span class="live-ring-pct-sign">%</span></div>
+                <div v-if="task.current_stage" class="live-ring-stage">{{ stageLabels[task.current_stage] ?? task.current_stage }}</div>
+              </div>
+            </div>
+            <div class="live-dashboard__info">
+              <div class="live-dashboard__module" v-if="task.current_module">
+                <span class="live-pulse" />
+                <span class="live-module-label">正在执行</span>
+                <span class="live-module-name">
+                  {{
+                    task.current_module
+                      .split(' · ')
+                      .map((m: string) => moduleLabels[m.trim()] ?? m.trim())
+                      .join('、')
+                  }}
+                </span>
+              </div>
+              <div v-if="liveModuleProgress.total > 0" class="live-dashboard__module-progress">
+                模块进度 {{ liveModuleProgress.done }}/{{ liveModuleProgress.total }}
+                <div class="live-module-bar">
+                  <div class="live-module-bar__fill" :style="{ width: `${(liveModuleProgress.done / liveModuleProgress.total) * 100}%` }" />
+                </div>
+              </div>
+              <div class="live-dashboard__counters">
+                <div class="live-counter">
+                  <div class="live-counter__value live-counter__value--host">{{ task.alive_hosts ?? 0 }}</div>
+                  <div class="live-counter__label">存活主机</div>
+                </div>
+                <div class="live-counter">
+                  <div class="live-counter__value live-counter__value--port">{{ task.open_ports ?? 0 }}</div>
+                  <div class="live-counter__label">开放端口</div>
+                </div>
+                <div class="live-counter live-counter--sev">
+                  <div class="live-counter__value live-counter__value--critical">{{ task.vuln_critical ?? 0 }}</div>
+                  <div class="live-counter__label">严重</div>
+                </div>
+                <div class="live-counter live-counter--sev">
+                  <div class="live-counter__value live-counter__value--high">{{ task.vuln_high ?? 0 }}</div>
+                  <div class="live-counter__label">高危</div>
+                </div>
+                <div class="live-counter live-counter--sev">
+                  <div class="live-counter__value live-counter__value--medium">{{ task.vuln_medium ?? 0 }}</div>
+                  <div class="live-counter__label">中危</div>
+                </div>
+                <div class="live-counter live-counter--sev">
+                  <div class="live-counter__value live-counter__value--low">{{ task.vuln_low ?? 0 }}</div>
+                  <div class="live-counter__label">低危</div>
+                </div>
+              </div>
+              <div v-if="task.scanned_targets" class="live-dashboard__targets">
+                已扫描 {{ task.scanned_targets }} 个目标
+              </div>
+            </div>
+          </div>
+
+          <!-- Static Progress (non-running) -->
+          <div v-else class="progress-section">
             <div class="progress-meta">
               <span class="progress-label">执行进度</span>
               <span v-if="task.current_stage" class="progress-stage">
                 {{ stageLabels[task.current_stage] ?? task.current_stage }}
-                <template v-if="task.current_module">
-                  /
-                  {{
-                    task.current_module
-                      .split(' · ')
-                      .map((m) => moduleLabels[m.trim()] ?? m.trim())
-                      .join('、')
-                  }}
-                </template>
               </span>
               <span class="progress-pct">{{ Math.round(task.progress ?? 0) }}%</span>
             </div>
@@ -1863,57 +2008,62 @@ onUnmounted(() => {
             />
           </div>
 
-          <!-- Stats Grid -->
-          <div class="stats-grid">
-            <div class="stat-item">
-              <span class="stat-dot" style="background: #38a169" />
-              <div class="stat-body">
-                <div class="stat-value">{{ task.alive_hosts ?? 0 }}</div>
-                <div class="stat-label">存活主机</div>
+          <!-- Stats Summary (hidden when live dashboard is active) -->
+          <div v-if="!isActive" class="stats-summary">
+            <div class="stats-summary__assets">
+              <div class="stats-summary__item">
+                <span class="stats-summary__num">{{ task.alive_hosts ?? 0 }}</span>
+                <span class="stats-summary__lbl">存活主机</span>
+              </div>
+              <div class="stats-summary__divider" />
+              <div class="stats-summary__item">
+                <span class="stats-summary__num">{{ task.open_ports ?? 0 }}</span>
+                <span class="stats-summary__lbl">开放端口</span>
+              </div>
+              <div class="stats-summary__divider" />
+              <div class="stats-summary__item">
+                <span class="stats-summary__num stats-summary__num--vuln">{{ vulnTotal }}</span>
+                <span class="stats-summary__lbl">漏洞总数</span>
               </div>
             </div>
-            <div class="stat-item">
-              <span class="stat-dot" style="background: #3182ce" />
-              <div class="stat-body">
-                <div class="stat-value">{{ task.open_ports ?? 0 }}</div>
-                <div class="stat-label">开放端口</div>
+            <div v-if="vulnTotal > 0" class="stats-summary__sev">
+              <div class="sev-pill sev-pill--critical" :title="`严重 ${task.vuln_critical ?? 0}`">
+                <span class="sev-pill__dot" />
+                <span class="sev-pill__label">严重</span>
+                <span class="sev-pill__count">{{ task.vuln_critical ?? 0 }}</span>
+              </div>
+              <div class="sev-pill sev-pill--high" :title="`高危 ${task.vuln_high ?? 0}`">
+                <span class="sev-pill__dot" />
+                <span class="sev-pill__label">高危</span>
+                <span class="sev-pill__count">{{ task.vuln_high ?? 0 }}</span>
+              </div>
+              <div class="sev-pill sev-pill--medium" :title="`中危 ${task.vuln_medium ?? 0}`">
+                <span class="sev-pill__dot" />
+                <span class="sev-pill__label">中危</span>
+                <span class="sev-pill__count">{{ task.vuln_medium ?? 0 }}</span>
+              </div>
+              <div class="sev-pill sev-pill--low" :title="`低危 ${task.vuln_low ?? 0}`">
+                <span class="sev-pill__dot" />
+                <span class="sev-pill__label">低危</span>
+                <span class="sev-pill__count">{{ task.vuln_low ?? 0 }}</span>
               </div>
             </div>
-            <div class="stat-divider" />
-            <div class="stat-item">
-              <span class="stat-dot" style="background: #e53e3e" />
-              <div class="stat-body">
-                <div class="stat-value">{{ task.vuln_critical ?? 0 }}</div>
-                <div class="stat-label">严重</div>
-              </div>
-            </div>
-            <div class="stat-item">
-              <span class="stat-dot" style="background: #ed8936" />
-              <div class="stat-body">
-                <div class="stat-value">{{ task.vuln_high ?? 0 }}</div>
-                <div class="stat-label">高危</div>
-              </div>
-            </div>
-            <div class="stat-item">
-              <span class="stat-dot" style="background: #ecc94b" />
-              <div class="stat-body">
-                <div class="stat-value">{{ task.vuln_medium ?? 0 }}</div>
-                <div class="stat-label">中危</div>
-              </div>
-            </div>
-            <div class="stat-item">
-              <span class="stat-dot" style="background: #48bb78" />
-              <div class="stat-body">
-                <div class="stat-value">{{ task.vuln_low ?? 0 }}</div>
-                <div class="stat-label">低危</div>
-              </div>
+            <div v-if="vulnTotal > 0" class="sev-bar-compact">
+              <div v-if="(task.vuln_critical ?? 0) > 0" class="sev-bar-compact__seg sev-bar-compact__seg--critical" :style="{ flex: task.vuln_critical }" />
+              <div v-if="(task.vuln_high ?? 0) > 0" class="sev-bar-compact__seg sev-bar-compact__seg--high" :style="{ flex: task.vuln_high }" />
+              <div v-if="(task.vuln_medium ?? 0) > 0" class="sev-bar-compact__seg sev-bar-compact__seg--medium" :style="{ flex: task.vuln_medium }" />
+              <div v-if="(task.vuln_low ?? 0) > 0" class="sev-bar-compact__seg sev-bar-compact__seg--low" :style="{ flex: task.vuln_low }" />
             </div>
           </div>
         </NCard>
 
         <!-- Module Overview -->
-        <NCard v-if="summary && Object.keys(summary.by_module).length > 0" size="small" style="margin-bottom: 16px">
-          <div style="font-size: 13px; font-weight: 600; margin-bottom: 12px; color: var(--text-color-1, #333)">模块执行概览</div>
+        <div v-if="summary && Object.keys(summary.by_module).length > 0" class="module-overview-card">
+          <div class="module-overview-header">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#1890ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /></svg>
+            <span class="module-overview-title">模块执行概览</span>
+            <span class="module-overview-count">{{ Object.keys(summary.by_module).length }} 个模块</span>
+          </div>
           <div class="module-chips">
             <div
               v-for="[mod, count] in Object.entries(summary.by_module).slice(0, 8)"
@@ -1926,14 +2076,13 @@ onUnmounted(() => {
             </div>
             <div 
               v-if="Object.keys(summary.by_module).length > 8" 
-              class="module-chip" 
-              style="opacity: 0.7; cursor: pointer;"
+              class="module-chip module-chip--more"
               @click="showAllModules = true"
             >
               +{{ Object.keys(summary.by_module).length - 8 }} 更多
             </div>
           </div>
-        </NCard>
+        </div>
 
         <!-- Tab Bar -->
         <div ref="tabBarRef" class="tab-bar">
@@ -1960,7 +2109,7 @@ onUnmounted(() => {
                 <code style="font-size: 12px">{{ task.id }}</code>
               </NDescriptionsItem>
               <NDescriptionsItem label="扫描模式">
-                {{ profileLabels[task.type] ?? task.type ?? '-' }}
+                {{ task.template_name ?? profileLabels[task.profile ?? ''] ?? profileLabels[task.type] ?? task.profile ?? task.type ?? '-' }}
               </NDescriptionsItem>
               <NDescriptionsItem label="目标数量">
                 已扫描 {{ task.scanned_targets ?? 0 }} / 共 {{ task.total_targets ?? 0 }}
@@ -1985,6 +2134,72 @@ onUnmounted(() => {
               <NTag v-if="task.targets.length > 100" size="small" type="warning">+{{ task.targets.length - 100 }} 更多</NTag>
             </NSpace>
           </NCard>
+
+          <!-- Data Flow Visualization -->
+          <div v-if="summary && Object.keys(summary.by_module).length > 0" class="data-flow-card">
+            <div class="data-flow-header">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#1890ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></svg>
+              <span class="data-flow-title">数据流向</span>
+              <span class="data-flow-subtitle">目标 → 模块 → 发现</span>
+            </div>
+            <div class="data-flow-pipeline">
+              <!-- Input node -->
+              <div class="flow-node flow-node--input">
+                <div class="flow-node__icon">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#3182ce" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><line x1="2" y1="12" x2="22" y2="12" /><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" /></svg>
+                </div>
+                <div class="flow-node__label">扫描目标</div>
+                <div class="flow-node__count">{{ task.total_targets ?? task.targets?.length ?? 0 }}</div>
+              </div>
+
+              <div class="flow-connector">
+                <svg viewBox="0 0 40 20" width="40" height="20" class="flow-arrow-svg">
+                  <line x1="0" y1="10" x2="32" y2="10" stroke="#d9d9d9" stroke-width="2" />
+                  <polygon points="32,5 40,10 32,15" fill="#d9d9d9" />
+                </svg>
+              </div>
+
+              <!-- Module nodes -->
+              <div class="flow-modules">
+                <div
+                  v-for="[mod, count] in Object.entries(summary.by_module).sort((a, b) => b[1] - a[1]).slice(0, 10)"
+                  :key="mod"
+                  class="flow-module-row"
+                >
+                  <div class="flow-module-name">{{ moduleLabels[mod] ?? mod }}</div>
+                  <div class="flow-module-bar-track">
+                    <div
+                      class="flow-module-bar-fill"
+                      :style="{ width: `${Math.min(100, (count / Math.max(...Object.values(summary.by_module))) * 100)}%` }"
+                    />
+                  </div>
+                  <div class="flow-module-count">{{ count }}</div>
+                </div>
+              </div>
+
+              <div class="flow-connector">
+                <svg viewBox="0 0 40 20" width="40" height="20" class="flow-arrow-svg">
+                  <line x1="0" y1="10" x2="32" y2="10" stroke="#d9d9d9" stroke-width="2" />
+                  <polygon points="32,5 40,10 32,15" fill="#d9d9d9" />
+                </svg>
+              </div>
+
+              <!-- Output node -->
+              <div class="flow-node flow-node--output">
+                <div class="flow-node__icon">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#e53e3e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>
+                </div>
+                <div class="flow-node__label">总发现</div>
+                <div class="flow-node__count">{{ summary.total_findings }}</div>
+                <div class="flow-severity-dots" v-if="summary.by_severity">
+                  <span v-if="summary.by_severity.critical" class="flow-sev-dot flow-sev-dot--critical" :title="`严重: ${summary.by_severity.critical}`">{{ summary.by_severity.critical }}</span>
+                  <span v-if="summary.by_severity.high" class="flow-sev-dot flow-sev-dot--high" :title="`高危: ${summary.by_severity.high}`">{{ summary.by_severity.high }}</span>
+                  <span v-if="summary.by_severity.medium" class="flow-sev-dot flow-sev-dot--medium" :title="`中危: ${summary.by_severity.medium}`">{{ summary.by_severity.medium }}</span>
+                  <span v-if="summary.by_severity.low" class="flow-sev-dot flow-sev-dot--low" :title="`低危: ${summary.by_severity.low}`">{{ summary.by_severity.low }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
 
           <!-- Asset Summary in Overview -->
           <NCard v-if="assets.length > 0" size="small" style="margin-bottom: 16px">
@@ -2268,7 +2483,7 @@ onUnmounted(() => {
                 <span class="severity-chip-count">{{ summary.by_severity[sev] ?? 0 }}</span>
               </div>
             </div>
-            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; padding: 8px 12px; background: #fafafa; border-radius: 8px;">
+            <div class="findings-filter-bar">
               <NSelect v-model:value="filterSeverity" :options="severityOptions" placeholder="严重级别" clearable size="small" style="width: 120px" @update:value="() => { findingsPage = 1; fetchFindings(); }" />
               <NSelect v-model:value="filterModule" :options="moduleOptions" placeholder="扫描模块" clearable size="small" style="width: 180px" @update:value="() => { findingsPage = 1; fetchFindings(); }" />
               <NInput v-model:value="filterKeyword" placeholder="搜索标题/目标" clearable size="small" style="width: 200px" @keydown.enter="() => { findingsPage = 1; fetchFindings(); }" @clear="() => { findingsPage = 1; fetchFindings(); }" />
@@ -2279,35 +2494,37 @@ onUnmounted(() => {
               <span class="finding-table-hint">
                 {{ activeSubTab === 'port_open' ? '端口扫描与服务识别结果（同端口已合并展示）' : '点击行查看完整内容' }}
               </span>
-              <span style="font-size: 13px; color: #999; margin-left: auto;">共 <b style="color: #333">{{ findingsTotal }}</b> 条结果</span>
+              <span class="findings-total-count">共 <b>{{ findingsTotal }}</b> 条结果</span>
             </div>
-            <NDataTable
-              v-if="findingsLoading || mergedFindings.length > 0"
-              :columns="findingColumns"
-              :data="mergedFindings"
-              :loading="findingsLoading"
-              :row-key="(row: ScanFinding) => row.id"
-              :row-props="findingRowProps"
-              :pagination="false"
-              :bordered="false"
-              size="small"
-              striped
-              :max-height="640"
-              :scroll-x="findingTableScrollX"
-              class="findings-result-table"
-            />
-            <div v-if="findingsTotal > 0" style="display: flex; justify-content: flex-end; margin-top: 12px;">
-              <NPagination
-                :page="findingsPage"
-                :page-size="findingsPageSize"
-                :item-count="findingsTotal"
-                :page-sizes="[20, 50, 100]"
-                show-size-picker
-                @update:page="(p: number) => { findingsPage = p; fetchFindings(); }"
-                @update:page-size="(ps: number) => { findingsPageSize = ps; findingsPage = 1; fetchFindings(); }"
+            <div class="findings-table-wrapper">
+              <NDataTable
+                v-if="findingsLoading || mergedFindings.length > 0"
+                :columns="findingColumns"
+                :data="mergedFindings"
+                :loading="findingsLoading"
+                :row-key="(row: ScanFinding) => row.id"
+                :row-props="findingRowProps"
+                :pagination="false"
+                :bordered="false"
+                size="small"
+                striped
+                :max-height="640"
+                :scroll-x="findingTableScrollX"
+                class="findings-result-table"
               />
+              <div v-if="findingsTotal > 0" class="findings-pagination">
+                <NPagination
+                  :page="findingsPage"
+                  :page-size="findingsPageSize"
+                  :item-count="findingsTotal"
+                  :page-sizes="[20, 50, 100]"
+                  show-size-picker
+                  @update:page="(p: number) => { findingsPage = p; fetchFindings(); }"
+                  @update:page-size="(ps: number) => { findingsPageSize = ps; findingsPage = 1; fetchFindings(); }"
+                />
+              </div>
+              <NEmpty v-if="!findingsLoading && mergedFindings.length === 0" description="暂无扫描发现" style="padding: 60px 0" />
             </div>
-            <NEmpty v-if="!findingsLoading && mergedFindings.length === 0" description="暂无扫描发现" style="padding: 60px 0" />
           </template>
         </template>
       </template>
@@ -2415,11 +2632,16 @@ onUnmounted(() => {
 
 .task-detail-page {
   padding: 20px 24px;
+  max-width: 1440px;
+  margin: 0 auto;
 }
 
 /* Header Card */
 .header-card {
   margin-bottom: 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color, #e8ecf1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
 }
 
 .header-title-row {
@@ -2435,9 +2657,10 @@ onUnmounted(() => {
 }
 
 .header-task-name {
-  font-size: 17px;
-  font-weight: 600;
-  color: var(--text-color-1, #1a1a1a);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-color-1, #1a1a2e);
+  letter-spacing: -0.01em;
 }
 
 .header-tags {
@@ -2454,6 +2677,164 @@ onUnmounted(() => {
   background: #52c41a;
   margin-right: 4px;
   animation: pulse 1.5s infinite;
+}
+
+/* Live Dashboard */
+.live-dashboard {
+  display: flex;
+  align-items: flex-start;
+  gap: 28px;
+  padding: 20px 0 16px;
+  border-top: 1px solid #f5f5f5;
+}
+
+.live-dashboard__ring {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  flex-shrink: 0;
+}
+
+.live-ring-svg {
+  width: 100%;
+  height: 100%;
+}
+
+.live-ring-progress {
+  transition: stroke-dasharray 0.6s ease;
+}
+
+.live-ring-inner {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.live-ring-pct {
+  font-size: 28px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-color-1, #1a1a1a);
+  line-height: 1;
+}
+
+.live-ring-pct-sign {
+  font-size: 14px;
+  font-weight: 600;
+  color: #8c8c8c;
+}
+
+.live-ring-stage {
+  font-size: 11px;
+  color: #8c8c8c;
+  margin-top: 4px;
+}
+
+.live-dashboard__info {
+  flex: 1;
+  min-width: 0;
+}
+
+.live-dashboard__module {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: #f0f5ff;
+  border: 1px solid #d6e4ff;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.live-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #1890ff;
+  flex-shrink: 0;
+  animation: pulse 1.5s infinite;
+}
+
+.live-module-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #1d39c4;
+}
+
+.live-module-name {
+  font-size: 13px;
+  color: #1d39c4;
+}
+
+.live-dashboard__module-progress {
+  font-size: 12px;
+  color: #8c8c8c;
+  margin-bottom: 14px;
+}
+
+.live-module-bar {
+  height: 4px;
+  background: #f0f0f0;
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.live-module-bar__fill {
+  height: 100%;
+  background: #1890ff;
+  border-radius: 2px;
+  transition: width 0.4s ease;
+}
+
+.live-dashboard__counters {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+}
+
+.live-counter {
+  text-align: center;
+  padding: 8px 4px;
+  background: #fafbfc;
+  border-radius: 6px;
+  border: 1px solid #f0f0f0;
+  transition: transform 0.15s;
+}
+
+.live-counter__value {
+  font-size: 20px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  transition: color 0.3s;
+}
+
+.live-counter__label {
+  font-size: 10px;
+  color: #8c8c8c;
+  margin-top: 3px;
+}
+
+.live-counter__value--host { color: var(--text-color-1, #333); }
+.live-counter__value--port { color: var(--text-color-1, #333); }
+.live-counter__value--critical { color: #e53e3e; }
+.live-counter__value--high { color: #ed8936; }
+.live-counter__value--medium { color: #d69e2e; }
+.live-counter__value--low { color: #48bb78; }
+
+.live-dashboard__targets {
+  font-size: 12px;
+  color: #8c8c8c;
+  margin-top: 10px;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
 }
 
 /* Progress */
@@ -2487,54 +2868,122 @@ onUnmounted(() => {
   font-variant-numeric: tabular-nums;
 }
 
-/* Stats Grid */
-.stats-grid {
+/* Stats Summary — clean, compact layout */
+.stats-summary {
+  padding: 14px 0 6px;
+  border-top: 1px solid var(--border-color-light, #f0f0f0);
+}
+.stats-summary__assets {
   display: flex;
   align-items: center;
   gap: 0;
-  padding: 12px 0 4px;
-  border-top: 1px solid #f5f5f5;
+  margin-bottom: 12px;
 }
-
-.stat-item {
+.stats-summary__item {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 1;
-  padding: 0 12px;
+  align-items: baseline;
+  gap: 6px;
+  padding: 0 20px;
+}
+.stats-summary__item:first-child { padding-left: 0; }
+.stats-summary__num {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-color-1, #1a1a1a);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.stats-summary__num--vuln {
+  color: var(--text-color-1, #1a1a1a);
+}
+.stats-summary__lbl {
+  font-size: 13px;
+  color: var(--text-color-3, #8c8c8c);
+  white-space: nowrap;
+}
+.stats-summary__divider {
+  width: 1px;
+  height: 24px;
+  background: var(--border-color-light, #e8e8e8);
+  flex-shrink: 0;
 }
 
-.stat-item .stat-dot {
+.stats-summary__sev {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.sev-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--bg-color-2, #fafafa);
+  border: 1px solid var(--border-color-light, #eee);
+  color: var(--text-color-2, #555);
+}
+.sev-pill__dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
 }
+.sev-pill__label { font-size: 12px; }
+.sev-pill__count { font-weight: 700; font-variant-numeric: tabular-nums; }
 
-.stat-body {
-  min-width: 0;
+.sev-pill--critical .sev-pill__dot { background: #e53e3e; }
+.sev-pill--critical .sev-pill__count { color: #c53030; }
+.sev-pill--high .sev-pill__dot { background: #ed8936; }
+.sev-pill--high .sev-pill__count { color: #c05621; }
+.sev-pill--medium .sev-pill__dot { background: #ecc94b; }
+.sev-pill--medium .sev-pill__count { color: #975a16; }
+.sev-pill--low .sev-pill__dot { background: #48bb78; }
+.sev-pill--low .sev-pill__count { color: #276749; }
+
+/* Compact Severity Bar */
+.sev-bar-compact {
+  display: flex;
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--border-color-light, #f0f0f0);
+  gap: 1px;
 }
-
-.stat-value {
-  font-size: 20px;
-  font-weight: 700;
-  line-height: 1.2;
-  font-variant-numeric: tabular-nums;
-  color: var(--text-color-1, #1a1a1a);
+.sev-bar-compact__seg {
+  transition: flex 0.4s ease;
 }
+.sev-bar-compact__seg--critical { background: #e53e3e; }
+.sev-bar-compact__seg--high { background: #ed8936; }
+.sev-bar-compact__seg--medium { background: #ecc94b; }
+.sev-bar-compact__seg--low { background: #48bb78; }
 
-.stat-label {
-  font-size: 11px;
-  color: var(--text-color-3, #999);
-  margin-top: 1px;
+/* Module Overview Card */
+.module-overview-card {
+  background: var(--card-color, #fff);
+  border: 1px solid var(--border-color, #eef2f6);
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
-
-.stat-divider {
-  width: 1px;
-  height: 32px;
-  background: #f0f0f0;
-  flex-shrink: 0;
-  margin: 0 4px;
+.module-overview-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.module-overview-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-color-1, #333);
+}
+.module-overview-count {
+  font-size: 12px;
+  color: #8c8c8c;
+  margin-left: auto;
 }
 
 /* Module Chips */
@@ -2577,6 +3026,14 @@ onUnmounted(() => {
   font-weight: 600;
   min-width: 22px;
   text-align: center;
+}
+
+.module-chip--more {
+  opacity: 0.7;
+  border-style: dashed;
+}
+.module-chip--more:hover {
+  opacity: 1;
 }
 
 /* Tab Bar */
@@ -2706,25 +3163,97 @@ onUnmounted(() => {
   color: var(--sev-color);
 }
 
+.findings-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  background: var(--body-color, linear-gradient(135deg, #f8f9fb 0%, #f0f2f5 100%));
+  border-radius: 10px;
+  border: 1px solid var(--border-color, #e8ecf1);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.findings-total-count {
+  font-size: 12px;
+  color: #8c8c8c;
+  margin-left: auto;
+}
+.findings-total-count b {
+  color: var(--text-color-1, #333);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
 .finding-table-hint {
   font-size: 12px;
   color: #8c8c8c;
+}
+
+.findings-table-wrapper {
+  background: var(--card-color, #fff);
+  border: 1px solid var(--border-color, #e8ecf1);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.findings-pagination {
+  display: flex;
+  justify-content: flex-end;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-color-light, #f0f0f0);
+  background: var(--body-color, #fafbfc);
+}
+
+:deep(.findings-result-table .n-data-table-th) {
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  color: #4a5568 !important;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: #f7f8fa !important;
+  border-bottom: 2px solid #e2e8f0 !important;
+  padding-top: 10px !important;
+  padding-bottom: 10px !important;
 }
 
 :deep(.findings-result-table .n-data-table-td) {
   vertical-align: top;
   padding-top: 10px !important;
   padding-bottom: 10px !important;
+  border-bottom: 1px solid #f0f0f0 !important;
+  font-size: 13px;
+}
+
+:deep(.findings-result-table .n-data-table-tr) {
+  border-left: 3px solid transparent;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+:deep(.findings-result-table .n-data-table-tr:nth-child(even)) {
+  background: rgba(0, 0, 0, 0.015);
 }
 
 :deep(.findings-result-table .n-data-table-tr:hover) {
   background: rgba(24, 144, 255, 0.04);
+  border-left-color: var(--row-sev-color, transparent);
+}
+
+:deep(.findings-result-table .n-data-table-tr.finding-row-high) {
+  border-left-color: var(--row-sev-color, transparent);
+  background: rgba(229, 62, 62, 0.02);
+}
+:deep(.findings-result-table .n-data-table-tr.finding-row-high:hover) {
+  background: rgba(229, 62, 62, 0.05);
 }
 
 :deep(.finding-cell-stack) {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   min-width: 180px;
   max-width: 480px;
   padding: 2px 0;
@@ -2733,25 +3262,26 @@ onUnmounted(() => {
 :deep(.finding-cell-title) {
   font-size: 13px;
   font-weight: 600;
-  color: #1a1a1a;
-  line-height: 1.5;
+  color: var(--text-color-1, #1a1a1a);
+  line-height: 1.45;
   word-break: break-word;
   white-space: normal;
 }
 
 :deep(.finding-cell-sub) {
   font-size: 12px;
-  color: #666;
-  line-height: 1.55;
+  color: var(--text-color-3, #666);
+  line-height: 1.5;
   word-break: break-word;
   white-space: normal;
   display: -webkit-box;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  opacity: 0.85;
 }
 
 :deep(.finding-cell-muted) {
-  color: #ccc;
+  color: var(--text-color-4, #ccc);
 }
 
 :deep(.finding-host-cell) {
@@ -2759,5 +3289,270 @@ onUnmounted(() => {
   font-size: 12px;
   font-family: 'SF Mono', Consolas, Monaco, monospace;
   word-break: break-all;
+  color: var(--text-color-1, #1a1a1a);
 }
+
+/* Confidence badge */
+.conf-badge {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  cursor: help;
+  padding: 2px 0;
+}
+
+.conf-badge__bar {
+  width: 48px;
+  height: 4px;
+  background: #f0f0f0;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.conf-badge__fill {
+  height: 100%;
+  background: var(--conf-color, #52c41a);
+  border-radius: 2px;
+  transition: width 0.4s ease;
+}
+
+.conf-badge__text {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--conf-color, #52c41a);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.conf-tooltip__header {
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+.conf-tooltip__reason {
+  font-size: 12px;
+  line-height: 1.5;
+  opacity: 0.9;
+  white-space: pre-wrap;
+}
+
+/* Verification chips */
+.verif-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: default;
+  transition: background 0.15s;
+}
+
+.verif-chip--exploit {
+  background: #fff1f0;
+  color: #cf1322;
+}
+
+.verif-chip--exploit:hover {
+  background: #ffccc7;
+}
+
+.verif-chip--principle {
+  background: #fff7e6;
+  color: #ad6800;
+}
+
+.verif-chip--principle:hover {
+  background: #ffe58f;
+}
+
+.verif-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+}
+
+.verif-confirmed {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 600;
+  color: #389e0d;
+  padding: 0 4px;
+}
+
+.verif-unconfirmed {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  color: #8c8c8c;
+  padding: 0 4px;
+}
+
+/* Data Flow Visualization */
+.data-flow-card {
+  margin-bottom: 16px;
+  padding: 16px 20px;
+  background: #fff;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+}
+
+.data-flow-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.data-flow-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1a1a2e;
+}
+
+.data-flow-subtitle {
+  font-size: 12px;
+  color: #8c8c8c;
+  margin-left: 4px;
+}
+
+.data-flow-pipeline {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  min-height: 80px;
+}
+
+.flow-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 16px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  min-width: 90px;
+  transition: box-shadow 0.2s;
+}
+
+.flow-node:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.flow-node--input {
+  background: linear-gradient(135deg, #ebf8ff 0%, #bee3f8 100%);
+  border-color: #90cdf4;
+}
+
+.flow-node--output {
+  background: linear-gradient(135deg, #fff5f5 0%, #fed7d7 100%);
+  border-color: #feb2b2;
+}
+
+.flow-node__icon {
+  margin-bottom: 6px;
+}
+
+.flow-node__label {
+  font-size: 11px;
+  color: #718096;
+  margin-bottom: 2px;
+}
+
+.flow-node__count {
+  font-size: 22px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #1a202c;
+  line-height: 1.1;
+}
+
+.flow-connector {
+  flex-shrink: 0;
+  padding: 0 2px;
+  display: flex;
+  align-items: center;
+}
+
+.flow-arrow-svg {
+  display: block;
+}
+
+.flow-modules {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px;
+  background: #fafbfc;
+  border: 1px solid #edf2f7;
+  border-radius: 8px;
+  min-width: 200px;
+  max-width: 600px;
+}
+
+.flow-module-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+}
+
+.flow-module-name {
+  font-size: 12px;
+  color: #4a5568;
+  min-width: 80px;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.flow-module-bar-track {
+  flex: 1;
+  height: 6px;
+  background: #edf2f7;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.flow-module-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4299e1, #667eea);
+  border-radius: 3px;
+  transition: width 0.6s ease;
+  min-width: 2px;
+}
+
+.flow-module-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: #2d3748;
+  min-width: 28px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.flow-severity-dots {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.flow-sev-dot {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.flow-sev-dot--critical { background: #fff5f5; color: #c53030; }
+.flow-sev-dot--high { background: #fffaf0; color: #c05621; }
+.flow-sev-dot--medium { background: #fffff0; color: #975a16; }
+.flow-sev-dot--low { background: #f0fff4; color: #276749; }
 </style>

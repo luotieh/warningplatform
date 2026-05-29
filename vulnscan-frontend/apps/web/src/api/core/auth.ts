@@ -139,11 +139,19 @@ export async function logoutApi() {
   return requestClient.post('/iam/auth/logout');
 }
 
+const permissionInflight = new Map<string, Promise<AuthApi.PermissionBundle>>();
+
 export async function getPermissionApi(appId?: string) {
+  const key = appId || '__default__';
+  const existing = permissionInflight.get(key);
+  if (existing) return existing;
+
   const params = appId ? { app: appId } : {};
-  return requestClient.get<AuthApi.PermissionBundle>('/iam/profile', {
-    params,
-  });
+  const promise = requestClient
+    .get<AuthApi.PermissionBundle>('/iam/profile', { params })
+    .finally(() => permissionInflight.delete(key));
+  permissionInflight.set(key, promise);
+  return promise;
 }
 
 const menusInflight = new Map<string, Promise<AuthApi.MenuGroup[]>>();

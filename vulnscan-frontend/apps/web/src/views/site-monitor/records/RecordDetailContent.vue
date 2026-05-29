@@ -238,6 +238,7 @@ watch(
           <SensitiveWordDetail
             v-else-if="detail.dimension === 'sensitive_word'"
             :result="parsedResult"
+            :execution-id="recordId"
             class="mb-3"
           />
           <SensitiveFileDetail

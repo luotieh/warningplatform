@@ -44,23 +44,27 @@ func NewTokenBucket(rps float64, burst float64) *TokenBucket {
 	}
 }
 
-// Wait 阻塞直到取得令牌或 ctx 取消。不在持锁状态下等待，避免与 sync.Cond 交叉导致重复 Unlock。
+// Wait blocks until a token is available or ctx is cancelled.
+// Uses a single reusable timer to avoid per-iteration allocation.
 func (tb *TokenBucket) Wait(ctx context.Context) error {
-	for {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		if tb.tryTake() {
-			return nil
-		}
+	if tb.tryTake() {
+		return nil
+	}
 
-		wait := tb.estimateWaitLocked()
-		timer := time.NewTimer(wait)
+	wait := tb.estimateWait()
+	timer := time.NewTimer(wait)
+	defer timer.Stop()
+
+	for {
 		select {
 		case <-ctx.Done():
-			timer.Stop()
 			return ctx.Err()
 		case <-timer.C:
+			if tb.tryTake() {
+				return nil
+			}
+			wait = tb.estimateWait()
+			timer.Reset(wait)
 		}
 	}
 }
@@ -89,8 +93,9 @@ func (tb *TokenBucket) tryTake() bool {
 	return false
 }
 
-// estimateWaitLocked 估算距离下一枚令牌的大致等待时间（调用方未持锁）。
-func (tb *TokenBucket) estimateWaitLocked() time.Duration {
+// estimateWait computes how long to sleep before a token becomes available.
+// Caps at 500ms to stay responsive, floors at 1ms to prevent zero-duration waits.
+func (tb *TokenBucket) estimateWait() time.Duration {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
 
@@ -109,8 +114,8 @@ func (tb *TokenBucket) estimateWaitLocked() time.Duration {
 	if d < time.Millisecond {
 		return time.Millisecond
 	}
-	if d > 50*time.Millisecond {
-		return 50 * time.Millisecond
+	if d > 500*time.Millisecond {
+		return 500 * time.Millisecond
 	}
 	return d
 }

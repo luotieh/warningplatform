@@ -5,6 +5,7 @@ import (
 	"crypto/md5"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"log/slog"
@@ -14,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -23,9 +25,20 @@ import (
 	"golang.org/x/net/html"
 )
 
+type ScreenshotConfig struct {
+	Width   int `json:"width"`
+	Height  int `json:"height"`
+	Quality int `json:"quality"`
+}
+
+func DefaultScreenshotConfig() ScreenshotConfig {
+	return ScreenshotConfig{Width: 1920, Height: 1080, Quality: 80}
+}
+
 type PageService struct {
-	client  *http.Client
-	browser *rod.Browser
+	client    *http.Client
+	browser   *rod.Browser
+	ScreenCfg ScreenshotConfig
 }
 
 func NewPageService() *PageService {
@@ -43,6 +56,7 @@ func NewPageService() *PageService {
 	}
 
 	ps := &PageService{
+		ScreenCfg: DefaultScreenshotConfig(),
 		client: &http.Client{
 			Transport: transport,
 			Timeout:   30 * time.Second,
@@ -61,6 +75,40 @@ func NewPageService() *PageService {
 const defaultUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
 func (ps *PageService) FetchPage(ctx context.Context, url string, requestHost ...string) (*PageSnapshot, error) {
+	const maxRetries = 3
+	var snap *PageSnapshot
+	var lastErr error
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return snap, ctx.Err()
+			case <-time.After(time.Duration(attempt) * 2 * time.Second):
+			}
+			slog.Debug("[Monitor] FetchPage retry", "url", url, "attempt", attempt+1)
+		}
+
+		var err error
+		snap, err = ps.fetchPageOnce(ctx, url, requestHost...)
+		if err == nil {
+			return snap, nil
+		}
+		lastErr = err
+
+		errStr := err.Error()
+		if strings.Contains(errStr, "EOF") ||
+			strings.Contains(errStr, "connection reset") ||
+			strings.Contains(errStr, "connection refused") ||
+			strings.Contains(errStr, "i/o timeout") {
+			continue
+		}
+		return snap, err
+	}
+	return snap, lastErr
+}
+
+func (ps *PageService) fetchPageOnce(ctx context.Context, url string, requestHost ...string) (*PageSnapshot, error) {
 	snap := &PageSnapshot{URL: url}
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
@@ -172,7 +220,9 @@ func (ps *PageService) parseHTML(snap *PageSnapshot) {
 		return
 	}
 
+	pageDomain := extractDomain(snap.URL)
 	var textBuf strings.Builder
+	var allScriptCode strings.Builder
 	var walk func(*html.Node)
 	walk = func(n *html.Node) {
 		if n.Type == html.ElementNode {
@@ -181,17 +231,10 @@ func (ps *PageService) parseHTML(snap *PageSnapshot) {
 				if n.FirstChild != nil && n.FirstChild.Type == html.TextNode {
 					snap.Title = strings.TrimSpace(n.FirstChild.Data)
 				}
+			case "meta":
+				ps.parseMetaRefresh(snap, n)
 			case "a":
-				link := LinkInfo{}
-				for _, attr := range n.Attr {
-					if attr.Key == "href" {
-						link.URL = attr.Val
-						if strings.HasPrefix(attr.Val, "http") &&
-							!strings.Contains(attr.Val, extractDomain(snap.URL)) {
-							link.IsExternal = true
-						}
-					}
-				}
+				link := ps.parseLinkNode(n, pageDomain)
 				if link.URL != "" {
 					snap.Links = append(snap.Links, link)
 				}
@@ -205,12 +248,17 @@ func (ps *PageService) parseHTML(snap *PageSnapshot) {
 				}
 				if !script.IsExternal && n.FirstChild != nil {
 					snippet := n.FirstChild.Data
-					if len(snippet) > 200 {
-						snippet = snippet[:200]
+					allScriptCode.WriteString(snippet)
+					allScriptCode.WriteString("\n")
+					if len(snippet) > 500 {
+						snippet = snippet[:500]
 					}
 					script.Snippet = snippet
 				}
 				snap.Scripts = append(snap.Scripts, script)
+			case "iframe":
+				iframe := ps.parseIframeNode(n, pageDomain)
+				snap.Iframes = append(snap.Iframes, iframe)
 			case "style", "noscript":
 				return
 			}
@@ -238,12 +286,135 @@ func (ps *PageService) parseHTML(snap *PageSnapshot) {
 		}
 	}
 
+	snap.JSRedirects = detectJSRedirects(allScriptCode.String())
+
 	slog.Debug("page parsed",
 		"url", snap.URL,
 		"title", snap.Title,
 		"links", len(snap.Links),
 		"scripts", len(snap.Scripts),
+		"iframes", len(snap.Iframes),
+		"js_redirects", len(snap.JSRedirects),
 		"text_len", len(snap.VisibleText))
+}
+
+func (ps *PageService) parseMetaRefresh(snap *PageSnapshot, n *html.Node) {
+	httpEquiv := ""
+	content := ""
+	for _, attr := range n.Attr {
+		switch strings.ToLower(attr.Key) {
+		case "http-equiv":
+			httpEquiv = strings.ToLower(attr.Val)
+		case "content":
+			content = attr.Val
+		}
+	}
+	if httpEquiv != "refresh" || content == "" {
+		return
+	}
+	secs, url := parseMetaRefreshContent(content)
+	if url != "" {
+		snap.MetaRedirect = &MetaRedirect{URL: url, Seconds: secs}
+	}
+}
+
+func parseMetaRefreshContent(content string) (int, string) {
+	content = strings.TrimSpace(content)
+	parts := strings.SplitN(content, ";", 2)
+	secs := 0
+	if len(parts) >= 1 {
+		fmt.Sscanf(strings.TrimSpace(parts[0]), "%d", &secs)
+	}
+	if len(parts) < 2 {
+		return secs, ""
+	}
+	urlPart := strings.TrimSpace(parts[1])
+	if strings.HasPrefix(strings.ToLower(urlPart), "url=") {
+		urlPart = strings.TrimSpace(urlPart[4:])
+		urlPart = strings.Trim(urlPart, "'\"")
+		return secs, urlPart
+	}
+	return secs, ""
+}
+
+func (ps *PageService) parseLinkNode(n *html.Node, pageDomain string) LinkInfo {
+	link := LinkInfo{}
+	style := ""
+	for _, attr := range n.Attr {
+		switch attr.Key {
+		case "href":
+			link.URL = attr.Val
+			if strings.HasPrefix(attr.Val, "http") &&
+				!strings.Contains(attr.Val, pageDomain) {
+				link.IsExternal = true
+			}
+		case "style":
+			style = strings.ToLower(attr.Val)
+		}
+	}
+	if isHiddenByStyle(style) {
+		link.IsHidden = true
+	}
+	return link
+}
+
+func (ps *PageService) parseIframeNode(n *html.Node, pageDomain string) IframeInfo {
+	iframe := IframeInfo{}
+	style := ""
+	for _, attr := range n.Attr {
+		switch attr.Key {
+		case "src":
+			iframe.Src = attr.Val
+			if strings.HasPrefix(attr.Val, "http") &&
+				!strings.Contains(attr.Val, pageDomain) {
+				iframe.IsExternal = true
+			}
+		case "width":
+			iframe.Width = attr.Val
+		case "height":
+			iframe.Height = attr.Val
+		case "style":
+			style = attr.Val
+			iframe.Style = attr.Val
+		}
+	}
+	if isHiddenIframe(iframe, style) {
+		iframe.IsHidden = true
+	}
+	return iframe
+}
+
+func isHiddenByStyle(style string) bool {
+	lower := strings.ToLower(style)
+	if strings.Contains(lower, "display:none") || strings.Contains(lower, "display: none") {
+		return true
+	}
+	if strings.Contains(lower, "visibility:hidden") || strings.Contains(lower, "visibility: hidden") {
+		return true
+	}
+	if strings.Contains(lower, "opacity:0") || strings.Contains(lower, "opacity: 0") {
+		return true
+	}
+	if strings.Contains(lower, "font-size:0") || strings.Contains(lower, "font-size: 0") {
+		return true
+	}
+	if strings.Contains(lower, "position:absolute") || strings.Contains(lower, "position: absolute") {
+		if strings.Contains(lower, "left:-") || strings.Contains(lower, "top:-") {
+			return true
+		}
+	}
+	return false
+}
+
+func isHiddenIframe(iframe IframeInfo, style string) bool {
+	if isHiddenByStyle(style) {
+		return true
+	}
+	if (iframe.Width == "0" || iframe.Width == "1") &&
+		(iframe.Height == "0" || iframe.Height == "1") {
+		return true
+	}
+	return false
 }
 
 func extractDomain(rawURL string) string {
@@ -372,32 +543,47 @@ var monitorBrowserFallbackPaths = []string{
 	`/usr/bin/google-chrome-stable`,
 }
 
-func (ps *PageService) initBrowser() *rod.Browser {
-	path := ""
+func (ps *PageService) findBrowserPath() string {
 	if env := os.Getenv("CHROME_BIN"); env != "" {
 		if _, err := exec.LookPath(env); err == nil {
-			path = env
+			return env
 		}
 	}
-	if path == "" {
-		if found, ok := launcher.LookPath(); ok {
-			path = found
+	if found, ok := launcher.LookPath(); ok {
+		return found
+	}
+	for _, p := range monitorBrowserFallbackPaths {
+		if _, err := exec.LookPath(p); err == nil {
+			return p
 		}
 	}
-	if path == "" {
-		for _, p := range monitorBrowserFallbackPaths {
-			if _, err := exec.LookPath(p); err == nil {
-				path = p
-				break
-			}
-		}
-	}
+	return ""
+}
+
+func (ps *PageService) initBrowser() *rod.Browser {
+	path := ps.findBrowserPath()
 	if path == "" {
 		slog.Info("[Monitor] 未找到浏览器，监测截图功能不可用")
 		return nil
 	}
 
-	userDataDir := filepath.Join(os.TempDir(), fmt.Sprintf("monitor-rod-%d", os.Getpid()))
+	const maxAttempts = 3
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		b := ps.tryLaunchBrowser(path, attempt)
+		if b != nil {
+			return b
+		}
+		if attempt < maxAttempts {
+			time.Sleep(time.Duration(attempt) * 2 * time.Second)
+		}
+	}
+
+	slog.Warn("[Monitor] 浏览器多次启动均失败，截图不可用", "path", path, "attempts", maxAttempts)
+	return nil
+}
+
+func (ps *PageService) tryLaunchBrowser(path string, attempt int) *rod.Browser {
+	userDataDir := filepath.Join(os.TempDir(), fmt.Sprintf("monitor-rod-%d-%d", os.Getpid(), attempt))
 	_ = os.RemoveAll(userDataDir)
 
 	l := launcher.New().Bin(path).
@@ -415,22 +601,39 @@ func (ps *PageService) initBrowser() *rod.Browser {
 
 	u, err := l.Launch()
 	if err != nil {
-		slog.Warn("[Monitor] 启动浏览器失败，监测截图不可用", "error", err)
+		slog.Warn("[Monitor] 启动浏览器失败", "attempt", attempt, "error", err)
 		_ = os.RemoveAll(userDataDir)
 		return nil
 	}
 
 	b := rod.New().ControlURL(u)
 	if err := b.Connect(); err != nil {
-		slog.Warn("[Monitor] 连接浏览器失败", "error", err)
+		slog.Warn("[Monitor] 连接浏览器失败", "attempt", attempt, "error", err)
+		_ = os.RemoveAll(userDataDir)
 		return nil
 	}
 	_ = b.IgnoreCertErrors(true)
-	slog.Info("[Monitor] 浏览器截图已启用", "path", path)
+	slog.Info("[Monitor] 浏览器截图已启用", "path", path, "attempt", attempt)
 	return b
 }
 
+// EnsureBrowser 确保浏览器实例可用。如果当前实例为 nil 或已失效，尝试重新启动。
+func (ps *PageService) EnsureBrowser() {
+	if ps.browser != nil {
+		if _, err := ps.browser.Version(); err == nil {
+			return
+		}
+		_ = ps.browser.Close()
+		ps.browser = nil
+	}
+	ps.browser = ps.initBrowser()
+}
+
 func (ps *PageService) captureScreenshot(ctx context.Context, rawURL string) []byte {
+	ps.EnsureBrowser()
+	if ps.browser == nil {
+		return nil
+	}
 	defer func() {
 		if r := recover(); r != nil {
 			slog.Debug("[Monitor] 截图异常恢复", "url", rawURL, "error", r)
@@ -443,16 +646,17 @@ func (ps *PageService) captureScreenshot(ctx context.Context, rawURL string) []b
 	}
 	defer page.Close()
 
+	cfg := ps.ScreenCfg
 	page = page.Context(ctx).Timeout(20 * time.Second)
 	if err := page.Navigate(rawURL); err != nil {
 		return nil
 	}
 	_ = page.WaitStable(800 * time.Millisecond)
 	_ = page.SetViewport(&proto.EmulationSetDeviceMetricsOverride{
-		Width: 1280, Height: 720, DeviceScaleFactor: 1,
+		Width: cfg.Width, Height: cfg.Height, DeviceScaleFactor: 1,
 	})
 
-	quality := 70
+	quality := cfg.Quality
 	data, err := page.Screenshot(false, &proto.PageCaptureScreenshot{
 		Format:  proto.PageCaptureScreenshotFormatJpeg,
 		Quality: &quality,
@@ -462,6 +666,224 @@ func (ps *PageService) captureScreenshot(ctx context.Context, rawURL string) []b
 		return nil
 	}
 	return data
+}
+
+// HasBrowser 返回无头浏览器是否可用。
+func (ps *PageService) HasBrowser() bool {
+	return ps.browser != nil
+}
+
+var cloakingUAs = []struct {
+	Name string
+	UA   string
+}{
+	{"Googlebot", "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"},
+	{"Baiduspider", "Mozilla/5.0 (compatible; Baiduspider/2.0; +http://www.baidu.com/search/spider.html)"},
+	{"Bingbot", "Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)"},
+}
+
+// CloakingResult records the outcome of a UA-based cloaking detection.
+type CloakingResult struct {
+	Detected   bool             `json:"detected"`
+	NormalHash string           `json:"normal_hash"`
+	BotResults []CloakingBotHit `json:"bot_results,omitempty"`
+	Similarity float64          `json:"similarity,omitempty"`
+}
+
+// CloakingBotHit records a single bot UA test result.
+type CloakingBotHit struct {
+	BotName     string  `json:"bot_name"`
+	ContentHash string  `json:"content_hash"`
+	Similarity  float64 `json:"similarity"`
+	TitleMatch  bool    `json:"title_match"`
+	BotTitle    string  `json:"bot_title,omitempty"`
+}
+
+// DetectCloaking fetches the same URL with a normal UA and multiple bot UAs,
+// then compares the content to detect SEO cloaking.
+func (ps *PageService) DetectCloaking(ctx context.Context, rawURL, normalHash, normalTitle, normalText string) *CloakingResult {
+	result := &CloakingResult{NormalHash: normalHash}
+	normalSimhash := Simhash(normalText)
+
+	for _, bot := range cloakingUAs {
+		botSnap := ps.fetchWithUA(ctx, rawURL, bot.UA)
+		if botSnap == nil || botSnap.Error != "" {
+			continue
+		}
+
+		botText := botSnap.VisibleText
+		if botText == "" {
+			botText = botSnap.RenderedHTML
+		}
+		botSimhash := Simhash(botText)
+		sim := SimhashSimilarity(normalSimhash, botSimhash)
+
+		hit := CloakingBotHit{
+			BotName:     bot.Name,
+			ContentHash: botSnap.ContentHash,
+			Similarity:  sim,
+			TitleMatch:  botSnap.Title == normalTitle,
+			BotTitle:    botSnap.Title,
+		}
+		result.BotResults = append(result.BotResults, hit)
+
+		if sim < 0.70 || botSnap.ContentHash != normalHash {
+			result.Detected = true
+			result.Similarity = sim
+		}
+	}
+
+	return result
+}
+
+func (ps *PageService) fetchWithUA(ctx context.Context, rawURL, ua string) *PageSnapshot {
+	snap := &PageSnapshot{URL: rawURL}
+	req, err := http.NewRequestWithContext(ctx, "GET", rawURL, nil)
+	if err != nil {
+		snap.Error = err.Error()
+		return snap
+	}
+	req.Header.Set("User-Agent", ua)
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+
+	resp, err := ps.client.Do(req)
+	if err != nil {
+		snap.Error = err.Error()
+		return snap
+	}
+	defer resp.Body.Close()
+
+	snap.StatusCode = resp.StatusCode
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 5*1024*1024))
+	if err != nil {
+		snap.Error = err.Error()
+		return snap
+	}
+
+	snap.RenderedHTML = string(body)
+	snap.ContentHash = fmt.Sprintf("%x", md5.Sum(body))
+	ps.parseHTML(snap)
+	return snap
+}
+
+// Simhash wrapper for page_service (delegates to analyzer.Simhash logic).
+func Simhash(text string) uint64 {
+	tokens := simhashTokenize(text)
+	if len(tokens) == 0 {
+		return 0
+	}
+	var v [64]int
+	for _, token := range tokens {
+		h := simhashHash(token)
+		for i := 0; i < 64; i++ {
+			if (h>>uint(i))&1 == 1 {
+				v[i]++
+			} else {
+				v[i]--
+			}
+		}
+	}
+	var fp uint64
+	for i := 0; i < 64; i++ {
+		if v[i] > 0 {
+			fp |= 1 << uint(i)
+		}
+	}
+	return fp
+}
+
+func SimhashSimilarity(a, b uint64) float64 {
+	if a == 0 && b == 0 {
+		return 1.0
+	}
+	x := a ^ b
+	dist := 0
+	for x != 0 {
+		dist++
+		x &= x - 1
+	}
+	return 1.0 - float64(dist)/64.0
+}
+
+func simhashTokenize(text string) []string {
+	text = strings.ToLower(text)
+	fields := strings.Fields(text)
+	if len(fields) < 3 {
+		return fields
+	}
+	ngrams := make([]string, 0, len(fields))
+	ngrams = append(ngrams, fields...)
+	for i := 0; i <= len(fields)-3; i++ {
+		ngrams = append(ngrams, fields[i]+" "+fields[i+1]+" "+fields[i+2])
+	}
+	return ngrams
+}
+
+func simhashHash(token string) uint64 {
+	h := md5.Sum([]byte(token))
+	return binary.LittleEndian.Uint64(h[:8])
+}
+
+// DetectBrowserRedirect navigates to the URL with a headless browser and monitors
+// for JS-triggered navigation. It waits up to `waitDuration` after initial load
+// to detect delayed redirects. Returns the final URL and whether a redirect occurred.
+func (ps *PageService) DetectBrowserRedirect(ctx context.Context, rawURL string, waitDuration time.Duration) (finalURL string, redirected bool) {
+	ps.EnsureBrowser()
+	if ps.browser == nil {
+		return rawURL, false
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Debug("[Monitor] 浏览器跳转检测异常", "url", rawURL, "error", r)
+		}
+	}()
+
+	page, err := ps.browser.Page(proto.TargetCreateTarget{URL: "about:blank"})
+	if err != nil {
+		return rawURL, false
+	}
+	defer page.Close()
+
+	page = page.Context(ctx).Timeout(waitDuration + 10*time.Second)
+	_ = page.SetViewport(&proto.EmulationSetDeviceMetricsOverride{
+		Width: 1920, Height: 1080, DeviceScaleFactor: 1,
+	})
+
+	if err := page.Navigate(rawURL); err != nil {
+		return rawURL, false
+	}
+	_ = page.WaitStable(800 * time.Millisecond)
+
+	info, err := page.Info()
+	if err == nil && info.URL != "" {
+		immediateURL := info.URL
+		origDomain := extractDomain(rawURL)
+		immDomain := extractDomain(immediateURL)
+		if origDomain != immDomain && immDomain != "" {
+			return immediateURL, true
+		}
+	}
+
+	if waitDuration > 0 {
+		select {
+		case <-ctx.Done():
+			return rawURL, false
+		case <-time.After(waitDuration):
+		}
+
+		info, err = page.Info()
+		if err == nil && info.URL != "" {
+			delayedURL := info.URL
+			origDomain := extractDomain(rawURL)
+			delayDomain := extractDomain(delayedURL)
+			if origDomain != delayDomain && delayDomain != "" {
+				slog.Info("[Monitor] 检测到延迟JS跳转", "original", rawURL, "redirected_to", delayedURL)
+				return delayedURL, true
+			}
+		}
+	}
+
+	return rawURL, false
 }
 
 // CaptureSimpleScreenshot 截取指定 URL 的普通截图（不带标注）。
@@ -479,7 +901,12 @@ type IssueAnnotation struct {
 
 // CaptureAnnotatedScreenshot 导航到指定 URL，根据标注信息在页面上注入红框高亮，然后截图。
 func (ps *PageService) CaptureAnnotatedScreenshot(ctx context.Context, rawURL string, annotations []IssueAnnotation) []byte {
-	if ps.browser == nil || len(annotations) == 0 {
+	if len(annotations) == 0 {
+		return nil
+	}
+	ps.EnsureBrowser()
+	if ps.browser == nil {
+		slog.Warn("[Monitor] 标注截图跳过：无可用浏览器", "url", rawURL)
 		return nil
 	}
 	defer func() {
@@ -494,13 +921,14 @@ func (ps *PageService) CaptureAnnotatedScreenshot(ctx context.Context, rawURL st
 	}
 	defer page.Close()
 
+	cfg := ps.ScreenCfg
 	page = page.Context(ctx).Timeout(25 * time.Second)
 	if err := page.Navigate(rawURL); err != nil {
 		return nil
 	}
 	_ = page.WaitStable(800 * time.Millisecond)
 	_ = page.SetViewport(&proto.EmulationSetDeviceMetricsOverride{
-		Width: 1920, Height: 1080, DeviceScaleFactor: 1,
+		Width: cfg.Width, Height: cfg.Height, DeviceScaleFactor: 1,
 	})
 
 	js := buildAnnotationJS(annotations)
@@ -509,7 +937,7 @@ func (ps *PageService) CaptureAnnotatedScreenshot(ctx context.Context, rawURL st
 		slog.Debug("[Monitor] 注入标注 JS 失败", "url", rawURL, "error", err)
 	}
 
-	quality := 80
+	quality := cfg.Quality
 	data, err := page.Screenshot(false, &proto.PageCaptureScreenshot{
 		Format:  proto.PageCaptureScreenshotFormatJpeg,
 		Quality: &quality,
@@ -637,6 +1065,97 @@ function highlightPage(label){
 
 	parts = append(parts, `})()`)
 	return strings.Join(parts, "\n")
+}
+
+var jsRedirectPatterns = []struct {
+	re      *regexp.Regexp
+	typName string
+}{
+	{regexp.MustCompile(`(?i)(?:window\.)?location(?:\.href)?\s*=\s*['"]([^'"]+)['"]`), "location_assign"},
+	{regexp.MustCompile(`(?i)location\.replace\s*\(\s*['"]([^'"]+)['"]\s*\)`), "location_replace"},
+	{regexp.MustCompile(`(?i)window\.open\s*\(\s*['"]([^'"]+)['"]\s*\)`), "window_open"},
+	{regexp.MustCompile(`(?i)window\.navigate\s*\(\s*['"]([^'"]+)['"]\s*\)`), "window_navigate"},
+	{regexp.MustCompile(`(?i)document\.location\s*=\s*['"]([^'"]+)['"]`), "document_location"},
+}
+
+var jsDelayedRedirectRe = regexp.MustCompile(`(?i)setTimeout\s*\(\s*(?:function\s*\(\s*\)\s*\{[^}]*(?:location|window\.open|navigate)[^}]*\}|['"][^'"]*(?:location|window\.open)[^'"]*['"])\s*,\s*(\d+)`)
+var jsSetIntervalRedirectRe = regexp.MustCompile(`(?i)setInterval\s*\(\s*(?:function\s*\(\s*\)\s*\{[^}]*(?:location|window\.open)[^}]*\}|['"][^'"]*(?:location|window\.open)[^'"]*['"])\s*,\s*(\d+)`)
+
+func detectJSRedirects(allScript string) []JSRedirect {
+	if allScript == "" {
+		return nil
+	}
+
+	var redirects []JSRedirect
+	seen := make(map[string]bool)
+
+	for _, p := range jsRedirectPatterns {
+		matches := p.re.FindAllStringSubmatch(allScript, -1)
+		for _, m := range matches {
+			if len(m) < 2 {
+				continue
+			}
+			target := m[1]
+			if target == "" || target == "#" || target == "about:blank" {
+				continue
+			}
+			key := p.typName + ":" + target
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+
+			snippet := m[0]
+			if len(snippet) > 200 {
+				snippet = snippet[:200]
+			}
+			redirects = append(redirects, JSRedirect{
+				Type:    p.typName,
+				Target:  target,
+				Snippet: snippet,
+			})
+		}
+	}
+
+	if dMatches := jsDelayedRedirectRe.FindAllStringSubmatch(allScript, -1); len(dMatches) > 0 {
+		for _, m := range dMatches {
+			delay := 0
+			if len(m) > 1 {
+				fmt.Sscanf(m[1], "%d", &delay)
+			}
+			snippet := m[0]
+			if len(snippet) > 200 {
+				snippet = snippet[:200]
+			}
+			redirects = append(redirects, JSRedirect{
+				Type:    "setTimeout_redirect",
+				Target:  "",
+				Snippet: snippet,
+				Delay:   delay,
+			})
+		}
+	}
+
+	if iMatches := jsSetIntervalRedirectRe.FindAllStringSubmatch(allScript, -1); len(iMatches) > 0 {
+		for _, m := range iMatches {
+			delay := 0
+			if len(m) > 1 {
+				fmt.Sscanf(m[1], "%d", &delay)
+			}
+			snippet := m[0]
+			if len(snippet) > 200 {
+				snippet = snippet[:200]
+			}
+			redirects = append(redirects, JSRedirect{
+				Type:    "setInterval_redirect",
+				Target:  "",
+				Snippet: snippet,
+				Delay:   delay,
+			})
+		}
+	}
+
+	return redirects
 }
 
 func escapeJSString(s string) string {

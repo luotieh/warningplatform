@@ -15,6 +15,7 @@ type PocQuery struct {
 	Keyword  string `form:"keyword"`
 	Severity string `form:"severity"`
 	Category string `form:"category"`
+	Tag      string `form:"tag"`
 	Enabled  *bool  `form:"enabled"`
 }
 
@@ -48,6 +49,9 @@ func (s *ServicePoc) List(q PocQuery, scopes ...func(*gorm.DB) *gorm.DB) ([]mode
 	}
 	if q.Category != "" {
 		tx = tx.Where("category = ?", q.Category)
+	}
+	if q.Tag != "" {
+		tx = tx.Where("tags LIKE ?", "%"+q.Tag+"%")
 	}
 	if q.Enabled != nil {
 		tx = tx.Where("enabled = ?", *q.Enabled)
@@ -118,4 +122,97 @@ func (s *ServicePoc) ImportYAML(yaml string) (*model.PocTemplate, error) {
 
 func (s *ServicePoc) ImportDir(dir string) (imported, skipped, errors int) {
 	return s.store.ImportFromDir(dir)
+}
+
+type PocTagGroup struct {
+	Tag   string `json:"tag"`
+	Count int64  `json:"count"`
+}
+
+type PocStats struct {
+	Total      int64            `json:"total"`
+	Enabled    int64            `json:"enabled"`
+	BySeverity map[string]int64 `json:"by_severity"`
+	TopTags    []PocTagGroup    `json:"top_tags"`
+	ByCategory map[string]int64 `json:"by_category"`
+}
+
+func (s *ServicePoc) Stats(scopes ...func(*gorm.DB) *gorm.DB) (*PocStats, error) {
+	base := s.session().Model(&model.PocTemplate{}).Scopes(scopes...)
+
+	stats := &PocStats{
+		BySeverity: make(map[string]int64),
+		ByCategory: make(map[string]int64),
+	}
+
+	base.Count(&stats.Total)
+	base.Where("enabled = ?", true).Count(&stats.Enabled)
+
+	type sevRow struct {
+		Severity string `gorm:"column:severity"`
+		Count    int64  `gorm:"column:cnt"`
+	}
+	var sevRows []sevRow
+	s.session().Model(&model.PocTemplate{}).Scopes(scopes...).
+		Select("severity, COUNT(*) as cnt").
+		Group("severity").
+		Find(&sevRows)
+	for _, r := range sevRows {
+		if r.Severity != "" {
+			stats.BySeverity[r.Severity] = r.Count
+		}
+	}
+
+	type catRow struct {
+		Category string `gorm:"column:category"`
+		Count    int64  `gorm:"column:cnt"`
+	}
+	var catRows []catRow
+	s.session().Model(&model.PocTemplate{}).Scopes(scopes...).
+		Select("category, COUNT(*) as cnt").
+		Where("category != ''").
+		Group("category").
+		Order("cnt DESC").
+		Find(&catRows)
+	for _, r := range catRows {
+		stats.ByCategory[r.Category] = r.Count
+	}
+
+	var allItems []model.PocTemplate
+	s.session().Model(&model.PocTemplate{}).Scopes(scopes...).
+		Select("tags").
+		Find(&allItems)
+	tagCount := make(map[string]int64)
+	for _, item := range allItems {
+		for _, t := range item.Tags {
+			if t != "" {
+				tagCount[t]++
+			}
+		}
+	}
+
+	type kv struct {
+		k string
+		v int64
+	}
+	var sorted []kv
+	for k, v := range tagCount {
+		sorted = append(sorted, kv{k, v})
+	}
+	for i := 0; i < len(sorted); i++ {
+		for j := i + 1; j < len(sorted); j++ {
+			if sorted[j].v > sorted[i].v {
+				sorted[i], sorted[j] = sorted[j], sorted[i]
+			}
+		}
+	}
+	limit := 50
+	if len(sorted) < limit {
+		limit = len(sorted)
+	}
+	for _, s := range sorted[:limit] {
+		stats.TopTags = append(stats.TopTags, PocTagGroup{Tag: s.k, Count: s.v})
+	}
+
+	return stats, nil
 }

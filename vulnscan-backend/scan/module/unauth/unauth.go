@@ -104,6 +104,7 @@ func (m *UnauthScanner) Run(ctx context.Context, targets []*core.Target, config 
 
 					finding := chk(ctx, host, target.Port)
 					if finding != nil {
+						finding.Target = target
 						mu.Lock()
 						result.Findings = append(result.Findings, finding)
 						mu.Unlock()
@@ -134,6 +135,7 @@ func (m *UnauthScanner) Run(ctx context.Context, targets []*core.Target, config 
 
 						finding := chk(ctx, host, target.Port)
 						if finding != nil {
+							finding.Target = target
 							mu.Lock()
 							result.Findings = append(result.Findings, finding)
 							mu.Unlock()
@@ -161,12 +163,11 @@ func (m *UnauthScanner) Run(ctx context.Context, targets []*core.Target, config 
 				defer wg.Done()
 				defer func() { <-sem }()
 
-				// 尝试几种最常见的未授权访问
 				for serviceName, checker := range serviceCheckers {
-					// 只尝试几种最可能的无害检测
 					if isLikelyUnauthService(serviceName) {
 						finding := checker(ctx, host, target.Port)
 						if finding != nil {
+							finding.Target = target
 							mu.Lock()
 							result.Findings = append(result.Findings, finding)
 							mu.Unlock()

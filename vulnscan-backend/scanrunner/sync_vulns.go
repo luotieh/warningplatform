@@ -7,10 +7,9 @@ import (
 	"time"
 
 	"code.yt-security.com/public/core/v2/generate/qulid"
+	"gorm.io/gorm"
 
 	"vulnscan-backend/model"
-
-	"gorm.io/gorm"
 )
 
 func vulnFingerprint(taskID, target string, port int, title, moduleID, templateID string) string {
@@ -39,6 +38,10 @@ func SyncVulnerabilitiesFromTask(db *gorm.DB, task *model.ScanTask) (int, error)
 
 	now := time.Now()
 	synced := 0
+
+	// Pre-load PoC template ProductIDs for batch resolution
+	pocProductCache := make(map[string]string)
+
 	for i := range findings {
 		f := findings[i]
 		tplID := ""
@@ -53,6 +56,8 @@ func SyncVulnerabilitiesFromTask(db *gorm.DB, task *model.ScanTask) (int, error)
 			}
 		}
 		fp := vulnFingerprint(task.ID, f.Target, f.Port, f.Title, f.ModuleID, tplID)
+
+		productID := resolveVulnProductID(db, f, tplID, pocProductCache)
 
 		var existing model.Vulnerability
 		err := db.Where("task_id = ? AND target = ? AND port = ? AND title = ? AND module_id = ?",
@@ -74,6 +79,7 @@ func SyncVulnerabilitiesFromTask(db *gorm.DB, task *model.ScanTask) (int, error)
 				Severity:    f.Severity,
 				ModuleID:    f.ModuleID,
 				TemplateID:  tplID,
+				ProductID:   productID,
 				Evidence:    f.Evidence,
 				Status:      model.VulnStatusOpen,
 				Confidence:  f.Confidence,
@@ -101,11 +107,41 @@ func SyncVulnerabilitiesFromTask(db *gorm.DB, task *model.ScanTask) (int, error)
 			"template_id": tplID,
 			"updated_at":  now,
 		}
+		if productID != "" {
+			updates["product_id"] = productID
+		}
 		if err := db.Model(&model.Vulnerability{}).Where("id = ?", existing.ID).Updates(updates).Error; err == nil {
 			synced++
 		}
 	}
 	return synced, nil
+}
+
+// resolveVulnProductID tries to find a ProductID from the PoC template or finding data.
+func resolveVulnProductID(db *gorm.DB, f model.ScanFinding, tplID string, cache map[string]string) string {
+	if tplID != "" {
+		if pid, ok := cache[tplID]; ok {
+			return pid
+		}
+		var pocRec model.PocTemplate
+		err := db.Select("product_id").Where("poc_id = ? OR id = ?", tplID, tplID).First(&pocRec).Error
+		if err == nil && pocRec.ProductID != "" {
+			cache[tplID] = pocRec.ProductID
+			return pocRec.ProductID
+		}
+		cache[tplID] = ""
+	}
+
+	if f.Data != nil {
+		if product, ok := f.Data["product"].(string); ok && product != "" {
+			var prod model.Product
+			if err := db.Where("name = ?", strings.ToLower(strings.TrimSpace(product))).
+				Select("id").First(&prod).Error; err == nil {
+				return prod.ID
+			}
+		}
+	}
+	return ""
 }
 
 // EnsureVulnFromFinding 将单条扫描发现写入漏洞库并返回漏洞 ID。
@@ -144,6 +180,7 @@ func EnsureVulnFromFinding(db *gorm.DB, findingID string) (string, error) {
 	if sev == "" {
 		sev = "info"
 	}
+	productID := resolveVulnProductID(db, f, tplID, map[string]string{})
 	v := model.Vulnerability{
 		ID:          qulid.GenerateID(),
 		TaskID:      f.TaskID,
@@ -156,6 +193,7 @@ func EnsureVulnFromFinding(db *gorm.DB, findingID string) (string, error) {
 		Severity:    sev,
 		ModuleID:    f.ModuleID,
 		TemplateID:  tplID,
+		ProductID:   productID,
 		Evidence:    f.Evidence,
 		Status:      model.VulnStatusOpen,
 		Confidence:  f.Confidence,

@@ -26,9 +26,36 @@ func (e *DBExecutor) Type() string { return "monitor" }
 
 func (e *DBExecutor) Init(ctx context.Context) error {
 	e.pageService = NewPageService()
+	e.loadScreenshotConfig()
 	e.analysis = NewAnalysisEngineFromDB(e.db)
 	e.analysis.RefreshRules(ctx)
 	return nil
+}
+
+func (e *DBExecutor) loadScreenshotConfig() {
+	if e.db == nil || e.pageService == nil {
+		return
+	}
+	type cfgRow struct {
+		ConfigJSON string `gorm:"column:config_json"`
+	}
+	var row cfgRow
+	if err := e.db.Table("monitor_default_configs").Where("dimension = ?", "screenshot").Select("config_json").First(&row).Error; err != nil {
+		return
+	}
+	var cfg ScreenshotConfig
+	if json.Unmarshal([]byte(row.ConfigJSON), &cfg) == nil {
+		if cfg.Width > 0 {
+			e.pageService.ScreenCfg.Width = cfg.Width
+		}
+		if cfg.Height > 0 {
+			e.pageService.ScreenCfg.Height = cfg.Height
+		}
+		if cfg.Quality > 0 && cfg.Quality <= 100 {
+			e.pageService.ScreenCfg.Quality = cfg.Quality
+		}
+		slog.Info("[Monitor] 截图配置已加载", "width", e.pageService.ScreenCfg.Width, "height", e.pageService.ScreenCfg.Height, "quality", e.pageService.ScreenCfg.Quality)
+	}
 }
 
 func (e *DBExecutor) Execute(ctx context.Context, payload json.RawMessage) *agent.TaskResult {
@@ -75,6 +102,27 @@ func (e *DBExecutor) Execute(ctx context.Context, payload json.RawMessage) *agen
 			result.ScreenshotData = snap.Screenshot
 		}
 
+		if (msg.Dimension == "blacklink" || msg.Dimension == "tamper") && e.pageService.HasBrowser() {
+			finalURL, redirected := e.pageService.DetectBrowserRedirect(ctx, msg.URL, 5*time.Second)
+			if redirected {
+				snap.JSRedirects = append(snap.JSRedirects, JSRedirect{
+					Type:   "browser_detected",
+					Target: finalURL,
+				})
+				slog.Info("[Monitor] 浏览器检测到跳转", "dimension", msg.Dimension, "url", msg.URL, "final", finalURL)
+			}
+		}
+
+		if msg.Dimension == "blacklink" {
+			cloaking := e.pageService.DetectCloaking(ctx, msg.URL, snap.ContentHash, snap.Title, snap.VisibleText)
+			if cloaking != nil && cloaking.Detected {
+				slog.Info("[Monitor] 检测到SEO Cloaking", "url", msg.URL, "similarity", cloaking.Similarity)
+			}
+			if cloaking != nil {
+				snap.CloakingResult = cloaking
+			}
+		}
+
 		raw, _ := json.Marshal(snap)
 		snapshotJSON := string(raw)
 
@@ -93,11 +141,16 @@ func (e *DBExecutor) Execute(ctx context.Context, payload json.RawMessage) *agen
 		if output != nil && output.HasIssue {
 			annotations := BuildAnnotationsFromOutput(msg.Dimension, output)
 			if len(annotations) > 0 {
+				slog.Info("[Monitor] 准备生成标注截图", "dimension", msg.Dimension, "url", msg.URL, "annotations", len(annotations), "browser_ok", e.pageService.HasBrowser())
 				annotatedData := e.pageService.CaptureAnnotatedScreenshot(ctx, msg.URL, annotations)
 				if len(annotatedData) > 0 {
 					result.AnnotatedScreenshotData = annotatedData
-					slog.Info("[Monitor] 标注截图已生成", "dimension", msg.Dimension, "url", msg.URL, "annotations", len(annotations))
+					slog.Info("[Monitor] 标注截图已生成", "dimension", msg.Dimension, "url", msg.URL, "size", len(annotatedData))
+				} else {
+					slog.Warn("[Monitor] 标注截图生成失败（返回空数据）", "dimension", msg.Dimension, "url", msg.URL)
 				}
+			} else {
+				slog.Debug("[Monitor] 无标注信息可用", "dimension", msg.Dimension, "has_issue", output.HasIssue)
 			}
 
 			if msg.Dimension == "blacklink" {

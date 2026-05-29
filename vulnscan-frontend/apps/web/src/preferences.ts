@@ -16,7 +16,7 @@ export const overridesPreferences = defineOverridesPreferences({
   app: {
     accessMode: 'backend',
     defaultAvatar: '/avatar.webp',
-    defaultHomePath: '/dashboard/overview',
+    defaultHomePath: '/workbench/overview',
     enableCheckUpdates: false,
     enableRefreshToken: true,
     name: import.meta.env.VITE_APP_TITLE,

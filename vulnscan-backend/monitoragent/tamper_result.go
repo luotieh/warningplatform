@@ -77,6 +77,15 @@ func BuildTamperResultJSON(snapshotJSON string, output *analyzer.Output, pageURL
 						result[key] = v
 					}
 				}
+				if cv, ok := details["cross_validation"]; ok {
+					result["cross_validation"] = cv
+				}
+				if aa, ok := details["auto_accepted"]; ok {
+					result["auto_accepted"] = aa
+				}
+				if nu, ok := details["likely_normal_update"]; ok {
+					result["likely_normal_update"] = nu
+				}
 			}
 		}
 	}

@@ -33,15 +33,16 @@ func NewFindingStream(bufferSize int) *FindingStream {
 }
 
 func (fs *FindingStream) Send(batch *FindingBatch) (sent bool) {
+	if fs.closed.Load() {
+		return false
+	}
+
+	// Guard against send-on-closed-channel race between closed.Load() and actual send
 	defer func() {
 		if r := recover(); r != nil {
 			sent = false
 		}
 	}()
-
-	if fs.closed.Load() {
-		return false
-	}
 
 	select {
 	case fs.ch <- batch:
@@ -51,6 +52,7 @@ func (fs *FindingStream) Send(batch *FindingBatch) (sent bool) {
 
 	timer := time.NewTimer(5 * time.Second)
 	defer timer.Stop()
+
 	select {
 	case fs.ch <- batch:
 		return true

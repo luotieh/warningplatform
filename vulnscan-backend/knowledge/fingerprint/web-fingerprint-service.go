@@ -43,12 +43,23 @@ type WebFingerprintUpdateReq struct {
 	VersionExpr *string `json:"version_expr"`
 }
 
+// ProductLinker resolves a product name into a ProductID.
+type ProductLinker interface {
+	MatchOrCreate(name, vendor string) string
+}
+
 type ServiceWebFingerprint struct {
-	db *db.DB
+	db            *db.DB
+	productLinker ProductLinker
 }
 
 func NewServiceWebFingerprint(database *db.DB) *ServiceWebFingerprint {
 	return &ServiceWebFingerprint{db: database}
+}
+
+// SetProductLinker enables automatic product-to-ProductID resolution on create/update.
+func (s *ServiceWebFingerprint) SetProductLinker(linker ProductLinker) {
+	s.productLinker = linker
 }
 
 func (s *ServiceWebFingerprint) session() *gorm.DB {
@@ -117,6 +128,10 @@ func (s *ServiceWebFingerprint) Create(req WebFingerprintCreateReq, createdBy st
 		item.Priority = 50
 	}
 
+	if s.productLinker != nil && req.Product != "" {
+		item.ProductID = s.productLinker.MatchOrCreate(req.Product, "")
+	}
+
 	if err := s.session().Create(&item).Error; err != nil {
 		return nil, err
 	}
@@ -157,6 +172,14 @@ func (s *ServiceWebFingerprint) Update(id string, req WebFingerprintUpdateReq) e
 	}
 	if req.VersionExpr != nil {
 		updates["version_expr"] = *req.VersionExpr
+	}
+
+	if s.productLinker != nil {
+		if req.Product != nil && *req.Product != "" {
+			if pid := s.productLinker.MatchOrCreate(*req.Product, ""); pid != "" {
+				updates["product_id"] = pid
+			}
+		}
 	}
 
 	if len(updates) == 0 {

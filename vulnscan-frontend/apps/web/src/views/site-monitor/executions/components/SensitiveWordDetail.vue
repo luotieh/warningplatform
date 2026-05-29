@@ -1,19 +1,99 @@
 <script lang="ts" setup>
 import type { DataTableColumns } from 'naive-ui';
 
-import { computed, h } from 'vue';
+import { computed, h, onBeforeUnmount, ref, watch } from 'vue';
 
 import {
+  NAlert,
   NCard,
   NDataTable,
   NDescriptions,
   NDescriptionsItem,
   NEmpty,
+  NModal,
   NTag,
 } from 'naive-ui';
 
-const props = defineProps<{ result: any }>();
+import { getEvidenceAssetUrl } from '#/api/sitemonitor';
+import { fetchAuthImageObjectUrl } from '#/composables/useAuthImageObjectUrl';
+
+const props = defineProps<{ executionId?: string; result: any }>();
 const r = computed(() => props.result || {});
+
+const annotatedScreenshotUrl = computed(
+  () =>
+    r.value.annotated_screenshot_url ||
+    r.value.tamper_screenshot_url ||
+    '',
+);
+const annotatedScreenshotId = computed(
+  () =>
+    r.value.annotated_screenshot_id ||
+    r.value.tamper_screenshot_id ||
+    '',
+);
+const hasScreenshot = computed(() =>
+  Boolean(annotatedScreenshotUrl.value || annotatedScreenshotId.value),
+);
+const screenshotObjectUrl = ref('');
+const screenshotLoading = ref(false);
+const screenshotError = ref('');
+const previewVisible = ref(false);
+
+function revokeScreenshotObjectUrl() {
+  if (screenshotObjectUrl.value) {
+    URL.revokeObjectURL(screenshotObjectUrl.value);
+    screenshotObjectUrl.value = '';
+  }
+}
+
+function openScreenshot() {
+  if (screenshotObjectUrl.value) {
+    previewVisible.value = true;
+  }
+}
+
+async function loadScreenshot() {
+  revokeScreenshotObjectUrl();
+  screenshotError.value = '';
+
+  const urls = [
+    props.executionId
+      ? getEvidenceAssetUrl(props.executionId, 'annotated_screenshot')
+      : '',
+    annotatedScreenshotUrl.value,
+  ].filter(Boolean);
+
+  if (urls.length === 0) return;
+
+  screenshotLoading.value = true;
+  try {
+    let lastError = '';
+    for (const url of urls) {
+      try {
+        screenshotObjectUrl.value = await fetchAuthImageObjectUrl(url);
+        return;
+      } catch (error: any) {
+        lastError = error?.message || String(error);
+      }
+    }
+    screenshotError.value = `截图加载失败：${lastError || 'unknown error'}`;
+  } finally {
+    screenshotLoading.value = false;
+  }
+}
+
+watch(
+  () => [
+    annotatedScreenshotUrl.value,
+    annotatedScreenshotId.value,
+    props.executionId,
+  ],
+  loadScreenshot,
+  { immediate: true },
+);
+
+onBeforeUnmount(revokeScreenshotObjectUrl);
 
 type TagType = 'default' | 'error' | 'info' | 'primary' | 'success' | 'warning';
 
@@ -166,6 +246,56 @@ const matchCols: DataTableColumns<any> = [
       </NDescriptions>
     </NCard>
 
+    <NCard v-if="hasScreenshot" size="small" title="敏感词标注截图">
+      <p class="mb-2 text-xs text-gray-500">
+        以下截图为检测到敏感词时自动抓取，红色边框标注了命中敏感词的位置。
+      </p>
+      <NAlert
+        v-if="screenshotError"
+        type="warning"
+        :bordered="false"
+        class="mb-2"
+      >
+        {{ screenshotError }}
+      </NAlert>
+      <div class="rounded border border-gray-200 bg-gray-50 p-2">
+        <div
+          v-if="screenshotLoading"
+          class="py-8 text-center text-sm text-gray-400"
+        >
+          正在加载截图...
+        </div>
+        <img
+          v-else-if="screenshotObjectUrl"
+          :src="screenshotObjectUrl"
+          alt="敏感词标注截图"
+          class="max-w-full cursor-pointer rounded shadow-sm transition hover:shadow-md"
+          style="max-height: 600px"
+          @click="openScreenshot"
+        />
+        <NEmpty v-else description="暂无可展示截图" />
+      </div>
+    </NCard>
+
+    <NModal
+      v-model:show="previewVisible"
+      preset="card"
+      title="敏感词标注截图预览"
+      class="sw-preview-modal"
+      :bordered="false"
+      :segmented="{ content: true }"
+    >
+      <div class="sw-preview-frame">
+        <img
+          v-if="screenshotObjectUrl"
+          :src="screenshotObjectUrl"
+          alt="敏感词标注截图预览"
+          class="sw-preview-image"
+        />
+        <NEmpty v-else description="截图已失效，请重新打开详情" />
+      </div>
+    </NModal>
+
     <NCard
       v-if="pageEvidenceHtml"
       size="small"
@@ -228,5 +358,26 @@ const matchCols: DataTableColumns<any> = [
 .sw-evidence :deep(.sw-hit--low) {
   background: #dbeafe;
   color: #2563eb;
+}
+
+.sw-preview-frame {
+  display: flex;
+  max-height: min(78vh, 900px);
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  border-radius: 10px;
+  background: var(--n-color);
+}
+
+.sw-preview-image {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 18%);
+}
+
+:global(.sw-preview-modal) {
+  width: min(92vw, 1280px);
 }
 </style>

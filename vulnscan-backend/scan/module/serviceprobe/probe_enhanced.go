@@ -75,9 +75,14 @@ func (m *ServiceProbe) probeWithChain(ctx context.Context, target *core.Target, 
 	}
 	defer conn.Close()
 
-	bannerTimeout := timeout / 3
-	if bannerTimeout < 800*time.Millisecond {
-		bannerTimeout = 800 * time.Millisecond
+	bannerTimeout := timeout / 2
+	if bannerTimeout < 1500*time.Millisecond {
+		bannerTimeout = 1500 * time.Millisecond
+	}
+	if isBannerFirstPort(target.Port) {
+		if bannerTimeout < 3*time.Second {
+			bannerTimeout = 3 * time.Second
+		}
 	}
 	_ = conn.SetReadDeadline(time.Now().Add(bannerTimeout))
 

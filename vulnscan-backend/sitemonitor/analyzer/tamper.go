@@ -65,6 +65,7 @@ func (a *TamperAnalyzer) Analyze(ctx context.Context, input *Input) (*Output, er
 
 		output.BaselineUpdate = &model.MonitorBaselineUpdate{
 			ContentHash:       snap.ContentHash,
+			Simhash:           int64(Simhash(bodyText)),
 			DomStructureHash:  fmt.Sprintf("%x", md5.Sum([]byte(extractDOMStructure(snap.RenderedHTML)))),
 			Title:             snap.Title,
 			StatusCode:        snap.StatusCode,
@@ -96,17 +97,45 @@ func (a *TamperAnalyzer) Analyze(ctx context.Context, input *Input) (*Output, er
 	evidence := buildTamperCompareEvidence(input.Baseline.BodyText, currentText)
 
 	if len(diffs) > 0 {
-		output.HasIssue = true
-		output.Severity = classifyTamperSeverity(diffs)
+		crossCheck := a.crossValidateWithOtherDimensions(ctx, input.SnapshotJSON, input.URL)
 		textLen := utf8.RuneCountInString(currentText)
-		detailJSON, _ := json.Marshal(map[string]any{
+
+		isNormalUpdate := crossCheck != nil && !crossCheck.HasMaliciousContent && !hasInjectedElements(diffs)
+
+		if isNormalUpdate {
+			output.HasIssue = false
+			output.Severity = "info"
+			output.BaselineUpdate = &model.MonitorBaselineUpdate{
+				ContentHash:       snap.ContentHash,
+				Simhash:           int64(Simhash(currentText)),
+				DomStructureHash:  fmt.Sprintf("%x", md5.Sum([]byte(extractDOMStructure(snap.RenderedHTML)))),
+				Title:             snap.Title,
+				StatusCode:        snap.StatusCode,
+				VisibleTextLength: textLen,
+				BodyText:          currentText,
+				Action:            "auto_accept",
+			}
+		} else {
+			output.HasIssue = true
+			output.Severity = classifyTamperSeverityWithCross(diffs, crossCheck)
+		}
+
+		detailMap := map[string]any{
 			"diffs":               diffs,
 			"title":               snap.Title,
 			"status_code":         snap.StatusCode,
 			"content_hash":        snap.ContentHash,
 			"visible_text_length": textLen,
 			"evidence":            evidence,
-		})
+		}
+		if crossCheck != nil {
+			detailMap["cross_validation"] = crossCheck
+		}
+		if isNormalUpdate {
+			detailMap["auto_accepted"] = true
+			detailMap["likely_normal_update"] = true
+		}
+		detailJSON, _ := json.Marshal(detailMap)
 		output.DetailsJSON = string(detailJSON)
 	} else if evidence.BaselineHTML != "" || evidence.CurrentHTML != "" {
 		detailJSON, _ := json.Marshal(map[string]any{
@@ -122,10 +151,28 @@ func (a *TamperAnalyzer) compareWithBaseline(snap *snapshotData, baseline *model
 	diffs := make([]map[string]any, 0)
 
 	if snap.ContentHash != baseline.ContentHash && baseline.ContentHash != "" {
+		currentText := tamperCompareText(snap)
+		currentSimhash := Simhash(currentText)
+		baselineSimhash := uint64(baseline.Simhash)
+		similarity := SimhashSimilarity(currentSimhash, baselineSimhash)
+		distance := SimhashDistance(currentSimhash, baselineSimhash)
+
+		changeScale := "major"
+		if similarity > 0.95 {
+			changeScale = "trivial"
+		} else if similarity > 0.85 {
+			changeScale = "minor"
+		} else if similarity > 0.70 {
+			changeScale = "moderate"
+		}
+
 		diffs = append(diffs, map[string]any{
-			"type":     "content_hash",
-			"baseline": baseline.ContentHash,
-			"current":  snap.ContentHash,
+			"type":               "content_hash",
+			"baseline":           baseline.ContentHash,
+			"current":            snap.ContentHash,
+			"simhash_similarity": similarity,
+			"simhash_distance":   distance,
+			"change_scale":       changeScale,
 		})
 	}
 
@@ -264,14 +311,100 @@ func isEmptyBaseline(b *model.MonitorBaseline) bool {
 	return needsBaselineInit(b)
 }
 
-func classifyTamperSeverity(diffs []map[string]any) string {
+// TamperCrossCheck holds the result of cross-validating a tampered page against
+// sensitive word and blacklink analyzers. If malicious content is detected, the
+// tamper is confirmed as hostile; otherwise it is likely a legitimate update.
+type TamperCrossCheck struct {
+	HasMaliciousContent bool   `json:"has_malicious_content"`
+	SensitiveWordHit    bool   `json:"sensitive_word_hit"`
+	BlacklinkHit        bool   `json:"blacklink_hit"`
+	Summary             string `json:"summary"`
+}
+
+func (a *TamperAnalyzer) crossValidateWithOtherDimensions(ctx context.Context, snapshotJSON, url string) *TamperCrossCheck {
+	if a.rules == nil {
+		return nil
+	}
+
+	result := &TamperCrossCheck{}
+
+	swAnalyzer := NewSensitiveWordAnalyzer(a.rules)
+	swInput := &Input{SnapshotJSON: snapshotJSON, URL: url}
+	if swOut, err := swAnalyzer.Analyze(ctx, swInput); err == nil && swOut != nil && swOut.HasIssue {
+		result.SensitiveWordHit = true
+		result.HasMaliciousContent = true
+	}
+
+	blAnalyzer := NewBlacklinkAnalyzer(a.rules)
+	blInput := &Input{SnapshotJSON: snapshotJSON, URL: url}
+	if blOut, err := blAnalyzer.Analyze(ctx, blInput); err == nil && blOut != nil && blOut.HasIssue {
+		result.BlacklinkHit = true
+		result.HasMaliciousContent = true
+	}
+
+	var parts []string
+	if result.SensitiveWordHit {
+		parts = append(parts, "检出敏感词")
+	}
+	if result.BlacklinkHit {
+		parts = append(parts, "检出暗链")
+	}
+	if len(parts) > 0 {
+		result.Summary = "确认篡改: " + strings.Join(parts, "、")
+	} else {
+		result.Summary = "未检出敏感词/暗链，可能为正常更新"
+	}
+	return result
+}
+
+func classifyTamperSeverityWithCross(diffs []map[string]any, cross *TamperCrossCheck) string {
+	hasInjection := false
 	for _, d := range diffs {
 		if d["type"] == "injected_elements" {
-			return "critical"
+			hasInjection = true
+			break
 		}
 	}
+
+	if hasInjection {
+		return "critical"
+	}
+
+	if cross != nil && cross.HasMaliciousContent {
+		return "critical"
+	}
+
+	if cross != nil && !cross.HasMaliciousContent {
+		if isTrivialChange(diffs) {
+			return "info"
+		}
+		return "low"
+	}
+
 	if len(diffs) >= 3 {
 		return "high"
 	}
 	return "medium"
+}
+
+func classifyTamperSeverity(diffs []map[string]any) string {
+	return classifyTamperSeverityWithCross(diffs, nil)
+}
+
+func hasInjectedElements(diffs []map[string]any) bool {
+	for _, d := range diffs {
+		if d["type"] == "injected_elements" {
+			return true
+		}
+	}
+	return false
+}
+
+func isTrivialChange(diffs []map[string]any) bool {
+	for _, d := range diffs {
+		if scale, ok := d["change_scale"].(string); ok && scale == "trivial" {
+			return true
+		}
+	}
+	return false
 }

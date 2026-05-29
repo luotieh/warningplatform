@@ -16,29 +16,29 @@ html.dark,
 html.dark[data-theme],
 [data-theme] .dark,
 .dark {
-  --background: 222.34deg 10.43% 12.27% !important;
-  --background-deep: 220deg 13.06% 9% !important;
-  --card: 222.34deg 10.43% 12.27% !important;
+  --background: 220deg 13% 10% !important;
+  --background-deep: 220deg 13% 10% !important;
+  --card: 220deg 10% 14% !important;
 
-  --sidebar: 222.34deg 10.43% 12.27% !important;
-  --sidebar-deep: 220deg 13.06% 9% !important;
+  --sidebar: 220deg 13% 10% !important;
+  --sidebar-deep: 220deg 14% 8% !important;
   --menu: var(--sidebar) !important;
-  --header: 222.34deg 10.43% 12.27% !important;
+  --header: 220deg 13% 10% !important;
 
   --accent: 216 5% 19% !important;
   --accent-lighter: 216 5% 12% !important;
   --accent-hover: 216 5% 24% !important;
   --heavy: 216 5% 24% !important;
-  --border: 240 3.7% 22% !important;
+  --border: 220deg 8% 20% !important;
 }
 
 html:not(.dark),
 html:not(.dark)[data-theme] {
   --background: 0 0% 100% !important;
-  --background-deep: 220deg 14.29% 95.88% !important;
+  --background-deep: 220deg 14% 97% !important;
   --card: 0 0% 100% !important;
   --sidebar: 0 0% 100% !important;
-  --sidebar-deep: 0 0% 100% !important;
+  --sidebar-deep: 220deg 14% 97% !important;
   --menu: var(--sidebar) !important;
   --header: 0 0% 100% !important;
   --accent: 210deg 40% 96.08% !important;
@@ -105,4 +105,18 @@ html.dark .vben-menu.is-rounded .vben-sub-menu-title,
 html.dark .vben-menu.is-rounded .vben-menu-item-content {
   border-color: transparent !important;
   box-shadow: none !important;
+}
+
+/* 侧边栏菜单项背景统一 —— 非 active/hover 时透明，避免与 aside 底色产生色差 */
+html.dark .vben-menu.is-dark .vben-menu-item:not(.is-active):not(:hover),
+html.dark .vben-menu.is-dark .vben-sub-menu:not(.is-active) > .vben-sub-menu-content:not(:hover) {
+  background: transparent !important;
+}
+
+html.dark .vben-menu.is-dark {
+  background: transparent !important;
+}
+
+html.dark .vben-menu.is-dark .vben-sub-menu > ul.vben-menu {
+  background: transparent !important;
 }

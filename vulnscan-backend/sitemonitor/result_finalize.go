@@ -79,7 +79,6 @@ func FinalizeMonitorResult(ctx context.Context, db *gorm.DB, ar *model.MonitorAg
 			exec.Disposition = model.MonitorDispositionValid
 		}
 
-		// 问题去重：同一 URL + 维度 + 任务的未处置问题合并到一条记录
 		if exec.HasIssue {
 			issueKey := model.MakeIssueKey(exec.URL, exec.Dimension, exec.TargetID, exec.PathTaskID)
 			exec.IssueKey = issueKey
@@ -89,7 +88,8 @@ func FinalizeMonitorResult(ctx context.Context, db *gorm.DB, ar *model.MonitorAg
 				slog.Warn("[Monitor] issue merge failed, keeping as new", "eid", exec.ID, "err", mergeErr)
 			}
 			if merged {
-				return tx.Where("id = ?", exec.ID).Delete(&model.MonitorExecution{}).Error
+				exec.Disposition = "merged"
+				return tx.Save(&exec).Error
 			}
 			exec.FirstSeenAt = &now
 			exec.OccurrenceCount = 1
@@ -170,11 +170,17 @@ func applyResultSemantics(tx *gorm.DB, exec *model.MonitorExecution, ar *model.M
 			}
 		}
 	case "tamper":
+		autoAccepted := jsonBool(ar.Result, "auto_accepted")
 		var tr model.MonitorTamperResult
 		if err := json.Unmarshal([]byte(ar.Result), &tr); err != nil {
 			exec.HasIssue = jsonBool(ar.Result, "tampered")
 		} else {
-			exec.HasIssue = tr.Tampered
+			if autoAccepted {
+				exec.HasIssue = false
+				slog.Info("[Monitor] 篡改检测自动接受正常更新", "eid", ar.ExecutionID, "url", ar.URL)
+			} else {
+				exec.HasIssue = tr.Tampered
+			}
 			if tr.BaselineUpdate != nil {
 				if tx != nil {
 					_ = SaveBaselineFromUpdate(context.Background(), tx, ar.ExecutionID, ar.URL, ar.AgentID, tr.BaselineUpdate)

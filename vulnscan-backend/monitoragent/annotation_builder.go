@@ -2,6 +2,7 @@ package monitoragent
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"vulnscan-backend/sitemonitor/analyzer"
@@ -36,14 +37,22 @@ func buildSensitiveWordAnnotations(details map[string]any) []IssueAnnotation {
 		return nil
 	}
 
+	categories := make(map[string]int)
 	keywords := make([]string, 0, len(matches))
+	seen := make(map[string]bool)
 	for _, item := range matches {
 		m, ok := item.(map[string]any)
 		if !ok {
 			continue
 		}
 		word, _ := m["word"].(string)
-		if word != "" {
+		cat, _ := m["category"].(string)
+		if cat == "" {
+			cat = "敏感词"
+		}
+		categories[cat]++
+		if word != "" && !seen[word] {
+			seen[word] = true
 			keywords = append(keywords, word)
 		}
 	}
@@ -52,11 +61,23 @@ func buildSensitiveWordAnnotations(details map[string]any) []IssueAnnotation {
 		return nil
 	}
 
-	return []IssueAnnotation{{
-		Type:     "text",
-		Keywords: keywords,
-		Label:    "敏感词",
-	}}
+	var labelParts []string
+	for cat, count := range categories {
+		labelParts = append(labelParts, fmt.Sprintf("%s ×%d", cat, count))
+	}
+	summaryLabel := "敏感词检测: " + strings.Join(labelParts, ", ")
+
+	return []IssueAnnotation{
+		{
+			Type:  "page",
+			Label: summaryLabel,
+		},
+		{
+			Type:     "text",
+			Keywords: keywords,
+			Label:    "",
+		},
+	}
 }
 
 func buildBlacklinkAnnotations(details map[string]any) []IssueAnnotation {

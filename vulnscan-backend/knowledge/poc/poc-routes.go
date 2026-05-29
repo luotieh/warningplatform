@@ -19,6 +19,7 @@ func (m *Poc) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
 			Name: "检测模板", Enabled: true,
 			Children: []authorize.Route{
 				{Name: "POC列表", Path: "list", Method: "GET", Handler: m.handler.List, Enabled: true},
+				{Name: "POC统计", Path: "stats", Method: "GET", Handler: m.handler.Stats, Enabled: true},
 				{Name: "POC详情", Path: ":id", Method: "GET", Handler: m.handler.GetByID, Enabled: true},
 				{Name: "创建POC", Path: "", Method: "POST", Handler: m.handler.Create, Enabled: true},
 				{Name: "更新POC", Path: ":id", Method: "PUT", Handler: m.handler.Update, Enabled: true},

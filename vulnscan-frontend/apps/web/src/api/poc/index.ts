@@ -15,6 +15,11 @@ export interface PocTemplate {
   cve?: string;
   cwe?: string;
   cvss?: string;
+  product?: string;
+  vendor?: string;
+  affected_range?: string;
+  cpe?: string;
+  product_id?: string;
   hit_count?: number;
   source?: string;
   source_type?: string;
@@ -27,6 +32,23 @@ export interface PocTemplate {
 export async function getPocList(params?: Record<string, any>) {
   const res = await baseRequestClient.get<any>('/poc/list', { params });
   return normalizePagedResponse<PocTemplate>(res);
+}
+
+export interface PocTagGroup {
+  tag: string;
+  count: number;
+}
+
+export interface PocStats {
+  total: number;
+  enabled: number;
+  by_severity: Record<string, number>;
+  top_tags: PocTagGroup[];
+  by_category: Record<string, number>;
+}
+
+export function getPocStats() {
+  return requestClient.get<PocStats>('/poc/stats');
 }
 
 export function getPocDetail(id: string) {

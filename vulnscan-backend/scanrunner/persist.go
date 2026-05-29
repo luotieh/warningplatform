@@ -82,6 +82,73 @@ func (r *Runner) persistFindings() {
 		"vuln", vulnCount,
 		"created", created,
 	)
+
+	r.writebackServiceToPortOpen(records)
+}
+
+func (r *Runner) writebackServiceToPortOpen(records []model.ScanFinding) {
+	var serviceRecords []model.ScanFinding
+	for _, rec := range records {
+		if rec.Type == "service" && rec.Port > 0 && rec.Target != "" {
+			serviceRecords = append(serviceRecords, rec)
+		}
+	}
+	if len(serviceRecords) == 0 {
+		return
+	}
+
+	updated := 0
+	for _, svc := range serviceRecords {
+		svcData := svc.Data
+		svcName, _ := svcData["service"].(string)
+		version, _ := svcData["version"].(string)
+		banner, _ := svcData["banner"].(string)
+		if svcName == "" && version == "" {
+			continue
+		}
+
+		var portFinding model.ScanFinding
+		err := r.db.Where("task_id = ? AND target = ? AND port = ? AND type = ?",
+			svc.TaskID, svc.Target, svc.Port, "port_open").
+			First(&portFinding).Error
+		if err != nil {
+			continue
+		}
+
+		data := portFinding.Data
+		if data == nil {
+			data = model.JSONMap{}
+		}
+		changed := false
+		if svcName != "" && data["service"] == nil {
+			data["service"] = svcName
+			changed = true
+		}
+		if version != "" && data["version"] == nil {
+			data["version"] = version
+			changed = true
+		}
+		if banner != "" && data["banner"] == nil {
+			data["banner"] = banner
+			changed = true
+		}
+		if !changed {
+			continue
+		}
+		if err := r.db.Model(&model.ScanFinding{}).
+			Where("id = ?", portFinding.ID).
+			Update("data", data).Error; err != nil {
+			slog.Warn("[Persist] 回写服务信息到port_open失败",
+				"finding_id", portFinding.ID, "error", err)
+		} else {
+			updated++
+		}
+	}
+
+	if updated > 0 {
+		slog.Info("[Persist] 服务探测结果已回写到端口发现",
+			"task_id", r.task.ID, "updated", updated)
+	}
 }
 
 func findingToRecord(task model.ScanTask, f *core.Finding) model.ScanFinding {

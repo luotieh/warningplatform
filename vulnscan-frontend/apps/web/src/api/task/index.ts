@@ -8,6 +8,9 @@ export interface ScanTask {
   id: string;
   name: string;
   type: string;
+  profile?: string;
+  template_id?: string;
+  template_name?: string;
   status: string;
   priority: number;
   targets: string[];

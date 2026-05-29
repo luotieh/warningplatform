@@ -57,10 +57,10 @@ async function loadScreenshot() {
   screenshotError.value = '';
 
   const urls = [
-    tamperScreenshotUrl.value,
     props.executionId
       ? getEvidenceAssetUrl(props.executionId, 'annotated_screenshot')
       : '',
+    tamperScreenshotUrl.value,
   ].filter(Boolean);
 
   if (urls.length === 0) return;

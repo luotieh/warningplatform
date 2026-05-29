@@ -11,6 +11,26 @@ const routes: RouteRecordRaw[] = [
     redirect: '/knowledge/poc',
     children: [
       {
+        name: 'ProductManage',
+        path: 'product',
+        component: () => import('#/views/knowledge/product/list.vue'),
+        meta: {
+          icon: 'lucide:box',
+          title: '产品库',
+          perms: [
+            { action: 'create', label: '新建' },
+            { action: 'update', label: '编辑' },
+            { action: 'delete', label: '删除' },
+          ],
+          apis: ['GET /products/list'],
+          apisByAction: {
+            create: ['POST /products'],
+            update: ['PUT /products/:id'],
+            delete: ['DELETE /products/:id'],
+          },
+        },
+      },
+      {
         name: 'PocManage',
         path: 'poc',
         component: () => import('#/views/knowledge/poc/list.vue'),

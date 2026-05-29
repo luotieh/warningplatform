@@ -308,3 +308,12 @@ func (m *Monitor) SetCrawlScreenshotUploader(fn CrawlScreenshotUploader, baseURL
 		}
 	}
 }
+
+// SetFileDownloader 注入 IAM Storage 文件下载能力
+func (m *Monitor) SetFileDownloader(fn FileDownloader) {
+	if m.handler != nil && m.handler.svc != nil {
+		if s, ok := m.handler.svc.(*serviceMonitor); ok {
+			s.SetFileDownloader(fn)
+		}
+	}
+}

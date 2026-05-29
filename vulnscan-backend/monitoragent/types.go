@@ -59,6 +59,10 @@ type PageSnapshot struct {
 	VisualHash       string            `json:"visual_hash"`
 	Links            []LinkInfo        `json:"links"`
 	Scripts          []ScriptInfo      `json:"scripts"`
+	Iframes          []IframeInfo      `json:"iframes"`
+	MetaRedirect     *MetaRedirect     `json:"meta_redirect,omitempty"`
+	JSRedirects      []JSRedirect      `json:"js_redirects,omitempty"`
+	CloakingResult   *CloakingResult   `json:"cloaking,omitempty"`
 	ResolvedIPs      []string          `json:"resolved_ips"`
 	DNSMS            float64           `json:"dns_ms"`
 	TCPConnectMS     float64           `json:"tcp_connect_ms"`
@@ -93,4 +97,25 @@ type ScriptInfo struct {
 	Src        string `json:"src"`
 	IsExternal bool   `json:"is_external"`
 	Snippet    string `json:"content_snippet"`
+}
+
+type IframeInfo struct {
+	Src        string `json:"src"`
+	IsExternal bool   `json:"is_external"`
+	IsHidden   bool   `json:"is_hidden"`
+	Width      string `json:"width,omitempty"`
+	Height     string `json:"height,omitempty"`
+	Style      string `json:"style,omitempty"`
+}
+
+type MetaRedirect struct {
+	URL     string `json:"url"`
+	Seconds int    `json:"seconds"`
+}
+
+type JSRedirect struct {
+	Type    string `json:"type"`
+	Target  string `json:"target"`
+	Snippet string `json:"snippet"`
+	Delay   int    `json:"delay,omitempty"`
 }

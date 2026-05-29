@@ -127,9 +127,9 @@ function setupAccessGuard(router: Router) {
       accessStore.setAccessRoutes(accessibleRoutes);
       accessStore.setIsAccessChecked(true);
 
-      const homePath = '/dashboard/overview';
+      const homePath = '/workbench/overview';
       const redirectPath = (from.query.redirect ??
-        (to.path === homePath || to.path === '/' || to.path === '/dashboard'
+        (to.path === homePath || to.path === '/' || to.path === '/workbench' || to.path === '/dashboard' || to.path === '/dashboard/overview'
           ? (userInfo as any).homePath || homePath
           : to.fullPath)) as string;
       const resolved = decodeURIComponent(String(redirectPath));

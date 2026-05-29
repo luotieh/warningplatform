@@ -21,6 +21,7 @@ type ReportData struct {
 	DiscoveryFindings []DiscoveryItem    `json:"discovery_findings"`
 	DiscoveryGroups   []DiscoveryGroup   `json:"discovery_groups,omitempty"`
 	Assets            []AssetItem        `json:"assets"`
+	Products          []ProductSection   `json:"products,omitempty"`
 	Compliance        *ComplianceSection `json:"compliance,omitempty"`
 	Charts            []ChartData        `json:"charts,omitempty"`
 }
@@ -60,6 +61,19 @@ type VulnItem struct {
 	Description string `json:"description"`
 	Evidence    string `json:"evidence"`
 	Remediation string `json:"remediation"`
+	ProductID   string `json:"product_id,omitempty"`
+	ProductName string `json:"product_name,omitempty"`
+}
+
+type ProductSection struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Vendor      string `json:"vendor"`
+	Category    string `json:"category"`
+	Description string `json:"description"`
+	Homepage    string `json:"homepage"`
+	VulnCount   int    `json:"vuln_count"`
+	PocCount    int    `json:"poc_count"`
 }
 
 type DiscoveryItem struct {

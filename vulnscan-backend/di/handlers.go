@@ -2,6 +2,7 @@ package di
 
 import (
 	"context"
+	"io"
 	"log/slog"
 	"os"
 	"strings"
@@ -268,6 +269,15 @@ func (h *Handlers) injectAnnotatedScreenshotUploader() {
 	}
 	h.embeddedAgent.SetAnnotatedUploader(uploader, deleter, storageBaseURL)
 	slog.Info("[+] 标注截图上传能力已注入（IAM Storage）")
+
+	h.SiteMonitor.SetFileDownloader(func(ctx context.Context, fileID string) (io.ReadCloser, string, error) {
+		result, err := h.IAM.Storage.DownloadFileAsService(ctx, fileID)
+		if err != nil {
+			return nil, "", err
+		}
+		return result.Content, result.ContentType, nil
+	})
+	slog.Info("[+] IAM Storage 文件下载能力已注入")
 }
 
 func (h *Handlers) syncBackends(backends []authorize.BackendItem) {

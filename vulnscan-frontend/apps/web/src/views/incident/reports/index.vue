@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { computed, h, nextTick, onMounted, ref, watch } from 'vue';
+import { computed, h, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 
 import { EchartsUI, useEcharts } from '@vben/plugins/echarts';
 import type { EchartsUIType } from '@vben/plugins/echarts';
@@ -38,6 +38,23 @@ defineOptions({ name: 'IncidentReports' });
 const message = useMessage();
 const loading = ref(true);
 const downloading = ref(false);
+
+const isDark = ref(document.documentElement.classList.contains('dark'));
+let themeObserver: MutationObserver | null = null;
+
+onMounted(() => {
+  themeObserver = new MutationObserver(() => {
+    const nowDark = document.documentElement.classList.contains('dark');
+    if (nowDark !== isDark.value) {
+      isDark.value = nowDark;
+    }
+  });
+  themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+});
+
+onUnmounted(() => {
+  themeObserver?.disconnect();
+});
 
 const remediation = ref<RemediationStats | null>(null);
 const overdueItems = ref<SecurityIncident[]>([]);
@@ -148,6 +165,10 @@ watch(dimension, async () => {
   await loadDimension();
 });
 
+watch(isDark, () => {
+  nextTick(() => renderCharts());
+});
+
 watch(reportPeriod, () => {
   const currentMonth = new Date().getMonth() + 1;
   reportValue.value = reportPeriod.value === 'quarter' ? Math.ceil(currentMonth / 3) : currentMonth;
@@ -195,24 +216,65 @@ function renderCharts() {
   renderHotCategoryOnly();
 }
 
+const dimensionColorMap: Record<string, string> = {
+  '紧急': '#dc2626',
+  '高': '#ea580c',
+  '中': '#d97706',
+  '低': '#059669',
+};
+const defaultBarColors = ['#3b82f6', '#60a5fa', '#93c5fd', '#bfdbfe', '#dbeafe', '#eff6ff'];
+
+function chartColors() {
+  const dark = isDark.value;
+  return {
+    tooltipBg: dark ? 'rgba(30,41,59,0.95)' : 'rgba(255,255,255,0.96)',
+    tooltipBorder: dark ? '#334155' : '#e2e8f0',
+    tooltipText: dark ? '#e2e8f0' : '#334155',
+    axisLabel: dark ? '#94a3b8' : '#64748b',
+    axisLine: dark ? '#334155' : '#e2e8f0',
+    splitLine: dark ? 'rgba(148,163,184,0.1)' : '#f1f5f9',
+  };
+}
+
 function renderDimensionOnly() {
+  const items = dimensionData.value;
+  const barColors = items.map((item, idx) =>
+    dimensionColorMap[item.value] ?? defaultBarColors[idx % defaultBarColors.length],
+  );
+  const cc = chartColors();
+
   renderDimensionChart({
-    color: ['#0f766e'],
-    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      backgroundColor: cc.tooltipBg,
+      borderColor: cc.tooltipBorder,
+      textStyle: { color: cc.tooltipText },
+    },
     grid: { left: 48, right: 20, top: 20, bottom: 48 },
     xAxis: {
       type: 'category',
-      data: dimensionData.value.map((item) => item.value),
+      data: items.map((item) => item.value),
       axisLabel: {
         interval: 0,
-        rotate: dimensionData.value.length > 5 ? 20 : 0,
+        rotate: items.length > 5 ? 20 : 0,
+        color: cc.axisLabel,
       },
+      axisLine: { lineStyle: { color: cc.axisLine } },
     },
-    yAxis: { type: 'value', minInterval: 1 },
+    yAxis: {
+      type: 'value',
+      minInterval: 1,
+      axisLabel: { color: cc.axisLabel },
+      splitLine: { lineStyle: { color: cc.splitLine, type: 'dashed' } },
+    },
     series: [
       {
         type: 'bar',
-        data: dimensionData.value.map((item) => item.count),
+        data: items.map((item, idx) => ({
+          value: item.count,
+          itemStyle: { color: barColors[idx] },
+        })),
         barMaxWidth: 34,
         itemStyle: { borderRadius: [6, 6, 0, 0] },
       },
@@ -224,30 +286,49 @@ function renderTrendOnly() {
   const historical = trendData.value?.historical ?? [];
   const predicted = trendData.value?.predicted ?? [];
   const labels = [...historical.map((item) => item.date), ...predicted.map((item) => item.date)];
+  const cc = chartColors();
 
   renderTrendChart({
-    color: ['#2080f0', '#f0a020'],
-    tooltip: { trigger: 'axis' },
-    legend: { top: 0 },
+    color: ['#3b82f6', '#f59e0b'],
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: cc.tooltipBg,
+      borderColor: cc.tooltipBorder,
+      textStyle: { color: cc.tooltipText },
+    },
+    legend: { top: 0, textStyle: { color: cc.axisLabel } },
     grid: { left: 48, right: 20, top: 36, bottom: 32 },
-    xAxis: { type: 'category', data: labels },
-    yAxis: { type: 'value', minInterval: 1 },
+    xAxis: {
+      type: 'category',
+      data: labels,
+      axisLabel: { color: cc.axisLabel },
+      axisLine: { lineStyle: { color: cc.axisLine } },
+    },
+    yAxis: {
+      type: 'value',
+      minInterval: 1,
+      axisLabel: { color: cc.axisLabel },
+      splitLine: { lineStyle: { color: cc.splitLine, type: 'dashed' } },
+    },
     series: [
       {
         name: '历史事件',
         type: 'line',
         smooth: true,
         data: historical.map((item) => item.count),
+        areaStyle: { color: 'rgba(59,130,246,0.08)' },
+        lineStyle: { width: 2.5 },
       },
       {
         name: '预测事件',
         type: 'line',
         smooth: true,
-        lineStyle: { type: 'dashed' },
+        lineStyle: { type: 'dashed', width: 2 },
         data: [
           ...Array(historical.length).fill(null),
           ...predicted.map((item) => item.count),
         ],
+        areaStyle: { color: 'rgba(245,158,11,0.06)' },
       },
     ],
   });
@@ -255,22 +336,42 @@ function renderTrendOnly() {
 
 function renderHotCategoryOnly() {
   const hotCategories = aiData.value?.hot_categories ?? [];
+  const cc = chartColors();
+  const hotBarGradient = {
+    type: 'linear' as const, x: 0, y: 0, x2: 1, y2: 0,
+    colorStops: [
+      { offset: 0, color: '#3b82f6' },
+      { offset: 1, color: '#60a5fa' },
+    ],
+  };
+
   renderHotCategoryChart({
-    color: ['#7c3aed'],
-    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      backgroundColor: cc.tooltipBg,
+      borderColor: cc.tooltipBorder,
+      textStyle: { color: cc.tooltipText },
+    },
     grid: { left: 96, right: 20, top: 20, bottom: 20 },
-    xAxis: { type: 'value', minInterval: 1 },
+    xAxis: {
+      type: 'value',
+      minInterval: 1,
+      axisLabel: { color: cc.axisLabel },
+      splitLine: { lineStyle: { color: cc.splitLine, type: 'dashed' } },
+    },
     yAxis: {
       type: 'category',
       data: hotCategories.map((item) => item.name).reverse(),
-      axisLabel: { width: 84, overflow: 'truncate' },
+      axisLabel: { width: 84, overflow: 'truncate', color: cc.axisLabel },
+      axisLine: { lineStyle: { color: cc.axisLine } },
     },
     series: [
       {
         type: 'bar',
         data: hotCategories.map((item) => item.count).reverse(),
         barMaxWidth: 24,
-        itemStyle: { borderRadius: [0, 6, 6, 0] },
+        itemStyle: { borderRadius: [0, 6, 6, 0], color: hotBarGradient },
       },
     ],
   });
@@ -458,25 +559,22 @@ function formatTime(value?: string) {
 
 <style scoped>
 .incident-report-page {
+  --rp-primary: var(--primary-color, #2080f0);
+  --rp-text-1: var(--text-color-1, #1e293b);
+  --rp-text-2: var(--text-color-2, #475569);
+  --rp-text-3: var(--text-color-3, #94a3b8);
+
   padding: 20px;
   min-height: 100%;
-  background:
-    radial-gradient(circle at top left, rgba(15, 118, 110, 0.1), transparent 24%),
-    linear-gradient(180deg, #f6faf9 0%, #edf4f2 100%);
 }
 
-.hero-card,
-.metric-card,
-.panel-grid :deep(.n-card) {
-  border-radius: 20px;
-  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.06);
+.incident-report-page :deep(.n-card) {
+  border-radius: 12px;
 }
 
 .hero-card {
   margin-bottom: 16px;
-  background:
-    linear-gradient(140deg, rgba(7, 59, 76, 0.98) 0%, rgba(15, 118, 110, 0.95) 100%);
-  color: #fff;
+  border-left: 4px solid var(--rp-primary, #2080f0);
 }
 
 .hero-row {
@@ -491,8 +589,9 @@ function formatTime(value?: string) {
   font-size: 12px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.72);
+  color: var(--rp-primary, #2080f0);
   margin-bottom: 8px;
+  font-weight: 600;
 }
 
 .hero-title {
@@ -504,7 +603,7 @@ function formatTime(value?: string) {
 .hero-desc {
   margin: 10px 0 0;
   max-width: 640px;
-  color: rgba(255, 255, 255, 0.8);
+  opacity: 0.75;
   line-height: 1.7;
 }
 
@@ -517,21 +616,10 @@ function formatTime(value?: string) {
   padding: 18px 18px 14px;
 }
 
-.accent-blue {
-  background: linear-gradient(180deg, #f3f8ff 0%, #fff 100%);
-}
-
-.accent-green {
-  background: linear-gradient(180deg, #f2fcf9 0%, #fff 100%);
-}
-
-.accent-red {
-  background: linear-gradient(180deg, #fff7f7 0%, #fff 100%);
-}
-
-.accent-gold {
-  background: linear-gradient(180deg, #fffdf2 0%, #fff 100%);
-}
+.accent-blue { border-left: 3px solid #3b82f6; }
+.accent-green { border-left: 3px solid #059669; }
+.accent-red { border-left: 3px solid #dc2626; }
+.accent-gold { border-left: 3px solid #d97706; }
 
 .panel-header {
   display: flex;
@@ -544,11 +632,10 @@ function formatTime(value?: string) {
   margin: 0;
   font-size: 18px;
   font-weight: 700;
-  color: #182431;
 }
 
 .panel-subtitle {
-  color: #64748b;
+  color: var(--rp-text-3);
   font-size: 13px;
 }
 
@@ -565,46 +652,61 @@ function formatTime(value?: string) {
 
 .ai-risk {
   padding: 14px;
-  border-radius: 16px;
-  background: #f8fafc;
-  border: 1px solid #edf2f7;
+  border-radius: 12px;
+  background: rgba(59, 130, 246, 0.06);
+  border: 1px solid rgba(59, 130, 246, 0.12);
+  transition: box-shadow 0.2s;
+}
+
+:global(.dark) .ai-risk {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: rgba(59, 130, 246, 0.2);
+}
+
+.ai-risk:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
 .ai-risk .label {
   display: block;
-  font-size: 12px;
-  color: #64748b;
+  font-size: 11px;
+  color: var(--rp-text-3);
   margin-bottom: 6px;
+  letter-spacing: 0.02em;
 }
 
 .ai-risk strong {
-  font-size: 18px;
-  color: #182431;
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--rp-primary, #2080f0);
 }
 
 .ai-text {
   line-height: 1.7;
-  color: #334155;
   margin-bottom: 12px;
 }
 
 .recommend-list {
-  border-radius: 16px;
-  background: #f7faf8;
-  border: 1px solid #e6f1ed;
+  border-radius: 12px;
+  background: rgba(59, 130, 246, 0.05);
+  border: 1px solid rgba(59, 130, 246, 0.1);
   padding: 14px 16px;
+}
+
+:global(.dark) .recommend-list {
+  background: rgba(59, 130, 246, 0.08);
+  border-color: rgba(59, 130, 246, 0.15);
 }
 
 .recommend-title {
   font-size: 13px;
   font-weight: 700;
   margin-bottom: 8px;
-  color: #14532d;
+  color: var(--rp-primary, #2080f0);
 }
 
 .recommend-item {
   line-height: 1.7;
-  color: #334155;
 }
 
 @media (max-width: 1024px) {

@@ -2,6 +2,7 @@ package sitemonitor
 
 import (
 	"context"
+	"io"
 	"log/slog"
 	"time"
 
@@ -13,6 +14,9 @@ import (
 
 // CrawlScreenshotUploader 爬虫截图上传函数签名：JPEG 数据 + 文件标识 → 存储 ID/URL
 type CrawlScreenshotUploader func(ctx context.Context, jpegData []byte, name string) (string, error)
+
+// FileDownloader 从 IAM Storage 下载文件内容的回调函数签名。
+type FileDownloader func(ctx context.Context, fileID string) (io.ReadCloser, string, error)
 
 type ctxKeyCreatorID struct{}
 
@@ -35,6 +39,7 @@ type serviceMonitor struct {
 	eventBridge       *MonitorEventBridge
 	screenshotBaseURL string
 	crawlUploader     CrawlScreenshotUploader
+	fileDownloader    FileDownloader
 }
 
 func NewServiceMonitor(database *db.DB, incidentSvc coreContract.ServiceCore) *serviceMonitor {
@@ -56,6 +61,11 @@ func (s *serviceMonitor) CrawlScreenshotURL(fileID string) string {
 		return ""
 	}
 	return s.screenshotBaseURL + "/" + fileID + "/content"
+}
+
+// SetFileDownloader 注入 IAM Storage 文件下载能力。
+func (s *serviceMonitor) SetFileDownloader(fn FileDownloader) {
+	s.fileDownloader = fn
 }
 
 func (s *serviceMonitor) GetDB() *db.DB { return s.db }

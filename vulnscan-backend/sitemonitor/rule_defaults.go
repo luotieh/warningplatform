@@ -22,6 +22,7 @@ func InitDefaultRuleData(database *db.DB) {
 		var existing model.MonitorRuleData
 		if session.WithContext(ctx).Where("module_key = ?", moduleKey).First(&existing).Error == nil {
 			if existing.Data != "" {
+				mergeNewDefaultKeys(session, ctx, moduleKey, existing, defaultData)
 				continue
 			}
 		}
@@ -42,6 +43,40 @@ func InitDefaultRuleData(database *db.DB) {
 	}
 
 	migrateModuleMerge(session, ctx)
+}
+
+func mergeNewDefaultKeys(session *gorm.DB, ctx context.Context, moduleKey string, existing model.MonitorRuleData, defaultData map[string]any) {
+	decoded, err := model.MonitorDecodeRuleData(existing.Data)
+	if err != nil {
+		return
+	}
+	var currentData map[string]any
+	if json.Unmarshal([]byte(decoded), &currentData) != nil {
+		return
+	}
+
+	merged := false
+	for key, val := range defaultData {
+		if _, exists := currentData[key]; !exists {
+			currentData[key] = val
+			merged = true
+			slog.Info("[RuleData] 合并新默认键", "module", moduleKey, "key", key)
+		}
+	}
+	if !merged {
+		return
+	}
+
+	raw, _ := json.Marshal(currentData)
+	encoded, err := model.MonitorEncodeRuleData(string(raw))
+	if err != nil {
+		slog.Error("[RuleData] 合并编码失败", "module", moduleKey, "error", err)
+		return
+	}
+	if err := session.WithContext(ctx).Model(&model.MonitorRuleData{}).
+		Where("module_key = ?", moduleKey).Update("data", encoded).Error; err != nil {
+		slog.Error("[RuleData] 合并更新失败", "module", moduleKey, "error", err)
+	}
 }
 
 func migrateModuleMerge(session *gorm.DB, ctx context.Context) {
@@ -255,10 +290,24 @@ var defaultRuleDataMap = map[string]map[string]any{
 			{"pattern": "(?i)(BEGIN (RSA |DSA |EC )?PRIVATE KEY)", "name": "私钥泄露", "severity": "critical"},
 			{"pattern": "(?i)(password|passwd|secret)\\s*[:=]", "name": "密码泄露", "severity": "high"},
 			{"pattern": "(?i)(api.?key|access.?token|secret.?key)\\s*[:=]", "name": "密钥泄露", "severity": "high"},
+			{"pattern": "(?i)(AKIA[0-9A-Z]{16})", "name": "AWS Access Key", "severity": "critical"},
+			{"pattern": "(?i)(ghp_[a-zA-Z0-9]{36}|github_pat_)", "name": "GitHub Token", "severity": "critical"},
+			{"pattern": "(?i)(sk-[a-zA-Z0-9]{20,})", "name": "OpenAI/Stripe密钥", "severity": "critical"},
+			{"pattern": "(?i)(xox[bpors]-[0-9a-zA-Z-]+)", "name": "Slack Token", "severity": "high"},
+			{"pattern": "(?i)(jdbc:|mongodb://|redis://|mysql://|postgres://)", "name": "数据库连接串", "severity": "critical"},
+			{"pattern": "(?i)(smtp_pass|mail_password|email_password)\\s*[:=]", "name": "邮箱凭证", "severity": "high"},
+			{"pattern": "(?i)(DOCKER_AUTH|REGISTRY_PASSWORD|DOCKER_PASSWORD)", "name": "Docker凭证", "severity": "high"},
+			{"pattern": "(?i)(ssh-rsa\\s+AAAA|ssh-ed25519\\s+AAAA)", "name": "SSH公钥", "severity": "medium"},
+			{"pattern": "(?i)(AliyunAccessKeyId|ALICLOUD_ACCESS_KEY)", "name": "阿里云AK", "severity": "critical"},
+			{"pattern": "(?i)(TENCENTCLOUD_SECRET_KEY|SecretId)", "name": "腾讯云密钥", "severity": "critical"},
 		},
 		"soft_404_patterns": []map[string]string{
 			{"pattern": "(?i)(page not found|404|not exist)", "description": "标准404"},
 			{"pattern": "(?i)(error|oops|sorry)", "description": "错误页面"},
+			{"pattern": "(?i)(the page you requested|cannot be found)", "description": "英文404"},
+			{"pattern": "(?i)(页面不存在|找不到|未找到)", "description": "中文404"},
+			{"pattern": "(?i)(bad request|invalid url)", "description": "错误请求"},
+			{"pattern": "(?i)(access denied|permission denied|unauthorized)", "description": "访问拒绝"},
 		},
 		"backup_variants": []map[string]string{
 			{"suffix": ".bak", "description": "备份文件"},
@@ -270,22 +319,143 @@ var defaultRuleDataMap = map[string]map[string]any{
 			{"suffix": ".copy", "description": "复制文件"},
 			{"suffix": ".tar.gz", "description": "压缩包"},
 			{"suffix": ".zip", "description": "ZIP压缩包"},
+			{"suffix": ".rar", "description": "RAR压缩包"},
+			{"suffix": ".7z", "description": "7z压缩包"},
+			{"suffix": ".sql", "description": "SQL数据库导出"},
+			{"suffix": ".sql.gz", "description": "压缩SQL导出"},
+			{"suffix": ".dump", "description": "数据库转储"},
+			{"suffix": ".tmp", "description": "临时文件"},
+			{"suffix": ".dist", "description": "分发模板"},
+			{"suffix": ".sample", "description": "示例文件"},
+			{"suffix": ".inc", "description": "包含文件"},
+			{"suffix": ".conf", "description": "配置文件"},
+			{"suffix": ".cfg", "description": "配置文件"},
 		},
 		"high_risk_dirs": []map[string]string{
 			{"path": "/.git/", "description": "Git仓库"},
 			{"path": "/.svn/", "description": "SVN仓库"},
+			{"path": "/.hg/", "description": "Mercurial仓库"},
 			{"path": "/wp-admin/", "description": "WordPress后台"},
 			{"path": "/admin/", "description": "管理后台"},
+			{"path": "/administrator/", "description": "Joomla后台"},
 			{"path": "/phpmyadmin/", "description": "phpMyAdmin"},
+			{"path": "/adminer.php", "description": "Adminer"},
 			{"path": "/.env", "description": "环境变量文件"},
+			{"path": "/.env.local", "description": "本地环境变量"},
+			{"path": "/.env.production", "description": "生产环境变量"},
 			{"path": "/web.config", "description": "IIS配置"},
 			{"path": "/server-status", "description": "Apache状态"},
+			{"path": "/server-info", "description": "Apache服务器信息"},
+			{"path": "/.htaccess", "description": "Apache访问控制"},
+			{"path": "/.htpasswd", "description": "Apache密码文件"},
+			{"path": "/WEB-INF/web.xml", "description": "Java Web配置"},
+			{"path": "/WEB-INF/classes/", "description": "Java类文件"},
+			{"path": "/META-INF/MANIFEST.MF", "description": "Java清单"},
+			{"path": "/config/database.yml", "description": "Rails数据库配置"},
+			{"path": "/config/secrets.yml", "description": "Rails密钥配置"},
+			{"path": "/wp-config.php", "description": "WordPress配置"},
+			{"path": "/wp-config.php.bak", "description": "WordPress配置备份"},
+			{"path": "/composer.json", "description": "PHP依赖清单"},
+			{"path": "/composer.lock", "description": "PHP依赖锁"},
+			{"path": "/package.json", "description": "Node.js依赖"},
+			{"path": "/Gemfile", "description": "Ruby依赖"},
+			{"path": "/Dockerfile", "description": "Docker构建文件"},
+			{"path": "/docker-compose.yml", "description": "Docker编排"},
+			{"path": "/.dockerenv", "description": "Docker容器标识"},
+			{"path": "/phpinfo.php", "description": "PHP信息页面"},
+			{"path": "/info.php", "description": "PHP信息"},
+			{"path": "/test.php", "description": "PHP测试文件"},
+			{"path": "/.DS_Store", "description": "Mac目录索引"},
+			{"path": "/Thumbs.db", "description": "Windows缩略图"},
+			{"path": "/Desktop.ini", "description": "Windows目录设置"},
+			{"path": "/.idea/workspace.xml", "description": "JetBrains项目"},
+			{"path": "/.vscode/settings.json", "description": "VSCode配置"},
+			{"path": "/backup/", "description": "备份目录"},
+			{"path": "/backups/", "description": "备份目录"},
+			{"path": "/dump/", "description": "导出目录"},
+			{"path": "/upload/", "description": "上传目录"},
+			{"path": "/uploads/", "description": "上传目录"},
+			{"path": "/temp/", "description": "临时目录"},
+			{"path": "/tmp/", "description": "临时目录"},
+			{"path": "/debug/", "description": "调试目录"},
+			{"path": "/console/", "description": "控制台"},
+			{"path": "/trace", "description": "调试跟踪"},
+			{"path": "/actuator", "description": "Spring Actuator"},
+			{"path": "/actuator/env", "description": "Spring环境变量"},
+			{"path": "/actuator/health", "description": "Spring健康检查"},
+			{"path": "/swagger-ui.html", "description": "Swagger文档"},
+			{"path": "/swagger-ui/", "description": "Swagger UI"},
+			{"path": "/api-docs", "description": "API文档"},
+			{"path": "/graphql", "description": "GraphQL端点"},
+			{"path": "/graphiql", "description": "GraphiQL IDE"},
+			{"path": "/.well-known/security.txt", "description": "安全联系信息"},
+			{"path": "/crossdomain.xml", "description": "跨域策略"},
+			{"path": "/clientaccesspolicy.xml", "description": "Silverlight跨域"},
+			{"path": "/elmah.axd", "description": ".NET错误日志"},
+			{"path": "/trace.axd", "description": ".NET跟踪"},
 		},
 		"safe_files": []map[string]string{
 			{"name": "robots.txt", "description": "爬虫协议"},
 			{"name": "favicon.ico", "description": "网站图标"},
 			{"name": "sitemap.xml", "description": "站点地图"},
 			{"name": "crossdomain.xml", "description": "Flash跨域"},
+			{"name": ".well-known/security.txt", "description": "安全联系信息"},
+			{"name": "humans.txt", "description": "团队信息"},
+			{"name": "manifest.json", "description": "PWA清单"},
+			{"name": "browserconfig.xml", "description": "IE配置"},
+		},
+		"framework_paths": []map[string]string{
+			// Laravel
+			{"path": "/storage/logs/laravel.log", "mark": "Laravel日志", "risk": "high", "framework": "Laravel"},
+			{"path": "/storage/framework/sessions/", "mark": "Laravel会话", "risk": "critical", "framework": "Laravel"},
+			{"path": "/.env.example", "mark": "Laravel环境示例", "risk": "medium", "framework": "Laravel"},
+			{"path": "/vendor/composer/installed.json", "mark": "PHP依赖列表", "risk": "medium", "framework": "Laravel"},
+			{"path": "/artisan", "mark": "Laravel Artisan", "risk": "medium", "framework": "Laravel"},
+			// Django
+			{"path": "/settings.py", "mark": "Django配置", "risk": "critical", "framework": "Django"},
+			{"path": "/manage.py", "mark": "Django管理", "risk": "medium", "framework": "Django"},
+			{"path": "/requirements.txt", "mark": "Python依赖", "risk": "medium", "framework": "Django"},
+			{"path": "/debug/", "mark": "Django调试", "risk": "high", "framework": "Django"},
+			{"path": "/__debug__/", "mark": "Django Debug Toolbar", "risk": "high", "framework": "Django"},
+			// Rails
+			{"path": "/config/database.yml", "mark": "Rails数据库配置", "risk": "critical", "framework": "Rails"},
+			{"path": "/config/secrets.yml", "mark": "Rails密钥", "risk": "critical", "framework": "Rails"},
+			{"path": "/config/master.key", "mark": "Rails主密钥", "risk": "critical", "framework": "Rails"},
+			{"path": "/config/credentials.yml.enc", "mark": "Rails加密凭证", "risk": "high", "framework": "Rails"},
+			{"path": "/log/production.log", "mark": "Rails生产日志", "risk": "high", "framework": "Rails"},
+			// Node.js / Next.js
+			{"path": "/node_modules/", "mark": "Node.js模块", "risk": "medium", "framework": "Node.js"},
+			{"path": "/.npmrc", "mark": "NPM配置", "risk": "high", "framework": "Node.js"},
+			{"path": "/.yarnrc", "mark": "Yarn配置", "risk": "medium", "framework": "Node.js"},
+			{"path": "/next.config.js", "mark": "Next.js配置", "risk": "medium", "framework": "Next.js"},
+			{"path": "/.next/BUILD_ID", "mark": "Next.js构建", "risk": "low", "framework": "Next.js"},
+			// CI/CD
+			{"path": "/Jenkinsfile", "mark": "Jenkins流水线", "risk": "high", "framework": "CI/CD"},
+			{"path": "/.gitlab-ci.yml", "mark": "GitLab CI配置", "risk": "high", "framework": "CI/CD"},
+			{"path": "/.github/workflows/", "mark": "GitHub Actions", "risk": "medium", "framework": "CI/CD"},
+			{"path": "/.travis.yml", "mark": "Travis CI配置", "risk": "medium", "framework": "CI/CD"},
+			{"path": "/Makefile", "mark": "构建脚本", "risk": "medium", "framework": "CI/CD"},
+			// 云存储/配置
+			{"path": "/.aws/credentials", "mark": "AWS凭证", "risk": "critical", "framework": "Cloud"},
+			{"path": "/.boto", "mark": "GCS凭证", "risk": "critical", "framework": "Cloud"},
+			{"path": "/.s3cfg", "mark": "S3配置", "risk": "critical", "framework": "Cloud"},
+			{"path": "/terraform.tfstate", "mark": "Terraform状态", "risk": "critical", "framework": "Cloud"},
+			{"path": "/terraform.tfvars", "mark": "Terraform变量", "risk": "critical", "framework": "Cloud"},
+			// Go
+			{"path": "/go.mod", "mark": "Go模块", "risk": "low", "framework": "Go"},
+			{"path": "/go.sum", "mark": "Go依赖哈希", "risk": "low", "framework": "Go"},
+			// Python
+			{"path": "/Pipfile", "mark": "Python依赖", "risk": "low", "framework": "Python"},
+			{"path": "/setup.py", "mark": "Python安装脚本", "risk": "medium", "framework": "Python"},
+			// CMS
+			{"path": "/wp-json/wp/v2/users", "mark": "WordPress用户枚举", "risk": "medium", "framework": "WordPress"},
+			{"path": "/wp-includes/version.php", "mark": "WordPress版本", "risk": "low", "framework": "WordPress"},
+			{"path": "/sites/default/settings.php", "mark": "Drupal配置", "risk": "critical", "framework": "Drupal"},
+			{"path": "/configuration.php", "mark": "Joomla配置", "risk": "critical", "framework": "Joomla"},
+			// 其他
+			{"path": "/Vagrantfile", "mark": "Vagrant配置", "risk": "medium", "framework": "DevOps"},
+			{"path": "/ansible.cfg", "mark": "Ansible配置", "risk": "high", "framework": "DevOps"},
+			{"path": "/.k8s/", "mark": "K8s配置", "risk": "high", "framework": "DevOps"},
 		},
 	},
 	"sw_engine": {

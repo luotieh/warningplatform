@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import type { DataTableColumns } from "naive-ui";
-import type { TestPocMatch, ValidateResult } from '#/api/poc/index';
+import type { TestPocMatch, ValidateResult, PocStats } from '#/api/poc/index';
 
 import { computed, defineAsyncComponent, h, onMounted, ref } from "vue";
 
@@ -39,6 +39,7 @@ import {
   deletePoc,
   getPocDetail,
   getPocList,
+  getPocStats,
   importPocUpload,
   importPocYaml,
   testPoc,
@@ -136,6 +137,47 @@ const testResult = ref<{
 const showDetail = ref(false);
 const detailItem = ref<PocTemplate | null>(null);
 const detailTab = ref("info");
+
+// Stats & Sidebar
+const stats = ref<PocStats | null>(null);
+const activeTag = ref<string | null>(null);
+const viewMode = ref<'list' | 'tags'>('tags');
+
+async function fetchStats() {
+  try {
+    stats.value = (await getPocStats()) as any;
+  } catch { /* silent */ }
+}
+
+function onTagClick(tag: string) {
+  if (activeTag.value === tag) {
+    activeTag.value = null;
+  } else {
+    activeTag.value = tag;
+  }
+  severityFilter.value = null;
+  keyword.value = '';
+  page.value = 1;
+  fetchData();
+}
+
+function onSeverityClick(sev: string) {
+  if (severityFilter.value === sev) {
+    severityFilter.value = null;
+  } else {
+    severityFilter.value = sev;
+  }
+  page.value = 1;
+  fetchData();
+}
+
+function clearFilters() {
+  activeTag.value = null;
+  severityFilter.value = null;
+  keyword.value = '';
+  page.value = 1;
+  fetchData();
+}
 
 const severityOptions = [
   { label: "严重", value: "critical" },
@@ -242,6 +284,38 @@ const columns = computed<DataTableColumns<PocTemplate>>(() => [
     width: 180,
     ellipsis: { tooltip: true as const },
   },
+  {
+    title: "产品/版本",
+    key: "product",
+    width: 150,
+    render: (row: PocTemplate) => {
+      const parts: any[] = [];
+      const r = row as any;
+      if (r.product) {
+        const label = r.vendor ? `${r.vendor}/${r.product}` : r.product;
+        if (r.product_id) {
+          parts.push(
+            h(
+              "a",
+              {
+                href: `/knowledge/product`,
+                style: "font-weight: 500; color: var(--primary-color); cursor: pointer; text-decoration: none",
+                onClick: (e: Event) => e.stopPropagation(),
+              },
+              label,
+            ),
+          );
+        } else {
+          parts.push(h("span", { style: "font-weight: 500" }, label));
+        }
+      }
+      if (r.affected_range) {
+        parts.push(h("span", { style: "font-size: 11px; color: #e65100; margin-left: 4px" }, r.affected_range));
+      }
+      if (!parts.length) return h("span", { style: "color: #ccc" }, "-");
+      return h("div", { style: "display: flex; align-items: center; gap: 2px; flex-wrap: wrap" }, parts);
+    },
+  },
   { title: "作者", key: "author", width: 100 },
   { title: "CVE", key: "cve", width: 130 },
   {
@@ -313,6 +387,7 @@ async function fetchData() {
       page_size: pageSize.value,
       keyword: keyword.value || undefined,
       severity: severityFilter.value || undefined,
+      tag: activeTag.value || undefined,
     });
     data.value = result.items ?? [];
     total.value = result.total ?? 0;
@@ -532,87 +607,130 @@ async function openDetail(row: PocTemplate) {
   showDetail.value = true;
 }
 
-onMounted(fetchData);
+onMounted(() => {
+  fetchData();
+  fetchStats();
+});
 </script>
 
 <template>
-  <div style="padding: 16px">
-    <NCard title="检测模板" size="small">
-      <template #header-extra>
-        <NSpace :size="8">
-          <NSelect
-            v-model:value="severityFilter"
-            :options="severityOptions"
-            placeholder="严重程度"
-            size="small"
-            style="width: 120px"
-            clearable
-            @update:value="
-              () => {
-                page = 1;
-                fetchData();
-              }
-            "
-          />
-          <NInput
-            v-model:value="keyword"
-            placeholder="搜索..."
-            size="small"
-            clearable
-            style="width: 180px"
-            @keyup.enter="
-              () => {
-                page = 1;
-                fetchData();
-              }
-            "
-          />
-          <NButton
-            size="small"
-            type="primary"
-            @click="
-              () => {
-                page = 1;
-                fetchData();
-              }
-            "
-          >
-            搜索
-          </NButton>
-          <NButton size="small" @click="showImport = true">导入 YAML</NButton>
-          <NButton size="small" @click="showUpload = true">上传模板</NButton>
-          <NButton size="small" type="primary" @click="openCreate">
-            新建
-          </NButton>
-        </NSpace>
-      </template>
+  <div class="poc-page">
+    <!-- Stats Overview -->
+    <div v-if="stats" class="poc-stats-bar">
+      <div class="poc-stat-item" @click="clearFilters" :class="{ active: !activeTag && !severityFilter }">
+        <div class="poc-stat-value">{{ stats.total }}</div>
+        <div class="poc-stat-label">全部模板</div>
+      </div>
+      <div class="poc-stat-item poc-stat--enabled">
+        <div class="poc-stat-value">{{ stats.enabled }}</div>
+        <div class="poc-stat-label">已启用</div>
+      </div>
+      <div
+        v-for="sev in ['critical', 'high', 'medium', 'low', 'info']"
+        :key="sev"
+        class="poc-stat-item poc-stat--sev"
+        :class="{ active: severityFilter === sev }"
+        :style="{ '--sev-color': (sevColors[sev] ?? { fg: '#999' }).fg }"
+        @click="onSeverityClick(sev)"
+      >
+        <div class="poc-stat-value" :style="{ color: (sevColors[sev] ?? { fg: '#999' }).fg }">
+          {{ stats.by_severity[sev] ?? 0 }}
+        </div>
+        <div class="poc-stat-label">{{ sevLabels[sev] ?? sev }}</div>
+      </div>
+    </div>
 
-      <NDataTable
-        :columns="columns"
-        :data="data"
-        :loading="loading"
-        :bordered="false"
-        size="small"
-        striped
-        :scroll-x="1100"
-        :pagination="{
-          page,
-          pageSize,
-          itemCount: total,
-          showSizePicker: true,
-          pageSizes: [20, 50, 100],
-          onUpdatePage: (p: number) => {
-            page = p;
-            fetchData();
-          },
-          onUpdatePageSize: (s: number) => {
-            pageSize = s;
-            page = 1;
-            fetchData();
-          },
-        }"
-      />
-    </NCard>
+    <div class="poc-layout">
+      <!-- Sidebar: Tags -->
+      <div class="poc-sidebar">
+        <div class="poc-sidebar__header">
+          <span class="poc-sidebar__title">按标签浏览</span>
+          <NButton v-if="activeTag" text size="tiny" @click="clearFilters">清除</NButton>
+        </div>
+        <div v-if="stats?.top_tags?.length" class="poc-tag-list">
+          <div
+            v-for="tg in stats.top_tags"
+            :key="tg.tag"
+            class="poc-tag-item"
+            :class="{ active: activeTag === tg.tag }"
+            @click="onTagClick(tg.tag)"
+          >
+            <span class="poc-tag-name">{{ tg.tag }}</span>
+            <span class="poc-tag-count">{{ tg.count }}</span>
+          </div>
+        </div>
+        <div v-else class="poc-sidebar__empty">暂无标签</div>
+
+        <div v-if="stats?.by_category && Object.keys(stats.by_category).length" class="poc-sidebar__section">
+          <div class="poc-sidebar__title">按分类</div>
+          <div class="poc-tag-list">
+            <div
+              v-for="[cat, cnt] in Object.entries(stats.by_category)"
+              :key="cat"
+              class="poc-tag-item poc-tag-item--cat"
+              @click="keyword = cat; page = 1; fetchData()"
+            >
+              <span class="poc-tag-name">{{ cat }}</span>
+              <span class="poc-tag-count">{{ cnt }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Content -->
+      <div class="poc-main">
+        <NCard size="small" :bordered="true">
+          <template #header>
+            <div class="poc-header-row">
+              <span class="poc-header-title">
+                检测模板
+                <NTag v-if="activeTag" size="small" closable @close="activeTag = null; fetchData()">
+                  {{ activeTag }}
+                </NTag>
+                <NTag v-if="severityFilter" size="small" closable :style="{ background: (sevColors[severityFilter] ?? {bg:'#f5f5f5'}).bg, color: (sevColors[severityFilter] ?? {fg:'#999'}).fg }" @close="severityFilter = null; fetchData()">
+                  {{ sevLabels[severityFilter] ?? severityFilter }}
+                </NTag>
+              </span>
+            </div>
+          </template>
+          <template #header-extra>
+            <NSpace :size="8">
+              <NInput
+                v-model:value="keyword"
+                placeholder="搜索名称/CVE/PoC ID..."
+                size="small"
+                clearable
+                style="width: 220px"
+                @keyup.enter="() => { page = 1; fetchData(); }"
+              />
+              <NButton size="small" type="primary" @click="() => { page = 1; fetchData(); }">搜索</NButton>
+              <NButton size="small" @click="showImport = true">导入 YAML</NButton>
+              <NButton size="small" @click="showUpload = true">上传模板</NButton>
+              <NButton size="small" type="primary" @click="openCreate">新建</NButton>
+            </NSpace>
+          </template>
+
+          <NDataTable
+            :columns="columns"
+            :data="data"
+            :loading="loading"
+            :bordered="false"
+            size="small"
+            striped
+            :scroll-x="1100"
+            :pagination="{
+              page,
+              pageSize,
+              itemCount: total,
+              showSizePicker: true,
+              pageSizes: [20, 50, 100],
+              onUpdatePage: (p: number) => { page = p; fetchData(); },
+              onUpdatePageSize: (s: number) => { pageSize = s; page = 1; fetchData(); },
+            }"
+          />
+        </NCard>
+      </div>
+    </div>
 
     <!-- Import Modal -->
     <NModal
@@ -1083,6 +1201,21 @@ onMounted(fetchData);
               <NDescriptionsItem label="命中数">
                 {{ detailItem.hit_count }}
               </NDescriptionsItem>
+              <NDescriptionsItem label="产品">
+                {{ (detailItem as any).product || "-" }}
+              </NDescriptionsItem>
+              <NDescriptionsItem label="厂商">
+                {{ (detailItem as any).vendor || "-" }}
+              </NDescriptionsItem>
+              <NDescriptionsItem label="影响版本">
+                <span v-if="(detailItem as any).affected_range" style="color: #e65100; font-weight: 500">
+                  {{ (detailItem as any).affected_range }}
+                </span>
+                <span v-else style="color: #ccc">-</span>
+              </NDescriptionsItem>
+              <NDescriptionsItem label="CPE">
+                {{ (detailItem as any).cpe || "-" }}
+              </NDescriptionsItem>
               <NDescriptionsItem label="来源">
                 {{ detailItem.source || "-" }}
               </NDescriptionsItem>
@@ -1119,3 +1252,199 @@ onMounted(fetchData);
     </NDrawer>
   </div>
 </template>
+
+<style scoped>
+.poc-page {
+  padding: 16px;
+}
+
+.poc-stats-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  background: var(--card-color, #fff);
+  border: 1px solid var(--border-color, #eef2f6);
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  overflow-x: auto;
+}
+
+.poc-stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+  min-width: 60px;
+  border: 1px solid transparent;
+}
+
+.poc-stat-item:hover {
+  background: var(--hover-color, rgba(0, 0, 0, 0.02));
+}
+
+.poc-stat-item.active {
+  background: var(--primary-color-suppl, #f0f5ff);
+  border-color: var(--primary-color, #1890ff);
+}
+
+.poc-stat--sev.active {
+  background: color-mix(in srgb, var(--sev-color) 8%, transparent);
+  border-color: var(--sev-color);
+}
+
+.poc-stat-value {
+  font-size: 22px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  color: var(--text-color-1, #333);
+}
+
+.poc-stat--enabled .poc-stat-value {
+  color: #16a34a;
+}
+
+.poc-stat-label {
+  font-size: 11px;
+  color: var(--text-color-3, #8c8c8c);
+  margin-top: 4px;
+  font-weight: 500;
+}
+
+.poc-layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 860px) {
+  .poc-layout {
+    grid-template-columns: 1fr;
+  }
+  .poc-sidebar {
+    display: none;
+  }
+}
+
+.poc-sidebar {
+  background: var(--card-color, #fff);
+  border: 1px solid var(--border-color, #eef2f6);
+  border-radius: 10px;
+  padding: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  position: sticky;
+  top: 16px;
+  max-height: calc(100vh - 180px);
+  overflow-y: auto;
+}
+
+.poc-sidebar__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.poc-sidebar__title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-color-2, #555);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.poc-sidebar__section {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color-light, #f0f0f0);
+}
+
+.poc-sidebar__empty {
+  font-size: 12px;
+  color: var(--text-color-4, #ccc);
+  text-align: center;
+  padding: 20px 0;
+}
+
+.poc-tag-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.poc-tag-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-size: 12px;
+}
+
+.poc-tag-item:hover {
+  background: var(--hover-color, rgba(0, 0, 0, 0.03));
+}
+
+.poc-tag-item.active {
+  background: var(--primary-color-suppl, #e8f4ff);
+  color: var(--primary-color, #1890ff);
+}
+
+.poc-tag-item.active .poc-tag-count {
+  background: var(--primary-color, #1890ff);
+  color: #fff;
+}
+
+.poc-tag-name {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-color-1, #333);
+}
+
+.poc-tag-item.active .poc-tag-name {
+  color: var(--primary-color, #1890ff);
+}
+
+.poc-tag-count {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 600;
+  min-width: 20px;
+  text-align: center;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: var(--border-color-light, #f0f0f0);
+  color: var(--text-color-3, #999);
+  font-variant-numeric: tabular-nums;
+}
+
+.poc-tag-item--cat .poc-tag-name {
+  color: var(--text-color-2, #666);
+}
+
+.poc-main {
+  min-width: 0;
+}
+
+.poc-header-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.poc-header-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+</style>

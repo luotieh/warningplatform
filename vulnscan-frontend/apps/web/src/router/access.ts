@@ -84,13 +84,13 @@ async function generateAccess(options: GenerateMenuAndRoutesOptions) {
         .map((m) => m.name)
         .sort()
         .join(',');
-    const lastSyncHash = sessionStorage.getItem(SYNC_DONE_KEY);
+    const lastSyncHash = localStorage.getItem(SYNC_DONE_KEY);
     const needsSync = manifestHash !== lastSyncHash && manifest.length > 0;
 
     if (needsSync) {
       try {
         await syncFrontendRoutes(manifest);
-        sessionStorage.setItem(SYNC_DONE_KEY, manifestHash);
+        localStorage.setItem(SYNC_DONE_KEY, manifestHash);
         if (!hasMenuRoutes) {
           message.success('菜单初始化完成，正在加载...');
         }
