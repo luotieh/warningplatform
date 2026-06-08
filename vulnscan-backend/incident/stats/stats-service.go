@@ -13,7 +13,7 @@ import (
 	coreContract "vulnscan-backend/incident/core/core-contract"
 	statsContract "vulnscan-backend/incident/stats/stats-contract"
 
-	"code.yt-security.com/public/core/v2/db"
+	"code.yt-security.com/public/core/db"
 	"gorm.io/gorm"
 )
 

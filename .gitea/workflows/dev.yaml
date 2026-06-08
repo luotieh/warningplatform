@@ -85,15 +85,22 @@ jobs:
           LDFLAGS+=" -X 'vulnscan-backend/boot.BuildCommit=${{ steps.meta.outputs.commit_msg }}'"
           LDFLAGS+=" -X 'vulnscan-backend/boot.ProductVersion=${{ steps.meta.outputs.tag }}'"
 
-          # 双架构并行编译（已去除 UPX，避免压缩耗时且 arm64 不支持 UPX）
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="$LDFLAGS" -trimpath -o ../server-amd64 ./cmd/server &
-          pid_amd=$!
-          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="$LDFLAGS" -trimpath -o ../server-arm64 ./cmd/server &
-          pid_arm=$!
-          wait $pid_amd $pid_arm
+          AGENT_LDFLAGS="-s -w -extldflags '-static'"
+          AGENT_LDFLAGS+=" -X 'vulnscan-backend/agent.Version=${{ steps.meta.outputs.tag }}'"
 
-          echo "✅ 后端构建完成（含嵌入前端）"
-          ls -la ../server-*
+          # 双架构并行编译 Server + Agent
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="$LDFLAGS" -trimpath -o ../server-amd64 ./cmd/server &
+          pid1=$!
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="$LDFLAGS" -trimpath -o ../server-arm64 ./cmd/server &
+          pid2=$!
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="$AGENT_LDFLAGS" -trimpath -o ../agent-amd64 ./cmd/agent &
+          pid3=$!
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="$AGENT_LDFLAGS" -trimpath -o ../agent-arm64 ./cmd/agent &
+          pid4=$!
+          wait $pid1 $pid2 $pid3 $pid4
+
+          echo "✅ 后端构建完成（Server + Agent，含嵌入前端）"
+          ls -la ../server-* ../agent-*
 
       - name: (5) 准备 Docker 构建上下文
         run: |
@@ -159,12 +166,28 @@ jobs:
             -v --location --request PUT \
             "https://code.yt-security.com/api/packages/${ORGANIZE}/generic/${APP_NAME}-${MODE}/${PACKAGE_VERSION}/${APP_NAME}-${PACKAGE_VERSION}.tar.gz" \
             --form "attachment=@${APP_NAME}-${PACKAGE_VERSION}.tar.gz"
-          echo "✅ 构建产物上传完成"
+
+          # 上传 Agent 各平台二进制到 Packages（单文件直接下载）
+          AGENT_PKG="vulnscan-agent-${MODE}"
+          for arch in amd64 arm64; do
+            curl --user admin:b4385df77930334f1ebcf1274be50bc65024d56f \
+              --location --request PUT \
+              "https://code.yt-security.com/api/packages/${ORGANIZE}/generic/${AGENT_PKG}/${PACKAGE_VERSION}/vulnscan-agent-linux-${arch}" \
+              --upload-file "agent-${arch}"
+          done
+
+          # 同时上传一份打包合集
+          tar -czf vulnscan-agent-${PACKAGE_VERSION}.tar.gz agent-amd64 agent-arm64
+          curl --user admin:b4385df77930334f1ebcf1274be50bc65024d56f \
+            --location --request PUT \
+            "https://code.yt-security.com/api/packages/${ORGANIZE}/generic/${AGENT_PKG}/${PACKAGE_VERSION}/vulnscan-agent-${PACKAGE_VERSION}.tar.gz" \
+            --upload-file "vulnscan-agent-${PACKAGE_VERSION}.tar.gz"
+          echo "✅ 构建产物上传完成（Server + Agent）"
 
       - name: (8) 清理
         if: always()
         run: |
-          rm -f server-* *.tar *.tar.gz *.config.toml Dockerfile 2>/dev/null
+          rm -f server-* agent-* *.tar *.tar.gz *.config.toml Dockerfile 2>/dev/null
           rm -rf vulnscan-backend/frontend/dist/*
           echo "✅ 清理完成"
 

@@ -1,8 +1,8 @@
 package fingerprint
 
 import (
-	"code.yt-security.com/public/core/v2/web"
-	iamsdk "code.yt-security.com/public/sdk"
+	iamsdk "code.yt-security.com/public/access"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 )
 
@@ -25,7 +25,7 @@ func (h *HandlerWebFingerprint) List(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).List(count, items).Send()
+	web.Succeed(c).List(count, items).Send()
 }
 
 func (h *HandlerWebFingerprint) GetByID(c *gin.Context) {
@@ -39,7 +39,7 @@ func (h *HandlerWebFingerprint) GetByID(c *gin.Context) {
 		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.OK(c).Data(item).Send()
+	web.Succeed(c).Data(item).Send()
 }
 
 func (h *HandlerWebFingerprint) Create(c *gin.Context) {
@@ -54,7 +54,7 @@ func (h *HandlerWebFingerprint) Create(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(item).Send()
+	web.Succeed(c).Data(item).Send()
 }
 
 func (h *HandlerWebFingerprint) Update(c *gin.Context) {
@@ -71,7 +71,7 @@ func (h *HandlerWebFingerprint) Update(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerWebFingerprint) Delete(c *gin.Context) {
@@ -84,5 +84,5 @@ func (h *HandlerWebFingerprint) Delete(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }

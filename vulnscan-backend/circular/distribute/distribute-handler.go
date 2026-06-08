@@ -5,7 +5,7 @@ import (
 	inputContract "vulnscan-backend/circular/input/input-contract"
 	"vulnscan-backend/circular/scope"
 
-	"code.yt-security.com/public/core/v2/web"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 )
 
@@ -27,7 +27,7 @@ func (h *HandlerDistribute) List(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).List(total, items).Send()
+	web.Succeed(c).List(total, items).Send()
 }
 
 func (h *HandlerDistribute) Distribute(c *gin.Context) {
@@ -39,5 +39,5 @@ func (h *HandlerDistribute) Distribute(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }

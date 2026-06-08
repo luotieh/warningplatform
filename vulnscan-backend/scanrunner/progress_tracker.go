@@ -8,8 +8,8 @@ import (
 
 	"gorm.io/gorm"
 
+	"code.yt-security.com/public/scanengine/core"
 	"vulnscan-backend/model"
-	"vulnscan-backend/scan/core"
 )
 
 type TaskProgress struct {

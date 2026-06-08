@@ -7,9 +7,9 @@ import (
 	"vulnscan-backend/model"
 	tmplEngine "vulnscan-backend/template/engine"
 
-	"code.yt-security.com/public/core/v2/generate/qulid"
-	"code.yt-security.com/public/core/v2/web"
-	iamsdk "code.yt-security.com/public/sdk"
+	iamsdk "code.yt-security.com/public/access"
+	"code.yt-security.com/public/core/generate/ulid"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 	"vulnscan-backend/pkg/definition"
@@ -39,7 +39,7 @@ func (h *Handler) List(c *gin.Context) {
 		q.Page = 1
 	}
 
-	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
 	tx := h.db.Model(&model.ScanTemplate{}).Scopes(scope)
 	if q.Keyword != "" {
 		tx = tx.Where("name LIKE ? OR description LIKE ?", "%"+q.Keyword+"%", "%"+q.Keyword+"%")
@@ -73,7 +73,7 @@ func (h *Handler) List(c *gin.Context) {
 		results = append(results, vo)
 	}
 
-	web.OK(c).List(count, results).Send()
+	web.Succeed(c).List(count, results).Send()
 }
 
 func (h *Handler) GetByID(c *gin.Context) {
@@ -99,7 +99,7 @@ func (h *Handler) GetByID(c *gin.Context) {
 		}
 	}
 
-	web.OK(c).Data(vo).Send()
+	web.Succeed(c).Data(vo).Send()
 }
 
 type createTemplateReq struct {
@@ -132,7 +132,7 @@ func (h *Handler) Create(c *gin.Context) {
 	})
 
 	item := model.ScanTemplate{
-		ID:          qulid.GenerateID(),
+		ID:          ulid.GenerateID(),
 		Name:        req.Name,
 		Code:        req.Code,
 		Category:    req.Category,
@@ -148,7 +148,7 @@ func (h *Handler) Create(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(item).Send()
+	web.Succeed(c).Data(item).Send()
 }
 
 type updateTemplateReq struct {
@@ -219,7 +219,7 @@ func (h *Handler) Update(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *Handler) Delete(c *gin.Context) {
@@ -239,7 +239,7 @@ func (h *Handler) Delete(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 type toggleTemplateReq struct {
@@ -257,7 +257,7 @@ func (h *Handler) Toggle(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *Handler) SeedBuiltins(c *gin.Context) {
@@ -292,16 +292,16 @@ func (h *Handler) SeedBuiltins(c *gin.Context) {
 			AuthorID:    "system",
 		}
 		if item.ID == "" {
-			item.ID = qulid.GenerateID()
+			item.ID = ulid.GenerateID()
 		}
 		h.db.Create(&item)
 		created++
 	}
 	slog.Info("[Template] 内置模板同步完成", "updated", updated, "created", created)
-	web.OK(c).Data(map[string]int{"updated": updated, "created": created}).Send()
+	web.Succeed(c).Data(map[string]int{"updated": updated, "created": created}).Send()
 }
 
 func (h *Handler) ListBuiltins(c *gin.Context) {
 	builtins := tmplEngine.BuiltinTemplates()
-	web.OK(c).Data(builtins).Send()
+	web.Succeed(c).Data(builtins).Send()
 }

@@ -6,7 +6,7 @@ import (
 	clusterContract "vulnscan-backend/cluster/cluster-contract"
 	"vulnscan-backend/pkg/clusterconn"
 
-	"code.yt-security.com/public/core/v2/web"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 )
 
@@ -20,7 +20,7 @@ func NewHandlerCluster(svc clusterContract.ServiceCluster, conn clusterconn.Opti
 }
 
 func (h *HandlerCluster) GetConnectivityModes(c *gin.Context) {
-	web.OK(c).Data(clusterconn.BuildConnectivityModes(h.conn)).Send()
+	web.Succeed(c).Data(clusterconn.BuildConnectivityModes(h.conn)).Send()
 }
 
 func (h *HandlerCluster) IssueScanNodeCredentials(c *gin.Context) {
@@ -34,7 +34,7 @@ func (h *HandlerCluster) IssueScanNodeCredentials(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(out).Send()
+	web.Succeed(c).Data(out).Send()
 }
 
 func (h *HandlerCluster) ListWorkers(c *gin.Context) {
@@ -49,7 +49,7 @@ func (h *HandlerCluster) ListWorkers(c *gin.Context) {
 		return
 	}
 
-	web.OK(c).List(count, items).Send()
+	web.Succeed(c).List(count, items).Send()
 }
 
 func (h *HandlerCluster) GetWorker(c *gin.Context) {
@@ -65,7 +65,7 @@ func (h *HandlerCluster) GetWorker(c *gin.Context) {
 		return
 	}
 
-	web.OK(c).Data(node).Send()
+	web.Succeed(c).Data(node).Send()
 }
 
 func (h *HandlerCluster) NodeKnowledgeManifest(c *gin.Context) {
@@ -74,7 +74,7 @@ func (h *HandlerCluster) NodeKnowledgeManifest(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(data).Send()
+	web.Succeed(c).Data(data).Send()
 }
 
 func (h *HandlerCluster) CheckStale(c *gin.Context) {
@@ -84,7 +84,7 @@ func (h *HandlerCluster) CheckStale(c *gin.Context) {
 		return
 	}
 
-	web.OK(c).Data(stale).Send()
+	web.Succeed(c).Data(stale).Send()
 }
 
 func (h *HandlerCluster) UnregisterWorker(c *gin.Context) {
@@ -98,7 +98,7 @@ func (h *HandlerCluster) UnregisterWorker(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerCluster) DeleteScanNode(c *gin.Context) {
@@ -112,5 +112,5 @@ func (h *HandlerCluster) DeleteScanNode(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }

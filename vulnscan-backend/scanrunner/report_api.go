@@ -1,13 +1,13 @@
 package scanrunner
 
 import (
-	"code.yt-security.com/public/core/v2/web"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
+	"code.yt-security.com/public/scanengine/core"
 	"vulnscan-backend/model"
 	"vulnscan-backend/pkg/definition"
-	"vulnscan-backend/scan/core"
 	"vulnscan-backend/scan/orchestrate"
 )
 
@@ -63,7 +63,7 @@ func (a *ReportAPI) AttackPath(c *gin.Context) {
 	analyzer := orchestrate.NewAttackPathAnalyzer()
 	paths := analyzer.Analyze(engineTargets, engineFindings)
 
-	web.OK(c).Data(gin.H{
+	web.Succeed(c).Data(gin.H{
 		"task_id":      taskID,
 		"attack_paths": paths,
 		"total_hosts":  len(paths),
@@ -81,7 +81,7 @@ func (a *ReportAPI) DeltaScan(c *gin.Context) {
 		return
 	}
 
-	web.OK(c).Data(result).Send()
+	web.Succeed(c).Data(result).Send()
 }
 
 func (a *ReportAPI) Timeline(c *gin.Context) {
@@ -98,5 +98,5 @@ func (a *ReportAPI) Timeline(c *gin.Context) {
 		return
 	}
 
-	web.OK(c).Data(entries).Send()
+	web.Succeed(c).Data(entries).Send()
 }

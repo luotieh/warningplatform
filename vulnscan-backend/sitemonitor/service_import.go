@@ -11,7 +11,7 @@ import (
 	"vulnscan-backend/model"
 	"vulnscan-backend/sitemonitor/contract"
 
-	"code.yt-security.com/public/core/v2/generate/qulid"
+	"code.yt-security.com/public/core/generate/ulid"
 	"github.com/xuri/excelize/v2"
 )
 
@@ -55,7 +55,7 @@ func (s *serviceMonitor) ImportTasks(ctx context.Context, fileData []byte) (*con
 	}
 
 	result := &contract.ImportResult{
-		ID:        qulid.GenerateID(),
+		ID:        ulid.GenerateID(),
 		Total:     len(rows) - 1,
 		CreatedAt: time.Now().Format(time.RFC3339),
 	}
@@ -108,7 +108,7 @@ func (s *serviceMonitor) ImportTasks(ctx context.Context, fileData []byte) (*con
 			VirtualHost: virtualHost,
 			Enabled:     true,
 		}
-		target.ID = qulid.GenerateID()
+		target.ID = ulid.GenerateID()
 		if err := s.CreateTarget(ctx, target); err != nil {
 			rowResult.Error = err.Error()
 			result.Failed++

@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import type { DataTableColumns } from "naive-ui";
-import { computed, h, onMounted, ref } from "vue";
+import { computed, h, onMounted, ref, watch } from "vue";
 import {
   NButton,
   NCard,
@@ -9,11 +9,13 @@ import {
   NDescriptionsItem,
   NDrawer,
   NDrawerContent,
+  NEmpty,
   NForm,
   NFormItem,
   NInput,
   NInputGroup,
   NPopconfirm,
+  NScrollbar,
   NSelect,
   NSpace,
   NTag,
@@ -25,8 +27,12 @@ import {
   createProduct,
   deleteProduct,
   getProductList,
+  getProductSummary,
+  reclassifyProducts,
   updateProduct,
+  type CategoryGroup,
   type Product,
+  type VendorGroup,
 } from "#/api/product/index";
 
 const message = useMessage();
@@ -36,6 +42,12 @@ const total = ref(0);
 const page = ref(1);
 const pageSize = ref(20);
 const keyword = ref("");
+
+const filterVendor = ref<string | null>(null);
+const filterCategory = ref<string | null>(null);
+
+const vendorGroups = ref<VendorGroup[]>([]);
+const categoryGroups = ref<CategoryGroup[]>([]);
 
 const showDrawer = ref(false);
 const drawerMode = ref<"create" | "edit" | "detail">("create");
@@ -66,6 +78,12 @@ const categoryOptions = [
   { label: "邮件", value: "mail" },
   { label: "VPN", value: "vpn" },
   { label: "防火墙", value: "firewall" },
+  { label: "OA / 办公", value: "oa" },
+  { label: "网络设备", value: "network" },
+  { label: "存储", value: "storage" },
+  { label: "消息队列", value: "queue" },
+  { label: "SCADA / 工控", value: "scada" },
+  { label: "插件", value: "plugin" },
   { label: "其他", value: "other" },
 ];
 
@@ -74,14 +92,28 @@ categoryOptions.forEach((o) => {
   categoryMap[o.value] = o.label;
 });
 
+const sidebarMode = ref<"vendor" | "category">("vendor");
+
+async function fetchSummary() {
+  try {
+    const res = await getProductSummary();
+    vendorGroups.value = res.vendors || [];
+    categoryGroups.value = res.categories || [];
+  } catch { /* ignore */ }
+}
+
 async function fetchData() {
   loading.value = true;
   try {
-    const res = await getProductList({
+    const params: Record<string, any> = {
       page: page.value,
       page_size: pageSize.value,
-      keyword: keyword.value || undefined,
-    });
+    };
+    if (keyword.value) params.keyword = keyword.value;
+    if (filterVendor.value) params.vendor = filterVendor.value;
+    if (filterCategory.value) params.category = filterCategory.value;
+
+    const res = await getProductList(params);
     data.value = res.items;
     total.value = res.total;
   } finally {
@@ -95,6 +127,40 @@ function handlePageChange(p: number) {
 }
 
 function handleSearch() {
+  page.value = 1;
+  filterVendor.value = null;
+  filterCategory.value = null;
+  fetchData();
+}
+
+function selectVendor(vendor: string) {
+  if (filterVendor.value === vendor) {
+    filterVendor.value = null;
+  } else {
+    filterVendor.value = vendor;
+  }
+  filterCategory.value = null;
+  keyword.value = "";
+  page.value = 1;
+  fetchData();
+}
+
+function selectCategory(category: string) {
+  if (filterCategory.value === category) {
+    filterCategory.value = null;
+  } else {
+    filterCategory.value = category;
+  }
+  filterVendor.value = null;
+  keyword.value = "";
+  page.value = 1;
+  fetchData();
+}
+
+function clearFilters() {
+  filterVendor.value = null;
+  filterCategory.value = null;
+  keyword.value = "";
   page.value = 1;
   fetchData();
 }
@@ -134,6 +200,7 @@ async function handleSave() {
       message.success("创建成功");
       showDrawer.value = false;
       fetchData();
+      fetchSummary();
     } catch (e: any) {
       message.error(e?.message || "创建失败");
     }
@@ -143,6 +210,7 @@ async function handleSave() {
       message.success("更新成功");
       showDrawer.value = false;
       fetchData();
+      fetchSummary();
     } catch (e: any) {
       message.error(e?.message || "更新失败");
     }
@@ -154,6 +222,7 @@ async function handleDelete(row: Product) {
     await deleteProduct(row.id);
     message.success("删除成功");
     fetchData();
+    fetchSummary();
   } catch (e: any) {
     message.error(e?.message || "删除失败");
   }
@@ -163,16 +232,37 @@ async function handleBackfill() {
   try {
     const res = await backfillProducts();
     message.success(`回填完成：PoC ${res.poc_updated} 条，指纹 ${res.fingerprint_updated} 条`);
+    fetchData();
+    fetchSummary();
   } catch (e: any) {
     message.error(e?.message || "回填失败");
   }
 }
 
+async function handleReclassify() {
+  try {
+    const res = await reclassifyProducts();
+    message.success(`重新分类完成：${res.updated} 条产品更新`);
+    fetchData();
+    fetchSummary();
+  } catch (e: any) {
+    message.error(e?.message || "重新分类失败");
+  }
+}
+
+const activeFilterLabel = computed(() => {
+  if (filterVendor.value) return `厂商: ${filterVendor.value}`;
+  if (filterCategory.value) return `分类: ${categoryMap[filterCategory.value] || filterCategory.value}`;
+  if (keyword.value) return `搜索: ${keyword.value}`;
+  return null;
+});
+
 const columns = computed<DataTableColumns<Product>>(() => [
   {
     title: "产品名称",
     key: "name",
-    width: 160,
+    width: 180,
+    ellipsis: { tooltip: true },
     render: (row) =>
       h(
         NButton,
@@ -183,38 +273,41 @@ const columns = computed<DataTableColumns<Product>>(() => [
   {
     title: "厂商",
     key: "vendor",
-    width: 140,
-    render: (row) => row.vendor || "-",
+    width: 120,
+    ellipsis: { tooltip: true },
+    render: (row) => row.vendor
+      ? h(NButton, { text: true, size: "small", onClick: () => selectVendor(row.vendor) }, { default: () => row.vendor })
+      : "-",
   },
   {
     title: "分类",
     key: "category",
-    width: 110,
+    width: 100,
     render: (row) =>
       row.category
-        ? h(NTag, { size: "small", bordered: false }, { default: () => categoryMap[row.category] || row.category })
+        ? h(NTag, { size: "small", bordered: false, style: { cursor: 'pointer' }, onClick: () => selectCategory(row.category) }, { default: () => categoryMap[row.category] || row.category })
         : "-",
   },
   {
-    title: "关联 PoC",
+    title: "PoC",
     key: "poc_count",
-    width: 90,
+    width: 70,
     align: "center",
     render: (row) =>
       h(NText, { depth: row.poc_count ? 1 : 3 }, { default: () => String(row.poc_count ?? 0) }),
   },
   {
-    title: "关联指纹",
+    title: "指纹",
     key: "fingerprint_count",
-    width: 90,
+    width: 70,
     align: "center",
     render: (row) =>
       h(NText, { depth: row.fingerprint_count ? 1 : 3 }, { default: () => String(row.fingerprint_count ?? 0) }),
   },
   {
-    title: "关联漏洞",
+    title: "漏洞",
     key: "vuln_count",
-    width: 90,
+    width: 70,
     align: "center",
     render: (row) =>
       h(NText, { depth: row.vuln_count ? 1 : 3 }, { default: () => String(row.vuln_count ?? 0) }),
@@ -222,7 +315,7 @@ const columns = computed<DataTableColumns<Product>>(() => [
   {
     title: "操作",
     key: "actions",
-    width: 140,
+    width: 120,
     render: (row) =>
       h(NSpace, { size: 4 }, {
         default: () => [
@@ -256,45 +349,115 @@ const aliasesText = computed({
   },
 });
 
-onMounted(fetchData);
+const sidebarList = computed(() => {
+  if (sidebarMode.value === "vendor") {
+    return vendorGroups.value.map((v) => ({
+      key: v.vendor,
+      label: v.vendor,
+      count: v.count,
+      active: filterVendor.value === v.vendor,
+    }));
+  }
+  return categoryGroups.value.map((c) => ({
+    key: c.category,
+    label: categoryMap[c.category] || c.category || '未分类',
+    count: c.count,
+    active: filterCategory.value === c.category,
+  }));
+});
+
+function onSidebarClick(key: string) {
+  if (sidebarMode.value === "vendor") {
+    selectVendor(key);
+  } else {
+    selectCategory(key);
+  }
+}
+
+onMounted(() => {
+  fetchData();
+  fetchSummary();
+});
 </script>
 
 <template>
-  <div class="p-4">
-    <NCard title="产品知识库" :bordered="false">
-      <template #header-extra>
-        <NSpace>
-          <NInputGroup>
-            <NInput
-              v-model:value="keyword"
-              placeholder="搜索产品名称 / 厂商"
-              clearable
-              style="width: 220px"
-              @keydown.enter="handleSearch"
-            />
-            <NButton type="primary" @click="handleSearch">搜索</NButton>
-          </NInputGroup>
-          <NButton @click="handleBackfill">回填关联</NButton>
-          <NButton type="primary" @click="openCreate">新建产品</NButton>
-        </NSpace>
-      </template>
+  <div class="product-page">
+    <div class="product-sidebar">
+      <div class="sidebar-tabs">
+        <button
+          :class="['sidebar-tab', { active: sidebarMode === 'vendor' }]"
+          @click="sidebarMode = 'vendor'"
+        >
+          按厂商
+        </button>
+        <button
+          :class="['sidebar-tab', { active: sidebarMode === 'category' }]"
+          @click="sidebarMode = 'category'"
+        >
+          按分类
+        </button>
+      </div>
+      <NScrollbar style="max-height: calc(100vh - 160px)">
+        <div v-if="sidebarList.length === 0" style="padding: 24px 16px; text-align: center">
+          <NEmpty description="暂无数据" size="small" />
+        </div>
+        <div
+          v-for="item in sidebarList"
+          :key="item.key"
+          :class="['sidebar-item', { active: item.active }]"
+          @click="onSidebarClick(item.key)"
+        >
+          <span class="sidebar-item__label">{{ item.label }}</span>
+          <span class="sidebar-item__count">{{ item.count }}</span>
+        </div>
+      </NScrollbar>
+    </div>
 
-      <NDataTable
-        :columns="columns"
-        :data="data"
-        :loading="loading"
-        :pagination="{
-          page: page,
-          pageSize: pageSize,
-          itemCount: total,
-          onChange: handlePageChange,
-          showSizePicker: false,
-        }"
-        :row-key="(row: Product) => row.id"
-        size="small"
-        striped
-      />
-    </NCard>
+    <div class="product-main">
+      <NCard :bordered="false">
+        <template #header>
+          <div class="main-header">
+            <div class="main-header__title">
+              <span>产品知识库</span>
+              <NTag v-if="activeFilterLabel" size="small" closable @close="clearFilters" style="margin-left: 8px">
+                {{ activeFilterLabel }}
+              </NTag>
+            </div>
+            <NSpace size="small">
+              <NInputGroup>
+                <NInput
+                  v-model:value="keyword"
+                  placeholder="搜索产品名称 / 厂商"
+                  clearable
+                  style="width: 200px"
+                  @keydown.enter="handleSearch"
+                />
+                <NButton type="primary" @click="handleSearch">搜索</NButton>
+              </NInputGroup>
+              <NButton @click="handleReclassify">重新分类</NButton>
+              <NButton @click="handleBackfill">回填关联</NButton>
+              <NButton type="primary" @click="openCreate">新建产品</NButton>
+            </NSpace>
+          </div>
+        </template>
+
+        <NDataTable
+          :columns="columns"
+          :data="data"
+          :loading="loading"
+          :pagination="{
+            page: page,
+            pageSize: pageSize,
+            itemCount: total,
+            onChange: handlePageChange,
+            showSizePicker: false,
+          }"
+          :row-key="(row: Product) => row.id"
+          size="small"
+          striped
+        />
+      </NCard>
+    </div>
 
     <NDrawer v-model:show="showDrawer" :width="540">
       <NDrawerContent :title="drawerTitle" closable>
@@ -363,3 +526,119 @@ onMounted(fetchData);
     </NDrawer>
   </div>
 </template>
+
+<style scoped>
+.product-page {
+  display: flex;
+  gap: 0;
+  height: 100%;
+  min-height: 0;
+}
+
+.product-sidebar {
+  width: 220px;
+  min-width: 220px;
+  background: var(--card-color, #fff);
+  border-right: 1px solid var(--border-color, #e0e0e6);
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border-color, #e0e0e6);
+}
+
+.sidebar-tab {
+  flex: 1;
+  padding: 10px 0;
+  text-align: center;
+  font-size: 13px;
+  border: none;
+  background: transparent;
+  color: var(--text-color-2, #666);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.sidebar-tab.active {
+  color: var(--primary-color, #18a058);
+  font-weight: 600;
+  box-shadow: inset 0 -2px 0 var(--primary-color, #18a058);
+}
+
+.sidebar-tab:hover:not(.active) {
+  color: var(--text-color-1, #333);
+  background: var(--hover-color, rgba(0, 0, 0, 0.04));
+}
+
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 14px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-color-2, #666);
+  transition: all 0.15s;
+  border-left: 3px solid transparent;
+}
+
+.sidebar-item:hover {
+  background: var(--hover-color, rgba(0, 0, 0, 0.04));
+  color: var(--text-color-1, #333);
+}
+
+.sidebar-item.active {
+  background: var(--primary-color-hover, rgba(24, 160, 88, 0.08));
+  color: var(--primary-color, #18a058);
+  border-left-color: var(--primary-color, #18a058);
+  font-weight: 500;
+}
+
+.sidebar-item__label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-item__count {
+  flex-shrink: 0;
+  margin-left: 8px;
+  font-size: 12px;
+  color: var(--text-color-3, #999);
+  background: var(--tag-color, rgba(0, 0, 0, 0.04));
+  padding: 1px 6px;
+  border-radius: 10px;
+  min-width: 20px;
+  text-align: center;
+}
+
+.sidebar-item.active .sidebar-item__count {
+  color: var(--primary-color, #18a058);
+  background: var(--primary-color-hover, rgba(24, 160, 88, 0.12));
+}
+
+.product-main {
+  flex: 1;
+  min-width: 0;
+  padding: 16px;
+  overflow: auto;
+}
+
+.main-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.main-header__title {
+  display: flex;
+  align-items: center;
+  font-size: 16px;
+  font-weight: 600;
+}
+</style>

@@ -6,8 +6,8 @@ import (
 	fpruleContract "vulnscan-backend/fprule/fprule-contract"
 	"vulnscan-backend/model"
 
-	"code.yt-security.com/public/core/v2/db"
-	"code.yt-security.com/public/core/v2/generate/qulid"
+	"code.yt-security.com/public/core/db"
+	"code.yt-security.com/public/core/generate/ulid"
 	"gorm.io/gorm"
 )
 
@@ -69,7 +69,7 @@ func (s *serviceFPRule) GetByID(id string) (*model.FPRule, error) {
 
 func (s *serviceFPRule) Create(item *model.FPRule) error {
 	if item.ID == "" {
-		item.ID = qulid.GenerateID()
+		item.ID = ulid.GenerateID()
 	}
 	return s.session().Create(item).Error
 }
@@ -137,7 +137,7 @@ func (s *serviceFPRule) MarkFromFinding(findingID, matchType, reason, userID, or
 	}
 
 	rule := &model.FPRule{
-		ID:         qulid.GenerateID(),
+		ID:         ulid.GenerateID(),
 		Name:       name,
 		MatchType:  matchType,
 		MatchField: matchField,

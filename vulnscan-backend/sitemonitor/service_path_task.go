@@ -10,7 +10,7 @@ import (
 	"vulnscan-backend/model"
 	"vulnscan-backend/sitemonitor/contract"
 
-	"code.yt-security.com/public/core/v2/generate/qulid"
+	"code.yt-security.com/public/core/generate/ulid"
 	"gorm.io/gorm"
 )
 
@@ -32,7 +32,7 @@ func (s *serviceMonitor) CreatePathTask(ctx context.Context, pt *model.MonitorPa
 		return err
 	}
 	if pt.ID == "" {
-		pt.ID = qulid.GenerateID()
+		pt.ID = ulid.GenerateID()
 	}
 	seedPathTaskDefaults(pt)
 	return s.session().WithContext(ctx).Create(pt).Error
@@ -200,7 +200,7 @@ func (s *serviceMonitor) runPathTaskDimension(ctx context.Context, target *model
 	if err != nil {
 		return "", err
 	}
-	execID := qulid.GenerateID()
+	execID := ulid.GenerateID()
 	exec := model.MonitorExecution{
 		TargetID:   target.ID,
 		PathTaskID: pt.ID,

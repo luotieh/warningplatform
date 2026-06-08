@@ -3,8 +3,8 @@ package scanrunner
 import (
 	"strings"
 
+	"code.yt-security.com/public/scanengine/core"
 	"vulnscan-backend/model"
-	"vulnscan-backend/scan/core"
 )
 
 // EnginePolicy 从任务 Parameters / Config 解析（支持嵌套 map "engine" 与顶层键）。
@@ -44,10 +44,12 @@ func mergeTaskConfigSource(task model.ScanTask) map[string]interface{} {
 
 // ParseEnginePolicy 从任务配置解析引擎策略。
 func ParseEnginePolicy(src map[string]interface{}) EnginePolicy {
-	if len(src) == 0 {
-		return EnginePolicy{}
+	p := EnginePolicy{
+		AutoSkipWebVulnsWithoutHTTP: true,
 	}
-	p := EnginePolicy{}
+	if len(src) == 0 {
+		return p
+	}
 	if sub, ok := src["engine"].(map[string]interface{}); ok {
 		applyEngineMap(&p, sub)
 	}

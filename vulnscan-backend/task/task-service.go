@@ -9,7 +9,7 @@ import (
 	"vulnscan-backend/model"
 	taskContract "vulnscan-backend/task/task-contract"
 
-	"code.yt-security.com/public/core/v2/db"
+	"code.yt-security.com/public/core/db"
 	"gorm.io/gorm"
 )
 

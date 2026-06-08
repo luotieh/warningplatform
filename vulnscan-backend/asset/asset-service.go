@@ -7,8 +7,8 @@ import (
 	assetContract "vulnscan-backend/asset/asset-contract"
 	"vulnscan-backend/model"
 
-	"code.yt-security.com/public/core/v2/db"
-	"code.yt-security.com/public/core/v2/generate/qulid"
+	"code.yt-security.com/public/core/db"
+	"code.yt-security.com/public/core/generate/ulid"
 	"gorm.io/gorm"
 )
 
@@ -250,7 +250,7 @@ func (s *serviceAsset) ensureVerifyTasks(assets []model.Asset, operator, sourceT
 		return
 	}
 	now := time.Now()
-	batchID := qulid.GenerateID()
+	batchID := ulid.GenerateID()
 	sess := s.session()
 	exists := make(map[string]bool)
 	var existing []model.AssetVerifyTask
@@ -274,7 +274,7 @@ func (s *serviceAsset) ensureVerifyTasks(assets []model.Asset, operator, sourceT
 			status = model.AssetVerifyTaskPendingReceive
 		}
 		task := model.AssetVerifyTask{
-			ID:                qulid.GenerateID(),
+			ID:                ulid.GenerateID(),
 			AssetID:           asset.ID,
 			BatchID:           batchID,
 			SourceType:        sourceType,

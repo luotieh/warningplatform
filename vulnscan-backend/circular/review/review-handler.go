@@ -5,7 +5,7 @@ import (
 	reviewContract "vulnscan-backend/circular/review/review-contract"
 	"vulnscan-backend/circular/scope"
 
-	"code.yt-security.com/public/core/v2/web"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 )
 
@@ -27,7 +27,7 @@ func (h *HandlerReview) List(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).List(total, items).Send()
+	web.Succeed(c).List(total, items).Send()
 }
 
 func (h *HandlerReview) Review(c *gin.Context) {
@@ -43,5 +43,5 @@ func (h *HandlerReview) Review(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }

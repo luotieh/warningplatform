@@ -9,8 +9,8 @@ import (
 	"vulnscan-backend/boot"
 	"vulnscan-backend/model"
 
-	"code.yt-security.com/public/core/v2/db"
-	"code.yt-security.com/public/core/v2/generate/qulid"
+	"code.yt-security.com/public/core/db"
+	"code.yt-security.com/public/core/generate/ulid"
 	"github.com/nats-io/nats.go"
 	"gorm.io/gorm"
 )
@@ -166,7 +166,7 @@ func (s *NatsServiceImpl) SaveBaselineFromAgent(ctx context.Context, outerTx *go
 			AgentID:               agentID,
 			ConfirmedBy:           bu.ConfirmedBy,
 		}
-		baseline.ID = qulid.GenerateID()
+		baseline.ID = ulid.GenerateID()
 
 		if err := tx.Create(&baseline).Error; err != nil {
 			return fmt.Errorf("创建基线失败: %w", err)

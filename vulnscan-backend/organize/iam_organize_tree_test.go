@@ -3,11 +3,11 @@ package organize
 import (
 	"testing"
 
-	"code.yt-security.com/public/sdk/identity"
+	"code.yt-security.com/public/access/admin"
 )
 
 func TestBuildIAMOrganizeTreeFromInfos(t *testing.T) {
-	roots := buildIAMOrganizeTree([]*identity.OrganizeInfo{
+	roots := buildIAMOrganizeTree([]*admin.OrganizeInfo{
 		{ID: "a", Name: "A"},
 		{ID: "b", Name: "B", ParentID: "a"},
 	})

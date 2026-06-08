@@ -8,8 +8,8 @@ import (
 
 	"vulnscan-backend/model"
 
-	"code.yt-security.com/public/core/v2/generate/qulid"
-	"code.yt-security.com/public/core/v2/web"
+	"code.yt-security.com/public/core/generate/ulid"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 )
 
@@ -35,7 +35,7 @@ func (h *Handler) ListIOC(c *gin.Context) {
 	tx.Count(&count)
 	tx.Order("created_at DESC").Limit(200).Find(&items)
 
-	web.OK(c).List(count, items).Send()
+	web.Succeed(c).List(count, items).Send()
 }
 
 func (h *Handler) CreateIOC(c *gin.Context) {
@@ -45,7 +45,7 @@ func (h *Handler) CreateIOC(c *gin.Context) {
 	}
 
 	ioc := model.IOCIndicator{
-		ID:          qulid.GenerateID(),
+		ID:          ulid.GenerateID(),
 		Type:        req.Type,
 		Value:       strings.TrimSpace(req.Value),
 		ThreatType:  req.ThreatType,
@@ -66,7 +66,7 @@ func (h *Handler) CreateIOC(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(ioc).Send()
+	web.Succeed(c).Data(ioc).Send()
 }
 
 func (h *Handler) BatchImportIOC(c *gin.Context) {
@@ -86,7 +86,7 @@ func (h *Handler) BatchImportIOC(c *gin.Context) {
 			continue
 		}
 		iocs = append(iocs, model.IOCIndicator{
-			ID:          qulid.GenerateID(),
+			ID:          ulid.GenerateID(),
 			Type:        item.Type,
 			Value:       val,
 			ThreatType:  item.ThreatType,
@@ -106,13 +106,13 @@ func (h *Handler) BatchImportIOC(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(gin.H{"imported": len(iocs)}).Send()
+	web.Succeed(c).Data(gin.H{"imported": len(iocs)}).Send()
 }
 
 func (h *Handler) DeleteIOC(c *gin.Context) {
 	id := c.Param("id")
 	h.db.Where("id = ?", id).Delete(&model.IOCIndicator{})
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *Handler) ToggleIOC(c *gin.Context) {
@@ -123,7 +123,7 @@ func (h *Handler) ToggleIOC(c *gin.Context) {
 		return
 	}
 	h.db.Model(&ioc).Update("enabled", !ioc.Enabled)
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *Handler) CheckIOC(c *gin.Context) {
@@ -153,7 +153,7 @@ func (h *Handler) CheckIOC(c *gin.Context) {
 		})
 	}
 
-	web.OK(c).Data(gin.H{
+	web.Succeed(c).Data(gin.H{
 		"checked": len(req.Values),
 		"hits":    len(hits),
 		"matches": hits,
@@ -165,7 +165,7 @@ func (h *Handler) ScanAssetsIOC(c *gin.Context) {
 	now := time.Now()
 	h.db.Where("enabled = ? AND (expires_at IS NULL OR expires_at > ?)", true, now).Find(&indicators)
 	if len(indicators) == 0 {
-		web.OK(c).Data(gin.H{"message": "无有效IOC指标", "hits": 0}).Send()
+		web.Succeed(c).Data(gin.H{"message": "无有效IOC指标", "hits": 0}).Send()
 		return
 	}
 
@@ -214,7 +214,7 @@ func (h *Handler) ScanAssetsIOC(c *gin.Context) {
 	if len(hits) > 0 {
 		for _, hit := range hits {
 			n := model.Notification{
-				ID:       qulid.GenerateID(),
+				ID:       ulid.GenerateID(),
 				Type:     model.NotifyTypeIOCHit,
 				Title:    fmt.Sprintf("[IOC命中] %s (%s)", hit.IOCValue, hit.IOCType),
 				Content:  fmt.Sprintf("资产「%s」(%s) 匹配到威胁指标 %s", hit.AssetName, hit.AssetID, hit.IOCValue),
@@ -226,7 +226,7 @@ func (h *Handler) ScanAssetsIOC(c *gin.Context) {
 		slog.Info("[+] IOC扫描发现命中", "hits", len(hits))
 	}
 
-	web.OK(c).Data(gin.H{
+	web.Succeed(c).Data(gin.H{
 		"scanned_assets": len(assets),
 		"ioc_count":      len(indicators),
 		"hits":           len(hits),
@@ -250,7 +250,7 @@ func (h *Handler) GetIOCStats(c *gin.Context) {
 		typeStats[r.Type] = r.Count
 	}
 
-	web.OK(c).Data(gin.H{
+	web.Succeed(c).Data(gin.H{
 		"total":   total,
 		"enabled": enabled,
 		"expired": expired,

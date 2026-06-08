@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"vulnscan-backend/scan/core"
+	"code.yt-security.com/public/scanengine/core"
 )
 
 // CollectFilesystemTemplateSources 从任务 config / parameters 读取本地模板与工作流路径（用于镜像目录或官方 nuclei-templates），

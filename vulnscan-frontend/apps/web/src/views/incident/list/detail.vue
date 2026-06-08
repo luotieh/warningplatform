@@ -158,7 +158,7 @@ function goMonitorRecord() {
 
 const scanTaskLink = computed(() => {
   const m = incidentDescription.value.trace.match(/扫描任务 ID[：:]\s*(\S+)/);
-  return m?.[1] ? `/scan/tasks/${m[1]}` : '';
+  return m?.[1] ? `/scan/task/${m[1]}` : '';
 });
 
 const showReportPreview = ref(false);
@@ -251,7 +251,7 @@ async function handleClose() {
 const transferring = ref(false);
 const transferredCircularCode = ref<string | null>(null);
 
-const canAiPreAudit = computed(() => incident.value?.status === 1);
+const canAiPreAudit = computed(() => incident.value?.status === 1 || incident.value?.status === 3);
 const canManualAudit = computed(() => incident.value?.status === 1);
 const canTransferToCircular = computed(() => {
   const s = incident.value?.status;
@@ -395,13 +395,13 @@ onMounted(fetchData);
             <NSpace :size="8">
               <NButton size="small" @click="showReportPreview = true">报告预览</NButton>
               <NButton
-                v-perm="perm('export')"
+                v-perm.disable="perm('export')"
                 size="small"
                 :loading="exportingReport"
                 @click="handleExportReport('docx')"
               >导出 Word</NButton>
               <NButton
-                v-perm="perm('export')"
+                v-perm.disable="perm('export')"
                 size="small"
                 type="primary"
                 :loading="exportingReport"
@@ -409,41 +409,41 @@ onMounted(fetchData);
               >导出 PDF</NButton>
               <NButton
                 v-if="canAiPreAudit"
-                v-perm="perm('ai-audit')"
+                v-perm.disable="perm('ai-audit')"
                 size="small"
                 type="info"
                 @click="handleAiAudit"
               >智能预审</NButton>
               <NButton
                 v-if="canManualAudit"
-                v-perm="perm('manual-audit')"
+                v-perm.disable="perm('manual-audit')"
                 size="small"
                 type="primary"
                 @click="showAuditModal=true"
               >人工复核</NButton>
               <NButton
                 v-if="incident.status===2||incident.status===4"
-                v-perm="perm('remediate')"
+                v-perm.disable="perm('remediate')"
                 size="small"
                 type="warning"
                 @click="showRemModal=true"
               >提交整改</NButton>
               <NButton
                 v-if="incident.status===6"
-                v-perm="perm('verify')"
+                v-perm.disable="perm('verify')"
                 size="small"
                 type="success"
                 @click="handleVerify"
               >验证整改</NButton>
               <NButton
                 v-if="incident.status>=2&&incident.status<=6"
-                v-perm="perm('close')"
+                v-perm.disable="perm('close')"
                 size="small"
                 @click="handleClose"
               >关闭事件</NButton>
               <NButton
                 v-if="canTransferToCircular"
-                v-perm="perm('transfer')"
+                v-perm.disable="perm('transfer')"
                 size="small"
                 type="error"
                 :loading="transferring"
@@ -451,7 +451,6 @@ onMounted(fetchData);
               >转为通报</NButton>
               <NButton
                 v-else-if="transferredCircularCode"
-                v-perm="perm('transfer')"
                 size="small"
                 type="error"
                 @click="router.push(`/circular/input/${transferredCircularCode}`)"
@@ -607,7 +606,7 @@ onMounted(fetchData);
             <!-- 关联漏洞 -->
             <NCard
               v-if="relatedVulns.length"
-              title="关联漏洞 ({{ relatedVulns.length }})"
+              :title="`关联漏洞 (${relatedVulns.length})`"
               size="small"
               style="margin-top:16px"
             >

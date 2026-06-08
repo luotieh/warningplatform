@@ -8,15 +8,15 @@ import (
 	"strings"
 	"time"
 
+	"code.yt-security.com/public/scanengine/module/portscan"
 	assetContract "vulnscan-backend/asset/asset-contract"
 	"vulnscan-backend/model"
-	"vulnscan-backend/scan/module/portscan"
 	"vulnscan-backend/scanrunner"
 
-	"code.yt-security.com/public/core/v2/db"
-	"code.yt-security.com/public/core/v2/generate/qulid"
-	"code.yt-security.com/public/core/v2/web"
-	iamsdk "code.yt-security.com/public/sdk"
+	iamsdk "code.yt-security.com/public/access"
+	"code.yt-security.com/public/core/db"
+	"code.yt-security.com/public/core/generate/ulid"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -196,7 +196,7 @@ func (h *DiscoveryHandler) backfillProbesFromScanTasks(sess *gorm.DB) {
 		}
 		now := time.Now()
 		probe := model.AssetDiscoveryProbe{
-			ID:          qulid.GenerateID(),
+			ID:          ulid.GenerateID(),
 			Name:        t.Name,
 			TaskID:      t.ID,
 			TargetsRaw:  strings.Join(t.Targets, "\n"),
@@ -273,7 +273,7 @@ func (h *DiscoveryHandler) CreateProbe(c *gin.Context) {
 	timeoutSec := float64(timeoutMs) / 1000.0
 
 	userID, organizeID := discoveryActor(c)
-	probeID := qulid.GenerateID()
+	probeID := ulid.GenerateID()
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
 		name = fmt.Sprintf("资产探测 %s", time.Now().Format("2006-01-02 15:04"))
@@ -333,7 +333,7 @@ func (h *DiscoveryHandler) CreateProbe(c *gin.Context) {
 		return
 	}
 
-	web.OK(c).Data(gin.H{
+	web.Succeed(c).Data(gin.H{
 		"probe":      probe,
 		"task_id":    res.Task.ID,
 		"split_mode": res.SplitMode,
@@ -402,7 +402,7 @@ func (h *DiscoveryHandler) ListProbes(c *gin.Context) {
 			}
 		}
 	}
-	web.OK(c).List(total, out).Send()
+	web.Succeed(c).List(total, out).Send()
 }
 
 func (h *DiscoveryHandler) GetProbe(c *gin.Context) {
@@ -419,7 +419,7 @@ func (h *DiscoveryHandler) GetProbe(c *gin.Context) {
 			_ = h.probeDB().First(&probe, "id = ?", id).Error
 		}
 	}
-	web.OK(c).Data(probe).Send()
+	web.Succeed(c).Data(probe).Send()
 }
 
 func (h *DiscoveryHandler) ListCandidates(c *gin.Context) {
@@ -465,7 +465,7 @@ func (h *DiscoveryHandler) ListCandidates(c *gin.Context) {
 	var dedupedTotal int
 	items, dedupedTotal = scanrunner.DedupeDiscoveryCandidateRows(items, int(total))
 	total = int64(dedupedTotal)
-	web.OK(c).List(total, items).Send()
+	web.Succeed(c).List(total, items).Send()
 }
 
 func (h *DiscoveryHandler) SyncCandidates(c *gin.Context) {
@@ -485,7 +485,7 @@ func (h *DiscoveryHandler) SyncCandidates(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(gin.H{"synced": n}).Send()
+	web.Succeed(c).Data(gin.H{"synced": n}).Send()
 }
 
 func (h *DiscoveryHandler) VerifyCandidates(c *gin.Context) {
@@ -524,7 +524,7 @@ func (h *DiscoveryHandler) VerifyCandidates(c *gin.Context) {
 	if probeID := c.Param("id"); probeID != "" {
 		_ = scanrunner.RefreshProbeCandidateCounts(h.probeDB(), probeID)
 	}
-	web.OK(c).Data(gin.H{
+	web.Succeed(c).Data(gin.H{
 		"updated":              res.RowsAffected,
 		"target_organize_id":   targetOrganizeID,
 		"target_organize_name": org.Name,
@@ -559,7 +559,7 @@ func (h *DiscoveryHandler) updateCandidateStatus(c *gin.Context, status string) 
 	if probeID := c.Param("id"); probeID != "" {
 		_ = scanrunner.RefreshProbeCandidateCounts(h.probeDB(), probeID)
 	}
-	web.OK(c).Data(gin.H{"updated": res.RowsAffected}).Send()
+	web.Succeed(c).Data(gin.H{"updated": res.RowsAffected}).Send()
 }
 
 func (h *DiscoveryHandler) ImportCandidates(c *gin.Context) {
@@ -641,7 +641,7 @@ func (h *DiscoveryHandler) ImportCandidates(c *gin.Context) {
 			ipv4 = ip.String()
 		}
 		item := model.Asset{
-			ID:         qulid.GenerateID(),
+			ID:         ulid.GenerateID(),
 			Name:       name,
 			Type:       assetType,
 			Address:    addr,
@@ -687,7 +687,7 @@ func (h *DiscoveryHandler) ImportCandidates(c *gin.Context) {
 	for pid := range probeIDs {
 		_ = scanrunner.RefreshProbeCandidateCounts(h.probeDB(), pid)
 	}
-	web.OK(c).Data(gin.H{"imported": imported, "skipped": skipped}).Send()
+	web.Succeed(c).Data(gin.H{"imported": imported, "skipped": skipped}).Send()
 }
 
 func discoveryCandidateAddress(c *model.AssetDiscoveryCandidate) string {

@@ -7,14 +7,14 @@ import (
 	"strings"
 	"time"
 
+	"code.yt-security.com/public/scanengine/core"
+	"code.yt-security.com/public/scanengine/module/screenshot"
 	"vulnscan-backend/boot"
 	"vulnscan-backend/model"
-	"vulnscan-backend/scan/core"
-	"vulnscan-backend/scan/module/screenshot"
 
-	"code.yt-security.com/public/core/v2/db"
-	iamsdk "code.yt-security.com/public/sdk"
-	"code.yt-security.com/public/sdk/storage"
+	iamsdk "code.yt-security.com/public/access"
+	"code.yt-security.com/public/access/storage"
+	"code.yt-security.com/public/core/db"
 	"gorm.io/gorm"
 )
 

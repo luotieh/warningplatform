@@ -4,8 +4,8 @@ import (
 	inputContract "vulnscan-backend/circular/input/input-contract"
 	"vulnscan-backend/circular/scope"
 
-	"code.yt-security.com/public/core/v2/web"
-	iamsdk "code.yt-security.com/public/sdk"
+	iamsdk "code.yt-security.com/public/access"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 )
 
@@ -27,7 +27,7 @@ func (h *HandlerInput) Add(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(gin.H{"id": id}).Send()
+	web.Succeed(c).Data(gin.H{"id": id}).Send()
 }
 
 func (h *HandlerInput) List(c *gin.Context) {
@@ -40,7 +40,7 @@ func (h *HandlerInput) List(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).List(total, items).Send()
+	web.Succeed(c).List(total, items).Send()
 }
 
 func (h *HandlerInput) Detail(c *gin.Context) {
@@ -53,7 +53,7 @@ func (h *HandlerInput) Detail(c *gin.Context) {
 		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.OK(c).Data(item).Send()
+	web.Succeed(c).Data(item).Send()
 }
 
 func (h *HandlerInput) Edit(c *gin.Context) {
@@ -69,7 +69,7 @@ func (h *HandlerInput) Edit(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerInput) Delete(c *gin.Context) {
@@ -81,7 +81,7 @@ func (h *HandlerInput) Delete(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerInput) Submit(c *gin.Context) {
@@ -93,7 +93,7 @@ func (h *HandlerInput) Submit(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerInput) Export(c *gin.Context) {
@@ -107,7 +107,7 @@ func (h *HandlerInput) Export(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerInput) Import(c *gin.Context) {
@@ -121,7 +121,7 @@ func (h *HandlerInput) Import(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(map[string]any{"count": count}).Send()
+	web.Succeed(c).Data(map[string]any{"count": count}).Send()
 }
 
 func (h *HandlerInput) CommonTemplateDownload(c *gin.Context) {
@@ -138,5 +138,5 @@ func (h *HandlerInput) ThirdPartyImport(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }

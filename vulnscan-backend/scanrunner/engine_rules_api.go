@@ -1,12 +1,12 @@
 package scanrunner
 
 import (
-	"code.yt-security.com/public/core/v2/web"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 )
 
 func (a *API) ListEngineRules(c *gin.Context) {
-	web.OK(c).Data(map[string]interface{}{
+	web.Succeed(c).Data(map[string]interface{}{
 		"rules":              EngineRulesCatalog(),
 		"module_exposure":    PrimaryModuleExposureDoc(),
 		"primary_module_ids": PrimaryModuleIDs(),
@@ -14,7 +14,7 @@ func (a *API) ListEngineRules(c *gin.Context) {
 }
 
 func (a *API) TaskParameterSchema(c *gin.Context) {
-	web.OK(c).Data(map[string]interface{}{
+	web.Succeed(c).Data(map[string]interface{}{
 		"task_level_params":    TaskLevelParamsCatalog(),
 		"module_create_params": ModuleCreateParamsCatalog(),
 		"engine_presets":       ListScanEnginePresets(),

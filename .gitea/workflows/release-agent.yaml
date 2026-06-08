@@ -1,0 +1,173 @@
+name: Release Scan Agent
+
+on:
+  push:
+    tags:
+      - 'agent-v*'
+
+env:
+  APP_NAME: vulnscan-agent
+  ORGANIZE: warning-platform
+
+jobs:
+  release:
+    runs-on: code
+    steps:
+      - name: (1) 代码签出
+        uses: https://code.yt-security.com/public/checkout@v6
+        with:
+          fetch-depth: 1
+          submodules: false
+
+      - name: (2) 解析版本号
+        id: version
+        run: |
+          TAG_NAME="${GITHUB_REF#refs/tags/}"
+          VERSION="${TAG_NAME#agent-v}"
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "tag_name=${TAG_NAME}" >> $GITHUB_OUTPUT
+          echo "发布版本: ${VERSION}"
+
+      - name: (3) 编译多平台 Agent
+        run: |
+          cd vulnscan-backend
+          export PATH=$PATH:$(go env GOPATH)/bin
+          go mod download
+
+          VERSION=${{ steps.version.outputs.version }}
+          BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          GO_VERSION=$(go version | awk '{print $3}')
+
+          LDFLAGS="-s -w -extldflags '-static'"
+          LDFLAGS+=" -X 'vulnscan-backend/agent.Version=${VERSION}'"
+          LDFLAGS+=" -X 'vulnscan-backend/boot.BuildTime=${BUILD_TIME}'"
+          LDFLAGS+=" -X 'vulnscan-backend/boot.GoVersion=${GO_VERSION}'"
+
+          platforms=(
+            "linux/amd64"
+            "linux/arm64"
+            "linux/arm-7"
+            "linux/arm-6"
+            "linux/arm-5"
+            "darwin/amd64"
+            "darwin/arm64"
+            "windows/amd64"
+          )
+
+          mkdir -p ../dist
+
+          for platform in "${platforms[@]}"; do
+            IFS='/' read -r os arch <<< "$platform"
+            GOARM=""
+            if [[ "$arch" == arm-* ]]; then
+              GOARM="${arch#arm-}"
+              arch="arm"
+            fi
+
+            output="../dist/${APP_NAME}-${VERSION}-${os}-${arch}"
+            if [ -n "$GOARM" ]; then
+              output="../dist/${APP_NAME}-${VERSION}-${os}-${arch}${GOARM}"
+            fi
+            if [ "$os" = "windows" ]; then
+              output="${output}.exe"
+            fi
+
+            echo "编译: ${os}/${arch}${GOARM:+v$GOARM}"
+            GOARM=$GOARM CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build \
+              -ldflags="$LDFLAGS" -trimpath -o "$output" ./cmd/agent &
+          done
+          wait
+
+          echo "✅ 全部平台编译完成"
+          ls -la ../dist/
+
+      - name: (4) 生成压缩包和校验和
+        run: |
+          cd dist
+          VERSION=${{ steps.version.outputs.version }}
+
+          # 对每个二进制文件生成 xz 压缩 + sha256
+          for file in ${APP_NAME}-*; do
+            [ -f "$file" ] || continue
+            echo "压缩: ${file}"
+            xz -9 -k "$file"
+            sha256sum "${file}.xz" > "${file}.xz.sha256"
+          done
+
+          # 生成总的 checksums.txt
+          sha256sum ${APP_NAME}-* > checksums.txt
+
+          echo "✅ 压缩和校验和生成完成"
+          ls -la
+
+      - name: (5) 创建 Gitea Release
+        env:
+          GITEA_TOKEN: b4385df77930334f1ebcf1274be50bc65024d56f
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          TAG_NAME=${{ steps.version.outputs.tag_name }}
+
+          RELEASE_NOTES="## Vulnscan Agent v${VERSION}
+
+          ### 下载说明
+
+          | 文件名 | 说明 |
+          |--------|------|
+          | \`${APP_NAME}-*-linux-amd64\` | Linux x86_64 |
+          | \`${APP_NAME}-*-linux-arm64\` | Linux ARM64 (树莓派4+/飞腾等) |
+          | \`${APP_NAME}-*-linux-arm7\` | Linux ARMv7 (树莓派3等) |
+          | \`${APP_NAME}-*-darwin-amd64\` | macOS Intel |
+          | \`${APP_NAME}-*-darwin-arm64\` | macOS Apple Silicon |
+          | \`${APP_NAME}-*-windows-amd64.exe\` | Windows x64 |
+          | \`*.xz\` | xz 压缩版（推荐下载） |
+          | \`*.sha256\` | SHA-256 校验和 |
+
+          ### 快速开始
+
+          \`\`\`bash
+          # 下载（以 Linux amd64 为例）
+          wget ${APP_NAME}-${VERSION}-linux-amd64.xz
+          xz -d ${APP_NAME}-${VERSION}-linux-amd64.xz
+          chmod +x ${APP_NAME}-${VERSION}-linux-amd64
+          mv ${APP_NAME}-${VERSION}-linux-amd64 /usr/local/bin/vulnscan-agent
+
+          # 生成注册信息
+          vulnscan-agent enroll
+
+          # 启动
+          vulnscan-agent run -credentials-file agent.secret
+          \`\`\`
+          "
+
+          # 创建 Release
+          RELEASE_ID=$(curl -s -X POST \
+            -H "Authorization: token ${GITEA_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "https://code.yt-security.com/api/v1/repos/${ORGANIZE}/vulnerability-scan-new/releases" \
+            -d "{
+              \"tag_name\": \"${TAG_NAME}\",
+              \"name\": \"Vulnscan Agent v${VERSION}\",
+              \"body\": $(echo "$RELEASE_NOTES" | jq -Rs .),
+              \"prerelease\": false
+            }" | jq -r '.id')
+
+          echo "Release ID: ${RELEASE_ID}"
+
+          # 上传所有附件
+          cd dist
+          for file in *; do
+            [ -f "$file" ] || continue
+            echo "上传: ${file}"
+            curl -s -X POST \
+              -H "Authorization: token ${GITEA_TOKEN}" \
+              -F "attachment=@${file}" \
+              "https://code.yt-security.com/api/v1/repos/${ORGANIZE}/vulnerability-scan-new/releases/${RELEASE_ID}/assets?name=${file}"
+          done
+
+          echo "✅ Release 发布完成: https://code.yt-security.com/${ORGANIZE}/vulnerability-scan-new/releases/tag/${TAG_NAME}"
+
+      - name: (6) 清理
+        if: always()
+        run: |
+          rm -rf dist
+          echo "✅ 清理完成"

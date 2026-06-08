@@ -12,12 +12,13 @@ import (
 	oc "vulnscan-backend/organize/organize-contract"
 	"vulnscan-backend/pkg/definition"
 
-	"code.yt-security.com/public/core/v2/web"
-	iamsdk "code.yt-security.com/public/sdk"
-	"code.yt-security.com/public/sdk/identity"
-	iamsdk_middleware "code.yt-security.com/public/sdk/middleware"
-	"code.yt-security.com/public/sdk/permission"
-	"code.yt-security.com/public/sdk/transport"
+	iamsdk "code.yt-security.com/public/access"
+	"code.yt-security.com/public/access/admin"
+	"code.yt-security.com/public/access/identity"
+	iamsdk_middleware "code.yt-security.com/public/access/middleware"
+	"code.yt-security.com/public/access/permission"
+	"code.yt-security.com/public/access/transport"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 )
 
@@ -51,7 +52,7 @@ func (h *HandlerOrganize) List(c *gin.Context) {
 	page, pageSize := normalizeOrganizePage(req.Page, req.PageSize, req.Name != "")
 	start := (page - 1) * pageSize
 	if start >= len(filtered) {
-		web.OK(c).List(count, []model.Organize{}).Send()
+		web.Succeed(c).List(count, []model.Organize{}).Send()
 		return
 	}
 	end := start + pageSize
@@ -61,7 +62,7 @@ func (h *HandlerOrganize) List(c *gin.Context) {
 
 	pageItems := filtered[start:end]
 	h.enrichParentNames(pageItems, items)
-	web.OK(c).List(count, pageItems).Send()
+	web.Succeed(c).List(count, pageItems).Send()
 }
 
 func (h *HandlerOrganize) enrichParentNames(pageItems, allItems []model.Organize) {
@@ -98,14 +99,14 @@ func (h *HandlerOrganize) GetByID(c *gin.Context) {
 	item, err := h.svc.GetByID(id)
 	if err != nil {
 		if fallback := h.organizeFromIAM(c, id); fallback != nil {
-			web.OK(c).Data(fallback).Send()
+			web.Succeed(c).Data(fallback).Send()
 			return
 		}
 		web.Err(c, web.NotFound).Send()
 		return
 	}
 	h.mergeOrganizeFromIAM(c, item)
-	web.OK(c).Data(item).Send()
+	web.Succeed(c).Data(item).Send()
 }
 
 func (h *HandlerOrganize) Create(c *gin.Context) {
@@ -128,7 +129,7 @@ func (h *HandlerOrganize) Create(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(item).Send()
+	web.Succeed(c).Data(item).Send()
 }
 
 func (h *HandlerOrganize) Update(c *gin.Context) {
@@ -159,7 +160,7 @@ func (h *HandlerOrganize) Update(c *gin.Context) {
 		web.Fail(c).Msg(userFacingOrganizeError(err)).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerOrganize) Delete(c *gin.Context) {
@@ -182,7 +183,7 @@ func (h *HandlerOrganize) Delete(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerOrganize) Ensure(c *gin.Context) {
@@ -196,7 +197,7 @@ func (h *HandlerOrganize) Ensure(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(item).Send()
+	web.Succeed(c).Data(item).Send()
 }
 
 func (h *HandlerOrganize) Tree(c *gin.Context) {
@@ -206,7 +207,7 @@ func (h *HandlerOrganize) Tree(c *gin.Context) {
 		return
 	}
 	filtered := h.filterOrganizesByPermission(c, items, true)
-	web.OK(c).Data(buildOrganizeTreeFromFlat(filtered)).Send()
+	web.Succeed(c).Data(buildOrganizeTreeFromFlat(filtered)).Send()
 }
 
 func (h *HandlerOrganize) IAMTree(c *gin.Context) {
@@ -219,7 +220,7 @@ func (h *HandlerOrganize) IAMTree(c *gin.Context) {
 		web.Fail(c).Msg("fetch IAM organizes failed: " + err.Error()).Send()
 		return
 	}
-	web.OK(c).Data(convertIAMNodes(nodes)).Send()
+	web.Succeed(c).Data(convertIAMNodes(nodes)).Send()
 }
 
 func (h *HandlerOrganize) SyncIam(c *gin.Context) {
@@ -239,7 +240,7 @@ func (h *HandlerOrganize) SyncIam(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(gin.H{
+	web.Succeed(c).Data(gin.H{
 		"synced": count,
 		"total":  countOrganizeNodes(iamNodes),
 	}).Send()
@@ -270,12 +271,12 @@ func (h *HandlerOrganize) fetchIAMOrganizeTree(c *gin.Context) ([]*identity.Orga
 	return buildIAMOrganizeTree(infos), nil
 }
 
-func (h *HandlerOrganize) fetchIAMOrganizeInfos(ctx context.Context) ([]*identity.OrganizeInfo, error) {
+func (h *HandlerOrganize) fetchIAMOrganizeInfos(ctx context.Context) ([]*admin.OrganizeInfo, error) {
 	options, err := h.iam.Admin.Organize.GetOrganizeOptions(ctx, "")
 	if err != nil {
 		return nil, err
 	}
-	infos := make([]*identity.OrganizeInfo, 0, len(options))
+	infos := make([]*admin.OrganizeInfo, 0, len(options))
 	seen := make(map[string]struct{}, len(options))
 	for _, option := range options {
 		if option.ID == "" {
@@ -358,7 +359,7 @@ func resolveVisibleOrganizeIDs(c *gin.Context, items []model.Organize) map[strin
 		return map[string]struct{}{}
 	}
 
-	scope, hasScope := iamsdk.GetDataScope(c)
+	scope, hasScope := iamsdk_middleware.GetDataScope(c)
 	if !hasScope || scope == nil {
 		// 单位管理页需展示完整组织树；未配置数据范围时默认可见全部（与资产数据权限分离）。
 		scope = &iamsdk_middleware.DataScope{
@@ -485,7 +486,7 @@ func (h *HandlerOrganize) ensureIAMOrganizeForCreate(c *gin.Context, item *model
 		return err
 	}
 	if info == nil {
-		req := &identity.CreateOrganizeRequest{
+		req := &admin.CreateOrganizeRequest{
 			Name:       item.Name,
 			ParentID:   firstNonEmpty(item.ParentID, defaultParentID),
 			CreditCode: item.UnifiedSocialCreditCode,
@@ -503,7 +504,7 @@ func (h *HandlerOrganize) ensureIAMOrganizeForCreate(c *gin.Context, item *model
 	return nil
 }
 
-func (h *HandlerOrganize) findIAMOrganizeByName(c *gin.Context, name string) (*identity.OrganizeInfo, error) {
+func (h *HandlerOrganize) findIAMOrganizeByName(c *gin.Context, name string) (*admin.OrganizeInfo, error) {
 	if h.iam == nil || name == "" {
 		return nil, nil
 	}
@@ -570,7 +571,7 @@ func isIAMUnauthorized(err error) bool {
 	return errors.As(err, &iamErr) && iamErr.IsUnauthorized()
 }
 
-func organizeModelFromIAM(info *identity.OrganizeInfo) *model.Organize {
+func organizeModelFromIAM(info *admin.OrganizeInfo) *model.Organize {
 	if info == nil {
 		return nil
 	}
@@ -582,7 +583,7 @@ func organizeModelFromIAM(info *identity.OrganizeInfo) *model.Organize {
 	}
 }
 
-func buildIAMOrganizeTree(items []*identity.OrganizeInfo) []*identity.OrganizeNode {
+func buildIAMOrganizeTree(items []*admin.OrganizeInfo) []*identity.OrganizeNode {
 	nodeMap := make(map[string]*identity.OrganizeNode, len(items))
 	for _, item := range items {
 		if item == nil || item.ID == "" {
@@ -667,13 +668,13 @@ func (h *HandlerConstruction) List(c *gin.Context) {
 	if !ok {
 		return
 	}
-	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
 	items, count, err := h.svc.List(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).List(count, items).Send()
+	web.Succeed(c).List(count, items).Send()
 }
 
 func (h *HandlerConstruction) GetByID(c *gin.Context) {
@@ -682,7 +683,7 @@ func (h *HandlerConstruction) GetByID(c *gin.Context) {
 		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.OK(c).Data(item).Send()
+	web.Succeed(c).Data(item).Send()
 }
 
 func (h *HandlerConstruction) Create(c *gin.Context) {
@@ -700,7 +701,7 @@ func (h *HandlerConstruction) Create(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(item).Send()
+	web.Succeed(c).Data(item).Send()
 }
 
 func (h *HandlerConstruction) Update(c *gin.Context) {
@@ -717,7 +718,7 @@ func (h *HandlerConstruction) Update(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerConstruction) Delete(c *gin.Context) {
@@ -725,5 +726,5 @@ func (h *HandlerConstruction) Delete(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }

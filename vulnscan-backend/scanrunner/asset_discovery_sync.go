@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"code.yt-security.com/public/core/v2/generate/qulid"
+	"code.yt-security.com/public/core/generate/ulid"
 	"gorm.io/gorm"
 
 	"vulnscan-backend/model"
@@ -185,7 +185,7 @@ func SyncAssetDiscoveryCandidates(db *gorm.DB, probeID string, taskIDs []string)
 			c.ImportedID = aid
 			continue
 		}
-		c.ID = qulid.GenerateID()
+		c.ID = ulid.GenerateID()
 		rows = append(rows, *c)
 	}
 	ApplyLibraryMatchToDiscoveryCandidates(db, rows)

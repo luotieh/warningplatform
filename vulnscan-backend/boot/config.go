@@ -3,9 +3,9 @@ package boot
 import (
 	"log/slog"
 
-	"code.yt-security.com/public/core/v2/db"
-	"code.yt-security.com/public/core/v2/os/qcfg"
-	"code.yt-security.com/public/core/v2/web"
+	"code.yt-security.com/public/core/config"
+	"code.yt-security.com/public/core/db"
+	"code.yt-security.com/public/core/web"
 )
 
 type IAMConfig struct {
@@ -70,32 +70,24 @@ type NatsConfig struct {
 }
 
 type Config struct {
-	Web     web.Config    `json:"web" toml:"web"`
-	DB      db.Config     `json:"db" toml:"db"`
-	Cache   CacheConfig   `json:"cache" toml:"cache"`
-	IAM     IAMConfig     `json:"iam" toml:"iam"`
-	SSO     SSOConfig     `json:"sso" toml:"sso"`
-	Nats    NatsConfig    `json:"nats" toml:"nats"`
-	Cluster ClusterConfig `json:"cluster" toml:"cluster"`
+	Web     web.Config         `json:"web" toml:"web"`
+	DB      db.DBManagerConfig `json:"db" toml:"db"`
+	Cache   CacheConfig        `json:"cache" toml:"cache"`
+	IAM     IAMConfig          `json:"iam" toml:"iam"`
+	SSO     SSOConfig          `json:"sso" toml:"sso"`
+	Nats    NatsConfig         `json:"nats" toml:"nats"`
+	Cluster ClusterConfig      `json:"cluster" toml:"cluster"`
 }
 
 func LoadConfig() *Config {
 	slog.Info("[+] ========== 配置初始化 ==========")
-	c1 := qcfg.New()
-	c1 = c1.SetConfigPath("config.toml")
-	err := c1.Load()
-	if err != nil {
+
+	var mConfig Config
+	if err := config.Load("config.toml", &mConfig); err != nil {
 		slog.Error("[!] 配置文件加载失败", "error", err)
 		panic("配置文件加载失败: " + err.Error())
 	}
 	slog.Info("[+] 配置文件加载成功")
-
-	var mConfig Config
-	err = c1.Unmarshal(&mConfig)
-	if err != nil {
-		slog.Error("[!] 配置文件解析失败", "error", err)
-		panic("配置文件解析失败: " + err.Error())
-	}
 
 	if mConfig.Cache.Prefix == "" {
 		mConfig.Cache.Prefix = "vs:"

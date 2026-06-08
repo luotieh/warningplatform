@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"code.yt-security.com/public/core/v2/generate/qulid"
+	"code.yt-security.com/public/core/generate/ulid"
 	"gorm.io/gorm"
 
 	"vulnscan-backend/model"
@@ -236,7 +236,7 @@ func (vm *VersionManager) GetRuleDelta(sinceVersion int64, limit int) (*SyncResp
 // LogSync records a sync operation for audit trail.
 func (vm *VersionManager) LogSync(subMasterID, dataType string, from, to int64, count int, status string, errMsg string, durMs int) {
 	log := model.SyncLog{
-		ID:           qulid.GenerateID(),
+		ID:           ulid.GenerateID(),
 		SubMasterID:  subMasterID,
 		DataType:     dataType,
 		FromVersion:  from,

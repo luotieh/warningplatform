@@ -3,7 +3,7 @@ package organize
 import (
 	"testing"
 
-	"code.yt-security.com/public/sdk/identity"
+	"code.yt-security.com/public/access/admin"
 )
 
 func TestFindIAMOrganizeByExactNameNilService(t *testing.T) {
@@ -14,12 +14,12 @@ func TestFindIAMOrganizeByExactNameNilService(t *testing.T) {
 }
 
 func TestPickFirstExactNameMatch(t *testing.T) {
-	all := []*identity.OrganizeInfo{
+	all := []*admin.OrganizeInfo{
 		{ID: "1", Name: "测试单位2"},
 		{ID: "2", Name: "测试单位1"},
 		{ID: "3", Name: "测试单位1"},
 	}
-	var matched *identity.OrganizeInfo
+	var matched *admin.OrganizeInfo
 	name := "测试单位1"
 	for _, info := range all {
 		if info != nil && info.Name == name && matched == nil {

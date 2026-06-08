@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"code.yt-security.com/public/core/v2/web"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 )
 
@@ -44,7 +44,7 @@ func (h *Handler) ListFrameworks(c *gin.Context) {
 			"rule_count":  len(fw.Rules),
 		})
 	}
-	web.OK(c).Data(list).Send()
+	web.Succeed(c).Data(list).Send()
 }
 
 func (h *Handler) GetFramework(c *gin.Context) {
@@ -54,7 +54,7 @@ func (h *Handler) GetFramework(c *gin.Context) {
 		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.OK(c).Data(fw).Send()
+	web.Succeed(c).Data(fw).Send()
 }
 
 func (h *Handler) RunCheck(c *gin.Context) {
@@ -90,7 +90,7 @@ func (h *Handler) RunCheck(c *gin.Context) {
 
 	report := h.engine.RunFramework(ctx, fw, req.TargetIP)
 
-	web.OK(c).Data(gin.H{
+	web.Succeed(c).Data(gin.H{
 		"report":    report,
 		"framework": fw.Name,
 		"target":    req.TargetIP,
@@ -118,5 +118,5 @@ func (h *Handler) GetRules(c *gin.Context) {
 		}
 		filtered = append(filtered, rule)
 	}
-	web.OK(c).Data(filtered).Send()
+	web.Succeed(c).Data(filtered).Send()
 }

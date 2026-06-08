@@ -3,8 +3,8 @@ package datalib
 import (
 	"vulnscan-backend/model"
 
-	"code.yt-security.com/public/core/v2/web"
-	iamsdk "code.yt-security.com/public/sdk"
+	iamsdk "code.yt-security.com/public/access"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 	"vulnscan-backend/pkg/definition"
 )
@@ -36,13 +36,13 @@ func (h *HandlerDataLib) List(c *gin.Context) {
 	if !ok {
 		return
 	}
-	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
 	items, count, err := h.svc.List(query, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).List(count, items).Send()
+	web.Succeed(c).List(count, items).Send()
 }
 
 func (h *HandlerDataLib) GetByID(c *gin.Context) {
@@ -55,7 +55,7 @@ func (h *HandlerDataLib) GetByID(c *gin.Context) {
 		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.OK(c).Data(item).Send()
+	web.Succeed(c).Data(item).Send()
 }
 
 func (h *HandlerDataLib) Create(c *gin.Context) {
@@ -70,7 +70,7 @@ func (h *HandlerDataLib) Create(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(req).Send()
+	web.Succeed(c).Data(req).Send()
 }
 
 func (h *HandlerDataLib) Update(c *gin.Context) {
@@ -86,7 +86,7 @@ func (h *HandlerDataLib) Update(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerDataLib) Delete(c *gin.Context) {
@@ -98,7 +98,7 @@ func (h *HandlerDataLib) Delete(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 // ── Entry Handlers ──
@@ -122,7 +122,7 @@ func (h *HandlerDataLib) ListEntries(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).List(count, items).Send()
+	web.Succeed(c).List(count, items).Send()
 }
 
 func (h *HandlerDataLib) GetEntry(c *gin.Context) {
@@ -135,7 +135,7 @@ func (h *HandlerDataLib) GetEntry(c *gin.Context) {
 		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.OK(c).Data(item).Send()
+	web.Succeed(c).Data(item).Send()
 }
 
 func (h *HandlerDataLib) AddEntry(c *gin.Context) {
@@ -152,7 +152,7 @@ func (h *HandlerDataLib) AddEntry(c *gin.Context) {
 		return
 	}
 	h.reloadScanKnowledge()
-	web.OK(c).Data(entry).Send()
+	web.Succeed(c).Data(entry).Send()
 }
 
 func (h *HandlerDataLib) UpdateEntry(c *gin.Context) {
@@ -169,7 +169,7 @@ func (h *HandlerDataLib) UpdateEntry(c *gin.Context) {
 		return
 	}
 	h.reloadScanKnowledge()
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerDataLib) DeleteEntry(c *gin.Context) {
@@ -182,7 +182,7 @@ func (h *HandlerDataLib) DeleteEntry(c *gin.Context) {
 		return
 	}
 	h.reloadScanKnowledge()
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 type batchEntryReq struct {
@@ -204,7 +204,7 @@ func (h *HandlerDataLib) BatchAddEntries(c *gin.Context) {
 		return
 	}
 	h.reloadScanKnowledge()
-	web.OK(c).Data(gin.H{"created": count}).Send()
+	web.Succeed(c).Data(gin.H{"created": count}).Send()
 }
 
 // ── Bulk Operations ──
@@ -228,7 +228,7 @@ func (h *HandlerDataLib) Import(c *gin.Context) {
 		return
 	}
 	h.reloadScanKnowledge()
-	web.OK(c).Data(gin.H{"imported": count}).Send()
+	web.Succeed(c).Data(gin.H{"imported": count}).Send()
 }
 
 func (h *HandlerDataLib) Export(c *gin.Context) {
@@ -256,7 +256,7 @@ func (h *HandlerDataLib) Clear(c *gin.Context) {
 		return
 	}
 	h.reloadScanKnowledge()
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerDataLib) GetCategories(c *gin.Context) {
@@ -266,7 +266,7 @@ func (h *HandlerDataLib) GetCategories(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(categories).Send()
+	web.Succeed(c).Data(categories).Send()
 }
 
 func (h *HandlerDataLib) Reload(c *gin.Context) {
@@ -278,5 +278,5 @@ func (h *HandlerDataLib) Reload(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Msg("reload success").Send()
+	web.Succeed(c).Msg("reload success").Send()
 }

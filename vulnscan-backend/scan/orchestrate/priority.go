@@ -1,7 +1,7 @@
 package orchestrate
 
 import (
-	"vulnscan-backend/scan/core"
+	"code.yt-security.com/public/scanengine/core"
 
 	"log/slog"
 	"sort"

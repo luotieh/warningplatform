@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"vulnscan-backend/scan/module/cyberspace"
+	"code.yt-security.com/public/scanengine/module/cyberspace"
 )
 
 type CyberspaceCollector struct {

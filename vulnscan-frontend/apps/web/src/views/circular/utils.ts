@@ -46,7 +46,11 @@ export function circularDataToFormMap(rows: unknown): Record<string, unknown> {
   if (!Array.isArray(rows)) return {};
   return rows.reduce((acc: Record<string, unknown>, item: Record<string, unknown>) => {
     const field = item?.field ?? item?.name ?? item?.key ?? item?.title;
-    if (field) acc[String(field)] = item?.value;
+    if (field) {
+      acc[String(field)] = item?.type === 'link' && item?.download_url
+        ? item.download_url
+        : item?.value;
+    }
     return acc;
   }, {});
 }

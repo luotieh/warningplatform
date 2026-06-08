@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"code.yt-security.com/public/core/v2/generate/qulid"
+	"code.yt-security.com/public/core/generate/ulid"
 	"gorm.io/gorm"
 )
 
@@ -128,7 +128,7 @@ func BuildIncidentOperationLog(
 	now := time.Now()
 	return IncidentOperationLog{
 		ReadOnlyModel: ReadOnlyModel{
-			Id:        qulid.GenerateID(),
+			Id:        ulid.GenerateID(),
 			CreatedAt: now,
 		},
 		IncidentId:    incidentId,
@@ -156,7 +156,7 @@ func BuildIncidentOperationLogWithTime(
 	}
 	return IncidentOperationLog{
 		ReadOnlyModel: ReadOnlyModel{
-			Id:        qulid.GenerateID(),
+			Id:        ulid.GenerateID(),
 			CreatedAt: time.Now(),
 		},
 		IncidentId:    incidentId,
@@ -194,7 +194,7 @@ func BuildIncidentComment(incidentId, parentId, content, authorId, authorName, m
 	now := time.Now()
 	return IncidentComment{
 		FullModel: FullModel{
-			Id:        qulid.GenerateID(),
+			Id:        ulid.GenerateID(),
 			CreatedAt: now,
 			CreatedBy: authorId,
 			UpdatedAt: now,

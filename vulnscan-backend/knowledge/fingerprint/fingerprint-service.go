@@ -3,8 +3,8 @@ package fingerprint
 import (
 	"vulnscan-backend/model"
 
-	"code.yt-security.com/public/core/v2/db"
-	"code.yt-security.com/public/core/v2/generate/qulid"
+	"code.yt-security.com/public/core/db"
+	"code.yt-security.com/public/core/generate/ulid"
 	"gorm.io/gorm"
 )
 
@@ -70,7 +70,7 @@ func (s *ServiceFingerprint) GetByID(id string) (*model.ServiceFingerprint, erro
 
 func (s *ServiceFingerprint) Create(item *model.ServiceFingerprint) error {
 	if item.ID == "" {
-		item.ID = qulid.GenerateID()
+		item.ID = ulid.GenerateID()
 	}
 	return s.session().Create(item).Error
 }

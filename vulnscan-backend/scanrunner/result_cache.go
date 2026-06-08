@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"vulnscan-backend/scan/core"
+	"code.yt-security.com/public/scanengine/core"
 )
 
 type cachedResult struct {

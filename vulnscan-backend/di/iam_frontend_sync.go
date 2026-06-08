@@ -7,10 +7,10 @@ import (
 	"log/slog"
 	"time"
 
-	"code.yt-security.com/public/core/v2/web"
-	"code.yt-security.com/public/sdk/authorize"
-	"code.yt-security.com/public/sdk/middleware"
-	"code.yt-security.com/public/sdk/transport"
+	"code.yt-security.com/public/access/authorize"
+	"code.yt-security.com/public/access/middleware"
+	"code.yt-security.com/public/access/transport"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 )
 
@@ -56,7 +56,7 @@ func (h *Handlers) syncFrontendsWithServiceToken(c *gin.Context) {
 	totalRefs, emptyRefs := countFrontendRefs(req.Items, 0, 0)
 	slog.Info("[sync-frontends] 收到前端菜单", "total_items", countFrontendItems(req.Items), "backend_refs_total", totalRefs, "items_without_refs", emptyRefs)
 
-	if err := h.IAM.Authorize.SyncFrontends(ctx, h.Config.IAM.ClientID, req.Items); err != nil {
+	if err := h.IAM.SyncFrontends(ctx, req.Items); err != nil {
 		slog.Error("[vulnscan] sync frontends to IAM failed", "err", err, "user", user.UserID)
 		web.Resp(c, web.InternalError.SetError(err))
 		return

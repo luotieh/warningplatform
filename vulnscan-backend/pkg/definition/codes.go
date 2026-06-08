@@ -3,7 +3,7 @@ package definition
 import (
 	"net/http"
 
-	"code.yt-security.com/public/core/v2/web"
+	"code.yt-security.com/public/core/web"
 )
 
 // 30000-30999: 扫描模块

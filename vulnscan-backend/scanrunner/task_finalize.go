@@ -42,7 +42,7 @@ func (r *Runner) finalizeAfterRun(ctx context.Context) {
 			}
 		}
 	default:
-		if status == model.TaskStatusCompleted || status == model.TaskStatusPartial {
+		if status == model.TaskStatusCompleted || status == model.TaskStatusPartial || status == model.TaskStatusFailed {
 			if n, err := SyncVulnerabilitiesFromTask(r.db, &r.task); err != nil {
 				slog.Warn("[Runner] 同步漏洞库失败", "task_id", r.task.ID, "error", err)
 			} else if n > 0 {

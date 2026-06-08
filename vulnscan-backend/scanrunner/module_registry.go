@@ -4,7 +4,7 @@ import (
 	"sort"
 	"sync"
 
-	"vulnscan-backend/scan/core"
+	"code.yt-security.com/public/scanengine/core"
 )
 
 type ModuleBuilder func(deps *ModuleDeps) core.ScanModule

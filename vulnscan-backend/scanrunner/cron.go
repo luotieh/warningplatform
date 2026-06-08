@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"code.yt-security.com/public/core/v2/generate/qulid"
+	"code.yt-security.com/public/core/generate/ulid"
 	"gorm.io/gorm"
 
 	"vulnscan-backend/model"
@@ -79,7 +79,7 @@ func (cs *CronScheduler) triggerSchedule(ctx context.Context, schedule *model.Sc
 	}
 
 	task := model.ScanTask{
-		ID:           qulid.GenerateID(),
+		ID:           ulid.GenerateID(),
 		Name:         schedule.Name + " (定时)",
 		TemplateID:   templateID,
 		TemplateName: schedule.TemplateName,

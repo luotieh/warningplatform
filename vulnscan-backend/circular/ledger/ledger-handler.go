@@ -4,7 +4,7 @@ import (
 	inputContract "vulnscan-backend/circular/input/input-contract"
 	ledgerContract "vulnscan-backend/circular/ledger/ledger-contract"
 
-	"code.yt-security.com/public/core/v2/web"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 )
 
@@ -26,7 +26,7 @@ func (h *HandlerLedger) List(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).List(total, items).Send()
+	web.Succeed(c).List(total, items).Send()
 }
 
 func (h *HandlerLedger) Detail(c *gin.Context) {
@@ -39,5 +39,5 @@ func (h *HandlerLedger) Detail(c *gin.Context) {
 		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.OK(c).Data(item).Send()
+	web.Succeed(c).Data(item).Send()
 }

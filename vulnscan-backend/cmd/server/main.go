@@ -25,7 +25,7 @@ func main() {
 
 	srvErr := make(chan error, 1)
 	go func() {
-		srvErr <- handlers.Web.ListenAndServeWithSignal()
+		srvErr <- handlers.Web.ListenAndServe(ctx)
 	}()
 
 	select {

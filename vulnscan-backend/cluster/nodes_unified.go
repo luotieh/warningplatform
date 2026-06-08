@@ -6,8 +6,8 @@ import (
 	"runtime"
 	"time"
 
-	"code.yt-security.com/public/core/v2/web"
-	"code.yt-security.com/public/sdk/authorize"
+	"code.yt-security.com/public/access/authorize"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/mem"
@@ -97,7 +97,7 @@ func (a *nodesAPI) List(c *gin.Context) {
 
 	summary := computeNodeSummary(nodes)
 
-	web.OK(c).Data(gin.H{
+	web.Succeed(c).Data(gin.H{
 		"nodes":   nodes,
 		"summary": summary,
 	}).Send()

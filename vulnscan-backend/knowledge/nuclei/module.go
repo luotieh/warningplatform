@@ -13,8 +13,8 @@ import (
 	"github.com/projectdiscovery/nuclei/v3/pkg/output"
 	"gorm.io/gorm"
 
+	"code.yt-security.com/public/scanengine/core"
 	"vulnscan-backend/pkg/scanmetrics"
-	"vulnscan-backend/scan/core"
 )
 
 type NucleiModule struct {
@@ -384,13 +384,13 @@ func extractDetectedProducts(config map[string]interface{}) []string {
 
 func buildNucleiOptions(templatePaths []string, workflowPaths []string, config map[string]interface{}) []nucleilib.NucleiSDKOptions {
 	concurrency := nucleilib.Concurrency{
-		TemplateConcurrency:           25,
-		HostConcurrency:               10,
-		HeadlessHostConcurrency:       2,
-		HeadlessTemplateConcurrency:   2,
-		JavascriptTemplateConcurrency: 15,
-		TemplatePayloadConcurrency:    25,
-		ProbeConcurrency:              50,
+		TemplateConcurrency:           40,
+		HostConcurrency:               15,
+		HeadlessHostConcurrency:       3,
+		HeadlessTemplateConcurrency:   3,
+		JavascriptTemplateConcurrency: 20,
+		TemplatePayloadConcurrency:    40,
+		ProbeConcurrency:              80,
 	}
 	if hasDetectedWAFs(config) {
 		concurrency.TemplateConcurrency = max(8, concurrency.TemplateConcurrency/2)
@@ -406,7 +406,7 @@ func buildNucleiOptions(templatePaths []string, workflowPaths []string, config m
 		}),
 		nucleilib.DisableUpdateCheck(),
 		nucleilib.WithNetworkConfig(nucleilib.NetworkConfig{
-			Timeout:         15,
+			Timeout:         10,
 			Retries:         1,
 			MaxHostError:    30,
 			SystemResolvers: true,
@@ -417,7 +417,7 @@ func buildNucleiOptions(templatePaths []string, workflowPaths []string, config m
 	if rateLimit, ok := config["rate_limit"].(int); ok && rateLimit > 0 {
 		opts = append(opts, nucleilib.WithGlobalRateLimit(rateLimit, time.Second))
 	} else {
-		opts = append(opts, nucleilib.WithGlobalRateLimit(100, time.Second))
+		opts = append(opts, nucleilib.WithGlobalRateLimit(200, time.Second))
 	}
 
 	if proxy, ok := config["proxy"].(string); ok && proxy != "" {

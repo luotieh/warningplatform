@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"code.yt-security.com/public/core/v2/generate/qulid"
+	"code.yt-security.com/public/core/generate/ulid"
 	"gorm.io/gorm"
 )
 
@@ -102,7 +102,7 @@ type BaseModel struct {
 
 func (m *BaseModel) BeforeCreate(tx *gorm.DB) error {
 	if m.ID == "" {
-		m.ID = qulid.GenerateID()
+		m.ID = ulid.GenerateID()
 	}
 	return nil
 }
@@ -119,7 +119,7 @@ type FullModel struct {
 
 func (m *FullModel) BeforeCreate(tx *gorm.DB) error {
 	if m.Id == "" {
-		m.Id = qulid.GenerateID()
+		m.Id = ulid.GenerateID()
 	}
 	return nil
 }

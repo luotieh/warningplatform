@@ -7,7 +7,7 @@ import (
 
 	statsContract "vulnscan-backend/incident/stats/stats-contract"
 
-	"code.yt-security.com/public/core/v2/web"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 )
 
@@ -29,7 +29,7 @@ func (h *HandlerStats) RemediationStats(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(stats).Send()
+	web.Succeed(c).Data(stats).Send()
 }
 
 func (h *HandlerStats) OverdueList(c *gin.Context) {
@@ -42,7 +42,7 @@ func (h *HandlerStats) OverdueList(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).List(count, items).Send()
+	web.Succeed(c).List(count, items).Send()
 }
 
 func (h *HandlerStats) MultiDimAnalysis(c *gin.Context) {
@@ -61,7 +61,7 @@ func (h *HandlerStats) MultiDimAnalysis(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(items).Send()
+	web.Succeed(c).Data(items).Send()
 }
 
 func (h *HandlerStats) GenerateReport(c *gin.Context) {
@@ -135,7 +135,7 @@ func (h *HandlerStats) PreviewIncidentReport(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(data).Send()
+	web.Succeed(c).Data(data).Send()
 }
 
 func (h *HandlerStats) ExportIncidentReport(c *gin.Context) {
@@ -197,7 +197,7 @@ func (h *HandlerStats) TrendPrediction(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(result).Send()
+	web.Succeed(c).Data(result).Send()
 }
 
 func (h *HandlerStats) AIAnalysis(c *gin.Context) {
@@ -206,7 +206,7 @@ func (h *HandlerStats) AIAnalysis(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(result).Send()
+	web.Succeed(c).Data(result).Send()
 }
 
 func (h *HandlerStats) AssetProfile(c *gin.Context) {
@@ -219,7 +219,7 @@ func (h *HandlerStats) AssetProfile(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(result).Send()
+	web.Succeed(c).Data(result).Send()
 }
 
 func (h *HandlerStats) AssetSummary(c *gin.Context) {
@@ -232,5 +232,5 @@ func (h *HandlerStats) AssetSummary(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).List(count, items).Send()
+	web.Succeed(c).List(count, items).Send()
 }

@@ -5,10 +5,11 @@ import (
 
 	"gorm.io/gorm"
 
-	"vulnscan-backend/dict"
+	"code.yt-security.com/public/scanengine/dict"
+	"code.yt-security.com/public/scanengine/rulestore"
+
 	"vulnscan-backend/model"
 	"vulnscan-backend/pkg/payload"
-	"vulnscan-backend/scan/rulestore"
 )
 
 func logKnowledgeBootstrap(db *gorm.DB, ds *dict.Store, rs *rulestore.Store, pl *payload.Loader) {

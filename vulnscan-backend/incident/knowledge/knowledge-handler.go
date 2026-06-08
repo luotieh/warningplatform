@@ -3,8 +3,8 @@ package knowledge
 import (
 	knowledgeContract "vulnscan-backend/incident/knowledge/knowledge-contract"
 
-	"code.yt-security.com/public/core/v2/web"
-	iamsdk "code.yt-security.com/public/sdk"
+	iamsdk "code.yt-security.com/public/access"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 )
 
@@ -28,7 +28,7 @@ func (h *HandlerKnowledge) Create(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerKnowledge) Update(c *gin.Context) {
@@ -44,7 +44,7 @@ func (h *HandlerKnowledge) Update(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerKnowledge) Delete(c *gin.Context) {
@@ -56,7 +56,7 @@ func (h *HandlerKnowledge) Delete(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerKnowledge) Detail(c *gin.Context) {
@@ -69,7 +69,7 @@ func (h *HandlerKnowledge) Detail(c *gin.Context) {
 		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.OK(c).Data(item).Send()
+	web.Succeed(c).Data(item).Send()
 }
 
 func (h *HandlerKnowledge) List(c *gin.Context) {
@@ -82,7 +82,7 @@ func (h *HandlerKnowledge) List(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).List(count, items).Send()
+	web.Succeed(c).List(count, items).Send()
 }
 
 func (h *HandlerKnowledge) Recommend(c *gin.Context) {
@@ -97,7 +97,7 @@ func (h *HandlerKnowledge) Recommend(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(items).Send()
+	web.Succeed(c).Data(items).Send()
 }
 
 func (h *HandlerKnowledge) Archive(c *gin.Context) {
@@ -111,5 +111,5 @@ func (h *HandlerKnowledge) Archive(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }

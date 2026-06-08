@@ -1,7 +1,7 @@
 package scope
 
 import (
-	iamsdk "code.yt-security.com/public/sdk"
+	iamsdk "code.yt-security.com/public/access"
 	"github.com/gin-gonic/gin"
 )
 

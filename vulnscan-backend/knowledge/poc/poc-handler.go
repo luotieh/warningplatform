@@ -11,16 +11,16 @@ import (
 	"sync"
 	"time"
 
+	"code.yt-security.com/public/scanengine/core"
 	"vulnscan-backend/knowledge/nuclei"
 	"vulnscan-backend/model"
-	"vulnscan-backend/scan/core"
 
 	nucleilib "github.com/projectdiscovery/nuclei/v3/lib"
 	"github.com/projectdiscovery/nuclei/v3/pkg/output"
 
-	"code.yt-security.com/public/core/v2/generate/qulid"
-	"code.yt-security.com/public/core/v2/web"
-	iamsdk "code.yt-security.com/public/sdk"
+	iamsdk "code.yt-security.com/public/access"
+	"code.yt-security.com/public/core/generate/ulid"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 	"vulnscan-backend/pkg/definition"
 )
@@ -39,23 +39,23 @@ func (h *HandlerPoc) List(c *gin.Context) {
 		return
 	}
 
-	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
 	items, count, err := h.svc.List(query, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).List(count, items).Send()
+	web.Succeed(c).List(count, items).Send()
 }
 
 func (h *HandlerPoc) Stats(c *gin.Context) {
-	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
 	stats, err := h.svc.Stats(scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(stats).Send()
+	web.Succeed(c).Data(stats).Send()
 }
 
 func (h *HandlerPoc) GetByID(c *gin.Context) {
@@ -68,7 +68,7 @@ func (h *HandlerPoc) GetByID(c *gin.Context) {
 		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.OK(c).Data(item).Send()
+	web.Succeed(c).Data(item).Send()
 }
 
 func (h *HandlerPoc) Create(c *gin.Context) {
@@ -82,7 +82,7 @@ func (h *HandlerPoc) Create(c *gin.Context) {
 		return
 	}
 	h.svc.InvalidateCache()
-	web.OK(c).Data(item).Send()
+	web.Succeed(c).Data(item).Send()
 }
 
 func (h *HandlerPoc) Update(c *gin.Context) {
@@ -99,7 +99,7 @@ func (h *HandlerPoc) Update(c *gin.Context) {
 		return
 	}
 	h.svc.InvalidateCache()
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerPoc) Delete(c *gin.Context) {
@@ -112,7 +112,7 @@ func (h *HandlerPoc) Delete(c *gin.Context) {
 		return
 	}
 	h.svc.InvalidateCache()
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 type toggleReq struct {
@@ -132,7 +132,7 @@ func (h *HandlerPoc) Toggle(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 type importYAMLReq struct {
@@ -150,7 +150,7 @@ func (h *HandlerPoc) ImportYAML(c *gin.Context) {
 		return
 	}
 	h.svc.InvalidateCache()
-	web.OK(c).Data(item).Send()
+	web.Succeed(c).Data(item).Send()
 }
 
 type importDirReq struct {
@@ -164,7 +164,7 @@ func (h *HandlerPoc) ImportDir(c *gin.Context) {
 	}
 	imported, skipped, errors := h.svc.ImportDir(req.Dir)
 	h.svc.InvalidateCache()
-	web.OK(c).Data(gin.H{
+	web.Succeed(c).Data(gin.H{
 		"imported": imported,
 		"skipped":  skipped,
 		"errors":   errors,
@@ -201,7 +201,7 @@ func (h *HandlerPoc) ImportUpload(c *gin.Context) {
 		}
 		imported, skipped, errCount := h.svc.ImportDir(extractDir)
 		h.svc.InvalidateCache()
-		web.OK(c).Data(gin.H{"imported": imported, "skipped": skipped, "errors": errCount}).Send()
+		web.Succeed(c).Data(gin.H{"imported": imported, "skipped": skipped, "errors": errCount}).Send()
 
 	case strings.HasSuffix(name, ".yaml") || strings.HasSuffix(name, ".yml"):
 		buf := make([]byte, header.Size)
@@ -215,7 +215,7 @@ func (h *HandlerPoc) ImportUpload(c *gin.Context) {
 			return
 		}
 		h.svc.InvalidateCache()
-		web.OK(c).Data(gin.H{"imported": 1, "skipped": 0, "errors": 0, "item": item}).Send()
+		web.Succeed(c).Data(gin.H{"imported": 1, "skipped": 0, "errors": 0, "item": item}).Send()
 
 	default:
 		web.Fail(c).Msg("仅支持 .zip 或 .yaml/.yml 文件").Send()
@@ -326,7 +326,7 @@ func (h *HandlerPoc) Validate(c *gin.Context) {
 
 	tmpl, err := nuclei.ParseTemplate([]byte(req.YAML))
 	if err != nil {
-		web.OK(c).Data(validateResult{Valid: false, Error: err.Error()}).Send()
+		web.Succeed(c).Data(validateResult{Valid: false, Error: err.Error()}).Send()
 		return
 	}
 
@@ -337,7 +337,7 @@ func (h *HandlerPoc) Validate(c *gin.Context) {
 		}
 	}
 
-	web.OK(c).Data(validateResult{
+	web.Succeed(c).Data(validateResult{
 		Valid:       true,
 		ID:          tmpl.ID,
 		Name:        tmpl.Info.Name,
@@ -442,7 +442,7 @@ func (h *HandlerPoc) QuickNucleiScan(c *gin.Context) {
 	for k, v := range req.Parameters {
 		cfg[k] = v
 	}
-	cfg["scan_request_id"] = qulid.GenerateID()
+	cfg["scan_request_id"] = ulid.GenerateID()
 
 	to := req.TimeoutSeconds
 	if to <= 0 {
@@ -465,7 +465,7 @@ func (h *HandlerPoc) QuickNucleiScan(c *gin.Context) {
 		return
 	}
 
-	web.OK(c).Data(gin.H{
+	web.Succeed(c).Data(gin.H{
 		"findings":    res.Findings,
 		"duration_ms": res.Duration.Milliseconds(),
 	}).Send()
@@ -479,7 +479,7 @@ func (h *HandlerPoc) TestPoc(c *gin.Context) {
 
 	tmpl, err := nuclei.ParseTemplate([]byte(req.YAML))
 	if err != nil {
-		web.OK(c).Data(testPocResult{
+		web.Succeed(c).Data(testPocResult{
 			Success: false,
 			Error:   fmt.Sprintf("YAML解析失败: %s", err.Error()),
 		}).Send()
@@ -526,7 +526,7 @@ func (h *HandlerPoc) TestPoc(c *gin.Context) {
 
 	ne, err := nucleilib.NewNucleiEngineCtx(ctx, opts...)
 	if err != nil {
-		web.OK(c).Data(testPocResult{
+		web.Succeed(c).Data(testPocResult{
 			Success:  false,
 			Error:    fmt.Sprintf("初始化Nuclei引擎失败: %s", err.Error()),
 			Duration: time.Since(start).Round(time.Millisecond).String(),
@@ -581,7 +581,7 @@ func (h *HandlerPoc) TestPoc(c *gin.Context) {
 		slog.Warn("[PocTest] 执行出错", "error", err)
 	}
 
-	web.OK(c).Data(testPocResult{
+	web.Succeed(c).Data(testPocResult{
 		Success:  true,
 		Duration: duration,
 		Findings: findings,

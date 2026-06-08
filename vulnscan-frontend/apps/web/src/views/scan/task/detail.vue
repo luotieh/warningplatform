@@ -82,9 +82,22 @@ const activeSubTab = ref('overview');
 const filterSeverity = ref<string | null>(null);
 const filterModule = ref<string | null>(null);
 const filterKeyword = ref('');
+const filterType = ref<string | null>(null);
+const selectedHost = ref<AssetSummary | null>(null);
 const endpointSearch = ref('');
 const tabBarRef = ref<HTMLElement | null>(null);
 const summary = ref<FindingSummary | null>(null);
+
+const allTabView = ref<'grouped' | 'table'>('grouped');
+const portTabView = ref<'card' | 'table'>('card');
+
+interface TypeGroup {
+  type: string;
+  label: string;
+  count: number;
+  color: string;
+  sevBreakdown: Record<string, number>;
+}
 
 const showDetail = ref(false);
 const detailItem = ref<ScanFinding | null>(null);
@@ -559,6 +572,8 @@ const typeColors: Record<string, string> = {
   api_endpoint_exposed: '#e53e3e', api_unauth_access: '#c53030', api_no_rate_limit: '#ed8936',
   api_info_leak_header: '#ecc94b', api_cors_wildcard: '#e53e3e', api_verbose_error: '#ed8936',
   api_idor: '#c53030', api_graphql_introspection: '#805ad5', api_graphql_types: '#805ad5',
+  // Tab 聚合类型
+  vuln: '#e53e3e', infra: '#4a5568', api_disc: '#3182ce', info_collect: '#667eea',
 };
 
 const moduleLabels: Record<string, string> = {
@@ -665,6 +680,36 @@ const subTabDefs = [
   { key: 'info_collect', label: '信息收集', mergeTypes: ['email', 'directory', 'dir_found', 'code_leak', 'cyber_asset', 'missing_security_headers', 'info_leak', 'body_regex', 'body_contains', 'header', 'git_leak', 'nuclei'], group: 'findings' },
 ];
 
+const typeGroupedData = computed<TypeGroup[]>(() => {
+  if (!summary.value?.by_type) return [];
+  return Object.entries(summary.value.by_type)
+    .sort((a, b) => b[1] - a[1])
+    .map(([t, count]) => ({
+      type: t,
+      label: typeLabels[t] ?? t,
+      count,
+      color: typeColors[t] ?? '#718096',
+      sevBreakdown: {},
+    }));
+});
+
+function onTypeCardClick(tabKey: string) {
+  if (tabKey === '__other') {
+    allTabView.value = 'table';
+    filterModule.value = null;
+    filterSeverity.value = null;
+    filterKeyword.value = '';
+    findingsPage.value = 1;
+    fetchFindings();
+    return;
+  }
+  activeSubTab.value = tabKey;
+  selectedEndpoint.value = '';
+  cachedEndpointList.value = [];
+  findingsPage.value = 1;
+  fetchFindings();
+}
+
 function formatTime(raw?: string) {
   if (!raw) return '-';
   const d = new Date(raw);
@@ -716,16 +761,7 @@ const subTabsWithCount = computed(() => {
     if ('isOverview' in t && t.isOverview) return { ...t, count: -1 };
     let count = 0;
     if (t.key === 'all') {
-      if (isAssetDiscoveryTask.value) {
-        count = summary.value!.total_findings;
-      } else {
-        count = summary.value!.total_findings;
-        for (const mt of TYPES_IN_PORT_SERVICE_TAB) {
-          count -= summary.value!.by_type[mt] ?? 0;
-        }
-        count -= summary.value!.by_type.host_alive ?? 0;
-        count = Math.max(0, count);
-      }
+      count = summary.value!.total_findings;
     } else if (t.key === 'host_alive') {
       count = summary.value!.by_type.host_alive ?? 0;
       if (count === 0 && (task.value?.alive_hosts ?? 0) > 0) {
@@ -767,6 +803,63 @@ const subTabsWithCount = computed(() => {
           ((task.value?.alive_hosts ?? 0) > 0 || isAssetDiscoveryTask.value)),
     );
 });
+
+const allTabCards = computed(() => {
+  if (!summary.value?.by_type) return [];
+  const byType = summary.value.by_type;
+  const covered = new Set<string>();
+  const cards: { key: string; label: string; count: number; color: string }[] = [];
+
+  for (const tab of subTabDefs) {
+    if ('isOverview' in tab && tab.isOverview) continue;
+    if (tab.key === 'all') continue;
+    let count = 0;
+    const types = 'mergeTypes' in tab && tab.mergeTypes ? [...tab.mergeTypes] : [tab.key];
+    for (const t of types) {
+      count += byType[t] ?? 0;
+      covered.add(t);
+    }
+    if (count > 0) {
+      cards.push({ key: tab.key, label: tab.label, count, color: typeColors[tab.key] ?? '#718096' });
+    }
+  }
+
+  let otherCount = 0;
+  for (const [t, c] of Object.entries(byType)) {
+    if (!covered.has(t)) otherCount += c;
+  }
+  if (otherCount > 0) {
+    cards.push({ key: '__other', label: '其他', count: otherCount, color: '#a0aec0' });
+  }
+
+  cards.sort((a, b) => b.count - a.count);
+  return cards;
+});
+
+const sortedByType = computed<[string, number][]>(() => {
+  if (!summary.value?.by_type) return [];
+  return Object.entries(summary.value.by_type).sort((a, b) => b[1] - a[1]);
+});
+
+const typeFilterOptions = computed(() => {
+  if (!summary.value?.by_type) return [];
+  return Object.entries(summary.value.by_type)
+    .sort((a, b) => b[1] - a[1])
+    .map(([k, v]) => ({
+      label: `${typeLabels[k] ?? k} (${v})`,
+      value: k,
+    }));
+});
+
+function selectHost(asset: AssetSummary) {
+  selectedHost.value = asset;
+  selectedEndpoint.value = asset.target || asset.ip;
+  filterSeverity.value = null;
+  filterType.value = null;
+  filterKeyword.value = '';
+  findingsPage.value = 1;
+  fetchFindings();
+}
 
 const severityOptions = [
   { label: '严重', value: 'critical' },
@@ -1444,8 +1537,10 @@ async function fetchFindings() {
       page_size: findingsPageSize.value,
     };
 
-    if (activeSubTab.value === 'all' && !isAssetDiscoveryTask.value) {
-      params.exclude_type = EXCLUDE_FROM_ALL_TAB;
+    if (activeSubTab.value === 'all') {
+      if (filterType.value) {
+        params.type = filterType.value;
+      }
     } else if (activeSubTab.value === 'vuln') {
       params.category = 'vuln';
     } else {
@@ -1491,6 +1586,10 @@ function onSubTabChange(key: string) {
   activeSubTab.value = key;
   selectedEndpoint.value = '';
   selectedTreeNode.value = '';
+  filterType.value = null;
+  selectedHost.value = null;
+  if (key === 'all') allTabView.value = 'grouped';
+  if (key === 'port_open') portTabView.value = 'card';
   if (key === 'overview') return;
   if (!summary.value) fetchSummary();
   if (key === 'host_alive') {
@@ -1498,6 +1597,7 @@ function onSubTabChange(key: string) {
     return;
   }
   if (assets.value.length === 0) fetchAssets();
+  if (key === 'all') return;
   findingsPage.value = 1;
   fetchFindings();
 }
@@ -1795,9 +1895,40 @@ const portServiceHostCount = computed(() => {
 
 const showEndpointSidebar = computed(() => {
   if (activeSubTab.value === 'port_open') {
+    if (portTabView.value === 'card') return false;
     return portServiceHostCount.value > 1;
   }
   return endpointList.value.length > 1;
+});
+
+interface PortCardHost {
+  host: string;
+  ports: Array<{ port: number; protocol: string; service: string; version: string; banner: string; confidence: number }>;
+}
+
+const portCardHosts = computed<PortCardHost[]>(() => {
+  if (activeSubTab.value !== 'port_open') return [];
+  const map = new Map<string, PortCardHost>();
+  for (const f of mergedFindings.value) {
+    const host = findingHost(f);
+    if (!map.has(host)) map.set(host, { host, ports: [] });
+    const entry = map.get(host)!;
+    const port = f.port || parseInt(d(f, 'port'), 10) || 0;
+    if (port > 0 && !entry.ports.some((p) => p.port === port)) {
+      entry.ports.push({
+        port,
+        protocol: d(f, 'protocol') || f.protocol || 'TCP',
+        service: d(f, 'service') || '',
+        version: d(f, 'version') || '',
+        banner: d(f, 'banner') || '',
+        confidence: f.confidence,
+      });
+    }
+  }
+  for (const h of map.values()) {
+    h.ports.sort((a, b) => a.port - b.port);
+  }
+  return Array.from(map.values()).sort((a, b) => b.ports.length - a.ports.length);
 });
 
 async function fetchLogs() {
@@ -2310,7 +2441,7 @@ onUnmounted(() => {
                     <div style="font-size: 11px; color: #999; margin-bottom: 6px; font-weight: 500">端口/服务 ({{ asset.ports.length }})</div>
                     <div style="display: flex; flex-wrap: wrap; gap: 4px">
                       <span
-                        v-for="p in asset.ports.slice(0, 8)"
+                        v-for="p in (asset.ports || []).slice(0, 8)"
                         :key="p.port"
                         style="display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 4px; font-size: 11px; background: #f0f5ff; color: #1890ff; border: 1px solid #d6e4ff"
                       >
@@ -2324,7 +2455,7 @@ onUnmounted(() => {
                   <div v-if="asset.services?.length" style="margin-bottom: 10px">
                     <div style="font-size: 11px; color: #999; margin-bottom: 6px; font-weight: 500">服务</div>
                     <div style="display: flex; flex-wrap: wrap; gap: 4px">
-                      <NTag v-for="s in asset.services.slice(0, 6)" :key="s" size="tiny" :bordered="false" type="info">{{ s }}</NTag>
+                      <NTag v-for="s in (asset.services || []).slice(0, 6)" :key="s" size="tiny" :bordered="false" type="info">{{ s }}</NTag>
                       <span v-if="asset.services.length > 6" style="font-size: 11px; color: #999; line-height: 22px">+{{ asset.services.length - 6 }}</span>
                     </div>
                   </div>
@@ -2332,7 +2463,7 @@ onUnmounted(() => {
                   <div v-if="asset.techs?.length" style="margin-bottom: 10px">
                     <div style="font-size: 11px; color: #999; margin-bottom: 6px; font-weight: 500">技术栈</div>
                     <div style="display: flex; flex-wrap: wrap; gap: 4px">
-                      <NTag v-for="t in asset.techs.slice(0, 6)" :key="t" size="tiny" :bordered="false" type="success">{{ t }}</NTag>
+                      <NTag v-for="t in (asset.techs || []).slice(0, 6)" :key="t" size="tiny" :bordered="false" type="success">{{ t }}</NTag>
                       <span v-if="asset.techs.length > 6" style="font-size: 11px; color: #999; line-height: 22px">+{{ asset.techs.length - 6 }}</span>
                     </div>
                   </div>
@@ -2374,129 +2505,141 @@ onUnmounted(() => {
           <TopologyGraph :findings="mergedFindings" height="550px" />
         </template>
 
-        <!-- Findings Content: Unified Endpoint Split Layout -->
-        <template v-if="activeSubTab !== 'overview' && activeSubTab !== 'host_alive'">
-          <div v-if="showEndpointSidebar" style="display: flex; gap: 16px; min-height: 500px;">
-            <!-- Left: Endpoint List -->
-            <div style="width: min(300px, 25%); min-width: 200px; flex-shrink: 0; border: 1px solid #f0f0f0; border-radius: 8px; background: #fafafa; overflow: hidden; max-height: 700px; display: flex; flex-direction: column;">
-              <div style="padding: 10px 12px; font-size: 13px; font-weight: 600; color: #333; border-bottom: 1px solid #f0f0f0; position: sticky; top: 0; background: #fafafa; z-index: 1;">
-                {{ activeSubTab === 'port_open' ? '扫描主机' : '目标地址' }}
-                <span style="font-weight: 400; color: #999; font-size: 12px; margin-left: 6px">
-                  {{ activeSubTab === 'port_open' ? portServiceHostCount : endpointList.length }} 台
-                </span>
+        <!-- Findings Content -->
+        <template v-if="activeSubTab !== 'overview' && activeSubTab !== 'host_alive' && activeSubTab !== 'nettopo'">
+
+          <!-- Port/Service Asset View -->
+          <template v-if="activeSubTab === 'port_open' && portTabView === 'card'">
+            <div class="fc-toolbar">
+              <div class="fc-toolbar__left">
+                <span class="fc-toolbar__title">资产端口概览</span>
+                <span class="fc-toolbar__meta">{{ assets.length }} 台主机</span>
               </div>
-              <NInput v-model:value="endpointSearch" placeholder="搜索目标" size="small" style="margin: 8px; border-radius: 4px;" />
-              <div style="flex: 1; overflow-y: auto;">
-                <div
-                  style="padding: 8px 12px; cursor: pointer; font-size: 12px; transition: background 0.15s; border-bottom: 1px solid #f5f5f5;"
-                  :style="{ background: selectedEndpoint === '' ? '#e6f7ff' : 'transparent', color: selectedEndpoint === '' ? '#1890ff' : '#555', fontWeight: selectedEndpoint === '' ? '600' : '400' }"
-                  @click="selectedEndpoint = ''; findingsPage = 1; fetchFindings()"
-                >
-                  全部 <span style="font-size: 11px; color: #999">({{ findingsTotal }})</span>
-                </div>
-                <div
-                  v-for="ep in endpointList.filter(e => !endpointSearch || e.key.includes(endpointSearch))"
-                  :key="ep.key"
-                  style="padding: 8px 12px; cursor: pointer; font-size: 12px; transition: background 0.15s; border-bottom: 1px solid #f5f5f5; display: flex; align-items: center; justify-content: space-between;"
-                  :style="{ background: selectedEndpoint === ep.key ? '#e6f7ff' : 'transparent', color: selectedEndpoint === ep.key ? '#1890ff' : '#333' }"
-                  @click="selectedEndpoint = ep.key; findingsPage = 1; fetchFindings()"
-                >
-                  <div style="min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="ep.label">
-                    <span style="font-weight: 500">{{ ep.host }}</span>
-                    <span
-                      v-if="ep.port > 0 && activeSubTab !== 'port_open'"
-                      style="color: #1890ff; font-weight: 600; margin-left: 2px"
-                    >:{{ ep.port }}</span>
+              <NButton size="small" quaternary @click="portTabView = 'table'">
+                <template #icon><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M1.5 2A1.5 1.5 0 000 3.5v9A1.5 1.5 0 001.5 14h13a1.5 1.5 0 001.5-1.5v-9A1.5 1.5 0 0014.5 2h-13zM1 3.5a.5.5 0 01.5-.5h13a.5.5 0 01.5.5v1H1v-1zM1 6h14v6.5a.5.5 0 01-.5.5h-13a.5.5 0 01-.5-.5V6z"/></svg></template>
+                表格视图
+              </NButton>
+            </div>
+            <NSpin :show="assetsLoading">
+              <div v-if="assets.length > 0" class="fc-asset-grid">
+                <div v-for="asset in assets" :key="asset.target" class="fc-asset-card" @click="openAssetDetail(asset)">
+                  <div class="fc-asset-card__head">
+                    <div class="fc-asset-card__ip">{{ asset.ip || asset.target }}</div>
+                    <div v-if="asset.os" class="fc-asset-card__os">{{ asset.os }}</div>
                   </div>
-                  <span style="font-size: 11px; padding: 1px 6px; border-radius: 10px; font-weight: 600; flex-shrink: 0; margin-left: 6px;"
-                    :style="{ background: selectedEndpoint === ep.key ? 'rgba(24,144,255,0.15)' : '#eee', color: selectedEndpoint === ep.key ? '#1890ff' : '#888' }"
-                  >{{ activeSubTab === 'port_open' ? `${ep.count} 端口` : ep.count }}</span>
+                  <div v-if="asset.title" class="fc-asset-card__title">{{ asset.title }}</div>
+                  <div class="fc-asset-card__ports">
+                    <span v-for="p in (asset.ports || []).slice(0, 12)" :key="p.port" class="fc-port-badge" :class="{ 'fc-port-badge--risk': [21,23,445,3389,6379,27017,2375].includes(p.port) }">
+                      {{ p.port }}<template v-if="p.service">/{{ p.service }}</template>
+                    </span>
+                    <span v-if="(asset.ports || []).length > 12" class="fc-port-badge fc-port-badge--more">+{{ asset.ports.length - 12 }}</span>
+                  </div>
+                  <div class="fc-asset-card__foot">
+                    <span v-if="asset.waf" class="fc-asset-tag fc-asset-tag--waf">WAF: {{ asset.waf }}</span>
+                    <span v-for="t in (asset.techs || []).slice(0, 3)" :key="t" class="fc-asset-tag">{{ t }}</span>
+                    <span v-if="Object.values(asset.vuln_count || {}).some(v => v > 0)" class="fc-asset-tag fc-asset-tag--vuln">
+                      漏洞 {{ Object.values(asset.vuln_count || {}).reduce((a, b) => a + b, 0) }}
+                    </span>
+                  </div>
                 </div>
               </div>
+              <NEmpty v-if="!assetsLoading && assets.length === 0" description="暂无资产数据" style="padding: 60px 0" />
+            </NSpin>
+          </template>
+
+          <!-- All Tab: Host-Centric View -->
+          <template v-else-if="activeSubTab === 'all'">
+            <!-- Host Grid Overview -->
+            <div v-if="!selectedHost" class="fc-host-view">
+              <div class="fc-toolbar">
+                <div class="fc-toolbar__left">
+                  <span class="fc-toolbar__title">主机总览</span>
+                  <span class="fc-toolbar__meta">{{ assets.length }} 台主机，{{ summary?.total_findings ?? 0 }} 条发现</span>
+                </div>
+              </div>
+              <!-- Severity summary -->
+              <div v-if="summary?.by_severity" class="fc-sev-bar">
+                <div
+                  v-for="sev in ['critical', 'high', 'medium', 'low', 'info']"
+                  :key="sev"
+                  v-show="(summary.by_severity[sev] ?? 0) > 0"
+                  class="fc-sev-chip"
+                  :style="{ '--c': (severityConfig[sev] ?? { color: '#999' }).color }"
+                >
+                  <span class="fc-sev-chip__dot" />
+                  {{ (severityConfig[sev] ?? { label: sev }).label }}
+                  <span class="fc-sev-chip__num">{{ summary.by_severity[sev] ?? 0 }}</span>
+                </div>
+              </div>
+              <NSpin :show="assetsLoading">
+                <div v-if="assets.length > 0" class="fc-host-grid">
+                  <div
+                    v-for="asset in assets"
+                    :key="asset.target"
+                    class="fc-host-card"
+                    @click="selectHost(asset)"
+                  >
+                    <div class="fc-host-card__head">
+                      <span class="fc-host-card__ip">{{ asset.ip || asset.target }}</span>
+                      <span v-if="asset.os" class="fc-host-card__os">{{ asset.os }}</span>
+                    </div>
+                    <div v-if="asset.title" class="fc-host-card__title">{{ asset.title }}</div>
+                    <div class="fc-host-card__stats">
+                      <span class="fc-host-stat">
+                        <span class="fc-host-stat__num">{{ (asset.ports || []).length }}</span>
+                        <span class="fc-host-stat__label">端口</span>
+                      </span>
+                      <span class="fc-host-stat">
+                        <span class="fc-host-stat__num">{{ (asset.services || []).length }}</span>
+                        <span class="fc-host-stat__label">服务</span>
+                      </span>
+                      <span v-if="Object.values(asset.vuln_count || {}).reduce((a, b) => a + b, 0) > 0" class="fc-host-stat fc-host-stat--vuln">
+                        <span class="fc-host-stat__num">{{ Object.values(asset.vuln_count || {}).reduce((a, b) => a + b, 0) }}</span>
+                        <span class="fc-host-stat__label">漏洞</span>
+                      </span>
+                    </div>
+                    <div v-if="(asset.ports || []).length > 0" class="fc-host-card__ports">
+                      <span v-for="p in (asset.ports || []).slice(0, 8)" :key="p.port" class="fc-port-mini" :class="{ 'fc-port-mini--risk': [21,23,445,3389,6379,27017,2375].includes(p.port) }">
+                        {{ p.port }}<template v-if="p.service">/{{ p.service }}</template>
+                      </span>
+                      <span v-if="(asset.ports || []).length > 8" class="fc-port-mini fc-port-mini--more">+{{ (asset.ports || []).length - 8 }}</span>
+                    </div>
+                  </div>
+                </div>
+                <NEmpty v-if="!assetsLoading && assets.length === 0" description="暂无扫描数据" style="padding: 60px 0" />
+              </NSpin>
             </div>
 
-            <!-- Right: Filtered Findings -->
-            <div style="flex: 1; min-width: 600px;">
-              <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; padding: 8px 12px; background: #fafafa; border-radius: 8px;">
-                <NSelect v-model:value="filterSeverity" :options="severityOptions" placeholder="严重级别" clearable size="small" style="width: 120px" @update:value="() => { findingsPage = 1; fetchFindings(); }" />
-                <NSelect v-model:value="filterModule" :options="moduleOptions" placeholder="扫描模块" clearable size="small" style="width: 160px" @update:value="() => { findingsPage = 1; fetchFindings(); }" />
-                <NInput v-model:value="filterKeyword" placeholder="搜索标题/目标" clearable size="small" style="width: 180px" @keydown.enter="() => { findingsPage = 1; fetchFindings(); }" @clear="() => { findingsPage = 1; fetchFindings(); }" />
-                <div style="display: flex; gap: 8px;">
-                  <NButton size="small" type="primary" @click="() => { findingsPage = 1; fetchFindings(); }">搜索</NButton>
-                  <NButton size="small" @click="() => { filterSeverity = null; filterModule = null; filterKeyword = ''; selectedEndpoint = ''; findingsPage = 1; fetchFindings(); }">重置</NButton>
+            <!-- Host Detail: Selected host findings -->
+            <div v-else class="fc-host-detail">
+              <div class="fc-host-detail__header">
+                <NButton size="small" quaternary @click="selectedHost = null">
+                  <template #icon><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path fill-rule="evenodd" d="M11.354 1.646a.5.5 0 010 .708L5.707 8l5.647 5.646a.5.5 0 01-.708.708l-6-6a.5.5 0 010-.708l6-6a.5.5 0 01.708 0z"/></svg></template>
+                  返回主机列表
+                </NButton>
+                <div class="fc-host-detail__info">
+                  <span class="fc-host-detail__ip">{{ selectedHost.ip || selectedHost.target }}</span>
+                  <span v-if="selectedHost.os" class="fc-host-detail__os">{{ selectedHost.os }}</span>
+                  <span v-if="selectedHost.title" class="fc-host-detail__title">{{ selectedHost.title }}</span>
                 </div>
-                <span class="finding-table-hint">
-                  {{
-                    activeSubTab === 'port_open'
-                      ? (portServiceHostCount > 1
-                        ? '按主机查看开放端口与服务（目标列仅显示 IP/域名）'
-                        : '开放端口与服务（同端口已合并；目标列仅显示主机）')
-                      : '点击行查看完整内容'
-                  }}
+              </div>
+              <!-- Host quick stats -->
+              <div class="fc-host-detail__stats">
+                <span class="fc-stat-pill"><b>{{ (selectedHost.ports || []).length }}</b> 端口</span>
+                <span class="fc-stat-pill"><b>{{ (selectedHost.services || []).length }}</b> 服务</span>
+                <span v-for="(count, sev) in (selectedHost.vuln_count || {})" :key="sev" class="fc-stat-pill" :class="`fc-stat-pill--${sev}`">
+                  <b>{{ count }}</b> {{ (severityConfig[sev as string] ?? { label: sev }).label }}
                 </span>
-                <span style="font-size: 12px; color: #999; margin-left: auto;">共 <b style="color: #333">{{ findingsTotal }}</b> 条</span>
               </div>
-              <NDataTable
-                v-if="findingsLoading || filteredByEndpoint.length > 0"
-                :columns="findingColumns"
-                :data="filteredByEndpoint"
-                :loading="findingsLoading"
-                :row-key="(row: ScanFinding) => row.id"
-                :row-props="findingRowProps"
-                :pagination="false"
-                :bordered="false"
-                size="small"
-                striped
-                :max-height="640"
-                :scroll-x="findingTableScrollX"
-                class="findings-result-table"
-              />
-              <div v-if="findingsTotal > 0" style="display: flex; justify-content: flex-end; margin-top: 12px;">
-                <NPagination
-                  :page="findingsPage"
-                  :page-size="findingsPageSize"
-                  :item-count="findingsTotal"
-                  :page-sizes="[20, 50, 100]"
-                  show-size-picker
-                  @update:page="(p: number) => { findingsPage = p; fetchFindings(); }"
-                  @update:page-size="(ps: number) => { findingsPageSize = ps; findingsPage = 1; fetchFindings(); }"
-                />
+              <!-- Filter + Table -->
+              <div class="fc-filter-bar">
+                <NSelect v-model:value="filterSeverity" :options="severityOptions" placeholder="严重级别" clearable size="small" style="width: 120px" @update:value="() => { findingsPage = 1; fetchFindings(); }" />
+                <NSelect v-model:value="filterType" :options="typeFilterOptions" placeholder="类型" clearable size="small" style="width: 140px" @update:value="() => { findingsPage = 1; fetchFindings(); }" />
+                <NInput v-model:value="filterKeyword" placeholder="搜索" clearable size="small" style="width: 180px" @keydown.enter="() => { findingsPage = 1; fetchFindings(); }" @clear="() => { findingsPage = 1; fetchFindings(); }" />
+                <NButton size="small" type="primary" @click="findingsPage = 1; fetchFindings()">搜索</NButton>
+                <NButton size="small" @click="filterSeverity = null; filterType = null; filterKeyword = ''; findingsPage = 1; fetchFindings()">重置</NButton>
+                <span class="fc-filter-bar__total">共 <b>{{ findingsTotal }}</b> 条</span>
               </div>
-              <NEmpty v-if="!findingsLoading && filteredByEndpoint.length === 0" description="该目标暂无发现" style="padding: 60px 0" />
-            </div>
-          </div>
-
-          <!-- Single endpoint: Standard Table Layout -->
-          <template v-else>
-            <div v-if="activeSubTab === 'all' && summary?.by_severity && Object.keys(summary.by_severity).length > 0" class="severity-bar">
-              <div
-                v-for="sev in ['critical', 'high', 'medium', 'low', 'info']"
-                :key="sev"
-                v-show="(summary.by_severity[sev] ?? 0) > 0"
-                class="severity-chip"
-                :class="{ active: filterSeverity === sev }"
-                :style="{ '--sev-color': (severityConfig[sev] ?? { color: '#999' }).color }"
-                @click="() => { filterSeverity = filterSeverity === sev ? null : sev; findingsPage = 1; fetchFindings(); }"
-              >
-                <span class="severity-chip-dot" />
-                <span class="severity-chip-label">{{ (severityConfig[sev] ?? { label: sev }).label }}</span>
-                <span class="severity-chip-count">{{ summary.by_severity[sev] ?? 0 }}</span>
-              </div>
-            </div>
-            <div class="findings-filter-bar">
-              <NSelect v-model:value="filterSeverity" :options="severityOptions" placeholder="严重级别" clearable size="small" style="width: 120px" @update:value="() => { findingsPage = 1; fetchFindings(); }" />
-              <NSelect v-model:value="filterModule" :options="moduleOptions" placeholder="扫描模块" clearable size="small" style="width: 180px" @update:value="() => { findingsPage = 1; fetchFindings(); }" />
-              <NInput v-model:value="filterKeyword" placeholder="搜索标题/目标" clearable size="small" style="width: 200px" @keydown.enter="() => { findingsPage = 1; fetchFindings(); }" @clear="() => { findingsPage = 1; fetchFindings(); }" />
-              <div style="display: flex; gap: 8px;">
-                <NButton size="small" type="primary" @click="() => { findingsPage = 1; fetchFindings(); }">搜索</NButton>
-                <NButton size="small" @click="() => { filterSeverity = null; filterModule = null; filterKeyword = ''; activeSubTab = 'all'; findingsPage = 1; fetchFindings(); }">重置</NButton>
-              </div>
-              <span class="finding-table-hint">
-                {{ activeSubTab === 'port_open' ? '端口扫描与服务识别结果（同端口已合并展示）' : '点击行查看完整内容' }}
-              </span>
-              <span class="findings-total-count">共 <b>{{ findingsTotal }}</b> 条结果</span>
-            </div>
-            <div class="findings-table-wrapper">
               <NDataTable
                 v-if="findingsLoading || mergedFindings.length > 0"
                 :columns="findingColumns"
@@ -2508,11 +2651,11 @@ onUnmounted(() => {
                 :bordered="false"
                 size="small"
                 striped
-                :max-height="640"
+                :max-height="540"
                 :scroll-x="findingTableScrollX"
                 class="findings-result-table"
               />
-              <div v-if="findingsTotal > 0" class="findings-pagination">
+              <div v-if="findingsTotal > 0" class="fc-pagination">
                 <NPagination
                   :page="findingsPage"
                   :page-size="findingsPageSize"
@@ -2523,8 +2666,54 @@ onUnmounted(() => {
                   @update:page-size="(ps: number) => { findingsPageSize = ps; findingsPage = 1; fetchFindings(); }"
                 />
               </div>
-              <NEmpty v-if="!findingsLoading && mergedFindings.length === 0" description="暂无扫描发现" style="padding: 60px 0" />
+              <NEmpty v-if="!findingsLoading && mergedFindings.length === 0" description="该主机暂无发现" style="padding: 60px 0" />
             </div>
+          </template>
+
+          <!-- Other Tabs: Simple Filter + Table -->
+          <template v-else>
+            <div class="fc-toolbar" v-if="activeSubTab === 'port_open'">
+              <div />
+              <NButton size="small" quaternary @click="portTabView = 'card'">
+                <template #icon><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M1 2.5A1.5 1.5 0 012.5 1h3A1.5 1.5 0 017 2.5v3A1.5 1.5 0 015.5 7h-3A1.5 1.5 0 011 5.5v-3zm8 0A1.5 1.5 0 0110.5 1h3A1.5 1.5 0 0115 2.5v3A1.5 1.5 0 0113.5 7h-3A1.5 1.5 0 019 5.5v-3zm-8 8A1.5 1.5 0 012.5 9h3A1.5 1.5 0 017 10.5v3A1.5 1.5 0 015.5 15h-3A1.5 1.5 0 011 13.5v-3zm8 0A1.5 1.5 0 0110.5 9h3a1.5 1.5 0 011.5 1.5v3a1.5 1.5 0 01-1.5 1.5h-3A1.5 1.5 0 019 13.5v-3z"/></svg></template>
+                资产视图
+              </NButton>
+            </div>
+            <div class="fc-filter-bar">
+              <NSelect v-model:value="filterSeverity" :options="severityOptions" placeholder="严重级别" clearable size="small" style="width: 120px" @update:value="() => { findingsPage = 1; fetchFindings(); }" />
+              <NSelect v-model:value="filterModule" :options="moduleOptions" placeholder="扫描模块" clearable size="small" style="width: 160px" @update:value="() => { findingsPage = 1; fetchFindings(); }" />
+              <NInput v-model:value="filterKeyword" placeholder="搜索标题/目标" clearable size="small" style="width: 200px" @keydown.enter="() => { findingsPage = 1; fetchFindings(); }" @clear="() => { findingsPage = 1; fetchFindings(); }" />
+              <NButton size="small" type="primary" @click="findingsPage = 1; fetchFindings()">搜索</NButton>
+              <NButton size="small" @click="filterSeverity = null; filterModule = null; filterKeyword = ''; findingsPage = 1; fetchFindings()">重置</NButton>
+              <span class="fc-filter-bar__total">共 <b>{{ findingsTotal }}</b> 条</span>
+            </div>
+            <NDataTable
+              v-if="findingsLoading || mergedFindings.length > 0"
+              :columns="findingColumns"
+              :data="mergedFindings"
+              :loading="findingsLoading"
+              :row-key="(row: ScanFinding) => row.id"
+              :row-props="findingRowProps"
+              :pagination="false"
+              :bordered="false"
+              size="small"
+              striped
+              :max-height="640"
+              :scroll-x="findingTableScrollX"
+              class="findings-result-table"
+            />
+            <div v-if="findingsTotal > 0" class="fc-pagination">
+              <NPagination
+                :page="findingsPage"
+                :page-size="findingsPageSize"
+                :item-count="findingsTotal"
+                :page-sizes="[20, 50, 100]"
+                show-size-picker
+                @update:page="(p: number) => { findingsPage = p; fetchFindings(); }"
+                @update:page-size="(ps: number) => { findingsPageSize = ps; findingsPage = 1; fetchFindings(); }"
+              />
+            </div>
+            <NEmpty v-if="!findingsLoading && mergedFindings.length === 0" description="暂无扫描发现" style="padding: 60px 0" />
           </template>
         </template>
       </template>
@@ -3555,4 +3744,632 @@ onUnmounted(() => {
 .flow-sev-dot--high { background: #fffaf0; color: #c05621; }
 .flow-sev-dot--medium { background: #fffff0; color: #975a16; }
 .flow-sev-dot--low { background: #f0fff4; color: #276749; }
+
+/* Type Grouped View */
+.grouped-view-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.grouped-view-header__title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+.grouped-view-header__count {
+  font-size: 12px;
+  color: #999;
+  margin-left: 10px;
+}
+.type-group-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+}
+.type-group-card {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid #eef2f6;
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.15s;
+  background: #fff;
+}
+.type-group-card:hover {
+  border-color: #1890ff;
+  box-shadow: 0 2px 8px rgba(24, 144, 255, 0.12);
+  transform: translateY(-1px);
+}
+.type-group-card__color {
+  width: 4px;
+  flex-shrink: 0;
+}
+.type-group-card__body {
+  flex: 1;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.type-group-card__label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.type-group-card__count {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1a1a1a;
+  flex-shrink: 0;
+}
+
+/* Port Card View */
+.port-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.port-card-header__title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+.port-card-header__count {
+  font-size: 12px;
+  color: #999;
+  margin-left: 10px;
+}
+.port-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+  gap: 14px;
+}
+.port-host-card {
+  border: 1px solid #eef2f6;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fff;
+  transition: box-shadow 0.2s;
+}
+.port-host-card:hover {
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+}
+.port-host-card__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #f0f5ff 0%, #f8fafc 100%);
+  border-bottom: 1px solid #f0f0f0;
+}
+.port-host-card__icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: #1890ff;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.port-host-card__info {
+  flex: 1;
+  min-width: 0;
+}
+.port-host-card__name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1a1a1a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.port-host-card__meta {
+  font-size: 11px;
+  color: #999;
+  margin-top: 2px;
+}
+.port-host-card__ports {
+  padding: 12px 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.port-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 5px;
+  font-size: 12px;
+  background: #f5f7fa;
+  border: 1px solid #e8ecf1;
+  transition: background 0.1s;
+}
+.port-item:hover {
+  background: #e6f7ff;
+  border-color: #91d5ff;
+}
+.port-item__num {
+  font-weight: 700;
+  color: #1890ff;
+}
+.port-item__num--sensitive {
+  color: #cf1322;
+}
+.port-item__proto {
+  font-size: 10px;
+  color: #999;
+  font-weight: 500;
+}
+.port-item__svc {
+  font-weight: 500;
+  color: #333;
+}
+.port-item__ver {
+  color: #52c41a;
+  font-size: 11px;
+}
+.port-item__guess {
+  color: #bbb;
+  font-size: 11px;
+  font-style: italic;
+}
+.port-host-card__banners {
+  padding: 0 16px 12px;
+  border-top: 1px solid #f5f5f5;
+  margin-top: 4px;
+  padding-top: 10px;
+}
+.port-banner-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  margin-bottom: 4px;
+}
+.port-banner-item__port {
+  flex-shrink: 0;
+  font-weight: 600;
+  color: #666;
+  min-width: 36px;
+}
+.port-banner-item__text {
+  color: #888;
+  font-family: 'SF Mono', Consolas, monospace;
+  word-break: break-all;
+}
+
+/* ===== New Findings Content Layout ===== */
+.fc-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.fc-toolbar__left {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.fc-toolbar__title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+.fc-toolbar__meta {
+  font-size: 12px;
+  color: #999;
+}
+
+/* Asset Grid */
+.fc-asset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 14px;
+}
+.fc-asset-card {
+  border: 1px solid #eef0f4;
+  border-radius: 10px;
+  padding: 16px;
+  cursor: pointer;
+  transition: box-shadow 0.2s, border-color 0.2s;
+  background: #fff;
+}
+.fc-asset-card:hover {
+  border-color: #bae0ff;
+  box-shadow: 0 2px 8px rgba(24, 144, 255, 0.08);
+}
+.fc-asset-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.fc-asset-card__ip {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1a1a1a;
+  font-family: 'SF Mono', Consolas, monospace;
+}
+.fc-asset-card__os {
+  font-size: 11px;
+  color: #8c8c8c;
+  background: #f5f5f5;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+.fc-asset-card__title {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fc-asset-card__ports {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 10px;
+}
+.fc-port-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 500;
+  font-family: 'SF Mono', Consolas, monospace;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: #f0f5ff;
+  color: #2f54eb;
+}
+.fc-port-badge--risk {
+  background: #fff1f0;
+  color: #cf1322;
+  font-weight: 600;
+}
+.fc-port-badge--more {
+  background: #f5f5f5;
+  color: #8c8c8c;
+}
+.fc-asset-card__foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.fc-asset-tag {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: #f6ffed;
+  color: #389e0d;
+}
+.fc-asset-tag--waf {
+  background: #fff7e6;
+  color: #d46b08;
+}
+.fc-asset-tag--vuln {
+  background: #fff1f0;
+  color: #cf1322;
+  font-weight: 600;
+}
+
+/* Split Layout (All tab) */
+.fc-split {
+  display: flex;
+  gap: 16px;
+  min-height: 500px;
+}
+.fc-type-panel {
+  width: 220px;
+  min-width: 180px;
+  flex-shrink: 0;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  background: #fafbfc;
+  overflow-y: auto;
+  max-height: 720px;
+}
+.fc-type-panel__head {
+  padding: 12px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+  border-bottom: 1px solid #f0f0f0;
+  position: sticky;
+  top: 0;
+  background: #fafbfc;
+  z-index: 1;
+}
+.fc-type-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  font-size: 12px;
+  cursor: pointer;
+  border-bottom: 1px solid #f8f8f8;
+  transition: background 0.15s;
+  color: #555;
+}
+.fc-type-item:hover {
+  background: #f0f7ff;
+}
+.fc-type-item--active {
+  background: #e6f7ff;
+  color: #1890ff;
+  font-weight: 600;
+}
+.fc-type-item__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.fc-type-item__label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fc-type-item__count {
+  font-size: 11px;
+  font-weight: 600;
+  color: #999;
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: #f0f0f0;
+}
+.fc-type-item--active .fc-type-item__count {
+  background: rgba(24, 144, 255, 0.12);
+  color: #1890ff;
+}
+.fc-main {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Severity Bar */
+.fc-sev-bar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.fc-sev-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 14px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid #eee;
+  background: #fff;
+  transition: all 0.2s;
+  color: #555;
+}
+.fc-sev-chip:hover {
+  border-color: var(--c);
+}
+.fc-sev-chip--active {
+  border-color: var(--c);
+  background: color-mix(in srgb, var(--c) 8%, white);
+  color: var(--c);
+  font-weight: 600;
+}
+.fc-sev-chip__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--c);
+}
+.fc-sev-chip__num {
+  font-weight: 600;
+  opacity: 0.8;
+}
+
+/* Filter Bar */
+.fc-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: #fafafa;
+  border-radius: 8px;
+}
+.fc-filter-bar__total {
+  margin-left: auto;
+  font-size: 12px;
+  color: #999;
+}
+.fc-filter-bar__total b {
+  color: #333;
+}
+
+/* Pagination */
+.fc-pagination {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+/* Host Grid (All Tab) */
+.fc-host-view {
+  /* wrapper for host grid */
+}
+.fc-host-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+.fc-host-card {
+  border: 1px solid #eef0f4;
+  border-radius: 10px;
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: box-shadow 0.2s, border-color 0.2s, transform 0.15s;
+  background: #fff;
+}
+.fc-host-card:hover {
+  border-color: #91caff;
+  box-shadow: 0 2px 8px rgba(24, 144, 255, 0.1);
+  transform: translateY(-1px);
+}
+.fc-host-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.fc-host-card__ip {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1a1a1a;
+  font-family: 'SF Mono', Consolas, monospace;
+}
+.fc-host-card__os {
+  font-size: 10px;
+  color: #8c8c8c;
+  background: #f5f5f5;
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+.fc-host-card__title {
+  font-size: 11px;
+  color: #8c8c8c;
+  margin-bottom: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fc-host-card__stats {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.fc-host-stat {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+}
+.fc-host-stat__num {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1890ff;
+}
+.fc-host-stat--vuln .fc-host-stat__num {
+  color: #cf1322;
+}
+.fc-host-stat__label {
+  font-size: 11px;
+  color: #999;
+}
+.fc-host-card__ports {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.fc-port-mini {
+  font-size: 10px;
+  font-family: 'SF Mono', Consolas, monospace;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: #f0f5ff;
+  color: #2f54eb;
+}
+.fc-port-mini--risk {
+  background: #fff1f0;
+  color: #cf1322;
+}
+.fc-port-mini--more {
+  background: #f5f5f5;
+  color: #8c8c8c;
+}
+
+/* Host Detail View */
+.fc-host-detail__header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #f0f0f0;
+}
+.fc-host-detail__info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.fc-host-detail__ip {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1a1a1a;
+  font-family: 'SF Mono', Consolas, monospace;
+}
+.fc-host-detail__os {
+  font-size: 11px;
+  color: #8c8c8c;
+  background: #f5f5f5;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+.fc-host-detail__title {
+  font-size: 12px;
+  color: #666;
+}
+.fc-host-detail__stats {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.fc-stat-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  background: #f0f5ff;
+  color: #2f54eb;
+}
+.fc-stat-pill b {
+  font-weight: 700;
+}
+.fc-stat-pill--critical {
+  background: #fff1f0;
+  color: #cf1322;
+}
+.fc-stat-pill--high {
+  background: #fff7e6;
+  color: #d46b08;
+}
+.fc-stat-pill--medium {
+  background: #fffbe6;
+  color: #d4b106;
+}
+.fc-stat-pill--low {
+  background: #f6ffed;
+  color: #389e0d;
+}
+.fc-stat-pill--info {
+  background: #f0f5ff;
+  color: #1890ff;
+}
 </style>

@@ -1,44 +1,37 @@
 package scanrunner
 
 import (
-	"vulnscan-backend/scan/core"
-	"vulnscan-backend/scan/module/advancedvuln"
-	"vulnscan-backend/scan/module/apidisc"
-	"vulnscan-backend/scan/module/apisec"
-	"vulnscan-backend/scan/module/bruteforce"
-	"vulnscan-backend/scan/module/bundle"
-	"vulnscan-backend/scan/module/certcheck"
-	"vulnscan-backend/scan/module/cmdi"
-	"vulnscan-backend/scan/module/company"
-	"vulnscan-backend/scan/module/dnsall"
-	"vulnscan-backend/scan/module/emailcollect"
-	"vulnscan-backend/scan/module/favicon"
-	"vulnscan-backend/scan/module/fingerprint"
-	"vulnscan-backend/scan/module/fpenhance"
-	"vulnscan-backend/scan/module/icmp"
-	"vulnscan-backend/scan/module/infoleak"
-	"vulnscan-backend/scan/module/ipattr"
-	"vulnscan-backend/scan/module/jsanalyze"
-	"vulnscan-backend/scan/module/jwtsec"
-	"vulnscan-backend/scan/module/lfi"
-	"vulnscan-backend/scan/module/nettopo"
-	"vulnscan-backend/scan/module/nosqli"
-	"vulnscan-backend/scan/module/portscan"
-	"vulnscan-backend/scan/module/realip"
-	"vulnscan-backend/scan/module/screenshot"
-	"vulnscan-backend/scan/module/sqli"
-	"vulnscan-backend/scan/module/ssrf"
-	"vulnscan-backend/scan/module/ssti"
-	"vulnscan-backend/scan/module/subdomain"
-	"vulnscan-backend/scan/module/synscan"
-	"vulnscan-backend/scan/module/techdetect"
-	"vulnscan-backend/scan/module/udpscan"
-	"vulnscan-backend/scan/module/unauth"
-	"vulnscan-backend/scan/module/wafdetect"
-	"vulnscan-backend/scan/module/weakpass"
-	"vulnscan-backend/scan/module/webcrawl"
-	"vulnscan-backend/scan/module/xss"
-	"vulnscan-backend/scan/module/xxe"
+	"code.yt-security.com/public/scanengine/core"
+	"code.yt-security.com/public/scanengine/module/advancedvuln"
+	"code.yt-security.com/public/scanengine/module/apisecurity"
+	"code.yt-security.com/public/scanengine/module/bundle"
+	"code.yt-security.com/public/scanengine/module/certcheck"
+	"code.yt-security.com/public/scanengine/module/cmdi"
+	"code.yt-security.com/public/scanengine/module/company"
+	"code.yt-security.com/public/scanengine/module/credential"
+	"code.yt-security.com/public/scanengine/module/dnsall"
+	"code.yt-security.com/public/scanengine/module/dnsaxfr"
+	"code.yt-security.com/public/scanengine/module/emailcollect"
+	"code.yt-security.com/public/scanengine/module/fingerprint"
+	"code.yt-security.com/public/scanengine/module/icmp"
+	"code.yt-security.com/public/scanengine/module/infoleak"
+	"code.yt-security.com/public/scanengine/module/injection"
+	"code.yt-security.com/public/scanengine/module/ipattr"
+	"code.yt-security.com/public/scanengine/module/lfi"
+	"code.yt-security.com/public/scanengine/module/nettopo"
+	"code.yt-security.com/public/scanengine/module/portscan"
+	"code.yt-security.com/public/scanengine/module/realip"
+	"code.yt-security.com/public/scanengine/module/screenshot"
+	"code.yt-security.com/public/scanengine/module/sqli"
+	"code.yt-security.com/public/scanengine/module/ssrf"
+	"code.yt-security.com/public/scanengine/module/subdomain"
+	"code.yt-security.com/public/scanengine/module/subtakeover"
+	"code.yt-security.com/public/scanengine/module/synscan"
+	"code.yt-security.com/public/scanengine/module/udpscan"
+	"code.yt-security.com/public/scanengine/module/wafdetect"
+	"code.yt-security.com/public/scanengine/module/webcrawl"
+	"code.yt-security.com/public/scanengine/module/webmisc"
+	"code.yt-security.com/public/scanengine/module/xss"
 )
 
 func registerBundleModules() {
@@ -50,57 +43,52 @@ func registerBundleModules() {
 			udpscan.New(),
 		})
 	})
+
 	RegisterModule("web_recon", func(d *ModuleDeps) core.ScanModule {
-		return bundle.New("web_recon", "Web 信息收集", "recon", 6, []core.ScanModule{
+		return bundle.New("web_recon", "Web 信息收集", "recon", 8, []core.ScanModule{
 			subdomain.New(d.Factory.ds),
-			webcrawl.New(),
-			techdetect.New(d.Factory.rs),
-			wafdetect.New(d.Factory.rs),
-			favicon.New(),
-			certcheck.New(),
 			dnsall.New(),
+			dnsaxfr.New(),
+			webcrawl.New(),
+			wafdetect.New(d.Factory.rs),
+			fingerprint.New(),
 			ipattr.New(),
 			realip.New(),
-			jsanalyze.New(d.Factory.rs),
-			fingerprint.NewWithDB(d.Factory.db),
-			apidisc.New(),
-			infoleak.New(),
 			company.New(),
 			emailcollect.New(),
+			certcheck.New(),
+			infoleak.New(),
 			screenshot.New(),
-			fpenhance.New(),
+			subtakeover.New(),
 		})
 	})
+
 	RegisterModule("asset_enrich", func(d *ModuleDeps) core.ScanModule {
 		return bundle.New("asset_enrich", "资产富化", "recon", 3, []core.ScanModule{
 			dnsall.New(),
 			ipattr.New(),
-			certcheck.New(),
 		})
 	})
+
 	RegisterModule("web_vuln_scan", func(d *ModuleDeps) core.ScanModule {
 		loader := d.Factory.loader
-		return bundle.New("web_vuln_scan", "Web 漏洞检测", "vuln", 6, []core.ScanModule{
+		return bundle.New("web_vuln_scan", "Web 漏洞检测", "vuln", 10, []core.ScanModule{
 			sqli.New(loader),
 			xss.New(loader),
-			ssrf.New("", loader),
 			cmdi.New(loader),
+			ssrf.New("", loader),
 			lfi.New(loader),
-			ssti.New(loader),
-			xxe.New(loader),
-			nosqli.New(loader),
-			jwtsec.New(),
-			apisec.New(),
+			injection.New(loader),
+			apisecurity.New(),
+			webmisc.New(),
 			advancedvuln.New(loader),
 		})
 	})
+
 	RegisterModule("credential_audit", func(d *ModuleDeps) core.ScanModule {
-		return bundle.New("credential_audit", "凭据安全", "vuln", 3, []core.ScanModule{
-			weakpass.New(d.Factory.ds),
-			bruteforce.New(d.Factory.ds),
-			unauth.New(),
-		})
+		return credential.New(d.Factory.ds)
 	})
+
 	RegisterModule("infra_extra", func(d *ModuleDeps) core.ScanModule {
 		return bundle.New("infra_extra", "网络拓扑", "recon", 1, []core.ScanModule{
 			nettopo.New(),
@@ -108,7 +96,6 @@ func registerBundleModules() {
 	})
 }
 
-// PrimaryModuleIDs 模板编辑器展示的模块（组合模块 + 少量独立模块）。
 func PrimaryModuleIDs() []string {
 	return []string{
 		"host_discover",
@@ -119,7 +106,6 @@ func PrimaryModuleIDs() []string {
 		"web_vuln_scan",
 		"credential_audit",
 		"nuclei-poc",
-		"dir_scan",
 		"infra_extra",
 	}
 }

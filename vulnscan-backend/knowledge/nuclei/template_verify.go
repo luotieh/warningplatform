@@ -11,14 +11,13 @@ import (
 )
 
 // TemplateIntegrityChecker validates template content for safety before import.
-type TemplateIntegrityChecker struct {
-	blockUnsigned bool
-}
+type TemplateIntegrityChecker struct{}
 
 // NewTemplateIntegrityChecker creates a checker.
-// If blockUnsigned is true, templates with code protocol will be rejected unless verified.
-func NewTemplateIntegrityChecker(blockUnsigned bool) *TemplateIntegrityChecker {
-	return &TemplateIntegrityChecker{blockUnsigned: blockUnsigned}
+// The blockUnsigned parameter is retained for API compatibility but no longer blocks code-protocol templates;
+// code-protocol safety is enforced at runtime via SignedTemplatesOnly.
+func NewTemplateIntegrityChecker(_ bool) *TemplateIntegrityChecker {
+	return &TemplateIntegrityChecker{}
 }
 
 // dangerousPatterns that suggest potentially malicious template content.
@@ -44,8 +43,9 @@ func (c *TemplateIntegrityChecker) CheckContent(content []byte) error {
 	lower := strings.ToLower(string(content))
 
 	hasCode := strings.Contains(lower, "code:") || strings.Contains(lower, "type: code")
-	if hasCode && c.blockUnsigned {
-		return fmt.Errorf("模板包含 Code 协议，需要签名验证 (template_id=%s)", tmpl.ID)
+	if hasCode {
+		slog.Warn("[TemplateCheck] 模板使用 Code 协议，运行时需启用签名验证以确保安全",
+			"template_id", tmpl.ID)
 	}
 
 	for _, pattern := range dangerousPatterns {

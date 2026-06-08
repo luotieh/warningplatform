@@ -20,7 +20,7 @@
     "format": "echo format skipped",
     "lint": "echo lint skipped",
     "postinstall": "pnpm -r run stub --if-present",
-    "preinstall": "npx only-allow pnpm",
+    "preinstall": "node -e \"if(!/pnpm/.test(process.env.npm_config_user_agent||''))throw new Error('Use pnpm to install')\"",
     "reinstall": "pnpm clean --del-lock && pnpm install"
   },
   "devDependencies": {

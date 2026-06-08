@@ -1,7 +1,7 @@
 package product
 
 import (
-	"code.yt-security.com/public/sdk/authorize"
+	"code.yt-security.com/public/access/authorize"
 	"github.com/gin-gonic/gin"
 )
 
@@ -25,6 +25,8 @@ func (m *ProductRoutes) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendI
 				{Name: "更新产品", Path: ":id", Method: "PUT", Handler: m.handler.Update, Enabled: true},
 				{Name: "删除产品", Path: ":id", Method: "DELETE", Handler: m.handler.Delete, Enabled: true},
 				{Name: "回填关联", Path: "backfill", Method: "POST", Handler: m.handler.Backfill, Enabled: true},
+				{Name: "分类统计", Path: "summary", Method: "GET", Handler: m.handler.Summary, Enabled: true},
+				{Name: "重新分类", Path: "reclassify", Method: "POST", Handler: m.handler.Reclassify, Enabled: true},
 			},
 		},
 	})

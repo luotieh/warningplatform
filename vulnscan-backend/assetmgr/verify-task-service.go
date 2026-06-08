@@ -8,8 +8,8 @@ import (
 	ac "vulnscan-backend/assetmgr/assetmgr-contract"
 	"vulnscan-backend/model"
 
-	"code.yt-security.com/public/core/v2/db"
-	"code.yt-security.com/public/core/v2/generate/qulid"
+	"code.yt-security.com/public/core/db"
+	"code.yt-security.com/public/core/generate/ulid"
 	"gorm.io/gorm"
 )
 
@@ -72,7 +72,7 @@ func (s *serviceVerifyTask) CreateTasks(req ac.VerifyTaskCreateReq, operator, or
 		req.SourceType = string(model.DataSourceManual)
 	}
 	if req.BatchID == "" {
-		req.BatchID = qulid.GenerateID()
+		req.BatchID = ulid.GenerateID()
 	}
 
 	var created []model.AssetVerifyTask
@@ -113,7 +113,7 @@ func (s *serviceVerifyTask) CreateTasks(req ac.VerifyTaskCreateReq, operator, or
 
 			now := time.Now()
 			task := model.AssetVerifyTask{
-				ID:                qulid.GenerateID(),
+				ID:                ulid.GenerateID(),
 				AssetID:           asset.ID,
 				BatchID:           req.BatchID,
 				SourceType:        req.SourceType,
@@ -420,7 +420,7 @@ func (s *serviceVerifyTask) createArchiveSnapshot(tx *gorm.DB, task model.AssetV
 		return err
 	}
 	return tx.Create(&model.AssetArchiveSnapshot{
-		ID:         qulid.GenerateID(),
+		ID:         ulid.GenerateID(),
 		TaskID:     task.ID,
 		AssetID:    task.AssetID,
 		BatchID:    task.BatchID,

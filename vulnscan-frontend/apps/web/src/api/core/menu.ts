@@ -37,13 +37,11 @@ function isButtonMenu(menu: IamMenu): boolean {
 
 function shouldHideInMenu(menu: IamMenu): boolean {
   const t = menu.menu_type;
-  // 额外页面、显式 hide_in_menu 不进入侧栏
   if (t === 3 || t === '3') return true;
   if (menu.hide_in_menu === true) return true;
-  // 纯重定向兼容项（无组件）不展示
-  if (menu.redirect && !menu.component) return true;
-  // IAM 同步时 show_link 缺省为 false，不能据此隐藏常规菜单(1/2)
+  // IAM 后端返回的目录菜单(1/2)可能只有 redirect 没有 component，不应隐藏
   if (t === 1 || t === '1' || t === 2 || t === '2') return false;
+  if (menu.redirect && !menu.component) return true;
   return menu.show_link === false;
 }
 

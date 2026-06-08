@@ -47,3 +47,26 @@ export function deleteProduct(id: string) {
 export function backfillProducts() {
   return requestClient.post<{ poc_updated: number; fingerprint_updated: number }>('/products/backfill');
 }
+
+export interface VendorGroup {
+  vendor: string;
+  count: number;
+}
+
+export interface CategoryGroup {
+  category: string;
+  count: number;
+}
+
+export interface ProductSummary {
+  vendors: VendorGroup[];
+  categories: CategoryGroup[];
+}
+
+export function getProductSummary() {
+  return requestClient.get<ProductSummary>('/products/summary');
+}
+
+export function reclassifyProducts() {
+  return requestClient.post<{ updated: number }>('/products/reclassify');
+}

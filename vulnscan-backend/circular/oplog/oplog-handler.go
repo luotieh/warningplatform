@@ -3,7 +3,7 @@ package oplog
 import (
 	oplogContract "vulnscan-backend/circular/oplog/oplog-contract"
 
-	"code.yt-security.com/public/core/v2/web"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 )
 
@@ -25,5 +25,5 @@ func (h *HandlerOplog) ByCircularId(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(logs).Send()
+	web.Succeed(c).Data(logs).Send()
 }

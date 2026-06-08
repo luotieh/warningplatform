@@ -12,8 +12,8 @@ import (
 	"vulnscan-backend/model"
 	"vulnscan-backend/monitoragent"
 
-	"code.yt-security.com/public/core/v2/web"
-	iamsdk "code.yt-security.com/public/sdk"
+	iamsdk "code.yt-security.com/public/access"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -58,7 +58,7 @@ func (h *EnrichHandler) SyncOnlineStatus(c *gin.Context) {
 		_ = c.ShouldBindJSON(&body)
 	}
 
-	scope := iamsdk.DataFilterScope(c, assetFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, assetFieldMapping)
 	sess := h.session()
 	tx := buildAssetListQuery(sess, listQuery, scope).Where("is_online = ?", true)
 
@@ -108,7 +108,7 @@ func (h *EnrichHandler) SyncOnlineStatus(c *gin.Context) {
 	result.Skipped += probeResult.Skipped
 	result.DurationMS = int(time.Since(start).Milliseconds())
 
-	web.OK(c).Data(result).Send()
+	web.Succeed(c).Data(result).Send()
 }
 
 func loadMonitorPathTasksByAssetID(sess *gorm.DB, assets []model.Asset) map[string]*model.MonitorPathTask {
@@ -350,7 +350,7 @@ func (h *EnrichHandler) ProbeAddress(c *gin.Context) {
 		reachable = probeTCPReachable(ctx, target)
 	}
 
-	web.OK(c).Data(map[string]any{
+	web.Succeed(c).Data(map[string]any{
 		"address":   addr,
 		"reachable": reachable,
 	}).Send()

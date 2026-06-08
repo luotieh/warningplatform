@@ -8,8 +8,8 @@ import (
 
 	remediationContract "vulnscan-backend/incident/remediation/remediation-contract"
 
-	"code.yt-security.com/public/core/v2/web"
-	iamsdk "code.yt-security.com/public/sdk"
+	iamsdk "code.yt-security.com/public/access"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 )
 
@@ -30,7 +30,7 @@ func (h *HandlerRemediation) SubmitRemediation(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerRemediation) VerifyRemediation(c *gin.Context) {
@@ -42,7 +42,7 @@ func (h *HandlerRemediation) VerifyRemediation(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerRemediation) CloseIncident(c *gin.Context) {
@@ -54,7 +54,7 @@ func (h *HandlerRemediation) CloseIncident(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerRemediation) BatchImport(c *gin.Context) {
@@ -77,7 +77,7 @@ func (h *HandlerRemediation) BatchImport(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(resp).Send()
+	web.Succeed(c).Data(resp).Send()
 }
 
 func (h *HandlerRemediation) DownloadImportTemplate(c *gin.Context) {

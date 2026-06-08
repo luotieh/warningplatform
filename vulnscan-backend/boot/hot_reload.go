@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"code.yt-security.com/public/core/v2/os/qcfg"
+	"code.yt-security.com/public/core/config"
 )
 
 type ConfigWatcher struct {
@@ -116,16 +116,9 @@ func loadConfigFromPath(path string) *Config {
 		}
 	}()
 
-	c1 := qcfg.New()
-	c1 = c1.SetConfigPath(path)
-	if err := c1.Load(); err != nil {
-		slog.Error("[!] 配置文件重加载失败", "error", err, "path", path)
-		return nil
-	}
-
 	var mConfig Config
-	if err := c1.Unmarshal(&mConfig); err != nil {
-		slog.Error("[!] 配置文件重解析失败", "error", err)
+	if err := config.Load(path, &mConfig); err != nil {
+		slog.Error("[!] 配置文件重加载失败", "error", err, "path", path)
 		return nil
 	}
 

@@ -3,8 +3,8 @@ package server
 import (
 	"time"
 
-	"code.yt-security.com/public/core/v2/web"
-	"code.yt-security.com/public/sdk/authorize"
+	"code.yt-security.com/public/access/authorize"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
@@ -71,7 +71,7 @@ func (a *ManageAPI) ListSubMasters(c *gin.Context) {
 		})
 	}
 
-	web.OK(c).List(int64(len(items)), items).Send()
+	web.Succeed(c).List(int64(len(items)), items).Send()
 }
 
 func (a *ManageAPI) Stats(c *gin.Context) {
@@ -82,7 +82,7 @@ func (a *ManageAPI) Stats(c *gin.Context) {
 
 	versions := a.versionManager.AllVersionsFromDB()
 
-	web.OK(c).Data(gin.H{
+	web.Succeed(c).Data(gin.H{
 		"total_sub_masters":  totalSubs,
 		"online_sub_masters": onlineSubs,
 		"current_versions":   versions,

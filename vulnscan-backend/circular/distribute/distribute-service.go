@@ -11,8 +11,8 @@ import (
 	distributeContract "vulnscan-backend/circular/distribute/distribute-contract"
 	inputContract "vulnscan-backend/circular/input/input-contract"
 
-	"code.yt-security.com/public/core/v2/db"
-	"code.yt-security.com/public/core/v2/generate/qulid"
+	"code.yt-security.com/public/core/db"
+	"code.yt-security.com/public/core/generate/ulid"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -92,7 +92,7 @@ func (s *serviceDistribute) Distribute(c *gin.Context, req distributeContract.Di
 			return err
 		}
 
-		distributionId := qulid.GenerateID()
+		distributionId := ulid.GenerateID()
 		distribution := model.CircularDistribution{
 			CircularId:         circular.Code,
 			CurrentOrganize:    "yt-networks-security",

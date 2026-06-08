@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"code.yt-security.com/public/core/v2/generate/qulid"
+	"code.yt-security.com/public/core/generate/ulid"
 	"gorm.io/gorm"
 )
 
@@ -137,7 +137,7 @@ func BuildCircularOperationLog(
 	now := time.Now()
 	return CircularOperationLog{
 		ReadOnlyModel: ReadOnlyModel{
-			Id:        qulid.GenerateID(),
+			Id:        ulid.GenerateID(),
 			CreatedAt: now,
 		},
 		CircularId:      circularId,

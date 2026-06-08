@@ -1,7 +1,7 @@
 package boot
 
 import (
-	"code.yt-security.com/public/core/v2/product"
+	"code.yt-security.com/public/core/product"
 )
 
 var (
@@ -21,8 +21,8 @@ func GetVersion() string {
 	return ProductVersion
 }
 
-func LoadProduct() *product.SystemProduct {
-	p := product.NewSystemProduct(ProductId, ProductName, ProductVersion, ProductName, "", "")
+func LoadProduct() *product.Product {
+	p := product.New(ProductId, ProductName, ProductVersion)
 	p.SetBuildInfo(product.BuildInfo{
 		BuildTime:    BuildTime,
 		BuildCommit:  BuildCommit,

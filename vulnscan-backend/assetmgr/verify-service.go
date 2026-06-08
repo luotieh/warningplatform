@@ -4,8 +4,8 @@ import (
 	ac "vulnscan-backend/assetmgr/assetmgr-contract"
 	"vulnscan-backend/model"
 
-	"code.yt-security.com/public/core/v2/db"
-	"code.yt-security.com/public/core/v2/generate/qulid"
+	"code.yt-security.com/public/core/db"
+	"code.yt-security.com/public/core/generate/ulid"
 	"gorm.io/gorm"
 )
 
@@ -50,7 +50,7 @@ func (s *serviceVerify) List(req ac.VerifyListReq, scopes ...func(*gorm.DB) *gor
 
 func (s *serviceVerify) Submit(item *model.AssetVerify) error {
 	if item.ID == "" {
-		item.ID = qulid.GenerateID()
+		item.ID = ulid.GenerateID()
 	}
 	item.ReviewStatus = model.ReviewPending
 	return s.session().Create(item).Error

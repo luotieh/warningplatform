@@ -1,9 +1,9 @@
 package setting
 
 import (
-	"code.yt-security.com/public/core/v2/web"
-	"code.yt-security.com/public/sdk/authorize"
-	"code.yt-security.com/public/sdk/middleware"
+	"code.yt-security.com/public/access/authorize"
+	"code.yt-security.com/public/access/middleware"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 )
 
@@ -52,7 +52,7 @@ func (h *Handler) ListAll(c *gin.Context) {
 			items[i].Value = "******"
 		}
 	}
-	web.OK(c).Data(items).Send()
+	web.Succeed(c).Data(items).Send()
 }
 
 func (h *Handler) GetByKey(c *gin.Context) {
@@ -65,7 +65,7 @@ func (h *Handler) GetByKey(c *gin.Context) {
 	if item.IsSecret && item.Value != "" {
 		item.Value = "******"
 	}
-	web.OK(c).Data(item).Send()
+	web.Succeed(c).Data(item).Send()
 }
 
 type batchUpdateReq struct {
@@ -102,7 +102,7 @@ func (h *Handler) BatchUpdate(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *Handler) ResetGroup(c *gin.Context) {
@@ -118,7 +118,7 @@ func (h *Handler) ResetGroup(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 type SettingRoutes struct {

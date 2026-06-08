@@ -3,7 +3,7 @@ package boot
 import (
 	"log/slog"
 
-	"code.yt-security.com/public/core/v2/db"
+	"code.yt-security.com/public/core/db"
 )
 
 func LoadDB(config *Config) *db.DB {

@@ -16,7 +16,7 @@ const routes: RouteRecordRaw[] = [
         component: () => import('#/views/circular/input/list.vue'),
         meta: {
           icon: 'lucide:file-input',
-          title: '通报录入',
+          title: '通报列表',
           perms: [
             { action: 'create', label: '新建通报' },
             { action: 'update', label: '编辑' },
@@ -69,34 +69,40 @@ const routes: RouteRecordRaw[] = [
         },
       },
       {
-        name: 'CircularVerify',
-        path: 'verify',
+        name: 'CircularWorkstation',
+        path: 'workstation',
         component: () => import('#/views/circular/flow-board.vue'),
-        props: { mode: 'verify' },
         meta: {
-          icon: 'lucide:check-circle',
-          title: '通报核验',
+          icon: 'lucide:workflow',
+          title: '通报工作台',
           perms: [
             { action: 'verify', label: '核验' },
+            { action: 'distribute', label: '派发' },
+            { action: 'review', label: '审核' },
           ],
-          apis: ['GET /circular/verifications'],
-          apisByAction: { verify: ['POST /circular/verifications'] },
+          apis: [
+            'GET /circular/verifications',
+            'GET /circular/distributions',
+            'GET /circular/reviews',
+          ],
+          apisByAction: {
+            verify: ['POST /circular/verifications'],
+            distribute: ['POST /circular/distributions'],
+            review: ['POST /circular/reviews/:id'],
+          },
         },
       },
       {
-        name: 'CircularDistribute',
+        name: 'CircularVerifyCompat',
+        path: 'verify',
+        redirect: '/circular/workstation?tab=verify',
+        meta: { hideInMenu: true, title: '通报核验' },
+      },
+      {
+        name: 'CircularDistributeCompat',
         path: 'distribute',
-        component: () => import('#/views/circular/flow-board.vue'),
-        props: { mode: 'distribute' },
-        meta: {
-          icon: 'lucide:send',
-          title: '通报派发',
-          perms: [
-            { action: 'distribute', label: '派发' },
-          ],
-          apis: ['GET /circular/distributions'],
-          apisByAction: { distribute: ['POST /circular/distributions'] },
-        },
+        redirect: '/circular/workstation?tab=distribute',
+        meta: { hideInMenu: true, title: '通报派发' },
       },
       {
         name: 'CircularDisposal',
@@ -131,19 +137,10 @@ const routes: RouteRecordRaw[] = [
         },
       },
       {
-        name: 'CircularReview',
+        name: 'CircularReviewCompat',
         path: 'review',
-        component: () => import('#/views/circular/flow-board.vue'),
-        props: { mode: 'review' },
-        meta: {
-          icon: 'lucide:clipboard-check',
-          title: '通报审核',
-          perms: [
-            { action: 'review', label: '审核' },
-          ],
-          apis: ['GET /circular/reviews'],
-          apisByAction: { review: ['POST /circular/reviews/:id'] },
-        },
+        redirect: '/circular/workstation?tab=review',
+        meta: { hideInMenu: true, title: '通报审核' },
       },
       {
         name: 'CircularLedger',

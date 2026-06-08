@@ -3,8 +3,8 @@ package cluster
 import (
 	"vulnscan-backend/model"
 
-	"code.yt-security.com/public/core/v2/db"
-	"code.yt-security.com/public/sdk/authorize"
+	"code.yt-security.com/public/access/authorize"
+	"code.yt-security.com/public/core/db"
 	"github.com/gin-gonic/gin"
 )
 

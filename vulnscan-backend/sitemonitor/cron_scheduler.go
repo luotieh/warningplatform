@@ -12,7 +12,7 @@ import (
 	"vulnscan-backend/model"
 	"vulnscan-backend/sitemonitor/contract"
 
-	"code.yt-security.com/public/core/v2/db"
+	"code.yt-security.com/public/core/db"
 	"github.com/robfig/cron/v3"
 	"gorm.io/gorm"
 )

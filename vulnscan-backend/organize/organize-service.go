@@ -7,8 +7,8 @@ import (
 	"vulnscan-backend/model"
 	oc "vulnscan-backend/organize/organize-contract"
 
-	"code.yt-security.com/public/core/v2/db"
-	"code.yt-security.com/public/core/v2/generate/qulid"
+	"code.yt-security.com/public/core/db"
+	"code.yt-security.com/public/core/generate/ulid"
 	"gorm.io/gorm"
 )
 
@@ -59,7 +59,7 @@ func (s *serviceOrganize) GetByID(id string) (*model.Organize, error) {
 
 func (s *serviceOrganize) Create(item *model.Organize) error {
 	if item.ID == "" {
-		item.ID = qulid.GenerateID()
+		item.ID = ulid.GenerateID()
 	}
 	db := s.session().Omit("deleted_at")
 	if strings.TrimSpace(item.UnifiedSocialCreditCode) == "" {

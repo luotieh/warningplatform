@@ -1,7 +1,7 @@
 package orchestrate
 
 import (
-	"vulnscan-backend/scan/core"
+	"code.yt-security.com/public/scanengine/core"
 
 	"fmt"
 	"log/slog"
@@ -231,13 +231,25 @@ func (e *TargetEnricher) mergeInto(dest, src *core.Target) {
 	if dest.Protocol == "" && src.Protocol != "" {
 		dest.Protocol = src.Protocol
 	}
-	if dest.Service == "" && src.Service != "" {
-		dest.Service = src.Service
+	if src.Service != "" {
+		svcLower := strings.ToLower(src.Service)
+		if dest.Service == "" || svcLower != "tcp" && svcLower != "udp" {
+			dest.Service = src.Service
+		}
 	} else if dest.Service == "" && src.Protocol != "" {
 		p := strings.ToLower(src.Protocol)
 		if p != "tcp" && p != "udp" && !strings.HasPrefix(p, "http") {
 			dest.Service = src.Protocol
 		}
+	}
+	if src.Product != "" && dest.Product == "" {
+		dest.Product = src.Product
+	}
+	if src.Version != "" && dest.Version == "" {
+		dest.Version = src.Version
+	}
+	if len(src.Fingerprints) > 0 {
+		dest.Fingerprints = append(dest.Fingerprints, src.Fingerprints...)
 	}
 	if src.Extra != nil {
 		if dest.Extra == nil {
@@ -256,7 +268,9 @@ func targetUniqueKey(t *core.Target) string {
 	if host == "" {
 		host = t.IP
 	}
-	return fmt.Sprintf("%s|%d|%s|%s", host, t.Port, t.Protocol, t.Service)
+	// Service 不参与 key：同一 host:port 的不同阶段可能有无 Service 的差异，
+	// 应该合并为同一 target 而不是产生两条记录。
+	return fmt.Sprintf("%s|%d", host, t.Port)
 }
 
 func copyExtra(m map[string]string) map[string]string {

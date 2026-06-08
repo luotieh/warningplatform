@@ -1,6 +1,6 @@
 package sitemonitor
 
-import "code.yt-security.com/public/sdk/permission"
+import "code.yt-security.com/public/access/permission"
 
 var monitorFieldMapping = permission.FieldMapping{
 	UserIDColumn:       "created_by",

@@ -11,8 +11,8 @@ import (
 	transferContract "vulnscan-backend/circular/transfer/transfer-contract"
 	"vulnscan-backend/formdesign"
 
-	"code.yt-security.com/public/core/v2/db"
-	"code.yt-security.com/public/core/v2/generate/qulid"
+	"code.yt-security.com/public/core/db"
+	"code.yt-security.com/public/core/generate/ulid"
 	"gorm.io/gorm"
 )
 
@@ -48,7 +48,7 @@ func (s *serviceTransfer) ReceiveIncident(ctx context.Context, req transferContr
 	}
 
 	now := time.Now()
-	circularCode := qulid.GenerateID()
+	circularCode := ulid.GenerateID()
 	circularData := buildCircularDataFromIncident(req)
 	circularData = s.attachIncidentReports(ctx, circularCode, req, circularData)
 
@@ -77,7 +77,7 @@ func (s *serviceTransfer) ReceiveIncident(ctx context.Context, req transferContr
 			SourceSystem: req.SourceSystem, TransferTime: now.Format("2006-01-02 15:04:05"),
 			SourceData: toJSONString(req),
 		}
-		transferRecord.Id = qulid.GenerateID()
+		transferRecord.Id = ulid.GenerateID()
 		transferRecord.CreatedAt = now
 		transferRecord.UpdatedAt = now
 		if err := session.Create(&transferRecord).Error; err != nil {

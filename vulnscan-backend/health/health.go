@@ -5,8 +5,8 @@ import (
 	"runtime"
 	"time"
 
-	"code.yt-security.com/public/core/v2/db"
-	"code.yt-security.com/public/core/v2/web"
+	"code.yt-security.com/public/core/db"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 )
 
@@ -27,7 +27,7 @@ func (h *Handler) RegisterRoutes(engine *gin.Engine) {
 }
 
 func (h *Handler) Health(c *gin.Context) {
-	web.OK(c).Data(gin.H{
+	web.Succeed(c).Data(gin.H{
 		"status": "ok",
 		"uptime": time.Since(startTime).String(),
 	}).Send()
@@ -54,7 +54,7 @@ func (h *Handler) Ready(c *gin.Context) {
 		return
 	}
 
-	web.OK(c).Data(gin.H{"status": "ready"}).Send()
+	web.Succeed(c).Data(gin.H{"status": "ready"}).Send()
 }
 
 func (h *Handler) System(c *gin.Context) {
@@ -76,7 +76,7 @@ func (h *Handler) System(c *gin.Context) {
 		}
 	}
 
-	web.OK(c).Data(gin.H{
+	web.Succeed(c).Data(gin.H{
 		"uptime_seconds": int(time.Since(startTime).Seconds()),
 		"go_version":     runtime.Version(),
 		"go_arch":        runtime.GOARCH,

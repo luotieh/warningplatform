@@ -1,9 +1,9 @@
 package boot
 
 import (
-	"code.yt-security.com/public/core/v2/web"
+	"code.yt-security.com/public/core/web"
 )
 
-func LoadWeb(config *Config) *web.Web {
-	return web.NewWeb(config.Web)
+func LoadWeb(config *Config) *web.Engine {
+	return web.New(config.Web)
 }

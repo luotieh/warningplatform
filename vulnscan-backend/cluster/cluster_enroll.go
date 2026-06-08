@@ -13,7 +13,7 @@ import (
 	"vulnscan-backend/pkg/nodeauth"
 	"vulnscan-backend/pkg/nodeenroll"
 
-	"code.yt-security.com/public/core/v2/generate/qulid"
+	"code.yt-security.com/public/core/generate/ulid"
 )
 
 func (s *serviceCluster) IssueScanNodeCredentials(ctx context.Context, req *clusterContract.NodeEnrollmentIssueRequest) (*clusterContract.NodeEnrollmentIssueResponse, error) {
@@ -55,7 +55,7 @@ func (s *serviceCluster) IssueScanNodeCredentials(ctx context.Context, req *clus
 		topology = clusterconn.TopologyMasterPublicNodePrivate
 	}
 
-	nodeUUID := qulid.GenerateID()
+	nodeUUID := ulid.GenerateID()
 	mac := strings.TrimSpace(req.Enrollment.PrimaryMAC)
 	if len(mac) > 20 {
 		mac = mac[:20]

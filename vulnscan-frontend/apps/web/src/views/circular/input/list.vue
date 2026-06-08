@@ -92,7 +92,7 @@ onMounted(async () => {
 
 <template>
   <div style="padding:16px">
-    <NCard title="通报录入" size="small">
+    <NCard title="通报列表" size="small">
       <template #header-extra>
         <NSpace :size="8">
           <NSelect v-model:value="statusFilter" :options="statusOptions" placeholder="状态" size="small" style="width:130px" clearable @update:value="()=>{page=1;fetchData()}" />

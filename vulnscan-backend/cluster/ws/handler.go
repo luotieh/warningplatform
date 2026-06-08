@@ -4,7 +4,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"code.yt-security.com/public/core/v2/web"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 )
@@ -44,7 +44,7 @@ func (h *WSHandler) RegisterRoutes(router *gin.RouterGroup) {
 
 // Status returns hub statistics as JSON.
 func (h *WSHandler) Status(c *gin.Context) {
-	web.OK(c).Data(map[string]interface{}{
+	web.Succeed(c).Data(map[string]interface{}{
 		"connected_workers": h.hub.WorkerCount(),
 		"worker_ids":        h.hub.OnlineWorkerIDs(),
 	}).Send()

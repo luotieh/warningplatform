@@ -7,7 +7,7 @@ import (
 
 	"vulnscan-backend/model"
 
-	"code.yt-security.com/public/core/v2/generate/qulid"
+	"code.yt-security.com/public/core/generate/ulid"
 	"gorm.io/gorm"
 )
 
@@ -76,7 +76,7 @@ func (s *serviceMonitor) UpdateAlertConfig(ctx context.Context, cfg *model.Monit
 	var existing model.MonitorAlertConfig
 	if s.session().WithContext(ctx).First(&existing).Error != nil {
 		if cfg.ID == "" {
-			cfg.ID = qulid.GenerateID()
+			cfg.ID = ulid.GenerateID()
 		}
 		return s.session().WithContext(ctx).Create(cfg).Error
 	}

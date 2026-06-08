@@ -5,8 +5,8 @@ import (
 
 	"vulnscan-backend/sitemonitor/contract"
 
-	"code.yt-security.com/public/core/v2/web"
-	iamsdk "code.yt-security.com/public/sdk"
+	iamsdk "code.yt-security.com/public/access"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 )
 
@@ -17,13 +17,13 @@ func (h *HandlerMonitor) ListExecutions(c *gin.Context) {
 	if !ok {
 		return
 	}
-	scope := iamsdk.DataFilterScope(c, monitorExecutionFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, monitorExecutionFieldMapping)
 	total, list, err := h.svc.ListExecutions(c.Request.Context(), req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).List(total, list).Send()
+	web.Succeed(c).List(total, list).Send()
 }
 
 func (h *HandlerMonitor) GetExecutionDetail(c *gin.Context) {
@@ -33,7 +33,7 @@ func (h *HandlerMonitor) GetExecutionDetail(c *gin.Context) {
 		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.OK(c).Data(detail).Send()
+	web.Succeed(c).Data(detail).Send()
 }
 
 func (h *HandlerMonitor) DeleteExecution(c *gin.Context) {
@@ -42,7 +42,7 @@ func (h *HandlerMonitor) DeleteExecution(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerMonitor) BatchDeleteExecutions(c *gin.Context) {
@@ -56,7 +56,7 @@ func (h *HandlerMonitor) BatchDeleteExecutions(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerMonitor) UpdateDisposition(c *gin.Context) {
@@ -73,7 +73,7 @@ func (h *HandlerMonitor) UpdateDisposition(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerMonitor) BatchUpdateDisposition(c *gin.Context) {
@@ -90,7 +90,7 @@ func (h *HandlerMonitor) BatchUpdateDisposition(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerMonitor) GetEvidenceAsset(c *gin.Context) {

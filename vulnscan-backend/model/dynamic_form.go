@@ -3,7 +3,7 @@ package model
 import (
 	"time"
 
-	"code.yt-security.com/public/core/v2/generate/qulid"
+	"code.yt-security.com/public/core/generate/ulid"
 	"gorm.io/gorm"
 )
 
@@ -31,7 +31,7 @@ func (DynamicFormTemplate) TableName() string { return "vs_dynamic_form_template
 
 func (m *DynamicFormTemplate) BeforeCreate(tx *gorm.DB) error {
 	if m.ID == "" {
-		m.ID = qulid.GenerateID()
+		m.ID = ulid.GenerateID()
 	}
 	if m.Version == 0 {
 		m.Version = 1
@@ -59,7 +59,7 @@ func (DynamicFormTemplateVersion) TableName() string { return "vs_dynamic_form_t
 
 func (m *DynamicFormTemplateVersion) BeforeCreate(tx *gorm.DB) error {
 	if m.ID == "" {
-		m.ID = qulid.GenerateID()
+		m.ID = ulid.GenerateID()
 	}
 	if m.Version == 0 {
 		m.Version = 1
@@ -89,7 +89,7 @@ func (DynamicFormSubmission) TableName() string { return "vs_dynamic_form_submis
 
 func (m *DynamicFormSubmission) BeforeCreate(tx *gorm.DB) error {
 	if m.ID == "" {
-		m.ID = qulid.GenerateID()
+		m.ID = ulid.GenerateID()
 	}
 	if m.Version == 0 {
 		m.Version = 1

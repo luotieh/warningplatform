@@ -1,6 +1,6 @@
 package definition
 
-import "code.yt-security.com/public/sdk/permission"
+import "code.yt-security.com/public/access/permission"
 
 // VulnscanFieldMapping is the project-wide default field mapping for IAM data-scope.
 // All tables in this project use "created_by" (not the SDK default "creator_id").

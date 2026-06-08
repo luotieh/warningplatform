@@ -8,8 +8,8 @@ import (
 
 	coreContract "vulnscan-backend/incident/core/core-contract"
 
-	"code.yt-security.com/public/core/v2/db"
-	"code.yt-security.com/public/core/v2/generate/qulid"
+	"code.yt-security.com/public/core/db"
+	"code.yt-security.com/public/core/generate/ulid"
 	"gorm.io/gorm"
 )
 
@@ -30,7 +30,7 @@ func (s *serviceCore) CreateIncident(ctx context.Context, req coreContract.Incid
 	sess := s.session()
 	now := time.Now()
 
-	assetId := qulid.GenerateID()
+	assetId := ulid.GenerateID()
 	asset := model.IncidentAsset{
 		FullModel: model.FullModel{
 			Id:        assetId,
@@ -52,7 +52,7 @@ func (s *serviceCore) CreateIncident(ctx context.Context, req coreContract.Incid
 		Region:       req.Asset.Region,
 	}
 
-	metaId := qulid.GenerateID()
+	metaId := ulid.GenerateID()
 	metadata := model.IncidentMetadata{
 		FullModel: model.FullModel{
 			Id:        metaId,
@@ -78,7 +78,7 @@ func (s *serviceCore) CreateIncident(ctx context.Context, req coreContract.Incid
 		AffectScope:         req.Metadata.AffectScope,
 	}
 
-	incidentId := qulid.GenerateID()
+	incidentId := ulid.GenerateID()
 	incidentNo := coreContract.GenerateIncidentNo()
 	slaLevel := model.IncidentAutoSLALevel(req.Level)
 	slaHours := model.IncidentSLAHours(slaLevel)

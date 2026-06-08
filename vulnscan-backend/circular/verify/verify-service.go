@@ -10,7 +10,7 @@ import (
 	inputContract "vulnscan-backend/circular/input/input-contract"
 	verifyContract "vulnscan-backend/circular/verify/verify-contract"
 
-	"code.yt-security.com/public/core/v2/db"
+	"code.yt-security.com/public/core/db"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )

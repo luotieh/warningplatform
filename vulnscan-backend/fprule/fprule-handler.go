@@ -4,8 +4,8 @@ import (
 	fpruleContract "vulnscan-backend/fprule/fprule-contract"
 	"vulnscan-backend/model"
 
-	"code.yt-security.com/public/core/v2/web"
-	iamsdk "code.yt-security.com/public/sdk"
+	iamsdk "code.yt-security.com/public/access"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 	"vulnscan-backend/pkg/definition"
 )
@@ -24,13 +24,13 @@ func (h *HandlerFPRule) List(c *gin.Context) {
 		return
 	}
 
-	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
 	items, count, err := h.svc.List(query, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).List(count, items).Send()
+	web.Succeed(c).List(count, items).Send()
 }
 
 func (h *HandlerFPRule) GetByID(c *gin.Context) {
@@ -43,7 +43,7 @@ func (h *HandlerFPRule) GetByID(c *gin.Context) {
 		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.OK(c).Data(item).Send()
+	web.Succeed(c).Data(item).Send()
 }
 
 type createFPRuleReq struct {
@@ -81,7 +81,7 @@ func (h *HandlerFPRule) Create(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(item).Send()
+	web.Succeed(c).Data(item).Send()
 }
 
 type updateFPRuleReq struct {
@@ -124,14 +124,14 @@ func (h *HandlerFPRule) Update(c *gin.Context) {
 	}
 
 	if len(updates) == 0 {
-		web.OK(c).Send()
+		web.Succeed(c).Send()
 		return
 	}
 	if err := h.svc.Update(uri.Id, updates); err != nil {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerFPRule) Delete(c *gin.Context) {
@@ -143,7 +143,7 @@ func (h *HandlerFPRule) Delete(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerFPRule) Toggle(c *gin.Context) {
@@ -155,7 +155,7 @@ func (h *HandlerFPRule) Toggle(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerFPRule) Mark(c *gin.Context) {
@@ -170,5 +170,5 @@ func (h *HandlerFPRule) Mark(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(rule).Send()
+	web.Succeed(c).Data(rule).Send()
 }

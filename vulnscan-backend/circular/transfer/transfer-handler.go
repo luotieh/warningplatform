@@ -8,8 +8,8 @@ import (
 	"vulnscan-backend/circular/scope"
 	transferContract "vulnscan-backend/circular/transfer/transfer-contract"
 
-	"code.yt-security.com/public/core/v2/web"
-	iamsdk "code.yt-security.com/public/sdk"
+	iamsdk "code.yt-security.com/public/access"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 )
 
@@ -36,7 +36,7 @@ func (h *HandlerTransfer) ReceiveIncident(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(map[string]string{"circular_code": code}).Send()
+	web.Succeed(c).Data(map[string]string{"circular_code": code}).Send()
 }
 
 func (h *HandlerTransfer) ReceiveIncidentBatch(c *gin.Context) {
@@ -50,7 +50,7 @@ func (h *HandlerTransfer) ReceiveIncidentBatch(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(results).Send()
+	web.Succeed(c).Data(results).Send()
 }
 
 func (h *HandlerTransfer) DownloadIncidentReport(c *gin.Context) {
@@ -100,5 +100,5 @@ func (h *HandlerTransfer) GetTransferStatus(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(resp).Send()
+	web.Succeed(c).Data(resp).Send()
 }

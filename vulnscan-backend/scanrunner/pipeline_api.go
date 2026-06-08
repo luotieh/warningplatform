@@ -3,11 +3,11 @@ package scanrunner
 import (
 	"strings"
 
-	"vulnscan-backend/scan/core"
+	"code.yt-security.com/public/scanengine/core"
 	"vulnscan-backend/template/engine"
 
-	"code.yt-security.com/public/core/v2/web"
-	"code.yt-security.com/public/sdk/authorize"
+	"code.yt-security.com/public/access/authorize"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -65,7 +65,7 @@ func (a *PipelineAPI) ListModules(c *gin.Context) {
 			})
 		}
 	}
-	web.OK(c).Data(result).Send()
+	web.Succeed(c).Data(result).Send()
 }
 
 func (a *PipelineAPI) ListModuleConfigs(c *gin.Context) {
@@ -87,7 +87,7 @@ func (a *PipelineAPI) ListModuleConfigs(c *gin.Context) {
 			}
 		}
 	}
-	web.OK(c).Data(configs).Send()
+	web.Succeed(c).Data(configs).Send()
 }
 
 func (a *PipelineAPI) ListTemplates(c *gin.Context) {
@@ -116,5 +116,5 @@ func (a *PipelineAPI) ListTemplates(c *gin.Context) {
 			ModuleCount: moduleCount,
 		})
 	}
-	web.OK(c).Data(result).Send()
+	web.Succeed(c).Data(result).Send()
 }

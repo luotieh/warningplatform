@@ -4,7 +4,7 @@ import (
 	"io"
 	"net/http"
 
-	"code.yt-security.com/public/core/v2/web"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 )
 
@@ -37,7 +37,7 @@ func (h *HandlerMonitor) ImportTasks(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(result).Send()
+	web.Succeed(c).Data(result).Send()
 }
 
 func (h *HandlerMonitor) GetImportResult(c *gin.Context) {
@@ -47,7 +47,7 @@ func (h *HandlerMonitor) GetImportResult(c *gin.Context) {
 		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.OK(c).Data(result).Send()
+	web.Succeed(c).Data(result).Send()
 }
 
 func (h *HandlerMonitor) ExportImportResult(c *gin.Context) {

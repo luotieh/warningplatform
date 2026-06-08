@@ -3,8 +3,8 @@ package fingerprint
 import (
 	"vulnscan-backend/model"
 
-	"code.yt-security.com/public/core/v2/web"
-	iamsdk "code.yt-security.com/public/sdk"
+	iamsdk "code.yt-security.com/public/access"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 	"vulnscan-backend/pkg/definition"
 )
@@ -23,13 +23,13 @@ func (h *HandlerFingerprint) List(c *gin.Context) {
 		return
 	}
 
-	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
 	items, count, err := h.svc.List(query, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).List(count, items).Send()
+	web.Succeed(c).List(count, items).Send()
 }
 
 func (h *HandlerFingerprint) GetByID(c *gin.Context) {
@@ -42,7 +42,7 @@ func (h *HandlerFingerprint) GetByID(c *gin.Context) {
 		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.OK(c).Data(item).Send()
+	web.Succeed(c).Data(item).Send()
 }
 
 func (h *HandlerFingerprint) Create(c *gin.Context) {
@@ -54,7 +54,7 @@ func (h *HandlerFingerprint) Create(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(req).Send()
+	web.Succeed(c).Data(req).Send()
 }
 
 func (h *HandlerFingerprint) Update(c *gin.Context) {
@@ -70,7 +70,7 @@ func (h *HandlerFingerprint) Update(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerFingerprint) Delete(c *gin.Context) {
@@ -82,5 +82,5 @@ func (h *HandlerFingerprint) Delete(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }

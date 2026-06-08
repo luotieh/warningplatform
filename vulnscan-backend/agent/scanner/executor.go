@@ -9,20 +9,22 @@ import (
 	"vulnscan-backend/agent"
 	"vulnscan-backend/model"
 	"vulnscan-backend/pkg/payload"
-	"vulnscan-backend/scan/core"
-	"vulnscan-backend/scan/module/certcheck"
-	"vulnscan-backend/scan/module/dirscan"
-	"vulnscan-backend/scan/module/dnsall"
-	"vulnscan-backend/scan/module/favicon"
-	"vulnscan-backend/scan/module/icmp"
-	"vulnscan-backend/scan/module/infoleak"
-	"vulnscan-backend/scan/module/portscan"
-	"vulnscan-backend/scan/module/serviceprobe"
-	"vulnscan-backend/scan/module/sqli"
-	"vulnscan-backend/scan/module/ssrf"
-	"vulnscan-backend/scan/module/weakpass"
-	"vulnscan-backend/scan/module/webcrawl"
-	"vulnscan-backend/scan/module/xss"
+	"vulnscan-backend/scanrunner"
+
+	"code.yt-security.com/public/scanengine/core"
+	"code.yt-security.com/public/scanengine/module/certcheck"
+	"code.yt-security.com/public/scanengine/module/dirscan"
+	"code.yt-security.com/public/scanengine/module/dnsall"
+	"code.yt-security.com/public/scanengine/module/favicon"
+	"code.yt-security.com/public/scanengine/module/icmp"
+	"code.yt-security.com/public/scanengine/module/infoleak"
+	"code.yt-security.com/public/scanengine/module/portscan"
+	"code.yt-security.com/public/scanengine/module/serviceprobe"
+	"code.yt-security.com/public/scanengine/module/sqli"
+	"code.yt-security.com/public/scanengine/module/ssrf"
+	"code.yt-security.com/public/scanengine/module/weakpass"
+	"code.yt-security.com/public/scanengine/module/webcrawl"
+	"code.yt-security.com/public/scanengine/module/xss"
 )
 
 type ScanPayload struct {
@@ -42,7 +44,8 @@ type ScanResult struct {
 }
 
 type Executor struct {
-	loader *payload.Loader
+	rawLoader *payload.Loader
+	loader    *scanrunner.PayloadAdapter
 }
 
 func NewExecutor() *Executor {
@@ -52,8 +55,9 @@ func NewExecutor() *Executor {
 func (e *Executor) Type() string { return "scan" }
 
 func (e *Executor) Init(_ context.Context) error {
-	e.loader = payload.NewLoader(nil)
-	_ = e.loader.LoadAll()
+	e.rawLoader = payload.NewLoader(nil)
+	_ = e.rawLoader.LoadAll()
+	e.loader = scanrunner.NewPayloadAdapter(e.rawLoader)
 	return nil
 }
 

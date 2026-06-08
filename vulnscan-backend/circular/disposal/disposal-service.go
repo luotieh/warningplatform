@@ -11,8 +11,8 @@ import (
 	distributeContract "vulnscan-backend/circular/distribute/distribute-contract"
 	inputContract "vulnscan-backend/circular/input/input-contract"
 
-	"code.yt-security.com/public/core/v2/db"
-	"code.yt-security.com/public/core/v2/generate/qulid"
+	"code.yt-security.com/public/core/db"
+	"code.yt-security.com/public/core/generate/ulid"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -98,7 +98,7 @@ func (s *serviceDisposal) Dispose(c *gin.Context, id string, actor scope.Actor, 
 			Circular: id, CurrentOrganize: currentOrganize, TargetOrganize: dist.CurrentOrganize,
 			DisposalQuestion: req.DisposalQuestion, DisposalResult: req.DisposalResult,
 		}
-		disposal.Id = qulid.GenerateID()
+		disposal.Id = ulid.GenerateID()
 		disposal.CreatedBy = actor.ID
 		disposal.CreatedAt = now
 		if err := session.Create(&disposal).Error; err != nil {
@@ -177,7 +177,7 @@ func (s *serviceDisposal) Redistribute(c *gin.Context, req distributeContract.Re
 	newDepth := parentDist.Depth + 1
 
 	return sess.WithContext(c).Transaction(func(session *gorm.DB) error {
-		distributionId := qulid.GenerateID()
+		distributionId := ulid.GenerateID()
 		dist := model.CircularDistribution{
 			CircularId: circular.Code, CurrentOrganize: currentOrganize, TargetOrganize: req.TargetOrganize,
 			ProcessingDeadline: parentDist.ProcessingDeadline, Requirements: parentDist.Requirements,

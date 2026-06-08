@@ -7,8 +7,8 @@ import (
 	"vulnscan-backend/model"
 	"vulnscan-backend/sitemonitor/contract"
 
-	"code.yt-security.com/public/core/v2/web"
-	iamsdk "code.yt-security.com/public/sdk"
+	iamsdk "code.yt-security.com/public/access"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 )
 
@@ -19,13 +19,13 @@ func (h *HandlerMonitor) ListWordLibraries(c *gin.Context) {
 	if !ok {
 		return
 	}
-	scope := iamsdk.DataFilterScope(c, monitorFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, monitorFieldMapping)
 	total, list, err := h.svc.ListWordLibraries(c.Request.Context(), req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).List(total, list).Send()
+	web.Succeed(c).List(total, list).Send()
 }
 
 func (h *HandlerMonitor) CreateWordLibrary(c *gin.Context) {
@@ -43,7 +43,7 @@ func (h *HandlerMonitor) CreateWordLibrary(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(gin.H{"id": lib.ID}).Send()
+	web.Succeed(c).Data(gin.H{"id": lib.ID}).Send()
 }
 
 func (h *HandlerMonitor) GetWordLibrary(c *gin.Context) {
@@ -53,7 +53,7 @@ func (h *HandlerMonitor) GetWordLibrary(c *gin.Context) {
 		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.OK(c).Data(detail).Send()
+	web.Succeed(c).Data(detail).Send()
 }
 
 func (h *HandlerMonitor) UpdateWordLibrary(c *gin.Context) {
@@ -66,7 +66,7 @@ func (h *HandlerMonitor) UpdateWordLibrary(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerMonitor) DeleteWordLibrary(c *gin.Context) {
@@ -75,7 +75,7 @@ func (h *HandlerMonitor) DeleteWordLibrary(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 // ══ 词库分类 ══
@@ -87,7 +87,7 @@ func (h *HandlerMonitor) ListWordCategories(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(cats).Send()
+	web.Succeed(c).Data(cats).Send()
 }
 
 func (h *HandlerMonitor) CreateWordCategory(c *gin.Context) {
@@ -107,7 +107,7 @@ func (h *HandlerMonitor) CreateWordCategory(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(gin.H{"id": cat.ID}).Send()
+	web.Succeed(c).Data(gin.H{"id": cat.ID}).Send()
 }
 
 func (h *HandlerMonitor) UpdateWordCategory(c *gin.Context) {
@@ -120,7 +120,7 @@ func (h *HandlerMonitor) UpdateWordCategory(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerMonitor) DeleteWordCategory(c *gin.Context) {
@@ -129,7 +129,7 @@ func (h *HandlerMonitor) DeleteWordCategory(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 // ══ 词条 ══
@@ -144,7 +144,7 @@ func (h *HandlerMonitor) ListWordEntries(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).List(total, list).Send()
+	web.Succeed(c).List(total, list).Send()
 }
 
 func (h *HandlerMonitor) BatchCreateWordEntries(c *gin.Context) {
@@ -172,7 +172,7 @@ func (h *HandlerMonitor) BatchCreateWordEntries(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerMonitor) ImportWordEntries(c *gin.Context) {
@@ -223,7 +223,7 @@ func (h *HandlerMonitor) ImportWordEntries(c *gin.Context) {
 	}
 
 	if len(words) == 0 {
-		web.OK(c).Data(gin.H{"imported": 0, "message": "文件中未发现有效词条"}).Send()
+		web.Succeed(c).Data(gin.H{"imported": 0, "message": "文件中未发现有效词条"}).Send()
 		return
 	}
 
@@ -247,7 +247,7 @@ func (h *HandlerMonitor) ImportWordEntries(c *gin.Context) {
 		return
 	}
 
-	web.OK(c).Data(gin.H{
+	web.Succeed(c).Data(gin.H{
 		"imported":   len(entries),
 		"duplicated": len(words) - len(entries),
 	}).Send()
@@ -264,7 +264,7 @@ func (h *HandlerMonitor) DeleteWordEntries(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 // ══ 文件库 ══
@@ -274,13 +274,13 @@ func (h *HandlerMonitor) ListFileLibraries(c *gin.Context) {
 	if !ok {
 		return
 	}
-	scope := iamsdk.DataFilterScope(c, monitorFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, monitorFieldMapping)
 	total, list, err := h.svc.ListFileLibraries(c.Request.Context(), req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).List(total, list).Send()
+	web.Succeed(c).List(total, list).Send()
 }
 
 func (h *HandlerMonitor) CreateFileLibrary(c *gin.Context) {
@@ -298,7 +298,7 @@ func (h *HandlerMonitor) CreateFileLibrary(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(gin.H{"id": lib.ID}).Send()
+	web.Succeed(c).Data(gin.H{"id": lib.ID}).Send()
 }
 
 func (h *HandlerMonitor) GetFileLibrary(c *gin.Context) {
@@ -308,7 +308,7 @@ func (h *HandlerMonitor) GetFileLibrary(c *gin.Context) {
 		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.OK(c).Data(detail).Send()
+	web.Succeed(c).Data(detail).Send()
 }
 
 func (h *HandlerMonitor) UpdateFileLibrary(c *gin.Context) {
@@ -321,7 +321,7 @@ func (h *HandlerMonitor) UpdateFileLibrary(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerMonitor) DeleteFileLibrary(c *gin.Context) {
@@ -330,7 +330,7 @@ func (h *HandlerMonitor) DeleteFileLibrary(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 // ══ 文件条目 ══
@@ -345,7 +345,7 @@ func (h *HandlerMonitor) ListFileEntries(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).List(total, list).Send()
+	web.Succeed(c).List(total, list).Send()
 }
 
 func (h *HandlerMonitor) BatchCreateFileEntries(c *gin.Context) {
@@ -375,7 +375,7 @@ func (h *HandlerMonitor) BatchCreateFileEntries(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerMonitor) DeleteFileEntries(c *gin.Context) {
@@ -389,7 +389,7 @@ func (h *HandlerMonitor) DeleteFileEntries(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerMonitor) ImportFileEntries(c *gin.Context) {
@@ -449,7 +449,7 @@ func (h *HandlerMonitor) ImportFileEntries(c *gin.Context) {
 	}
 
 	if len(entries) == 0 {
-		web.OK(c).Data(gin.H{"imported": 0, "message": "文件中未发现有效路径"}).Send()
+		web.Succeed(c).Data(gin.H{"imported": 0, "message": "文件中未发现有效路径"}).Send()
 		return
 	}
 
@@ -472,7 +472,7 @@ func (h *HandlerMonitor) ImportFileEntries(c *gin.Context) {
 		}
 	}
 
-	web.OK(c).Data(gin.H{
+	web.Succeed(c).Data(gin.H{
 		"imported":   len(toCreate),
 		"duplicated": duplicated,
 		"total":      len(entries),
@@ -487,7 +487,7 @@ func (h *HandlerMonitor) ListDefaultConfigs(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(configs).Send()
+	web.Succeed(c).Data(configs).Send()
 }
 
 func (h *HandlerMonitor) GetDefaultConfig(c *gin.Context) {
@@ -497,7 +497,7 @@ func (h *HandlerMonitor) GetDefaultConfig(c *gin.Context) {
 		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.OK(c).Data(cfg).Send()
+	web.Succeed(c).Data(cfg).Send()
 }
 
 func (h *HandlerMonitor) UpdateDefaultConfig(c *gin.Context) {
@@ -512,5 +512,5 @@ func (h *HandlerMonitor) UpdateDefaultConfig(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }

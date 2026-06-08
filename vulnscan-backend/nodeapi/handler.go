@@ -16,7 +16,7 @@ import (
 	"vulnscan-backend/pkg/nodeauth"
 	"vulnscan-backend/sitemonitor"
 
-	"code.yt-security.com/public/core/v2/web"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -104,7 +104,7 @@ func (a *NodeAPI) Heartbeat(c *gin.Context) {
 	}
 
 	a.gdb().Model(&model.Node{}).Where("uuid = ?", nodeUUID).Updates(updates)
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 // Shutdown 扫描节点优雅退出时主动通知主控，立即标离线并回收未完成任务。
@@ -137,7 +137,7 @@ func (a *NodeAPI) Shutdown(c *gin.Context) {
 		"running_tasks", req.RunningTasks,
 		"queued_tasks", req.QueuedTasks,
 	)
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (a *NodeAPI) recoverNodeWorkload(session *gorm.DB, nodeUUID, reason string) {
@@ -351,7 +351,7 @@ func (a *NodeAPI) ReportResult(c *gin.Context) {
 		Where("uuid = ?", result.AgentID).
 		UpdateColumn("tasks_completed", gorm.Expr("tasks_completed + 1"))
 
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (a *NodeAPI) GetRules(c *gin.Context) {

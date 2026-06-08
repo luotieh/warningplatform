@@ -7,8 +7,8 @@ import (
 
 	"vulnscan-backend/model"
 
-	"code.yt-security.com/public/core/v2/db"
-	"code.yt-security.com/public/core/v2/generate/qulid"
+	"code.yt-security.com/public/core/db"
+	"code.yt-security.com/public/core/generate/ulid"
 	"gorm.io/gorm"
 )
 
@@ -123,7 +123,7 @@ func (s *ServiceNotify) NotifyHighVuln(vuln *model.Vulnerability) {
 
 func (s *ServiceNotify) create(userID, notifyType, title, content, link, severity, taskID, vulnID string) {
 	n := model.Notification{
-		ID:       qulid.GenerateID(),
+		ID:       ulid.GenerateID(),
 		UserID:   userID,
 		Type:     notifyType,
 		Title:    title,

@@ -13,10 +13,10 @@ import (
 	"vulnscan-backend/pkg/assethost"
 	"vulnscan-backend/scanrunner"
 
-	"code.yt-security.com/public/core/v2/db"
-	"code.yt-security.com/public/core/v2/generate/qulid"
-	"code.yt-security.com/public/core/v2/web"
-	iamsdk "code.yt-security.com/public/sdk"
+	iamsdk "code.yt-security.com/public/access"
+	"code.yt-security.com/public/core/db"
+	"code.yt-security.com/public/core/generate/ulid"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -253,7 +253,7 @@ func (h *EnrichHandler) AssetDetail(c *gin.Context) {
 		screenshotB64 = h.findLatestScreenshot(asset.Address)
 	}
 
-	web.OK(c).Data(gin.H{
+	web.Succeed(c).Data(gin.H{
 		"asset":         asset,
 		"ports":         ports,
 		"vulns":         vulns,
@@ -293,24 +293,24 @@ func (h *EnrichHandler) AssetScreenshot(c *gin.Context) {
 		}
 		val, _ := h.screenshot.RefreshScreenshot(c.Request.Context(), id, uid)
 		if val != "" && !isBase64Screenshot(val) {
-			web.OK(c).Data(gin.H{"screenshot_url": h.screenshot.FileDownloadURL(val)}).Send()
+			web.Succeed(c).Data(gin.H{"screenshot_url": h.screenshot.FileDownloadURL(val)}).Send()
 		} else {
-			web.OK(c).Data(gin.H{"screenshot": val}).Send()
+			web.Succeed(c).Data(gin.H{"screenshot": val}).Send()
 		}
 		return
 	}
 
 	if asset.Screenshot != "" {
 		if !isBase64Screenshot(asset.Screenshot) {
-			web.OK(c).Data(gin.H{"screenshot_url": h.screenshot.FileDownloadURL(asset.Screenshot)}).Send()
+			web.Succeed(c).Data(gin.H{"screenshot_url": h.screenshot.FileDownloadURL(asset.Screenshot)}).Send()
 		} else {
-			web.OK(c).Data(gin.H{"screenshot": asset.Screenshot}).Send()
+			web.Succeed(c).Data(gin.H{"screenshot": asset.Screenshot}).Send()
 		}
 		return
 	}
 
 	b64 := h.findLatestScreenshot(asset.Address)
-	web.OK(c).Data(gin.H{"screenshot": b64}).Send()
+	web.Succeed(c).Data(gin.H{"screenshot": b64}).Send()
 }
 
 func extractBearerToken(c *gin.Context) string {
@@ -342,7 +342,7 @@ func (h *EnrichHandler) findLatestScreenshot(address string) string {
 }
 
 func (h *EnrichHandler) AggregateFromScans(c *gin.Context) {
-	scope := iamsdk.DataFilterScope(c, assetFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, assetFieldMapping)
 
 	var findings []struct {
 		Target   string
@@ -409,14 +409,14 @@ func (h *EnrichHandler) AggregateFromScans(c *gin.Context) {
 			})
 			updated++
 		} else {
-			asset.ID = qulid.GenerateID()
+			asset.ID = ulid.GenerateID()
 			asset.LastScanAt = &now
 			h.session().Create(asset)
 			created++
 		}
 	}
 
-	web.OK(c).Data(gin.H{
+	web.Succeed(c).Data(gin.H{
 		"total_discovered": len(assetMap),
 		"created":          created,
 		"updated":          updated,
@@ -431,7 +431,7 @@ func (h *EnrichHandler) AssetStats(c *gin.Context) {
 	listQuery.Page = 0
 	listQuery.PageSize = 0
 
-	scope := iamsdk.DataFilterScope(c, assetFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, assetFieldMapping)
 
 	var totalAssets int64
 	if err := buildAssetListQuery(h.session(), listQuery, scope).Count(&totalAssets).Error; err != nil {
@@ -490,7 +490,7 @@ func (h *EnrichHandler) AssetStats(c *gin.Context) {
 		Where("status NOT IN ?", []string{"fixed", "ignored"}).
 		Count(&vulnAssets)
 
-	web.OK(c).Data(gin.H{
+	web.Succeed(c).Data(gin.H{
 		"total":      totalAssets,
 		"active":     activeAssets,
 		"inactive":   totalAssets - activeAssets,
@@ -505,7 +505,7 @@ func (h *EnrichHandler) AssetStats(c *gin.Context) {
 // RegionScope 返回资产台账中实际出现的地域编码及数量（受数据权限约束，不含空地域）。
 // 优先使用组织表的 region_code（实时反映单位地址变动），fallback 到资产自身的 region_code。
 func (h *EnrichHandler) RegionScope(c *gin.Context) {
-	scope := iamsdk.DataFilterScope(c, assetFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, assetFieldMapping)
 
 	type row struct {
 		RegionCode string `json:"region_code"`
@@ -525,12 +525,12 @@ func (h *EnrichHandler) RegionScope(c *gin.Context) {
 		return
 	}
 
-	web.OK(c).Data(rows).Send()
+	web.Succeed(c).Data(rows).Send()
 }
 
 // IndustryScope 返回资产关联组织中实际出现的行业分类及数量。
 func (h *EnrichHandler) IndustryScope(c *gin.Context) {
-	scope := iamsdk.DataFilterScope(c, assetFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, assetFieldMapping)
 
 	type row struct {
 		IndustryCategory string `json:"industry_category"`
@@ -549,12 +549,12 @@ func (h *EnrichHandler) IndustryScope(c *gin.Context) {
 		return
 	}
 
-	web.OK(c).Data(rows).Send()
+	web.Succeed(c).Data(rows).Send()
 }
 
 // UnitTypeScope 返回资产关联组织中实际出现的单位类型及数量。
 func (h *EnrichHandler) UnitTypeScope(c *gin.Context) {
-	scope := iamsdk.DataFilterScope(c, assetFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, assetFieldMapping)
 
 	type row struct {
 		UnitType string `json:"unit_type"`
@@ -573,11 +573,11 @@ func (h *EnrichHandler) UnitTypeScope(c *gin.Context) {
 		return
 	}
 
-	web.OK(c).Data(rows).Send()
+	web.Succeed(c).Data(rows).Send()
 }
 
 func (h *EnrichHandler) GroupList(c *gin.Context) {
-	scope := iamsdk.DataFilterScope(c, assetFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, assetFieldMapping)
 	var groups []model.AssetGroup
 	h.session().Model(&model.AssetGroup{}).Scopes(scope).Order("created_at DESC").Find(&groups)
 
@@ -612,7 +612,7 @@ func (h *EnrichHandler) GroupList(c *gin.Context) {
 		result = append(result, groupWithCount{AssetGroup: g, AssetCount: countMap[g.ID]})
 	}
 
-	web.OK(c).Data(result).Send()
+	web.Succeed(c).Data(result).Send()
 }
 
 func (h *EnrichHandler) GroupCreate(c *gin.Context) {
@@ -631,7 +631,7 @@ func (h *EnrichHandler) GroupCreate(c *gin.Context) {
 
 	user, _ := iamsdk.GetCurrentUser(c)
 	group := model.AssetGroup{
-		ID:          qulid.GenerateID(),
+		ID:          ulid.GenerateID(),
 		Name:        req.Name,
 		Description: req.Description,
 		ParentID:    req.ParentID,
@@ -652,7 +652,7 @@ func (h *EnrichHandler) GroupCreate(c *gin.Context) {
 		h.executeDynamicGroupRule(&group)
 	}
 
-	web.OK(c).Data(group).Send()
+	web.Succeed(c).Data(group).Send()
 }
 
 func (h *EnrichHandler) executeDynamicGroupRule(group *model.AssetGroup) {
@@ -712,7 +712,7 @@ func (h *EnrichHandler) GroupRefresh(c *gin.Context) {
 
 	var count int64
 	h.session().Model(&model.Asset{}).Where("group_id = ?", id).Count(&count)
-	web.OK(c).Data(gin.H{"matched": count}).Send()
+	web.Succeed(c).Data(gin.H{"matched": count}).Send()
 }
 
 func (h *EnrichHandler) GroupUpdate(c *gin.Context) {
@@ -757,7 +757,7 @@ func (h *EnrichHandler) GroupUpdate(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *EnrichHandler) GroupDelete(c *gin.Context) {
@@ -774,7 +774,7 @@ func (h *EnrichHandler) GroupDelete(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *EnrichHandler) BatchAssignGroup(c *gin.Context) {
@@ -795,7 +795,7 @@ func (h *EnrichHandler) BatchAssignGroup(c *gin.Context) {
 		return
 	}
 
-	web.OK(c).Data(gin.H{"affected": result.RowsAffected}).Send()
+	web.Succeed(c).Data(gin.H{"affected": result.RowsAffected}).Send()
 }
 
 type portInfo struct {
@@ -923,7 +923,7 @@ func (h *EnrichHandler) Dedup(c *gin.Context) {
 		tx.Commit()
 	}
 
-	web.OK(c).Data(gin.H{
+	web.Succeed(c).Data(gin.H{
 		"dup_groups":     len(dups),
 		"merged_deleted": merged,
 	}).Send()
@@ -965,7 +965,7 @@ func (h *EnrichHandler) ImportSubdomainsFromScan(c *gin.Context) {
 		return
 	}
 	if len(findings) == 0 {
-		web.OK(c).Data(gin.H{"total": 0, "created": 0, "skipped": 0}).Send()
+		web.Succeed(c).Data(gin.H{"total": 0, "created": 0, "skipped": 0}).Send()
 		return
 	}
 
@@ -998,7 +998,7 @@ func (h *EnrichHandler) ImportSubdomainsFromScan(c *gin.Context) {
 			addr = norm
 		}
 		item := model.Asset{
-			ID:          qulid.GenerateID(),
+			ID:          ulid.GenerateID(),
 			Name:        name,
 			Type:        "domain",
 			Address:     addr,
@@ -1017,7 +1017,7 @@ func (h *EnrichHandler) ImportSubdomainsFromScan(c *gin.Context) {
 		created++
 	}
 
-	web.OK(c).Data(gin.H{
+	web.Succeed(c).Data(gin.H{
 		"total":   len(findings),
 		"created": created,
 		"skipped": skipped,
@@ -1026,7 +1026,7 @@ func (h *EnrichHandler) ImportSubdomainsFromScan(c *gin.Context) {
 
 // RepairSubdomainAddresses 根据资产名称「发现子域名: {fqdn}」修复被错误写成根域的访问地址。
 func (h *EnrichHandler) RepairSubdomainAddresses(c *gin.Context) {
-	scope := iamsdk.DataFilterScope(c, assetFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, assetFieldMapping)
 	var assets []model.Asset
 	if err := h.session().Model(&model.Asset{}).Scopes(scope).
 		Where("name LIKE ?", "发现子域名:%").Find(&assets).Error; err != nil {
@@ -1070,7 +1070,7 @@ func (h *EnrichHandler) RepairSubdomainAddresses(c *gin.Context) {
 		fixed++
 	}
 
-	web.OK(c).Data(gin.H{
+	web.Succeed(c).Data(gin.H{
 		"total":   len(assets),
 		"fixed":   fixed,
 		"skipped": skipped,
@@ -1127,7 +1127,7 @@ func (h *EnrichHandler) ImportFromCyberspace(c *gin.Context) {
 		}
 
 		asset := model.Asset{
-			ID:         qulid.GenerateID(),
+			ID:         ulid.GenerateID(),
 			Name:       name,
 			Address:    item.IP,
 			IPv4:       item.IP,
@@ -1152,7 +1152,7 @@ func (h *EnrichHandler) ImportFromCyberspace(c *gin.Context) {
 		}
 	}
 
-	web.OK(c).Data(gin.H{
+	web.Succeed(c).Data(gin.H{
 		"total":   len(req.Items),
 		"created": created,
 		"skipped": skipped,
@@ -1219,7 +1219,7 @@ func (h *EnrichHandler) EnrichAsset(c *gin.Context) {
 	if res.SplitMode {
 		out["sub_count"] = res.SubCount
 	}
-	web.OK(c).Data(out).Send()
+	web.Succeed(c).Data(out).Send()
 }
 
 func (h *EnrichHandler) BatchEnrich(c *gin.Context) {
@@ -1294,7 +1294,7 @@ func (h *EnrichHandler) BatchEnrich(c *gin.Context) {
 	if res.SplitMode {
 		out["sub_count"] = res.SubCount
 	}
-	web.OK(c).Data(out).Send()
+	web.Succeed(c).Data(out).Send()
 }
 
 func (h *EnrichHandler) RecalcRisk(c *gin.Context) {
@@ -1318,7 +1318,7 @@ func (h *EnrichHandler) RecalcRisk(c *gin.Context) {
 		RecordedAt:    time.Now(),
 	})
 
-	web.OK(c).Data(gin.H{"score": score, "detail": detail}).Send()
+	web.Succeed(c).Data(gin.H{"score": score, "detail": detail}).Send()
 }
 
 func (h *EnrichHandler) RecalcAllRisk(c *gin.Context) {
@@ -1365,7 +1365,7 @@ func (h *EnrichHandler) RecalcAllRisk(c *gin.Context) {
 		updated += len(batch)
 	}
 
-	web.OK(c).Data(gin.H{"updated": updated}).Send()
+	web.Succeed(c).Data(gin.H{"updated": updated}).Send()
 }
 
 func (h *EnrichHandler) RiskTrend(c *gin.Context) {
@@ -1380,7 +1380,7 @@ func (h *EnrichHandler) RiskTrend(c *gin.Context) {
 	h.session().Where("asset_id = ? AND recorded_at >= ?", id, since).
 		Order("recorded_at ASC").Find(&history)
 
-	web.OK(c).Data(history).Send()
+	web.Succeed(c).Data(history).Send()
 }
 
 func (h *EnrichHandler) RiskRanking(c *gin.Context) {
@@ -1408,7 +1408,7 @@ func (h *EnrichHandler) RiskRanking(c *gin.Context) {
 		})
 	}
 
-	web.OK(c).Data(result).Send()
+	web.Succeed(c).Data(result).Send()
 }
 
 func (h *EnrichHandler) calcRiskScore(asset *model.Asset) (float64, map[string]float64) {
@@ -1510,7 +1510,7 @@ func (h *EnrichHandler) buildTargetMatchers(asset *model.Asset) []string {
 // ── 资产报告 ──
 
 func (h *EnrichHandler) ComplianceReport(c *gin.Context) {
-	scope := iamsdk.DataFilterScope(c, assetFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, assetFieldMapping)
 
 	type complianceCounts struct {
 		Total           int64 `gorm:"column:total"`
@@ -1563,7 +1563,7 @@ func (h *EnrichHandler) ComplianceReport(c *gin.Context) {
 		return float64(a) / float64(b) * 100
 	}
 
-	web.OK(c).Data(gin.H{
+	web.Succeed(c).Data(gin.H{
 		"generated_at": time.Now().Format("2006-01-02 15:04:05"),
 		"summary": gin.H{
 			"total_assets": total,

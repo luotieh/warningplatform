@@ -3,8 +3,8 @@ package systemdict
 import (
 	"time"
 
-	"code.yt-security.com/public/core/v2/web"
-	"code.yt-security.com/public/sdk/authorize"
+	"code.yt-security.com/public/access/authorize"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 )
 
@@ -74,7 +74,7 @@ func (h *Handler) List(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).List(count, items).Send()
+	web.Succeed(c).List(count, items).Send()
 }
 
 func (h *Handler) Get(c *gin.Context) {
@@ -87,7 +87,7 @@ func (h *Handler) Get(c *gin.Context) {
 		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.OK(c).Data(gin.H{"dict": item, "items": children}).Send()
+	web.Succeed(c).Data(gin.H{"dict": item, "items": children}).Send()
 }
 
 func (h *Handler) Create(c *gin.Context) {
@@ -100,7 +100,7 @@ func (h *Handler) Create(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(gin.H{"id": id}).Send()
+	web.Succeed(c).Data(gin.H{"id": id}).Send()
 }
 
 func (h *Handler) Update(c *gin.Context) {
@@ -124,7 +124,7 @@ func (h *Handler) Update(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *Handler) Delete(c *gin.Context) {
@@ -136,7 +136,7 @@ func (h *Handler) Delete(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *Handler) Items(c *gin.Context) {
@@ -149,7 +149,7 @@ func (h *Handler) Items(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(items).Send()
+	web.Succeed(c).Data(items).Send()
 }
 
 func (h *Handler) ItemsByDict(c *gin.Context) {
@@ -166,7 +166,7 @@ func (h *Handler) ItemsByDict(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(items).Send()
+	web.Succeed(c).Data(items).Send()
 }
 
 func (h *Handler) AddItems(c *gin.Context) {
@@ -182,7 +182,7 @@ func (h *Handler) AddItems(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *Handler) UpdateItem(c *gin.Context) {
@@ -199,7 +199,7 @@ func (h *Handler) UpdateItem(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *Handler) DeleteItems(c *gin.Context) {
@@ -215,7 +215,7 @@ func (h *Handler) DeleteItems(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *Handler) SeedDefaults() {

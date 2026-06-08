@@ -3,7 +3,7 @@ package model
 import (
 	"time"
 
-	"code.yt-security.com/public/core/v2/generate/qulid"
+	"code.yt-security.com/public/core/generate/ulid"
 	"gorm.io/gorm"
 )
 
@@ -21,7 +21,7 @@ func (SystemDict) TableName() string { return "vs_system_dict" }
 
 func (m *SystemDict) BeforeCreate(tx *gorm.DB) error {
 	if m.ID == "" {
-		m.ID = qulid.GenerateID()
+		m.ID = ulid.GenerateID()
 	}
 	return nil
 }
@@ -43,7 +43,7 @@ func (SystemDictItem) TableName() string { return "vs_system_dict_item" }
 
 func (m *SystemDictItem) BeforeCreate(tx *gorm.DB) error {
 	if m.ID == "" {
-		m.ID = qulid.GenerateID()
+		m.ID = ulid.GenerateID()
 	}
 	return nil
 }

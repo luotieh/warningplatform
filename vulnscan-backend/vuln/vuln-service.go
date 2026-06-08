@@ -6,8 +6,8 @@ import (
 	"vulnscan-backend/model"
 	vulnContract "vulnscan-backend/vuln/vuln-contract"
 
-	"code.yt-security.com/public/core/v2/db"
-	"code.yt-security.com/public/core/v2/generate/qulid"
+	"code.yt-security.com/public/core/db"
+	"code.yt-security.com/public/core/generate/ulid"
 	"gorm.io/gorm"
 )
 
@@ -134,7 +134,7 @@ func (s *serviceVuln) changeStatus(id, newStatus, comment, operator string) erro
 	}
 
 	sess.Create(&model.VulnStatusHistory{
-		ID:        qulid.GenerateID(),
+		ID:        ulid.GenerateID(),
 		VulnID:    id,
 		OldStatus: oldStatus,
 		NewStatus: newStatus,

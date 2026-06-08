@@ -7,7 +7,7 @@ import (
 
 	commentContract "vulnscan-backend/incident/comment/comment-contract"
 
-	"code.yt-security.com/public/core/v2/db"
+	"code.yt-security.com/public/core/db"
 	"gorm.io/gorm"
 )
 

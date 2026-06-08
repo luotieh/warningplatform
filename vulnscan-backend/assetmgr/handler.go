@@ -6,9 +6,9 @@ import (
 	ac "vulnscan-backend/assetmgr/assetmgr-contract"
 	"vulnscan-backend/model"
 
-	"code.yt-security.com/public/core/v2/generate/qulid"
-	"code.yt-security.com/public/core/v2/web"
-	iamsdk "code.yt-security.com/public/sdk"
+	iamsdk "code.yt-security.com/public/access"
+	"code.yt-security.com/public/core/generate/ulid"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 	"vulnscan-backend/pkg/definition"
 )
@@ -51,13 +51,13 @@ func NewHandler(
 
 func (h *Handler) LifecycleList(c *gin.Context) {
 	req, _ := web.BindQuery[ac.LifecycleListReq](c)
-	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
 	items, count, err := h.lifecycle.ListTransitions(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).List(count, items).Send()
+	web.Succeed(c).List(count, items).Send()
 }
 
 func (h *Handler) LifecycleTransition(c *gin.Context) {
@@ -70,20 +70,20 @@ func (h *Handler) LifecycleTransition(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 // ── 风险评分 ──
 
 func (h *Handler) RiskList(c *gin.Context) {
 	req, _ := web.BindQuery[ac.RiskListReq](c)
-	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
 	items, count, err := h.risk.List(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).List(count, items).Send()
+	web.Succeed(c).List(count, items).Send()
 }
 
 func (h *Handler) RiskDetail(c *gin.Context) {
@@ -92,7 +92,7 @@ func (h *Handler) RiskDetail(c *gin.Context) {
 		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.OK(c).Data(item).Send()
+	web.Succeed(c).Data(item).Send()
 }
 
 func (h *Handler) RiskRecalculate(c *gin.Context) {
@@ -100,7 +100,7 @@ func (h *Handler) RiskRecalculate(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *Handler) RiskRecalculateAll(c *gin.Context) {
@@ -109,20 +109,20 @@ func (h *Handler) RiskRecalculateAll(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(gin.H{"recalculated": count}).Send()
+	web.Succeed(c).Data(gin.H{"recalculated": count}).Send()
 }
 
 // ── 告警 ──
 
 func (h *Handler) AlertList(c *gin.Context) {
 	req, _ := web.BindQuery[ac.AlertListReq](c)
-	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
 	items, count, err := h.alert.List(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).List(count, items).Send()
+	web.Succeed(c).List(count, items).Send()
 }
 
 func (h *Handler) AlertCreate(c *gin.Context) {
@@ -136,7 +136,7 @@ func (h *Handler) AlertCreate(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(item).Send()
+	web.Succeed(c).Data(item).Send()
 }
 
 func (h *Handler) AlertAck(c *gin.Context) {
@@ -145,7 +145,7 @@ func (h *Handler) AlertAck(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *Handler) AlertResolve(c *gin.Context) {
@@ -153,20 +153,20 @@ func (h *Handler) AlertResolve(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 // ── 审核 ──
 
 func (h *Handler) VerifyList(c *gin.Context) {
 	req, _ := web.BindQuery[ac.VerifyListReq](c)
-	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
 	items, count, err := h.verify.List(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).List(count, items).Send()
+	web.Succeed(c).List(count, items).Send()
 }
 
 func (h *Handler) VerifySubmit(c *gin.Context) {
@@ -181,7 +181,7 @@ func (h *Handler) VerifySubmit(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(item).Send()
+	web.Succeed(c).Data(item).Send()
 }
 
 func (h *Handler) VerifyReview(c *gin.Context) {
@@ -194,7 +194,7 @@ func (h *Handler) VerifyReview(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 // ── 合规项 ──
@@ -204,13 +204,13 @@ func (h *Handler) VerifyTaskList(c *gin.Context) {
 	if !ok {
 		return
 	}
-	scope := iamsdk.DataFilterScope(c, definition.VerifyTaskFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, definition.VerifyTaskFieldMapping)
 	items, count, err := h.verifyTask.ListTasks(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).List(count, items).Send()
+	web.Succeed(c).List(count, items).Send()
 }
 
 func (h *Handler) VerifyTaskCreate(c *gin.Context) {
@@ -224,7 +224,7 @@ func (h *Handler) VerifyTaskCreate(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(gin.H{"items": items, "count": len(items)}).Send()
+	web.Succeed(c).Data(gin.H{"items": items, "count": len(items)}).Send()
 }
 
 func (h *Handler) VerifyTaskDelete(c *gin.Context) {
@@ -233,7 +233,7 @@ func (h *Handler) VerifyTaskDelete(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *Handler) VerifyTaskReceive(c *gin.Context) {
@@ -246,7 +246,7 @@ func (h *Handler) VerifyTaskReceive(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *Handler) VerifyTaskConfirm(c *gin.Context) {
@@ -259,7 +259,7 @@ func (h *Handler) VerifyTaskConfirm(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *Handler) VerifyTaskReject(c *gin.Context) {
@@ -272,7 +272,7 @@ func (h *Handler) VerifyTaskReject(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *Handler) VerifyTaskForward(c *gin.Context) {
@@ -285,7 +285,7 @@ func (h *Handler) VerifyTaskForward(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *Handler) VerifyTaskReturn(c *gin.Context) {
@@ -298,7 +298,7 @@ func (h *Handler) VerifyTaskReturn(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *Handler) VerifyTaskArchive(c *gin.Context) {
@@ -311,7 +311,7 @@ func (h *Handler) VerifyTaskArchive(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *Handler) VerifyTaskReactivate(c *gin.Context) {
@@ -324,7 +324,7 @@ func (h *Handler) VerifyTaskReactivate(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *Handler) VerifyTaskLogs(c *gin.Context) {
@@ -340,7 +340,7 @@ func (h *Handler) VerifyTaskLogs(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).List(count, items).Send()
+	web.Succeed(c).List(count, items).Send()
 }
 
 func (h *Handler) ArchiveList(c *gin.Context) {
@@ -348,13 +348,13 @@ func (h *Handler) ArchiveList(c *gin.Context) {
 	if !ok {
 		return
 	}
-	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
 	items, count, err := h.verifyTask.ListArchives(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).List(count, items).Send()
+	web.Succeed(c).List(count, items).Send()
 }
 
 func (h *Handler) ArchiveDetail(c *gin.Context) {
@@ -363,18 +363,18 @@ func (h *Handler) ArchiveDetail(c *gin.Context) {
 		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.OK(c).Data(item).Send()
+	web.Succeed(c).Data(item).Send()
 }
 
 func (h *Handler) ComplianceList(c *gin.Context) {
 	req, _ := web.BindQuery[ac.ComplianceItemReq](c)
-	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
 	items, count, err := h.compliance.List(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).List(count, items).Send()
+	web.Succeed(c).List(count, items).Send()
 }
 
 func (h *Handler) ComplianceCreate(c *gin.Context) {
@@ -386,7 +386,7 @@ func (h *Handler) ComplianceCreate(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(item).Send()
+	web.Succeed(c).Data(item).Send()
 }
 
 func (h *Handler) ComplianceUpdate(c *gin.Context) {
@@ -399,7 +399,7 @@ func (h *Handler) ComplianceUpdate(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *Handler) ComplianceDelete(c *gin.Context) {
@@ -408,20 +408,20 @@ func (h *Handler) ComplianceDelete(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 // ── 责任人 ──
 
 func (h *Handler) ResponsibleList(c *gin.Context) {
 	req, _ := web.BindQuery[ac.ResponsibleListReq](c)
-	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
 	items, count, err := h.responsible.List(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).List(count, items).Send()
+	web.Succeed(c).List(count, items).Send()
 }
 
 func (h *Handler) ResponsibleCreate(c *gin.Context) {
@@ -433,7 +433,7 @@ func (h *Handler) ResponsibleCreate(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(item).Send()
+	web.Succeed(c).Data(item).Send()
 }
 
 func (h *Handler) ResponsibleUpdate(c *gin.Context) {
@@ -446,7 +446,7 @@ func (h *Handler) ResponsibleUpdate(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *Handler) ResponsibleDelete(c *gin.Context) {
@@ -455,20 +455,20 @@ func (h *Handler) ResponsibleDelete(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 // ── 合规模板 ──
 
 func (h *Handler) TemplateList(c *gin.Context) {
 	req, _ := web.BindQuery[ac.TemplateListReq](c)
-	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
 	items, count, err := h.tmpl.List(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).List(count, items).Send()
+	web.Succeed(c).List(count, items).Send()
 }
 
 func (h *Handler) TemplateDetail(c *gin.Context) {
@@ -479,7 +479,7 @@ func (h *Handler) TemplateDetail(c *gin.Context) {
 		return
 	}
 	tmplItems, _ := h.tmpl.ListItems(id)
-	web.OK(c).Data(gin.H{"template": item, "items": tmplItems}).Send()
+	web.Succeed(c).Data(gin.H{"template": item, "items": tmplItems}).Send()
 }
 
 func (h *Handler) TemplateCreate(c *gin.Context) {
@@ -491,7 +491,7 @@ func (h *Handler) TemplateCreate(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(item).Send()
+	web.Succeed(c).Data(item).Send()
 }
 
 func (h *Handler) TemplateItemCreate(c *gin.Context) {
@@ -503,20 +503,20 @@ func (h *Handler) TemplateItemCreate(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(item).Send()
+	web.Succeed(c).Data(item).Send()
 }
 
 // ── 合规检查结果 ──
 
 func (h *Handler) CheckResultList(c *gin.Context) {
 	req, _ := web.BindQuery[ac.CheckResultListReq](c)
-	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
 	items, count, err := h.check.List(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).List(count, items).Send()
+	web.Succeed(c).List(count, items).Send()
 }
 
 func (h *Handler) CheckResultUpsert(c *gin.Context) {
@@ -530,20 +530,20 @@ func (h *Handler) CheckResultUpsert(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 // ── 集成数据源 ──
 
 func (h *Handler) IntSourceList(c *gin.Context) {
 	req, _ := web.BindQuery[ac.IntSourceListReq](c)
-	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
 	items, count, err := h.integration.ListSources(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).List(count, items).Send()
+	web.Succeed(c).List(count, items).Send()
 }
 
 func (h *Handler) IntSourceCreate(c *gin.Context) {
@@ -555,7 +555,7 @@ func (h *Handler) IntSourceCreate(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(item).Send()
+	web.Succeed(c).Data(item).Send()
 }
 
 func (h *Handler) IntSourceUpdate(c *gin.Context) {
@@ -568,7 +568,7 @@ func (h *Handler) IntSourceUpdate(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *Handler) IntSourceDelete(c *gin.Context) {
@@ -577,20 +577,20 @@ func (h *Handler) IntSourceDelete(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 // ── 工作流 ──
 
 func (h *Handler) WorkflowList(c *gin.Context) {
 	req, _ := web.BindQuery[ac.WorkflowListReq](c)
-	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
 	items, count, err := h.workflow.List(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).List(count, items).Send()
+	web.Succeed(c).List(count, items).Send()
 }
 
 func (h *Handler) WorkflowCreate(c *gin.Context) {
@@ -600,12 +600,12 @@ func (h *Handler) WorkflowCreate(c *gin.Context) {
 	}
 	user, _ := iamsdk.GetCurrentUser(c)
 	item.CreatedBy = user.UserID
-	item.ID = qulid.GenerateID()
+	item.ID = ulid.GenerateID()
 	if err := h.workflow.Create(&item); err != nil {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(item).Send()
+	web.Succeed(c).Data(item).Send()
 }
 
 func (h *Handler) WorkflowUpdate(c *gin.Context) {
@@ -618,7 +618,7 @@ func (h *Handler) WorkflowUpdate(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *Handler) WorkflowDelete(c *gin.Context) {
@@ -626,16 +626,16 @@ func (h *Handler) WorkflowDelete(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *Handler) WorkflowExecutions(c *gin.Context) {
 	req, _ := web.BindQuery[ac.ExecutionListReq](c)
-	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
 	items, count, err := h.workflow.ListExecutions(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).List(count, items).Send()
+	web.Succeed(c).List(count, items).Send()
 }

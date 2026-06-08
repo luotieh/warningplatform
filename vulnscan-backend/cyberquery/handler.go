@@ -4,11 +4,11 @@ import (
 	"log/slog"
 	"strconv"
 
-	"code.yt-security.com/public/core/v2/web"
-	"code.yt-security.com/public/sdk/authorize"
+	"code.yt-security.com/public/access/authorize"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 
-	"vulnscan-backend/scan/module/cyberspace"
+	"code.yt-security.com/public/scanengine/module/cyberspace"
 )
 
 type Handler struct {
@@ -77,7 +77,7 @@ func (h *Handler) Search(c *gin.Context) {
 		}
 	}
 
-	web.OK(c).List(int64(len(assets)), assets).Send()
+	web.Succeed(c).List(int64(len(assets)), assets).Send()
 }
 
 func (h *Handler) HostLookup(c *gin.Context) {
@@ -97,7 +97,7 @@ func (h *Handler) HostLookup(c *gin.Context) {
 		assets = append(assets, results...)
 	}
 
-	web.OK(c).List(int64(len(assets)), assets).Send()
+	web.Succeed(c).List(int64(len(assets)), assets).Send()
 }
 
 func (h *Handler) ListProviders(c *gin.Context) {
@@ -114,7 +114,7 @@ func (h *Handler) ListProviders(c *gin.Context) {
 		})
 	}
 
-	web.OK(c).Data(list).Send()
+	web.Succeed(c).Data(list).Send()
 }
 
 type CyberQuery struct {

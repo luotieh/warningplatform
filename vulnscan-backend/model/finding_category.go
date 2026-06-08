@@ -90,7 +90,6 @@ func InferFindingCategory(moduleID, findingType string) string {
 	moduleID = strings.TrimSpace(moduleID)
 	findingType = strings.TrimSpace(findingType)
 
-	// 证书基线信息用于资产富化/台账，归入 recon；其余 cert_check 仍为 vuln。
 	if moduleID == "cert_check" && findingType == "cert_info" {
 		return FindingCategoryRecon
 	}
@@ -98,6 +97,7 @@ func InferFindingCategory(moduleID, findingType string) string {
 	if _, ok := vulnFindingModules[moduleID]; ok {
 		return FindingCategoryVuln
 	}
+
 	if _, ok := reconFindingModules[moduleID]; ok {
 		return FindingCategoryRecon
 	}
@@ -110,9 +110,27 @@ func InferFindingCategory(moduleID, findingType string) string {
 	return FindingCategoryVuln
 }
 
+// InferFindingCategoryWithSeverity extends InferFindingCategory with severity override:
+// recon-module findings with severity >= high are promoted to vuln category.
+func InferFindingCategoryWithSeverity(moduleID, findingType, severity string) string {
+	cat := InferFindingCategory(moduleID, findingType)
+	if cat == FindingCategoryRecon && (severity == "high" || severity == "critical") {
+		return FindingCategoryVuln
+	}
+	return cat
+}
+
 func NormalizeFindingCategory(category, moduleID, findingType string) string {
 	if strings.TrimSpace(category) == FindingCategoryRecon {
 		return FindingCategoryRecon
 	}
 	return InferFindingCategory(moduleID, findingType)
+}
+
+// NormalizeFindingCategoryWithSeverity is severity-aware normalization.
+func NormalizeFindingCategoryWithSeverity(category, moduleID, findingType, severity string) string {
+	if strings.TrimSpace(category) == FindingCategoryRecon && severity != "high" && severity != "critical" {
+		return FindingCategoryRecon
+	}
+	return InferFindingCategoryWithSeverity(moduleID, findingType, severity)
 }

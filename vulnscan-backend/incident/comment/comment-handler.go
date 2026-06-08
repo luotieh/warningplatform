@@ -3,8 +3,8 @@ package comment
 import (
 	commentContract "vulnscan-backend/incident/comment/comment-contract"
 
-	"code.yt-security.com/public/core/v2/web"
-	iamsdk "code.yt-security.com/public/sdk"
+	iamsdk "code.yt-security.com/public/access"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 )
 
@@ -31,7 +31,7 @@ func (h *HandlerComment) CreateComment(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(item).Send()
+	web.Succeed(c).Data(item).Send()
 }
 
 func (h *HandlerComment) ListComments(c *gin.Context) {
@@ -47,7 +47,7 @@ func (h *HandlerComment) ListComments(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(items).Send()
+	web.Succeed(c).Data(items).Send()
 }
 
 func (h *HandlerComment) DeleteComment(c *gin.Context) {
@@ -61,5 +61,5 @@ func (h *HandlerComment) DeleteComment(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }

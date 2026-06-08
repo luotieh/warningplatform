@@ -8,8 +8,8 @@ import (
 	"log/slog"
 	"time"
 
-	"code.yt-security.com/public/core/v2/web"
-	"code.yt-security.com/public/sdk/authorize"
+	"code.yt-security.com/public/access/authorize"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
@@ -100,7 +100,7 @@ func (a *API) Launch(c *gin.Context) {
 
 	task := res.Task
 	if res.SplitMode {
-		web.OK(c).Data(map[string]interface{}{
+		web.Succeed(c).Data(map[string]interface{}{
 			"task_id":    task.ID,
 			"name":       task.Name,
 			"template":   task.TemplateName,
@@ -111,7 +111,7 @@ func (a *API) Launch(c *gin.Context) {
 		return
 	}
 
-	web.OK(c).Data(map[string]interface{}{
+	web.Succeed(c).Data(map[string]interface{}{
 		"task_id":  task.ID,
 		"name":     task.Name,
 		"template": task.TemplateName,
@@ -147,7 +147,7 @@ func (a *API) Rerun(c *gin.Context) {
 		out["split_mode"] = true
 		out["sub_count"] = res.SubCount
 	}
-	web.OK(c).Data(out).Send()
+	web.Succeed(c).Data(out).Send()
 }
 
 func (a *API) Cancel(c *gin.Context) {
@@ -158,7 +158,7 @@ func (a *API) Cancel(c *gin.Context) {
 	}
 
 	CancelScanTask(a.db, a.scheduler, id)
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (a *API) Progress(c *gin.Context) {
@@ -169,7 +169,7 @@ func (a *API) Progress(c *gin.Context) {
 	}
 
 	if p := a.scheduler.GetProgress(id); p != nil {
-		web.OK(c).Data(p).Send()
+		web.Succeed(c).Data(p).Send()
 		return
 	}
 
@@ -179,7 +179,7 @@ func (a *API) Progress(c *gin.Context) {
 		return
 	}
 
-	web.OK(c).Data(TaskProgress{
+	web.Succeed(c).Data(TaskProgress{
 		TaskID:         task.ID,
 		Status:         task.Status,
 		CurrentStage:   task.CurrentStage,
@@ -216,7 +216,7 @@ func (a *API) Status(c *gin.Context) {
 		_ = row.Scan(&avgDuration)
 	}
 
-	web.OK(c).Data(map[string]interface{}{
+	web.Succeed(c).Data(map[string]interface{}{
 		"active_runners":      a.scheduler.ActiveTasks(),
 		"max_parallel":        a.scheduler.MaxParallel(),
 		"memory_queue_len":    a.scheduler.QueueLen(),
@@ -256,11 +256,11 @@ func (a *API) ListTemplates(c *gin.Context) {
 		})
 	}
 
-	web.OK(c).Data(result).Send()
+	web.Succeed(c).Data(result).Send()
 }
 
 func (a *API) ListEnginePresets(c *gin.Context) {
-	web.OK(c).Data(ListScanEnginePresets()).Send()
+	web.Succeed(c).Data(ListScanEnginePresets()).Send()
 }
 
 func (a *API) Events(c *gin.Context) {

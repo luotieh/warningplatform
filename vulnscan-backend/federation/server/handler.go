@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"time"
 
-	"code.yt-security.com/public/core/v2/generate/qulid"
-	"code.yt-security.com/public/core/v2/web"
+	"code.yt-security.com/public/core/generate/ulid"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
@@ -55,7 +55,7 @@ func (h *Handler) Register(c *gin.Context) {
 	apiToken := fedAuth.GenerateAPIToken(req.SubMasterCode)
 
 	sm := model.SubMaster{
-		ID:               qulid.GenerateID(),
+		ID:               ulid.GenerateID(),
 		TenantID:         license.TenantID,
 		SubMasterCode:    req.SubMasterCode,
 		Hostname:         req.Hostname,
@@ -91,7 +91,7 @@ func (h *Handler) Register(c *gin.Context) {
 
 	slog.Info("[Federation] 分主控注册成功", "code", req.SubMasterCode, "ip", req.IPAddress)
 
-	web.OK(c).Data(fedSync.RegisterResponse{
+	web.Succeed(c).Data(fedSync.RegisterResponse{
 		APIToken:       apiToken,
 		SyncInterval:   "10m",
 		ReportInterval: "5m",
@@ -136,7 +136,7 @@ func (h *Handler) Heartbeat(c *gin.Context) {
 
 	h.db.Model(&model.SubMaster{}).Where("sub_master_code = ?", subCode).Updates(updates)
 
-	web.OK(c).Data(fedSync.HeartbeatResponse{
+	web.Succeed(c).Data(fedSync.HeartbeatResponse{
 		Status:          "ok",
 		CurrentVersions: h.versionManager.AllVersionsFromDB(),
 	}).Send()
@@ -196,12 +196,12 @@ func (h *Handler) handleSync(c *gin.Context, dataType string) {
 	}
 	h.versionManager.LogSync(subCode, dataType, sinceVersion, toVer, len(resp.Items), "success", "", durMs)
 
-	web.OK(c).Data(resp).Send()
+	web.Succeed(c).Data(resp).Send()
 }
 
 // SyncManifest returns current version numbers for all data types.
 func (h *Handler) SyncManifest(c *gin.Context) {
-	web.OK(c).Data(fedSync.ManifestResponse{
+	web.Succeed(c).Data(fedSync.ManifestResponse{
 		Versions:   h.versionManager.AllVersionsFromDB(),
 		ServerTime: time.Now(),
 	}).Send()
@@ -241,7 +241,7 @@ func (h *Handler) ReceiveVulnReport(c *gin.Context) {
 	h.db.Where("sub_master_code = ?", subCode).First(&sm)
 
 	rec := model.AggregateVuln{
-		ID:          qulid.GenerateID(),
+		ID:          ulid.GenerateID(),
 		SubMasterID: subCode,
 		TenantID:    sm.TenantID,
 		ReportAt:    payload.ReportAt,
@@ -259,7 +259,7 @@ func (h *Handler) ReceiveVulnReport(c *gin.Context) {
 		return
 	}
 
-	web.OK(c).Data(gin.H{"status": "received"}).Send()
+	web.Succeed(c).Data(gin.H{"status": "received"}).Send()
 }
 
 // ReceiveScanReport accepts scan statistics from sub-masters.
@@ -275,7 +275,7 @@ func (h *Handler) ReceiveScanReport(c *gin.Context) {
 	h.db.Where("sub_master_code = ?", subCode).First(&sm)
 
 	rec := model.AggregateScan{
-		ID:             qulid.GenerateID(),
+		ID:             ulid.GenerateID(),
 		SubMasterID:    subCode,
 		TenantID:       sm.TenantID,
 		ReportAt:       payload.ReportAt,
@@ -292,14 +292,14 @@ func (h *Handler) ReceiveScanReport(c *gin.Context) {
 		return
 	}
 
-	web.OK(c).Data(gin.H{"status": "received"}).Send()
+	web.Succeed(c).Data(gin.H{"status": "received"}).Send()
 }
 
 // ListSubMasters returns all registered sub-masters for the dashboard.
 func (h *Handler) ListSubMasters(c *gin.Context) {
 	var subs []model.SubMaster
 	h.db.Order("updated_at DESC").Find(&subs)
-	web.OK(c).List(int64(len(subs)), subs).Send()
+	web.Succeed(c).List(int64(len(subs)), subs).Send()
 }
 
 // GlobalStats provides aggregated stats for the federation dashboard.
@@ -311,7 +311,7 @@ func (h *Handler) GlobalStats(c *gin.Context) {
 
 	versions := h.versionManager.AllVersionsFromDB()
 
-	web.OK(c).Data(gin.H{
+	web.Succeed(c).Data(gin.H{
 		"total_sub_masters":  totalSubs,
 		"online_sub_masters": onlineSubs,
 		"current_versions":   versions,

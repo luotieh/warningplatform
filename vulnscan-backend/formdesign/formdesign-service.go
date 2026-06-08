@@ -7,8 +7,8 @@ import (
 	"vulnscan-backend/circular/paging"
 	"vulnscan-backend/model"
 
-	"code.yt-security.com/public/core/v2/db"
-	"code.yt-security.com/public/core/v2/generate/qulid"
+	"code.yt-security.com/public/core/db"
+	"code.yt-security.com/public/core/generate/ulid"
 	"gorm.io/gorm"
 )
 
@@ -82,7 +82,7 @@ func (s *ServiceFormDesign) GetTemplateWithEditableVersion(id string) (model.Dyn
 
 func (s *ServiceFormDesign) CreateTemplate(req templateSaveReq, userID string) (model.DynamicFormTemplate, error) {
 	if req.Code == "" {
-		req.Code = qulid.GenerateID()
+		req.Code = ulid.GenerateID()
 	}
 	enabled := true
 	if req.Enabled != nil {
@@ -90,7 +90,7 @@ func (s *ServiceFormDesign) CreateTemplate(req templateSaveReq, userID string) (
 	}
 	now := time.Now()
 	item := model.DynamicFormTemplate{
-		ID:          qulid.GenerateID(),
+		ID:          ulid.GenerateID(),
 		Name:        req.Name,
 		Code:        req.Code,
 		Business:    req.Business,
@@ -116,7 +116,7 @@ func (s *ServiceFormDesign) CreateTemplate(req templateSaveReq, userID string) (
 			return err
 		}
 		draft := model.DynamicFormTemplateVersion{
-			ID:          qulid.GenerateID(),
+			ID:          ulid.GenerateID(),
 			TemplateID:  item.ID,
 			Version:     item.Version,
 			Status:      formVersionPublished,
@@ -377,7 +377,7 @@ func (s *ServiceFormDesign) SaveSubmission(req submissionSaveReq, userID string)
 		return nil, err
 	}
 	item := model.DynamicFormSubmission{
-		ID:                qulid.GenerateID(),
+		ID:                ulid.GenerateID(),
 		TemplateID:        req.TemplateID,
 		TemplateVersionID: versionID,
 		Business:          req.Business,
@@ -426,7 +426,7 @@ func (s *ServiceFormDesign) ensureDraftVersion(tx *gorm.DB, item model.DynamicFo
 	}
 	now := time.Now()
 	draft := model.DynamicFormTemplateVersion{
-		ID:         qulid.GenerateID(),
+		ID:         ulid.GenerateID(),
 		TemplateID: item.ID,
 		Version:    nextVersion,
 		Status:     formVersionDraft,

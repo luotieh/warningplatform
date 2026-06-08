@@ -12,7 +12,7 @@ import (
 	"vulnscan-backend/pkg/monitorcrawl"
 	"vulnscan-backend/sitemonitor/contract"
 
-	"code.yt-security.com/public/core/v2/generate/qulid"
+	"code.yt-security.com/public/core/generate/ulid"
 	"gorm.io/gorm"
 )
 
@@ -21,7 +21,7 @@ func (s *serviceMonitor) CreateTarget(ctx context.Context, t *model.MonitorTarge
 		return err
 	}
 	if t.ID == "" {
-		t.ID = qulid.GenerateID()
+		t.ID = ulid.GenerateID()
 	}
 	if t.DefaultScheme == "" {
 		t.DefaultScheme = "https"
@@ -195,7 +195,7 @@ func (s *serviceMonitor) runTargetDimension(ctx context.Context, target *model.M
 	if err != nil {
 		return "", err
 	}
-	execID := qulid.GenerateID()
+	execID := ulid.GenerateID()
 	exec := model.MonitorExecution{
 		TargetID:  target.ID,
 		Dimension: dimension,
@@ -246,7 +246,7 @@ func (s *serviceMonitor) StartCrawl(ctx context.Context, targetID string, req co
 		}
 	}
 	job := &model.MonitorCrawlJob{
-		ID:          qulid.GenerateID(),
+		ID:          ulid.GenerateID(),
 		TargetID:    targetID,
 		Status:      model.MonitorCrawlStatusPending,
 		UseHeadless: req.UseHeadless,
@@ -413,7 +413,7 @@ func (s *serviceMonitor) ApplyCrawlPaths(ctx context.Context, jobID string, req 
 			URLOverride: p.URL,
 			Enabled:     true,
 		}
-		pt.ID = qulid.GenerateID()
+		pt.ID = ulid.GenerateID()
 		seedPathTaskDefaults(pt)
 		if err := s.session().WithContext(ctx).Create(pt).Error; err != nil {
 			continue

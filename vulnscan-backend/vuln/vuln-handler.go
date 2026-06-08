@@ -6,8 +6,8 @@ import (
 	"vulnscan-backend/scanrunner"
 	vulnContract "vulnscan-backend/vuln/vuln-contract"
 
-	"code.yt-security.com/public/core/v2/web"
-	iamsdk "code.yt-security.com/public/sdk"
+	iamsdk "code.yt-security.com/public/access"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 	"vulnscan-backend/pkg/definition"
@@ -34,13 +34,13 @@ func (h *HandlerVuln) List(c *gin.Context) {
 		return
 	}
 
-	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
 	items, count, err := h.svc.List(query, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).List(count, items).Send()
+	web.Succeed(c).List(count, items).Send()
 }
 
 func (h *HandlerVuln) GetByID(c *gin.Context) {
@@ -54,7 +54,7 @@ func (h *HandlerVuln) GetByID(c *gin.Context) {
 		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.OK(c).Data(item).Send()
+	web.Succeed(c).Data(item).Send()
 }
 
 func (h *HandlerVuln) Delete(c *gin.Context) {
@@ -67,7 +67,7 @@ func (h *HandlerVuln) Delete(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 type markIgnoredReq struct {
@@ -83,7 +83,7 @@ func (h *HandlerVuln) MarkFixed(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerVuln) MarkIgnored(c *gin.Context) {
@@ -99,7 +99,7 @@ func (h *HandlerVuln) MarkIgnored(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerVuln) Reopen(c *gin.Context) {
@@ -111,7 +111,7 @@ func (h *HandlerVuln) Reopen(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerVuln) StatusHistory(c *gin.Context) {
@@ -124,7 +124,7 @@ func (h *HandlerVuln) StatusHistory(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(items).Send()
+	web.Succeed(c).Data(items).Send()
 }
 
 func (h *HandlerVuln) Retest(c *gin.Context) {
@@ -151,7 +151,7 @@ func (h *HandlerVuln) Retest(c *gin.Context) {
 		web.Fail(c).Msg(err.Error()).Send()
 		return
 	}
-	web.OK(c).Data(map[string]any{
+	web.Succeed(c).Data(map[string]any{
 		"task_id":  res.Task.ID,
 		"status":   res.Task.Status,
 		"vuln_id":  vuln.ID,
@@ -188,7 +188,7 @@ func (h *HandlerVuln) RetestFromFinding(c *gin.Context) {
 		web.Fail(c).Msg(err.Error()).Send()
 		return
 	}
-	web.OK(c).Data(map[string]any{
+	web.Succeed(c).Data(map[string]any{
 		"task_id":    res.Task.ID,
 		"status":     res.Task.Status,
 		"vuln_id":    vuln.ID,
@@ -197,11 +197,11 @@ func (h *HandlerVuln) RetestFromFinding(c *gin.Context) {
 }
 
 func (h *HandlerVuln) Stats(c *gin.Context) {
-	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
 	stats, err := h.svc.Stats(scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(stats).Send()
+	web.Succeed(c).Data(stats).Send()
 }

@@ -1,8 +1,8 @@
 package product
 
 import (
-	"code.yt-security.com/public/core/v2/web"
-	iamsdk "code.yt-security.com/public/sdk"
+	iamsdk "code.yt-security.com/public/access"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 )
 
@@ -73,7 +73,7 @@ func (h *HandlerProduct) List(c *gin.Context) {
 		result = append(result, ep)
 	}
 
-	web.OK(c).List(count, result).Send()
+	web.Succeed(c).List(count, result).Send()
 }
 
 func (h *HandlerProduct) GetByID(c *gin.Context) {
@@ -86,7 +86,7 @@ func (h *HandlerProduct) GetByID(c *gin.Context) {
 		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.OK(c).Data(item).Send()
+	web.Succeed(c).Data(item).Send()
 }
 
 func (h *HandlerProduct) Create(c *gin.Context) {
@@ -100,7 +100,7 @@ func (h *HandlerProduct) Create(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(item).Send()
+	web.Succeed(c).Data(item).Send()
 }
 
 func (h *HandlerProduct) Update(c *gin.Context) {
@@ -116,7 +116,7 @@ func (h *HandlerProduct) Update(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerProduct) Delete(c *gin.Context) {
@@ -128,12 +128,12 @@ func (h *HandlerProduct) Delete(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerProduct) Backfill(c *gin.Context) {
 	pocUpdated, fpUpdated := h.svc.BackfillExisting()
-	web.OK(c).Data(gin.H{
+	web.Succeed(c).Data(gin.H{
 		"poc_updated":         pocUpdated,
 		"fingerprint_updated": fpUpdated,
 	}).Send()
@@ -142,9 +142,23 @@ func (h *HandlerProduct) Backfill(c *gin.Context) {
 func (h *HandlerProduct) Search(c *gin.Context) {
 	keyword := c.Query("keyword")
 	if keyword == "" {
-		web.OK(c).Data([]interface{}{}).Send()
+		web.Succeed(c).Data([]interface{}{}).Send()
 		return
 	}
 	items, _, _ := h.svc.List(ProductQuery{Keyword: keyword, PageSize: 20, Page: 1})
-	web.OK(c).Data(items).Send()
+	web.Succeed(c).Data(items).Send()
+}
+
+func (h *HandlerProduct) Summary(c *gin.Context) {
+	vendors := h.svc.VendorSummary()
+	categories := h.svc.CategorySummary()
+	web.Succeed(c).Data(gin.H{
+		"vendors":    vendors,
+		"categories": categories,
+	}).Send()
+}
+
+func (h *HandlerProduct) Reclassify(c *gin.Context) {
+	updated := h.svc.ReclassifyAll()
+	web.Succeed(c).Data(gin.H{"updated": updated}).Send()
 }

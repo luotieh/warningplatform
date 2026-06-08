@@ -6,7 +6,7 @@ import (
 
 	"vulnscan-backend/sitemonitor/contract"
 
-	"code.yt-security.com/public/core/v2/web"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 )
 
@@ -33,7 +33,7 @@ func (h *HandlerMonitor) GetTaskTrend(c *gin.Context) {
 		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.OK(c).Data(resp).Send()
+	web.Succeed(c).Data(resp).Send()
 }
 
 func (h *HandlerMonitor) GetDashboardStats(c *gin.Context) {
@@ -42,7 +42,7 @@ func (h *HandlerMonitor) GetDashboardStats(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(stats).Send()
+	web.Succeed(c).Data(stats).Send()
 }
 
 func (h *HandlerMonitor) GetTaskExecutionStats(c *gin.Context) {
@@ -51,7 +51,7 @@ func (h *HandlerMonitor) GetTaskExecutionStats(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(stats).Send()
+	web.Succeed(c).Data(stats).Send()
 }
 
 func (h *HandlerMonitor) GenerateReport(c *gin.Context) {
@@ -75,7 +75,7 @@ func (h *HandlerMonitor) GenerateReport(c *gin.Context) {
 	}
 	endDate = endDate.Add(24*time.Hour - time.Second)
 
-	web.OK(c).Data(gin.H{
+	web.Succeed(c).Data(gin.H{
 		"start_date": startDate.Format("2006-01-02"),
 		"end_date":   endDate.Format("2006-01-02"),
 		"task_ids":   req.TaskIDs,

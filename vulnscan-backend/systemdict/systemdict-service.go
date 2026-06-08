@@ -5,8 +5,8 @@ import (
 
 	"vulnscan-backend/model"
 
-	"code.yt-security.com/public/core/v2/db"
-	"code.yt-security.com/public/core/v2/generate/qulid"
+	"code.yt-security.com/public/core/db"
+	"code.yt-security.com/public/core/generate/ulid"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -73,7 +73,7 @@ func (s *ServiceSystemDict) GetByID(id string) (*model.SystemDict, []model.Syste
 
 func (s *ServiceSystemDict) Create(req dictCreateReq) (string, error) {
 	if req.ID == "" {
-		req.ID = qulid.GenerateID()
+		req.ID = ulid.GenerateID()
 	}
 	now := time.Now()
 	err := s.session().Transaction(func(tx *gorm.DB) error {
@@ -201,7 +201,7 @@ func (s *ServiceSystemDict) createItems(tx *gorm.DB, dictID string, inputs []dic
 			sort = i + 1
 		}
 		items = append(items, model.SystemDictItem{
-			ID:        firstNonEmpty(input.ID, qulid.GenerateID()),
+			ID:        firstNonEmpty(input.ID, ulid.GenerateID()),
 			DictID:    dictID,
 			Label:     input.Label,
 			Value:     input.Value,

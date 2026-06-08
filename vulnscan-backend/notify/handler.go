@@ -1,9 +1,9 @@
 package notify
 
 import (
-	"code.yt-security.com/public/core/v2/web"
-	"code.yt-security.com/public/sdk/authorize"
-	"code.yt-security.com/public/sdk/middleware"
+	"code.yt-security.com/public/access/authorize"
+	"code.yt-security.com/public/access/middleware"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 )
 
@@ -26,7 +26,7 @@ func (h *Handler) List(c *gin.Context) {
 	notifyType := c.Query("type")
 
 	items, count := h.svc.List(userID, readFilter, notifyType)
-	web.OK(c).List(count, items).Send()
+	web.Succeed(c).List(count, items).Send()
 }
 
 func (h *Handler) UnreadCount(c *gin.Context) {
@@ -37,13 +37,13 @@ func (h *Handler) UnreadCount(c *gin.Context) {
 	}
 
 	count := h.svc.UnreadCount(userID)
-	web.OK(c).Data(gin.H{"count": count}).Send()
+	web.Succeed(c).Data(gin.H{"count": count}).Send()
 }
 
 func (h *Handler) MarkRead(c *gin.Context) {
 	id := c.Param("id")
 	h.svc.MarkRead(id)
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *Handler) MarkAllRead(c *gin.Context) {
@@ -54,13 +54,13 @@ func (h *Handler) MarkAllRead(c *gin.Context) {
 	}
 
 	h.svc.MarkAllRead(userID)
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *Handler) Delete(c *gin.Context) {
 	id := c.Param("id")
 	h.svc.Delete(id)
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 type NotifyRoutes struct {

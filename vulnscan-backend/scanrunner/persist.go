@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"strings"
 	"time"
 
-	"code.yt-security.com/public/core/v2/generate/qulid"
+	"code.yt-security.com/public/core/generate/ulid"
+	"gorm.io/gorm"
 
+	"code.yt-security.com/public/scanengine/core"
 	"vulnscan-backend/model"
-	"vulnscan-backend/scan/core"
 )
 
 func (r *Runner) persistFindings() {
@@ -172,11 +174,17 @@ func findingToRecord(task model.ScanTask, f *core.Finding) model.ScanFinding {
 		severity = "info"
 	}
 
-	category := model.InferFindingCategory(f.ModuleID, f.Type)
+	category := model.InferFindingCategoryWithSeverity(f.ModuleID, f.Type, severity)
 
 	data := model.JSONMap{}
 	for k, v := range f.Data {
 		data[k] = v
+	}
+	if f.Remediation != "" {
+		data["remediation"] = f.Remediation
+	}
+	if len(f.CWEIDs) > 0 {
+		data["cwe_ids"] = strings.Join(f.CWEIDs, ",")
 	}
 
 	verificationLevel := string(f.VerificationLevel)
@@ -185,7 +193,7 @@ func findingToRecord(task model.ScanTask, f *core.Finding) model.ScanFinding {
 	}
 
 	return model.ScanFinding{
-		ID:                 qulid.GenerateID(),
+		ID:                 ulid.GenerateID(),
 		TaskID:             task.ID,
 		ModuleID:           f.ModuleID,
 		Type:               f.Type,
@@ -238,4 +246,73 @@ func computeDedupKey(taskID string, f *core.Finding, strict bool) string {
 	}
 	hash := sha256.Sum256([]byte(raw))
 	return fmt.Sprintf("%x", hash[:16])
+}
+
+func (r *Runner) realtimeSyncVulns(records []model.ScanFinding) {
+	var highSevRecords []model.ScanFinding
+	for _, rec := range records {
+		if rec.Category == model.FindingCategoryVuln &&
+			(rec.Severity == "high" || rec.Severity == "critical") {
+			highSevRecords = append(highSevRecords, rec)
+		}
+	}
+	if len(highSevRecords) == 0 {
+		return
+	}
+
+	now := time.Now()
+	synced := 0
+	for _, f := range highSevRecords {
+		var existing model.Vulnerability
+		err := r.db.Where("task_id = ? AND target = ? AND port = ? AND title = ? AND module_id = ?",
+			r.task.ID, f.Target, f.Port, f.Title, f.ModuleID).First(&existing).Error
+		if err == nil {
+			continue
+		}
+		if err != gorm.ErrRecordNotFound {
+			continue
+		}
+
+		solution := ""
+		var cweIDs model.StringArray
+		if f.Data != nil {
+			if rem, ok := f.Data["remediation"].(string); ok {
+				solution = rem
+			}
+			if c, ok := f.Data["cwe_ids"].(string); ok && c != "" {
+				cweIDs = strings.Split(c, ",")
+			}
+		}
+
+		v := model.Vulnerability{
+			ID:          ulid.GenerateID(),
+			TaskID:      r.task.ID,
+			AssetID:     f.AssetID,
+			Target:      f.Target,
+			Port:        f.Port,
+			Protocol:    f.Protocol,
+			Title:       f.Title,
+			Description: f.Description,
+			Solution:    solution,
+			Severity:    f.Severity,
+			CWEIDs:      cweIDs,
+			ModuleID:    f.ModuleID,
+			Evidence:    f.Evidence,
+			Status:      model.VulnStatusOpen,
+			Confidence:  f.Confidence,
+			CreatedBy:   r.task.CreatedBy,
+			OrganizeID:  r.task.OrganizeID,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		}
+		if err := r.db.Create(&v).Error; err == nil {
+			synced++
+		}
+	}
+	if synced > 0 {
+		slog.Info("[SyncVuln] 实时同步高危漏洞到漏洞库",
+			"task_id", r.task.ID,
+			"synced", synced,
+		)
+	}
 }

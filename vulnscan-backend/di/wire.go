@@ -21,13 +21,13 @@ import (
 	"vulnscan-backend/task"
 	"vulnscan-backend/vuln"
 
-	iamsdk "code.yt-security.com/public/sdk"
-	"code.yt-security.com/public/sdk/ai"
+	iamsdk "code.yt-security.com/public/access"
+	"code.yt-security.com/public/access/ai"
 	"github.com/google/wire"
 )
 
-func provideChatService(client *iamsdk.Client) *ai.ChatService {
-	return client.Chat
+func provideChatService(client *iamsdk.Client) ai.Service {
+	return client.AI
 }
 
 func InitializeHandlers() *Handlers {

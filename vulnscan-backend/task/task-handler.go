@@ -4,9 +4,9 @@ import (
 	"vulnscan-backend/model"
 	taskContract "vulnscan-backend/task/task-contract"
 
-	"code.yt-security.com/public/core/v2/generate/qulid"
-	"code.yt-security.com/public/core/v2/web"
-	iamsdk "code.yt-security.com/public/sdk"
+	iamsdk "code.yt-security.com/public/access"
+	"code.yt-security.com/public/core/generate/ulid"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 	"vulnscan-backend/pkg/definition"
 )
@@ -25,14 +25,14 @@ func (h *HandlerTask) List(c *gin.Context) {
 		return
 	}
 
-	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
 	items, count, err := h.svc.List(query, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
 	}
 
-	web.OK(c).List(count, items).Send()
+	web.Succeed(c).List(count, items).Send()
 }
 
 func (h *HandlerTask) GetByID(c *gin.Context) {
@@ -48,7 +48,7 @@ func (h *HandlerTask) GetByID(c *gin.Context) {
 		return
 	}
 
-	web.OK(c).Data(item).Send()
+	web.Succeed(c).Data(item).Send()
 }
 
 func (h *HandlerTask) Create(c *gin.Context) {
@@ -59,7 +59,7 @@ func (h *HandlerTask) Create(c *gin.Context) {
 
 	user, _ := iamsdk.GetCurrentUser(c)
 	item := model.ScanTask{
-		ID:         qulid.GenerateID(),
+		ID:         ulid.GenerateID(),
 		Name:       req.Name,
 		TemplateID: req.TemplateID,
 		Type:       req.Type,
@@ -80,7 +80,7 @@ func (h *HandlerTask) Create(c *gin.Context) {
 		return
 	}
 
-	web.OK(c).Data(item).Send()
+	web.Succeed(c).Data(item).Send()
 }
 
 func (h *HandlerTask) Cancel(c *gin.Context) {
@@ -95,7 +95,7 @@ func (h *HandlerTask) Cancel(c *gin.Context) {
 		return
 	}
 
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerTask) Pause(c *gin.Context) {
@@ -104,7 +104,7 @@ func (h *HandlerTask) Pause(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerTask) Resume(c *gin.Context) {
@@ -113,7 +113,7 @@ func (h *HandlerTask) Resume(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerTask) Delete(c *gin.Context) {
@@ -128,7 +128,7 @@ func (h *HandlerTask) Delete(c *gin.Context) {
 		return
 	}
 
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerTask) ListFindings(c *gin.Context) {
@@ -150,7 +150,7 @@ func (h *HandlerTask) ListFindings(c *gin.Context) {
 		return
 	}
 
-	web.OK(c).List(count, items).Send()
+	web.Succeed(c).List(count, items).Send()
 }
 
 func (h *HandlerTask) FindingSummary(c *gin.Context) {
@@ -166,7 +166,7 @@ func (h *HandlerTask) FindingSummary(c *gin.Context) {
 		return
 	}
 
-	web.OK(c).Data(summary).Send()
+	web.Succeed(c).Data(summary).Send()
 }
 
 func (h *HandlerTask) ListAssets(c *gin.Context) {
@@ -182,7 +182,7 @@ func (h *HandlerTask) ListAssets(c *gin.Context) {
 		return
 	}
 
-	web.OK(c).Data(assets).Send()
+	web.Succeed(c).Data(assets).Send()
 }
 
 func (h *HandlerTask) ListLogs(c *gin.Context) {
@@ -198,5 +198,5 @@ func (h *HandlerTask) ListLogs(c *gin.Context) {
 		return
 	}
 
-	web.OK(c).Data(logs).Send()
+	web.Succeed(c).Data(logs).Send()
 }

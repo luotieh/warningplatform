@@ -5,7 +5,7 @@ import (
 	"vulnscan-backend/circular/scope"
 	verifyContract "vulnscan-backend/circular/verify/verify-contract"
 
-	"code.yt-security.com/public/core/v2/web"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 )
 
@@ -27,7 +27,7 @@ func (h *HandlerVerify) List(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).List(total, items).Send()
+	web.Succeed(c).List(total, items).Send()
 }
 
 func (h *HandlerVerify) Verify(c *gin.Context) {
@@ -39,5 +39,5 @@ func (h *HandlerVerify) Verify(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }

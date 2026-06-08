@@ -6,8 +6,8 @@ import (
 	"vulnscan-backend/model"
 	oc "vulnscan-backend/organize/organize-contract"
 
-	"code.yt-security.com/public/core/v2/db"
-	"code.yt-security.com/public/core/v2/generate/qulid"
+	"code.yt-security.com/public/core/db"
+	"code.yt-security.com/public/core/generate/ulid"
 	"gorm.io/gorm"
 )
 
@@ -62,7 +62,7 @@ func (s *serviceConstruction) GetByID(id string) (*model.ConstructionOrg, error)
 
 func (s *serviceConstruction) Create(item *model.ConstructionOrg) error {
 	if item.ID == "" {
-		item.ID = qulid.GenerateID()
+		item.ID = ulid.GenerateID()
 	}
 	return s.session().Create(item).Error
 }

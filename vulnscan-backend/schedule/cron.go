@@ -9,7 +9,7 @@ import (
 	"vulnscan-backend/model"
 	"vulnscan-backend/scanrunner"
 
-	"code.yt-security.com/public/core/v2/generate/qulid"
+	"code.yt-security.com/public/core/generate/ulid"
 	"gorm.io/gorm"
 )
 
@@ -83,7 +83,7 @@ func (cr *CronRunner) check() {
 }
 
 func (cr *CronRunner) executeSchedule(s model.ScanSchedule) {
-	taskID := qulid.GenerateID()
+	taskID := ulid.GenerateID()
 	now := time.Now()
 
 	templateID := s.TemplateID
@@ -133,7 +133,7 @@ func (cr *CronRunner) RunNow(id string) (string, error) {
 		return "", err
 	}
 
-	taskID := qulid.GenerateID()
+	taskID := ulid.GenerateID()
 	now := time.Now()
 
 	templateID := item.TemplateID

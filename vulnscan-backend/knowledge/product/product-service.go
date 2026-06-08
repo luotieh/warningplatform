@@ -6,8 +6,8 @@ import (
 
 	"vulnscan-backend/model"
 
-	"code.yt-security.com/public/core/v2/db"
-	"code.yt-security.com/public/core/v2/generate/qulid"
+	"code.yt-security.com/public/core/db"
+	"code.yt-security.com/public/core/generate/ulid"
 	"gorm.io/gorm"
 )
 
@@ -126,7 +126,7 @@ func (s *ServiceProduct) Create(req ProductCreateReq, createdBy string) (*model.
 		Tags:        req.Tags,
 		Aliases:     req.Aliases,
 	}
-	item.ID = qulid.GenerateID()
+	item.ID = ulid.GenerateID()
 	item.CreatedBy = createdBy
 
 	if err := s.session().Create(&item).Error; err != nil {
@@ -205,7 +205,7 @@ func (s *ServiceProduct) MatchOrCreate(name, vendor string) string {
 		Vendor:   strings.TrimSpace(vendor),
 		Category: guessCategory(canonical),
 	}
-	item.ID = qulid.GenerateID()
+	item.ID = ulid.GenerateID()
 	item.CreatedBy = "system"
 
 	if err := s.session().Create(&item).Error; err != nil {
@@ -267,6 +267,72 @@ func (s *ServiceProduct) StatsForProducts(productIDs []string) map[string]*Produ
 	return result
 }
 
+// VendorSummary returns distinct vendors with product counts.
+func (s *ServiceProduct) VendorSummary() []VendorGroup {
+	type row struct {
+		Vendor string `gorm:"column:vendor"`
+		Cnt    int64  `gorm:"column:cnt"`
+	}
+	var rows []row
+	s.session().Model(&model.Product{}).
+		Select("vendor, count(*) as cnt").
+		Where("vendor != ''").
+		Group("vendor").
+		Order("cnt DESC").
+		Find(&rows)
+
+	result := make([]VendorGroup, 0, len(rows))
+	for _, r := range rows {
+		result = append(result, VendorGroup{Vendor: r.Vendor, Count: r.Cnt})
+	}
+	return result
+}
+
+// CategorySummary returns distinct categories with product counts.
+func (s *ServiceProduct) CategorySummary() []CategoryGroup {
+	type row struct {
+		Category string `gorm:"column:category"`
+		Cnt      int64  `gorm:"column:cnt"`
+	}
+	var rows []row
+	s.session().Model(&model.Product{}).
+		Select("category, count(*) as cnt").
+		Group("category").
+		Order("cnt DESC").
+		Find(&rows)
+
+	result := make([]CategoryGroup, 0, len(rows))
+	for _, r := range rows {
+		result = append(result, CategoryGroup{Category: r.Category, Count: r.Cnt})
+	}
+	return result
+}
+
+type VendorGroup struct {
+	Vendor string `json:"vendor"`
+	Count  int64  `json:"count"`
+}
+
+type CategoryGroup struct {
+	Category string `json:"category"`
+	Count    int64  `json:"count"`
+}
+
+// ReclassifyAll re-runs guessCategory on all products with category "other" or empty.
+func (s *ServiceProduct) ReclassifyAll() int {
+	var products []model.Product
+	s.session().Where("category = '' OR category = 'other'").Find(&products)
+	updated := 0
+	for _, p := range products {
+		cat := guessCategory(p.Name)
+		if cat != "other" && cat != p.Category {
+			s.session().Model(&model.Product{}).Where("id = ?", p.ID).Update("category", cat)
+			updated++
+		}
+	}
+	return updated
+}
+
 // BackfillExisting scans all PoC and fingerprint records without ProductID and auto-links them.
 func (s *ServiceProduct) BackfillExisting() (int, int) {
 	var pocUpdated, fpUpdated int
@@ -306,20 +372,25 @@ func canonicalize(name string) string {
 func guessCategory(name string) string {
 	lower := strings.ToLower(name)
 	categoryMap := map[string][]string{
-		"web-server":   {"nginx", "apache", "iis", "lighttpd", "caddy", "traefik"},
-		"cms":          {"wordpress", "drupal", "joomla", "typo3", "ghost", "strapi"},
-		"framework":    {"spring", "django", "flask", "laravel", "express", "rails", "fastapi"},
-		"database":     {"mysql", "postgres", "redis", "mongodb", "elasticsearch", "mssql", "oracle"},
-		"language":     {"php", "python", "java", "node", "ruby", "go", "perl"},
-		"js-framework": {"react", "vue", "angular", "next", "nuxt", "svelte"},
-		"js-library":   {"jquery", "lodash", "bootstrap", "axios"},
-		"ci-cd":        {"jenkins", "gitlab", "bamboo", "teamcity", "drone", "argo"},
-		"container":    {"docker", "kubernetes", "k8s", "rancher", "portainer"},
-		"monitor":      {"grafana", "prometheus", "zabbix", "nagios", "datadog"},
-		"microservice": {"nacos", "consul", "etcd", "eureka", "apollo", "dubbo"},
-		"mail":         {"exchange", "postfix", "sendmail", "zimbra"},
-		"vpn":          {"openvpn", "wireguard", "fortinet", "paloalto", "pulse"},
-		"firewall":     {"pfsense", "fortinet", "sophos", "checkpoint"},
+		"web-server":   {"nginx", "apache", "httpd", "iis", "lighttpd", "caddy", "traefik", "haproxy", "openresty", "tengine", "litespeed", "envoy", "tomcat", "jetty", "undertow", "weblogic", "websphere", "glassfish", "wildfly", "gunicorn", "uvicorn", "kestrel", "cowboy", "puma", "unicorn"},
+		"cms":          {"wordpress", "drupal", "joomla", "typo3", "ghost", "strapi", "concrete5", "moodle", "xoops", "plone", "umbraco", "kentico", "sitecore", "contentful", "magento", "shopify", "prestashop", "opencart", "woocommerce", "mediawiki", "dokuwiki", "confluence", "xwiki", "discuz", "phpbb", "mybb", "vbulletin"},
+		"framework":    {"spring", "django", "flask", "laravel", "express", "rails", "fastapi", "gin", "fiber", "echo", "koa", "nest", "hapi", "aiohttp", "tornado", "sanic", "starlette", "pyramid", "bottle", "cherrypy", "falcon", "symfony", "codeigniter", "cakephp", "yii", "zend", "slim", "lumen", "thinkphp", "beego", "iris", "revel", "play", "grails", "struts", "vaadin", "wicket", "tapestry", "jsf"},
+		"database":     {"mysql", "mariadb", "postgres", "redis", "mongodb", "elasticsearch", "mssql", "oracle", "sqlite", "couchdb", "cassandra", "clickhouse", "influxdb", "neo4j", "cockroach", "tidb", "memcached", "etcd", "couchbase", "dynamodb", "firebird", "db2", "sybase", "hbase", "aerospike"},
+		"language":     {"php", "python", "java", "node", "ruby", "perl", "dotnet", ".net_framework", "asp.net"},
+		"js-framework": {"react", "vue", "angular", "next", "nuxt", "svelte", "gatsby", "remix", "solid", "ember", "backbone", "meteor"},
+		"js-library":   {"jquery", "lodash", "bootstrap", "axios", "moment", "chart.js", "d3", "three.js", "leaflet", "swiper"},
+		"ci-cd":        {"jenkins", "gitlab", "bamboo", "teamcity", "drone", "argo", "circleci", "travis", "concourse", "gocd", "buildbot", "hudson"},
+		"container":    {"docker", "kubernetes", "k8s", "rancher", "portainer", "helm", "istio", "podman", "containerd", "nomad", "mesos", "marathon", "swarm"},
+		"monitor":      {"grafana", "prometheus", "zabbix", "nagios", "datadog", "kibana", "graylog", "logstash", "fluentd", "sentry", "newrelic", "dynatrace", "icinga", "cacti", "munin", "netdata", "telegraf", "victoria_metrics"},
+		"microservice": {"nacos", "consul", "eureka", "apollo", "dubbo", "sentinel", "seata", "skywalking", "zipkin", "jaeger", "kong", "apisix", "zuul", "gateway", "ribbon", "feign", "hystrix"},
+		"mail":         {"exchange", "postfix", "sendmail", "zimbra", "roundcube", "thunderbird", "dovecot", "hmailserver", "mailu", "mailcow", "iredmail"},
+		"vpn":          {"openvpn", "wireguard", "fortivpn", "pulse_secure", "sonicwall_vpn", "globalprotect", "anyconnect", "ipsec", "strongswan"},
+		"firewall":     {"pfsense", "fortinet", "fortigate", "sophos", "checkpoint", "paloalto", "modsecurity", "waf", "imperva", "f5_big", "barracuda", "cloudflare"},
+		"oa":           {"oa", "泛微", "用友", "致远", "通达", "蓝凌", "金蝶", "万户"},
+		"network":      {"cisco", "huawei", "juniper", "mikrotik", "ubiquiti", "netgear", "tp-link", "tplink", "zyxel", "dlink", "d-link", "aruba", "ruckus", "meraki"},
+		"storage":      {"minio", "ceph", "gluster", "nexus", "harbor", "artifactory", "registry", "s3", "oss"},
+		"queue":        {"rabbitmq", "kafka", "rocketmq", "activemq", "nats", "nsq", "pulsar", "zeromq", "beanstalkd"},
+		"scada":        {"modbus", "bacnet", "s7comm", "dnp3", "opc", "plc", "scada", "hmi", "siemens"},
 	}
 	for cat, keywords := range categoryMap {
 		for _, kw := range keywords {
@@ -327,6 +398,11 @@ func guessCategory(name string) string {
 				return cat
 			}
 		}
+	}
+	if strings.HasSuffix(lower, "_plugin") || strings.HasSuffix(lower, "-plugin") ||
+		strings.HasSuffix(lower, "_theme") || strings.HasSuffix(lower, "-theme") ||
+		strings.HasSuffix(lower, "_addon") || strings.HasSuffix(lower, "-addon") {
+		return "plugin"
 	}
 	return "other"
 }

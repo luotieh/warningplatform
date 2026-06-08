@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 
+	"code.yt-security.com/public/scanengine/module/cyberspace"
 	"vulnscan-backend/asm"
 	"vulnscan-backend/boot"
 	"vulnscan-backend/cluster"
@@ -14,6 +15,7 @@ import (
 	fedClient "vulnscan-backend/federation/client"
 	"vulnscan-backend/federation/server"
 	"vulnscan-backend/intel"
+	"vulnscan-backend/knowledge/aihub"
 	"vulnscan-backend/knowledge/datalib"
 	kfp "vulnscan-backend/knowledge/fingerprint"
 	"vulnscan-backend/knowledge/poc"
@@ -22,13 +24,12 @@ import (
 	"vulnscan-backend/model"
 	"vulnscan-backend/nodeapi"
 	"vulnscan-backend/pkg/clusterconn"
-	"vulnscan-backend/scan/module/cyberspace"
 	"vulnscan-backend/scanrunner"
 	"vulnscan-backend/schedule"
 	"vulnscan-backend/setting"
 	tmplAPI "vulnscan-backend/template/api"
 
-	"code.yt-security.com/public/sdk/authorize"
+	"code.yt-security.com/public/access/authorize"
 	"github.com/gin-gonic/gin"
 )
 
@@ -106,7 +107,7 @@ func (h *Handlers) initKnowledgeAPIs(authGroup *gin.RouterGroup, backends *[]aut
 
 	h.Knowledge = scanrunner.NewKnowledgeRegistry(session)
 	scanrunner.SetDefaultKnowledgeRegistry(h.Knowledge)
-	h.payloadLoader = h.Knowledge.Loader
+	h.payloadLoader = h.Knowledge.RawLoader
 
 	pocSvc := poc.NewServicePoc(h.DB, h.Knowledge.Poc)
 	pocHandler := poc.NewHandlerPoc(pocSvc)
@@ -143,7 +144,12 @@ func (h *Handlers) initKnowledgeAPIs(authGroup *gin.RouterGroup, backends *[]aut
 	}
 	webFpSvc.SetProductLinker(productSvc)
 
-	slog.Info("[+] POC + Fingerprint + DataLib + PromptTemplate + Product 知识库 API 已注册")
+	aiHub := aihub.NewHub(h.IAM.AI, "")
+	aiHandler := aihub.NewHandler(aiHub)
+	aiRoutes := aihub.NewRoutes(aiHandler)
+	*backends = append(*backends, aiRoutes.RoutesWithGroup(authGroup)...)
+
+	slog.Info("[+] POC + Fingerprint + DataLib + PromptTemplate + Product + AIFingerprint 知识库 API 已注册")
 }
 
 func (h *Handlers) initTemplateAPI(authGroup *gin.RouterGroup, backends *[]authorize.BackendItem) {
@@ -267,7 +273,7 @@ func (h *Handlers) initFederation() {
 
 	switch mode {
 	case "central":
-		ginEngine := h.Web.GetRawWeb()
+		ginEngine := h.Web.Engine
 		server.RegisterRoutes(ginEngine, session)
 		slog.Info("[Federation] Central Master Federation Server 已启动")
 

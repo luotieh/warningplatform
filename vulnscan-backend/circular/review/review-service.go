@@ -11,9 +11,9 @@ import (
 	inputContract "vulnscan-backend/circular/input/input-contract"
 	reviewContract "vulnscan-backend/circular/review/review-contract"
 
-	"code.yt-security.com/public/core/v2/db"
-	"code.yt-security.com/public/core/v2/generate/qulid"
-	iamsdk "code.yt-security.com/public/sdk"
+	iamsdk "code.yt-security.com/public/access"
+	"code.yt-security.com/public/core/db"
+	"code.yt-security.com/public/core/generate/ulid"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -125,7 +125,7 @@ func (s *serviceReview) reviewApprove(
 		if !isTopLevel {
 			rev.DistributionId = receivedDist.Id
 		}
-		rev.Id = qulid.GenerateID()
+		rev.Id = ulid.GenerateID()
 		rev.CreatedBy = actor.ID
 		rev.CreatedAt = now
 		if err := session.Create(&rev).Error; err != nil {
@@ -194,7 +194,7 @@ func (s *serviceReview) reviewReject(
 			CircularId: circular.Code, Organize: currentOrganize,
 			Review: "rejected", Instructions: req.Instructions, Annex: req.Annex,
 		}
-		rev.Id = qulid.GenerateID()
+		rev.Id = ulid.GenerateID()
 		rev.CreatedBy = actor.ID
 		rev.CreatedAt = now
 		if err := session.Create(&rev).Error; err != nil {

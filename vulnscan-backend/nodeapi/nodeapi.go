@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"code.yt-security.com/public/core/v2/db"
+	"code.yt-security.com/public/core/db"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 

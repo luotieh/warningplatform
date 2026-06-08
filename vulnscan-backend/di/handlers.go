@@ -37,23 +37,24 @@ import (
 	"vulnscan-backend/task"
 	"vulnscan-backend/vuln"
 
-	"code.yt-security.com/public/core/v2/cache"
-	"code.yt-security.com/public/core/v2/db"
-	"code.yt-security.com/public/core/v2/product"
-	"code.yt-security.com/public/core/v2/web"
-	iamsdk "code.yt-security.com/public/sdk"
-	"code.yt-security.com/public/sdk/authorize"
-	"code.yt-security.com/public/sdk/storage"
+	iamsdk "code.yt-security.com/public/access"
+	"code.yt-security.com/public/access/authorize"
+	"code.yt-security.com/public/access/proxy"
+	"code.yt-security.com/public/access/storage"
+	"code.yt-security.com/public/core/cache"
+	"code.yt-security.com/public/core/db"
+	"code.yt-security.com/public/core/product"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type Handlers struct {
 	Config  *boot.Config
-	Web     *web.Web
+	Web     *web.Engine
 	DB      *db.DB
 	Cache   cache.Cache
-	Product *product.SystemProduct
+	Product *product.Product
 	IAM     *iamsdk.Client
 
 	Asset       *asset.Asset
@@ -88,29 +89,15 @@ func (h *Handlers) RouteLoad() {
 	h.initSettings()
 	h.wireIncidentReportExporter()
 
-	engine := h.Web.GetRawWeb()
+	engine := h.Web
 	engine.Use(web.MiddlewareRequestResponse())
 
 	apiGroup := engine.Group("/api")
 
-	var ssoOpts *iamsdk.SSORoutesOptions
-	if h.Config.SSO.CallbackURI != "" {
-		ssoOpts = &iamsdk.SSORoutesOptions{
-			CallbackURI:           h.Config.SSO.CallbackURI,
-			SuccessRedirect:       h.Config.SSO.SuccessRedirect,
-			CookieSecret:          []byte(h.Config.SSO.CookieSecret),
-			TokenRelayCallbackURI: h.Config.SSO.TokenRelayCallbackURI,
-		}
-	}
-
-	// SDK v1.5+ 在 sdkRoot 内自动挂 Authentication，parent 上不要重复挂认证中间件。
-	h.IAM.RegisterDefaultRoutes(engine, apiGroup, iamsdk.DefaultRoutesOptions{
-		SSO: ssoOpts,
-		Audit: &iamsdk.AuditMiddlewareOptions{
-			Domain:  h.Product.GetCode(),
-			Enabled: false,
-		},
-		PublicAuth: &iamsdk.PublicAuthProxyOptions{
+	h.IAM.RegisterProxyRoutes(apiGroup, proxy.Options{
+		MountPrefix: "iam",
+		ClientID:    h.Config.IAM.ClientID,
+		PublicAuth: &proxy.PublicAuthOptions{
 			SiteName:  h.Product.GetName(),
 			Copyright: h.Product.GetName(),
 		},
@@ -187,14 +174,14 @@ func (h *Handlers) RouteLoad() {
 	h.initFederation()
 
 	healthHandler := health.NewHandler(h.DB)
-	healthHandler.RegisterRoutes(engine)
+	healthHandler.RegisterRoutes(engine.Engine)
 
 	if metricsRouteEnabled() {
 		engine.GET("/metrics", gin.WrapH(promhttp.Handler()))
 		slog.Info("[+] Prometheus /metrics 已启用（环境变量 VULNSCAN_METRICS_ENABLED）")
 	}
 
-	h.initNodeAPI(engine)
+	h.initNodeAPI(engine.Engine)
 
 	sitemon.InitDefaultRuleData(h.DB)
 
@@ -210,7 +197,7 @@ func (h *Handlers) RouteLoad() {
 
 	h.SiteMonitor.StartScheduler()
 
-	frontend.SetupSPA(engine, web.MiddlewareNotFound())
+	frontend.SetupSPA(engine.Engine, web.MiddlewareNotFound())
 }
 
 func (h *Handlers) injectCrawlScreenshotUploader() {
@@ -291,7 +278,7 @@ func (h *Handlers) syncBackends(backends []authorize.BackendItem) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	if err := h.IAM.Authorize.SyncBackends(ctx, h.Config.IAM.ClientID, backends); err != nil {
+	if err := h.IAM.SyncBackends(ctx, backends); err != nil {
 		slog.Error("sync backends to IAM failed", "err", err)
 		return
 	}

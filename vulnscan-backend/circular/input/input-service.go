@@ -13,8 +13,8 @@ import (
 	inputContract "vulnscan-backend/circular/input/input-contract"
 	"vulnscan-backend/formdesign"
 
-	"code.yt-security.com/public/core/v2/db"
-	"code.yt-security.com/public/core/v2/generate/qulid"
+	"code.yt-security.com/public/core/db"
+	"code.yt-security.com/public/core/generate/ulid"
 	"github.com/gin-gonic/gin"
 	"github.com/xuri/excelize/v2"
 	"gorm.io/gorm"
@@ -40,7 +40,7 @@ func (s *serviceInput) Add(ctx context.Context, req inputContract.InputAddReq, a
 
 	sess := s.session()
 	now := time.Now()
-	id := qulid.GenerateID()
+	id := ulid.GenerateID()
 	circular := model.Circular{
 		Code:               id,
 		Title:              req.Title,
@@ -233,7 +233,7 @@ func (s *serviceInput) ThirdPartyImport(ctx context.Context, req inputContract.I
 
 	sess := s.session()
 	now := time.Now()
-	id := qulid.GenerateID()
+	id := ulid.GenerateID()
 	circular := model.Circular{
 		Code:             id,
 		Title:            req.Title,
@@ -363,7 +363,7 @@ func (s *serviceInput) Import(ctx context.Context, file *multipart.FileHeader, a
 		}
 
 		noticeMap := buildImportNoticeMap(row)
-		noticeCode := qulid.GenerateID()
+		noticeCode := ulid.GenerateID()
 		now := time.Now()
 		item := model.Circular{
 			Code:             noticeCode,

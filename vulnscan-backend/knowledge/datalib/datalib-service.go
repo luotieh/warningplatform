@@ -6,8 +6,8 @@ import (
 
 	"vulnscan-backend/model"
 
-	"code.yt-security.com/public/core/v2/db"
-	"code.yt-security.com/public/core/v2/generate/qulid"
+	"code.yt-security.com/public/core/db"
+	"code.yt-security.com/public/core/generate/ulid"
 	"gorm.io/gorm"
 )
 
@@ -89,7 +89,7 @@ func (s *ServiceDataLib) GetByID(id string) (*model.DataLibrary, error) {
 
 func (s *ServiceDataLib) Create(item *model.DataLibrary) error {
 	if item.ID == "" {
-		item.ID = qulid.GenerateID()
+		item.ID = ulid.GenerateID()
 	}
 	return s.session().Create(item).Error
 }
@@ -148,7 +148,7 @@ func (s *ServiceDataLib) GetEntryByID(entryID string) (*model.DataLibraryEntry, 
 }
 
 func (s *ServiceDataLib) AddEntry(libID string, entry *model.DataLibraryEntry) error {
-	entry.ID = qulid.GenerateID()
+	entry.ID = ulid.GenerateID()
 	entry.LibraryID = libID
 	err := s.session().Create(entry).Error
 	if err == nil {
@@ -175,7 +175,7 @@ func (s *ServiceDataLib) DeleteEntry(entryID string) error {
 
 func (s *ServiceDataLib) BatchAddEntries(libID string, entries []model.DataLibraryEntry) (int, error) {
 	for i := range entries {
-		entries[i].ID = qulid.GenerateID()
+		entries[i].ID = ulid.GenerateID()
 		entries[i].LibraryID = libID
 	}
 	result := s.session().CreateInBatches(entries, 100)
@@ -202,7 +202,7 @@ func (s *ServiceDataLib) ImportText(libID string, text string) (int, error) {
 		}
 		seen[line] = struct{}{}
 		entries = append(entries, model.DataLibraryEntry{
-			ID:        qulid.GenerateID(),
+			ID:        ulid.GenerateID(),
 			LibraryID: libID,
 			Value:     line,
 			Enabled:   true,

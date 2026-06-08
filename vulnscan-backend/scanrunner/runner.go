@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/url"
 	"strings"
 	"sync"
@@ -12,8 +13,8 @@ import (
 
 	"gorm.io/gorm"
 
+	"code.yt-security.com/public/scanengine/core"
 	"vulnscan-backend/model"
-	"vulnscan-backend/scan/core"
 	"vulnscan-backend/scan/orchestrate"
 	"vulnscan-backend/template/engine"
 )
@@ -324,7 +325,12 @@ func (r *Runner) Execute(ctx context.Context) {
 		TargetExclusionFilter: r.findingFilter,
 	}
 
-	r.executeDAG(ctx, stages, currentTargets, config, cb, engineOpts)
+	if shouldUsePipeline(stages, currentTargets) {
+		r.writeLog("info", "启用流水线执行模式（发现即处理）", "", "")
+		r.executePipeline(ctx, stages, currentTargets, config, cb, engineOpts)
+	} else {
+		r.executeDAG(ctx, stages, currentTargets, config, cb, engineOpts)
+	}
 
 	if taskAlreadyCancelled(r.db, r.task.ID) {
 		return
@@ -396,6 +402,9 @@ func (r *Runner) persistAndPublish(findings []*core.Finding, stage, moduleID str
 		"records", len(records), "created", created,
 	)
 
+	r.writebackServiceToPortOpen(records)
+	r.realtimeSyncVulns(records)
+
 	r.writeLog("info",
 		fmt.Sprintf("模块 [%s] 发现 %d 条新结果", moduleID, created),
 		stage, moduleID)
@@ -458,8 +467,16 @@ func (r *Runner) tryMergeParentScanTask(doneCtx context.Context) {
 }
 
 func buildTargets(task model.ScanTask) []*core.Target {
-	var targets []*core.Target
-	for _, addr := range task.Targets {
+	expanded, err := ExpandScanTargets(task.Targets, defaultMaxExpandedHosts)
+	if err != nil {
+		var targets []*core.Target
+		for _, addr := range task.Targets {
+			targets = append(targets, parseTargetAddr(addr))
+		}
+		return targets
+	}
+	targets := make([]*core.Target, 0, len(expanded))
+	for _, addr := range expanded {
 		targets = append(targets, parseTargetAddr(addr))
 	}
 	return targets
@@ -486,10 +503,20 @@ func parseTargetAddr(addr string) *core.Target {
 		} else if u.Scheme == "http" {
 			t.Port = 80
 		}
+		if net.ParseIP(t.Host) != nil {
+			t.IP = t.Host
+		}
 		return t
 	}
 	if h, p, err := netSplitHostPort(addr); err == nil && p > 0 {
-		return &core.Target{Host: h, Port: p}
+		t := &core.Target{Host: h, Port: p}
+		if net.ParseIP(h) != nil {
+			t.IP = h
+		}
+		return t
+	}
+	if ip := net.ParseIP(addr); ip != nil {
+		return &core.Target{Host: addr, IP: addr}
 	}
 	return &core.Target{Host: addr}
 }
@@ -529,6 +556,24 @@ func buildConfig(task model.ScanTask) map[string]interface{} {
 
 func isReconStage(name string) bool {
 	return name == "recon" || name == "recon-fast" || name == "recon-deep" || name == "probe"
+}
+
+func isHostDiscoveryStage(name string) bool {
+	return name == "discover" || name == "host_discover" || name == "host-discover" || name == "alive" || name == "ping"
+}
+
+func shouldUsePipeline(stages []stageGroup, targets []*core.Target) bool {
+	if len(targets) < 5 || len(stages) < 2 {
+		return false
+	}
+	hasDiscoverOrPort := false
+	for _, s := range stages {
+		if isHostDiscoveryStage(s.name) || isPortScanStage(s.name) {
+			hasDiscoverOrPort = true
+			break
+		}
+	}
+	return hasDiscoverOrPort
 }
 
 func extractDetectedProducts(findings []*core.Finding, config map[string]interface{}) []string {

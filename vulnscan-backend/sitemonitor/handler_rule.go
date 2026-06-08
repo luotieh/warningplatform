@@ -5,8 +5,8 @@ import (
 
 	"vulnscan-backend/model"
 
-	"code.yt-security.com/public/core/v2/web"
-	iamsdk "code.yt-security.com/public/sdk"
+	iamsdk "code.yt-security.com/public/access"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 )
 
@@ -18,7 +18,7 @@ func (h *HandlerMonitor) ListRuleDataSummary(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(list).Send()
+	web.Succeed(c).Data(list).Send()
 }
 
 func (h *HandlerMonitor) GetRuleData(c *gin.Context) {
@@ -28,7 +28,7 @@ func (h *HandlerMonitor) GetRuleData(c *gin.Context) {
 		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.OK(c).Data(data).Send()
+	web.Succeed(c).Data(data).Send()
 }
 
 func (h *HandlerMonitor) PutRuleData(c *gin.Context) {
@@ -43,7 +43,7 @@ func (h *HandlerMonitor) PutRuleData(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerMonitor) SyncAllRuleData(c *gin.Context) {
@@ -51,7 +51,7 @@ func (h *HandlerMonitor) SyncAllRuleData(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerMonitor) ImportRuleData(c *gin.Context) {
@@ -99,12 +99,12 @@ func (h *HandlerMonitor) ImportRuleData(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(gin.H{"module_key": moduleKey, "sections": len(incoming)}).Send()
+	web.Succeed(c).Data(gin.H{"module_key": moduleKey, "sections": len(incoming)}).Send()
 }
 
 func (h *HandlerMonitor) ResetDefaultRuleData(c *gin.Context) {
 	InitDefaultRuleData(h.svc.GetDB())
-	web.OK(c).Msg("默认规则数据已重置").Send()
+	web.Succeed(c).Msg("默认规则数据已重置").Send()
 }
 
 // ══ 告警配置 ══
@@ -115,7 +115,7 @@ func (h *HandlerMonitor) GetAlertConfig(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(cfg).Send()
+	web.Succeed(c).Data(cfg).Send()
 }
 
 func (h *HandlerMonitor) UpdateAlertConfig(c *gin.Context) {
@@ -127,19 +127,19 @@ func (h *HandlerMonitor) UpdateAlertConfig(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 // ══ Agent ══
 
 func (h *HandlerMonitor) ListAgents(c *gin.Context) {
-	scope := iamsdk.DataFilterScope(c, monitorFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, monitorFieldMapping)
 	agents, err := h.svc.ListAgents(c.Request.Context(), scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(agents).Send()
+	web.Succeed(c).Data(agents).Send()
 }
 
 func (h *HandlerMonitor) SyncAgentRules(c *gin.Context) {
@@ -149,7 +149,7 @@ func (h *HandlerMonitor) SyncAgentRules(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(result).Send()
+	web.Succeed(c).Data(result).Send()
 }
 
 func (h *HandlerMonitor) ShutdownAgent(c *gin.Context) {
@@ -159,7 +159,7 @@ func (h *HandlerMonitor) ShutdownAgent(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(result).Send()
+	web.Succeed(c).Data(result).Send()
 }
 
 func (h *HandlerMonitor) DeleteAgent(c *gin.Context) {
@@ -173,5 +173,5 @@ func (h *HandlerMonitor) DeleteAgent(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }

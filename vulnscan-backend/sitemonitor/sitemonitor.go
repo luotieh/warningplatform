@@ -6,9 +6,9 @@ import (
 
 	"vulnscan-backend/boot"
 
-	"code.yt-security.com/public/core/v2/db"
-	"code.yt-security.com/public/core/v2/web"
-	"code.yt-security.com/public/sdk/authorize"
+	"code.yt-security.com/public/access/authorize"
+	"code.yt-security.com/public/core/db"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 )
 
@@ -285,12 +285,12 @@ func (m *Monitor) handleGenerateReport(c *gin.Context) {
 		return
 	}
 
-	web.OK(c).Data(report).Send()
+	web.Succeed(c).Data(report).Send()
 }
 
 func (m *Monitor) handleScheduleOverview(c *gin.Context) {
 	info := m.scheduler.GetScheduleInfo()
-	web.OK(c).Data(gin.H{
+	web.Succeed(c).Data(gin.H{
 		"active_entries": m.scheduler.ActiveCount(),
 		"entries":        info,
 	}).Send()

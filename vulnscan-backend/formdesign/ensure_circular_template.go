@@ -8,7 +8,7 @@ import (
 
 	"vulnscan-backend/model"
 
-	"code.yt-security.com/public/core/v2/generate/qulid"
+	"code.yt-security.com/public/core/generate/ulid"
 	"gorm.io/gorm"
 )
 
@@ -39,8 +39,8 @@ func EnsureBuiltinCircularInputTemplate(sess *gorm.DB, ctx context.Context) (mod
 	}
 
 	now := time.Now()
-	templateID := qulid.GenerateID()
-	versionID := qulid.GenerateID()
+	templateID := ulid.GenerateID()
+	versionID := ulid.GenerateID()
 	schema := model.JSONMap{"rule": []any{}}
 	options := model.JSONMap{}
 
@@ -101,7 +101,7 @@ func EnsureBuiltinCircularInputTemplate(sess *gorm.DB, ctx context.Context) (mod
 
 func repairTemplateCurrentVersion(db *gorm.DB, item *model.DynamicFormTemplate) (model.DynamicFormTemplate, error) {
 	now := time.Now()
-	versionID := qulid.GenerateID()
+	versionID := ulid.GenerateID()
 	schema := item.Schema
 	if schema == nil {
 		schema = model.JSONMap{"rule": []any{}}

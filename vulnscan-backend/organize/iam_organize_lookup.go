@@ -4,11 +4,11 @@ import (
 	"context"
 	"strings"
 
-	"code.yt-security.com/public/sdk/identity"
+	"code.yt-security.com/public/access/admin"
 )
 
 // FindIAMOrganizeByExactName 按名称精确匹配 IAM 组织（同名取第一条，避免重复创建）。
-func FindIAMOrganizeByExactName(ctx context.Context, svc *identity.OrganizeAdminService, name string) (*identity.OrganizeInfo, error) {
+func FindIAMOrganizeByExactName(ctx context.Context, svc *admin.OrganizeAdminService, name string) (*admin.OrganizeInfo, error) {
 	name = strings.TrimSpace(name)
 	if name == "" || svc == nil {
 		return nil, nil
@@ -18,7 +18,7 @@ func FindIAMOrganizeByExactName(ctx context.Context, svc *identity.OrganizeAdmin
 	if err != nil {
 		return findIAMOrganizeByOptions(ctx, svc, name)
 	}
-	var matched *identity.OrganizeInfo
+	var matched *admin.OrganizeInfo
 	for _, info := range all {
 		if info == nil || strings.TrimSpace(info.Name) != name {
 			continue
@@ -32,7 +32,7 @@ func FindIAMOrganizeByExactName(ctx context.Context, svc *identity.OrganizeAdmin
 	return matched, nil
 }
 
-func findIAMOrganizeByOptions(ctx context.Context, svc *identity.OrganizeAdminService, name string) (*identity.OrganizeInfo, error) {
+func findIAMOrganizeByOptions(ctx context.Context, svc *admin.OrganizeAdminService, name string) (*admin.OrganizeInfo, error) {
 	options, err := svc.GetOrganizeOptions(ctx, name)
 	if err != nil {
 		return nil, err

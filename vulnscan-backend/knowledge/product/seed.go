@@ -5,7 +5,7 @@ import (
 
 	"vulnscan-backend/model"
 
-	"code.yt-security.com/public/core/v2/generate/qulid"
+	"code.yt-security.com/public/core/generate/ulid"
 	"gorm.io/gorm"
 )
 
@@ -128,7 +128,7 @@ func SeedBuiltinProducts(session *gorm.DB) {
 			CPEPrefix:   sp.CPEPrefix,
 			Aliases:     sp.Aliases,
 		}
-		item.ID = qulid.GenerateID()
+		item.ID = ulid.GenerateID()
 		item.CreatedBy = "system"
 
 		if err := session.Create(&item).Error; err != nil {

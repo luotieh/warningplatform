@@ -4,7 +4,7 @@ import (
 	ac "vulnscan-backend/assetmgr/assetmgr-contract"
 	"vulnscan-backend/model"
 
-	"code.yt-security.com/public/core/v2/db"
+	"code.yt-security.com/public/core/db"
 	"gorm.io/gorm"
 )
 

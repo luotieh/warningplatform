@@ -99,8 +99,9 @@ async function generateAccess(options: GenerateMenuAndRoutesOptions) {
           menus = retryMenus;
           hasMenuRoutes = true;
         }
-      } catch (e) {
-        console.warn('[Menu Auto-Sync] failed:', e);
+      } catch {
+        // 非特权用户同步会被后端拒绝（403），静默处理
+        localStorage.setItem(SYNC_DONE_KEY, manifestHash);
       }
     }
 

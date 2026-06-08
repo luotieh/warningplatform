@@ -10,6 +10,7 @@ import {
 import { useRouter } from 'vue-router';
 import {
   getIncidentList, deleteIncident, aiPreAudit, createIncident,
+  transferToCircular,
   type SecurityIncident, type CreateIncidentReq,
 } from '#/api/incident';
 import {
@@ -18,12 +19,10 @@ import {
   type IncidentExportFormat,
 } from '../incident-export';
 import IncidentPreviewDrawer from '../components/IncidentPreviewDrawer.vue';
-import { usePerm } from '#/composables/usePerm';
 import { useRoutePerm } from '#/composables/use-route-perm';
 
 defineOptions({ name: 'IncidentList' });
 
-const { can } = usePerm();
 const { perm } = useRoutePerm('/incident/list');
 
 const router = useRouter();
@@ -128,6 +127,46 @@ async function handleRowExport(row: SecurityIncident, format: IncidentExportForm
   }
 }
 
+async function handleTransferToCircular(row: SecurityIncident) {
+  try {
+    const res = await transferToCircular({
+      incident_id: row.id,
+      incident_no: row.incident_no,
+      name: row.name,
+      level: row.level,
+      source_system: 'incident',
+    });
+    message.success(`已转通报，通报编号: ${res.circular_code}`);
+    await fetchData();
+  } catch (e: any) {
+    message.error(e?.message || '转通报失败');
+  }
+}
+
+async function handleBatchTransfer() {
+  const ids = checkedRowKeys.value.map(String);
+  if (!ids.length) {
+    message.warning('请先勾选要转通报的事件');
+    return;
+  }
+  const rows = data.value.filter(r => ids.includes(r.id));
+  let successCount = 0;
+  for (const row of rows) {
+    try {
+      await transferToCircular({
+        incident_id: row.id,
+        incident_no: row.incident_no,
+        name: row.name,
+        level: row.level,
+        source_system: 'incident',
+      });
+      successCount++;
+    } catch { /* ignore individual failures */ }
+  }
+  message.success(`已转通报 ${successCount} 条`);
+  await fetchData();
+}
+
 const columns = computed(() => [
   { type: 'selection' as const },
   { title: '事件编号', key: 'incident_no', width: 160, ellipsis: { tooltip: true } },
@@ -135,28 +174,33 @@ const columns = computed(() => [
   { title: '级别', key: 'level', width: 80, align: 'center' as const, render: (row: SecurityIncident) => h('span', { style: `padding:2px 8px;border-radius:4px;font-size:12px;font-weight:600;color:#fff;background:${levelColors[row.level] ?? '#999'}` }, levelLabels[row.level] ?? '-') },
   { title: '状态', key: 'status', width: 110, render: (row: SecurityIncident) => h(NTag, { size: 'small', type: (statusTypes[row.status] || 'default') as any, bordered: false }, () => statusLabels[row.status] ?? '-') },
   { title: 'AI预审', key: 'ai_pre_status', width: 90, render: (row: SecurityIncident) => h(NTag, { size: 'small', type: row.ai_pre_status === 1 ? 'success' : 'default', bordered: false }, () => row.ai_pre_status === 1 ? '已预审' : '未预审') },
-  { title: 'SLA期限', key: 'sla_deadline', width: 170, render: (row: SecurityIncident) => { if (!row.sla_deadline) return '-'; const d = new Date(row.sla_deadline); const overdue = d < new Date(); const fmt = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; return h('span', { style: overdue ? 'color:#d03050;font-weight:600' : '' }, fmt); } },
+  { title: '处置截止时间', key: 'sla_deadline', width: 170, render: (row: SecurityIncident) => { if (!row.sla_deadline) return '-'; const d = new Date(row.sla_deadline); const overdue = d < new Date(); const fmt = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; return h('span', { style: overdue ? 'color:#d03050;font-weight:600' : '' }, fmt); } },
   { title: '创建时间', key: 'created_at', width: 170, render: (row: SecurityIncident) => { if (!row.created_at) return '-'; const d = new Date(row.created_at); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; } },
-  { title: '操作', key: 'actions', width: 300, fixed: 'right' as const, render: (row: SecurityIncident) => h(NSpace, { size: 4 }, () => {
-    const items: any[] = [
-      h(NButton, { size: 'tiny', type: 'default', text: true, onClick: () => openPreview(row) }, () => '预览'),
-      h(NButton, { size: 'tiny', type: 'info', text: true, onClick: () => router.push(`/incident/list/${row.id}`) }, () => '详情'),
+  { title: '操作', key: 'actions', width: 200, fixed: 'right' as const, render: (row: SecurityIncident) => {
+    const moreOpts: any[] = [
+      { label: '转通报', key: 'transfer' },
+      { label: '导出 Word', key: 'docx' },
+      { label: '导出 PDF', key: 'pdf' },
     ];
-    if (can(perm('export'))) {
-      items.push(h(NDropdown, {
-        trigger: 'click',
-        options: exportMenuOptions,
-        onSelect: (key: string) => handleRowExport(row, key as IncidentExportFormat),
-      }, { default: () => h(NButton, { size: 'tiny', text: true, disabled: exporting.value }, () => '导出') }));
+    if (row.status === 1 || row.status === 3) {
+      moreOpts.push({ label: 'AI预审', key: 'ai-audit' });
     }
-    if ((row.status === 1 || row.status === 3) && can(perm('ai-audit'))) {
-      items.push(h(NButton, { size: 'tiny', type: 'primary', text: true, onClick: () => handleAiAudit(row.id) }, () => 'AI预审'));
+    moreOpts.push({ type: 'divider', key: 'd1' });
+    moreOpts.push({ label: '删除', key: 'delete', props: { style: 'color: #d03050' } });
+    function handleMoreSelect(key: string) {
+      if (key === 'transfer') handleTransferToCircular(row);
+      else if (key === 'docx' || key === 'pdf') handleRowExport(row, key as IncidentExportFormat);
+      else if (key === 'ai-audit') handleAiAudit(row.id);
+      else if (key === 'delete') handleDelete(row.id);
     }
-    if (can(perm('delete'))) {
-      items.push(h(NPopconfirm, { onPositiveClick: () => handleDelete(row.id) }, { trigger: () => h(NButton, { size: 'tiny', type: 'error', text: true }, () => '删除'), default: () => '确定删除？' }));
-    }
-    return items;
-  }) },
+    return h(NSpace, { size: 4 }, () => [
+      h(NButton, { size: 'tiny', text: true, onClick: () => openPreview(row) }, () => '预览'),
+      h(NButton, { size: 'tiny', type: 'info', text: true, onClick: () => router.push(`/incident/list/${row.id}`) }, () => '详情'),
+      h(NDropdown, { trigger: 'click', options: moreOpts, onSelect: handleMoreSelect }, {
+        default: () => h(NButton, { size: 'tiny', text: true, quaternary: true }, () => '更多'),
+      }),
+    ]);
+  } },
 ]);
 
 async function fetchData() {
@@ -205,17 +249,19 @@ onMounted(fetchData);
           <NSelect v-model:value="levelFilter" :options="levelOptions" placeholder="级别" size="small" style="width:100px" clearable @update:value="()=>{page=1;fetchData()}" />
           <NInput v-model:value="keyword" placeholder="搜索事件..." size="small" clearable style="width:200px" @keyup.enter="()=>{page=1;fetchData()}" @clear="()=>{page=1;fetchData()}" />
           <NButton size="small" type="primary" @click="()=>{page=1;fetchData()}">搜索</NButton>
+          <NButton v-perm.disable="perm('transfer')" size="small" :disabled="!checkedRowKeys.length" @click="handleBatchTransfer">
+            批量转通报
+          </NButton>
           <NDropdown
-            v-if="can(perm('export'))"
             trigger="click"
             :options="exportMenuOptions"
             @select="(key: string) => handleBatchExport(key as IncidentExportFormat)"
           >
-            <NButton size="small" :loading="exporting" :disabled="!checkedRowKeys.length">
+            <NButton v-perm.disable="perm('export')" size="small" :loading="exporting" :disabled="!checkedRowKeys.length">
               批量导出
             </NButton>
           </NDropdown>
-          <NButton v-perm="perm('create')" size="small" type="primary" @click="openCreate">新建事件</NButton>
+          <NButton v-perm.disable="perm('create')" size="small" type="primary" @click="openCreate">新建事件</NButton>
         </NSpace>
       </template>
       <NDataTable

@@ -7,7 +7,7 @@ import (
 	"vulnscan-backend/model"
 	tmplEngine "vulnscan-backend/template/engine"
 
-	"code.yt-security.com/public/core/v2/web"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 )
 
@@ -44,7 +44,7 @@ func (a *API) SuggestParameters(c *gin.Context) {
 		}
 	}
 
-	web.OK(c).Data(resp).Send()
+	web.Succeed(c).Data(resp).Send()
 }
 
 func isTemplateOutdated(tmpl tmplEngine.ScanTemplate) bool {

@@ -63,6 +63,25 @@ const dataKeyLabels: Record<string, string> = {
   verification_detail: '验证说明',
   waf: 'WAF',
   cdn: 'CDN',
+  cve_id: 'CVE 编号',
+  cve: 'CVE 编号',
+  cvss_score: 'CVSS 评分',
+  owasp_category: 'OWASP 分类',
+  owasp: 'OWASP 分类',
+  remediation: '修复建议',
+  solution: '修复建议',
+  fix: '修复建议',
+  reference: '参考链接',
+  references: '参考链接',
+  affect_scope: '影响范围',
+  matched_at: '匹配位置',
+  request: '请求报文',
+  response: '响应报文',
+  curl_command: 'cURL 命令',
+  username: '用户名',
+  password: '密码',
+  param: '参数',
+  technologies: '技术栈',
 };
 
 const sourceLabels: Record<string, string> = {
@@ -96,10 +115,85 @@ const drawerWidth = computed(() => {
 
 const dataPriority = ['proof', 'check', 'service', 'version', 'username', 'password', 'port', 'banner'];
 
+const prominentKeys = new Set([
+  'screenshot', 'body_preview', 'cve_id', 'cve', 'cvss_score',
+  'remediation', 'solution', 'fix', 'reference', 'references',
+  'affect_scope', 'owasp_category', 'owasp', 'matched_at',
+  'request', 'response', 'curl_command', 'verified', 'verify_detail', 'verify_variants',
+]);
+
+const cveId = computed(() => {
+  const data = props.finding?.data;
+  if (!data) return '';
+  return data.cve_id || data.cve || '';
+});
+
+const cvssScore = computed(() => {
+  const data = props.finding?.data;
+  if (!data) return '';
+  const v = data.cvss_score ?? data.cvss;
+  if (v === undefined || v === null) return '';
+  return String(v);
+});
+
+const owaspCategory = computed(() => {
+  const data = props.finding?.data;
+  if (!data) return '';
+  return data.owasp_category || data.owasp || '';
+});
+
+const remediation = computed(() => {
+  const data = props.finding?.data;
+  if (!data) return '';
+  return data.remediation || data.solution || data.fix || '';
+});
+
+const referenceLinks = computed(() => {
+  const data = props.finding?.data;
+  if (!data) return [];
+  const raw = data.references || data.reference;
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw.filter(Boolean);
+  if (typeof raw === 'string') {
+    return raw.split(/[\n,;]/).map((s: string) => s.trim()).filter(Boolean);
+  }
+  return [];
+});
+
+const affectScope = computed(() => {
+  const data = props.finding?.data;
+  if (!data) return '';
+  return data.affect_scope || '';
+});
+
+const matchedAt = computed(() => {
+  const data = props.finding?.data;
+  if (!data) return '';
+  return data.matched_at || '';
+});
+
+const requestData = computed(() => {
+  const data = props.finding?.data;
+  if (!data) return '';
+  return data.request || '';
+});
+
+const responseData = computed(() => {
+  const data = props.finding?.data;
+  if (!data) return '';
+  return data.response || '';
+});
+
+const curlCommand = computed(() => {
+  const data = props.finding?.data;
+  if (!data) return '';
+  return data.curl_command || '';
+});
+
 const dataEntries = computed(() => {
   const data = props.finding?.data;
   if (!data) return [];
-  const entries = Object.entries(data).filter(([key]) => key !== 'screenshot' && key !== 'body_preview');
+  const entries = Object.entries(data).filter(([key]) => !prominentKeys.has(key));
   entries.sort((a, b) => {
     const ai = dataPriority.indexOf(a[0]);
     const bi = dataPriority.indexOf(b[0]);
@@ -183,6 +277,7 @@ function copyEvidence() {
             <span v-if="finding.confidence" class="fd-conf-text">
               置信度 {{ finding.confidence }}%
             </span>
+            <NTag v-for="tag in (finding.tags || [])" :key="tag" size="small" :bordered="false" style="background: #f0f0f0; color: #666">{{ tag }}</NTag>
           </div>
         </div>
       </template>
@@ -231,6 +326,23 @@ function copyEvidence() {
               <span v-if="finding.data.verify_variants" style="margin-left: 8px; font-size: 11px; color: #666">
                 (变体: {{ finding.data.verify_variants }})
               </span>
+            </NDescriptionsItem>
+            <NDescriptionsItem v-if="cveId" label="CVE 编号">
+              <a :href="`https://nvd.nist.gov/vuln/detail/${cveId}`" target="_blank" rel="noopener" style="color: #1890ff; text-decoration: none; font-weight: 600; font-family: 'SF Mono', Consolas, monospace">
+                {{ cveId }}
+              </a>
+            </NDescriptionsItem>
+            <NDescriptionsItem v-if="cvssScore" label="CVSS 评分">
+              <span :style="{ fontWeight: '700', color: parseFloat(cvssScore) >= 9 ? '#cf1322' : parseFloat(cvssScore) >= 7 ? '#fa8c16' : parseFloat(cvssScore) >= 4 ? '#faad14' : '#52c41a' }">
+                {{ cvssScore }}
+              </span>
+            </NDescriptionsItem>
+            <NDescriptionsItem v-if="owaspCategory" label="OWASP">
+              <NTag size="small" :bordered="false" type="info">{{ owaspCategory }}</NTag>
+            </NDescriptionsItem>
+            <NDescriptionsItem v-if="affectScope" label="影响范围">{{ affectScope }}</NDescriptionsItem>
+            <NDescriptionsItem v-if="matchedAt" label="匹配位置">
+              <span class="fd-mono" style="font-size: 11px; word-break: break-all">{{ matchedAt }}</span>
             </NDescriptionsItem>
           </NDescriptions>
         </section>
@@ -300,6 +412,39 @@ function copyEvidence() {
               alt="页面截图"
               @click="openScreenshot(finding.data.screenshot)"
             />
+          </div>
+        </section>
+
+        <section v-if="remediation" class="fd-section">
+          <div class="fd-section__title">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#52c41a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 4px"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><polyline points="10 9 9 9 8 9" /></svg>
+            修复建议
+          </div>
+          <pre class="fd-block fd-block--text" style="background: #f6ffed; border-color: #b7eb8f">{{ remediation }}</pre>
+        </section>
+
+        <section v-if="referenceLinks.length" class="fd-section">
+          <div class="fd-section__title">参考链接</div>
+          <div class="fd-ref-links">
+            <a v-for="(link, idx) in referenceLinks" :key="idx" :href="link" target="_blank" rel="noopener" class="fd-ref-link">
+              {{ link }}
+            </a>
+          </div>
+        </section>
+
+        <section v-if="requestData || responseData || curlCommand" class="fd-section">
+          <div class="fd-section__title">请求/响应</div>
+          <div v-if="curlCommand" style="margin-bottom: 8px">
+            <div style="font-size: 11px; color: #999; margin-bottom: 4px; font-weight: 500">cURL 命令</div>
+            <pre class="fd-block fd-block--code" style="font-size: 11px">{{ curlCommand }}</pre>
+          </div>
+          <div v-if="requestData" style="margin-bottom: 8px">
+            <div style="font-size: 11px; color: #999; margin-bottom: 4px; font-weight: 500">请求</div>
+            <pre class="fd-block fd-block--code" style="font-size: 11px; max-height: 200px">{{ requestData }}</pre>
+          </div>
+          <div v-if="responseData">
+            <div style="font-size: 11px; color: #999; margin-bottom: 4px; font-weight: 500">响应</div>
+            <pre class="fd-block fd-block--code" style="font-size: 11px; max-height: 200px">{{ responseData }}</pre>
           </div>
         </section>
 
@@ -577,5 +722,28 @@ function copyEvidence() {
   padding-top: 14px;
   border-top: 1px solid var(--border-color, #eef2f6);
   margin-top: 8px;
+}
+
+/* Reference Links */
+.fd-ref-links {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.fd-ref-link {
+  display: block;
+  font-size: 12px;
+  color: #1890ff;
+  text-decoration: none;
+  word-break: break-all;
+  padding: 6px 10px;
+  border-radius: 4px;
+  background: #f0f5ff;
+  border: 1px solid #d6e4ff;
+  transition: background 0.15s;
+}
+.fd-ref-link:hover {
+  background: #e6f7ff;
+  border-color: #91d5ff;
 }
 </style>

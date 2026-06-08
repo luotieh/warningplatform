@@ -3,7 +3,7 @@ package scanrunner
 import (
 	"time"
 
-	"vulnscan-backend/scan/core"
+	"code.yt-security.com/public/scanengine/core"
 	"vulnscan-backend/template/engine"
 )
 

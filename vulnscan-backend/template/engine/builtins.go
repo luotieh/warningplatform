@@ -200,7 +200,8 @@ func emergencyTemplate() *ScanTemplate {
 		},
 		Stages: []TemplateStage{
 			{Name: "端口发现", Module: "port_scan", Config: map[string]interface{}{"ports": "{{.ports}}", "concurrency": 1000}},
-			{Name: "服务+弱口令", Modules: []string{"service_probe", "weak_pass", "info_leak"}, Parallel: true, DependsOn: []string{"端口发现"}},
+			{Name: "服务识别", Modules: []string{"service_probe", "info_leak"}, Parallel: true, DependsOn: []string{"端口发现"}},
+			{Name: "弱口令", Module: "weak_pass", DependsOn: []string{"服务识别"}},
 		},
 	}
 }

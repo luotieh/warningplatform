@@ -3,7 +3,7 @@ package sla
 import (
 	slaContract "vulnscan-backend/incident/sla/sla-contract"
 
-	"code.yt-security.com/public/core/v2/web"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 )
 
@@ -21,7 +21,7 @@ func (h *HandlerSLA) SLAOverview(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(resp).Send()
+	web.Succeed(c).Data(resp).Send()
 }
 
 func (h *HandlerSLA) SetSLA(c *gin.Context) {
@@ -33,7 +33,7 @@ func (h *HandlerSLA) SetSLA(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerSLA) CheckSLA(c *gin.Context) {
@@ -42,5 +42,5 @@ func (h *HandlerSLA) CheckSLA(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(result).Send()
+	web.Succeed(c).Data(result).Send()
 }

@@ -13,10 +13,10 @@ import (
 	"vulnscan-backend/model"
 	"vulnscan-backend/organize"
 
-	"code.yt-security.com/public/core/v2/generate/qulid"
-	"code.yt-security.com/public/core/v2/web"
-	iamsdk "code.yt-security.com/public/sdk"
-	"code.yt-security.com/public/sdk/identity"
+	iamsdk "code.yt-security.com/public/access"
+	"code.yt-security.com/public/access/admin"
+	"code.yt-security.com/public/core/generate/ulid"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 	"github.com/xuri/excelize/v2"
 	"gorm.io/gorm"
@@ -191,7 +191,7 @@ func (h *HandlerAsset) ImportAssets(c *gin.Context) {
 			}
 		}
 		item := &model.Asset{
-			ID:         qulid.GenerateID(),
+			ID:         ulid.GenerateID(),
 			CreatedBy:  createdBy,
 			OrganizeID: firstNonEmpty(orgID, defaultParentID),
 			Status:     1,
@@ -308,7 +308,7 @@ func (h *HandlerAsset) ImportAssets(c *gin.Context) {
 		return
 	}
 
-	web.OK(c).Data(gin.H{"imported": count, "total": len(items)}).Send()
+	web.Succeed(c).Data(gin.H{"imported": count, "total": len(items)}).Send()
 }
 
 func (h *HandlerAsset) DownloadTemplate(c *gin.Context) {
@@ -620,7 +620,7 @@ type assetImportResolver struct {
 	orgByID         map[string]model.ConstructionOrg
 	organizeByName  map[string]string
 	iam             *iamsdk.Client
-	iamOrganizes    []*identity.OrganizeInfo
+	iamOrganizes    []*admin.OrganizeInfo
 	iamOrganizesErr error
 	iamOrganizesGot bool
 	createdBy       string
@@ -728,7 +728,7 @@ func (r *assetImportResolver) findLocalOrganizeByName(name string) (string, erro
 	return items[0].ID, nil
 }
 
-func (r *assetImportResolver) ensureLocalOrganizeOrError(info *identity.OrganizeInfo) (string, error) {
+func (r *assetImportResolver) ensureLocalOrganizeOrError(info *admin.OrganizeInfo) (string, error) {
 	if info == nil {
 		return "", fmt.Errorf("单位信息为空")
 	}
@@ -751,7 +751,7 @@ func (r *assetImportResolver) createLocalOrganizeByName(name string) (string, er
 	}
 
 	org := model.Organize{
-		ID:        qulid.GenerateID(),
+		ID:        ulid.GenerateID(),
 		Name:      name,
 		ParentID:  strings.TrimSpace(r.defaultParentID),
 		CreatedBy: r.createdBy,
@@ -764,7 +764,7 @@ func (r *assetImportResolver) createLocalOrganizeByName(name string) (string, er
 	return org.ID, nil
 }
 
-func (r *assetImportResolver) findIAMOrganizeByName(ctx context.Context, name string) (*identity.OrganizeInfo, error) {
+func (r *assetImportResolver) findIAMOrganizeByName(ctx context.Context, name string) (*admin.OrganizeInfo, error) {
 	if r.iam == nil || strings.TrimSpace(name) == "" {
 		return nil, nil
 	}
@@ -784,7 +784,7 @@ func (r *assetImportResolver) findIAMOrganizeByName(ctx context.Context, name st
 	return nil, nil
 }
 
-func (r *assetImportResolver) createIAMOrganize(ctx context.Context, name string) (*identity.OrganizeInfo, error) {
+func (r *assetImportResolver) createIAMOrganize(ctx context.Context, name string) (*admin.OrganizeInfo, error) {
 	if r.iam == nil || name == "" {
 		return nil, nil
 	}
@@ -794,7 +794,7 @@ func (r *assetImportResolver) createIAMOrganize(ctx context.Context, name string
 	} else if existing != nil {
 		return existing, nil
 	}
-	info, err := r.iam.Admin.Organize.CreateOrganize(ctx, &identity.CreateOrganizeRequest{
+	info, err := r.iam.Admin.Organize.CreateOrganize(ctx, &admin.CreateOrganizeRequest{
 		Name:     name,
 		ParentID: r.defaultParentID,
 	})
@@ -807,7 +807,7 @@ func (r *assetImportResolver) createIAMOrganize(ctx context.Context, name string
 	return info, nil
 }
 
-func (r *assetImportResolver) ensureLocalOrganize(info *identity.OrganizeInfo) string {
+func (r *assetImportResolver) ensureLocalOrganize(info *admin.OrganizeInfo) string {
 	if info == nil {
 		return ""
 	}
@@ -870,7 +870,7 @@ func (r *assetImportResolver) resolveConstructionOrg(input constructionOrgImport
 		return input.Name
 	}
 	org := model.ConstructionOrg{
-		ID:             qulid.GenerateID(),
+		ID:             ulid.GenerateID(),
 		Name:           input.Name,
 		Location:       input.Location,
 		Address:        input.Address,

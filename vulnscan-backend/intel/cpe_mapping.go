@@ -3,7 +3,7 @@ package intel
 import (
 	"strings"
 
-	"code.yt-security.com/public/core/v2/web"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 )
 
@@ -12,7 +12,7 @@ func (h *Handler) ListCPEMappings(c *gin.Context) {
 
 	mappings := h.matcher.GetCPEMappings()
 	if keyword == "" {
-		web.OK(c).Data(gin.H{"total": len(mappings), "mappings": mappings}).Send()
+		web.Succeed(c).Data(gin.H{"total": len(mappings), "mappings": mappings}).Send()
 		return
 	}
 
@@ -22,7 +22,7 @@ func (h *Handler) ListCPEMappings(c *gin.Context) {
 			filtered = append(filtered, m)
 		}
 	}
-	web.OK(c).Data(gin.H{"total": len(filtered), "mappings": filtered}).Send()
+	web.Succeed(c).Data(gin.H{"total": len(filtered), "mappings": filtered}).Send()
 }
 
 func (h *Handler) AddCPEMapping(c *gin.Context) {
@@ -41,7 +41,7 @@ func (h *Handler) AddCPEMapping(c *gin.Context) {
 		CPEMatches: req.CPEMatches,
 	}
 	h.matcher.AddCPEMapping(mapping)
-	web.OK(c).Data(mapping).Send()
+	web.Succeed(c).Data(mapping).Send()
 }
 
 func (h *Handler) UpdateCPEMapping(c *gin.Context) {
@@ -65,7 +65,7 @@ func (h *Handler) UpdateCPEMapping(c *gin.Context) {
 		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *Handler) DeleteCPEMapping(c *gin.Context) {
@@ -74,5 +74,5 @@ func (h *Handler) DeleteCPEMapping(c *gin.Context) {
 		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }

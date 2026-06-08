@@ -1,7 +1,7 @@
 package formdesign
 
 import (
-	"code.yt-security.com/public/sdk/authorize"
+	"code.yt-security.com/public/access/authorize"
 	"github.com/gin-gonic/gin"
 )
 

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"code.yt-security.com/public/core/v2/generate/qulid"
+	"code.yt-security.com/public/core/generate/ulid"
 	"gorm.io/gorm"
 
 	"vulnscan-backend/model"
@@ -115,7 +115,7 @@ func LaunchScan(db *gorm.DB, sched *Scheduler, p LaunchScanParams) (*LaunchScanR
 		if multi || pinned {
 			now := time.Now()
 			parent := model.ScanTask{
-				ID:           qulid.GenerateID(),
+				ID:           ulid.GenerateID(),
 				Name:         p.Name,
 				TemplateID:   tmpl.ID,
 				TemplateName: tmpl.Name,
@@ -143,7 +143,7 @@ func LaunchScan(db *gorm.DB, sched *Scheduler, p LaunchScanParams) (*LaunchScanR
 				subNow := time.Now()
 				wid := strings.TrimSpace(sh.WorkerID)
 				sub := model.ScanTask{
-					ID:           qulid.GenerateID(),
+					ID:           ulid.GenerateID(),
 					Name:         fmt.Sprintf("%s [节点分片 %d/%d]", p.Name, i+1, len(shards)),
 					TemplateID:   tmpl.ID,
 					TemplateName: tmpl.Name,
@@ -185,7 +185,7 @@ func LaunchScan(db *gorm.DB, sched *Scheduler, p LaunchScanParams) (*LaunchScanR
 	}
 
 	task := model.ScanTask{
-		ID:           qulid.GenerateID(),
+		ID:           ulid.GenerateID(),
 		Name:         p.Name,
 		TemplateID:   tmpl.ID,
 		TemplateName: tmpl.Name,
@@ -233,7 +233,7 @@ func LaunchScan(db *gorm.DB, sched *Scheduler, p LaunchScanParams) (*LaunchScanR
 func launchPinnedWorkerScan(db *gorm.DB, sched *Scheduler, p LaunchScanParams, tmpl model.ScanTemplate, params model.JSONMap, priority int, workerID string) (*LaunchScanResult, error) {
 	now := time.Now()
 	task := model.ScanTask{
-		ID:           qulid.GenerateID(),
+		ID:           ulid.GenerateID(),
 		Name:         p.Name,
 		TemplateID:   tmpl.ID,
 		TemplateName: tmpl.Name,

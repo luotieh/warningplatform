@@ -4,7 +4,7 @@ import (
 	"log/slog"
 	"strings"
 
-	"vulnscan-backend/scan/core"
+	"code.yt-security.com/public/scanengine/core"
 )
 
 // configKeySkipWebModules 写入运行配置，供 ExecuteStageWithOpts 过滤 Web 漏洞类模块（不入库、不传给模块）。
@@ -15,6 +15,7 @@ var webVulnModuleIDs = map[string]struct{}{
 	"web_vuln_scan": {},
 	"sqli":          {}, "xss": {}, "ssrf": {}, "cmdi": {}, "lfi": {}, "ssti": {}, "xxe": {}, "nosqli": {},
 	"jwt_sec": {}, "apisec": {}, "dir_scan": {}, "advanced_vuln": {}, "fpenhance": {},
+	"cors": {}, "open_redirect": {}, "hpp": {}, "graphql": {}, "ws_sec": {}, "idor": {}, "sec_headers": {},
 }
 
 func hasHTTPFromStageContext(ctx *StageContext) bool {

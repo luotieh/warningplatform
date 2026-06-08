@@ -4,8 +4,8 @@ import (
 	"vulnscan-backend/model"
 	"vulnscan-backend/sitemonitor/contract"
 
-	"code.yt-security.com/public/core/v2/web"
-	iamsdk "code.yt-security.com/public/sdk"
+	iamsdk "code.yt-security.com/public/access"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 )
 
@@ -19,7 +19,7 @@ func (h *HandlerMonitor) CreateTarget(c *gin.Context) {
 		return
 	}
 	c.Set("_created_target_id", req.ID)
-	web.OK(c).Data(req).Send()
+	web.Succeed(c).Data(req).Send()
 }
 
 func (h *HandlerMonitor) UpdateTarget(c *gin.Context) {
@@ -32,7 +32,7 @@ func (h *HandlerMonitor) UpdateTarget(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerMonitor) DeleteTarget(c *gin.Context) {
@@ -40,7 +40,7 @@ func (h *HandlerMonitor) DeleteTarget(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerMonitor) GetTarget(c *gin.Context) {
@@ -49,7 +49,7 @@ func (h *HandlerMonitor) GetTarget(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(t).Send()
+	web.Succeed(c).Data(t).Send()
 }
 
 func (h *HandlerMonitor) ListTargets(c *gin.Context) {
@@ -57,13 +57,13 @@ func (h *HandlerMonitor) ListTargets(c *gin.Context) {
 	if !ok {
 		return
 	}
-	scope := iamsdk.DataFilterScope(c, monitorFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, monitorFieldMapping)
 	total, list, err := h.svc.ListTargets(c.Request.Context(), req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).List(total, list).Send()
+	web.Succeed(c).List(total, list).Send()
 }
 
 func (h *HandlerMonitor) RunTarget(c *gin.Context) {
@@ -77,7 +77,7 @@ func (h *HandlerMonitor) RunTarget(c *gin.Context) {
 		web.Fail(c).Err(err).Data(outcome).Send()
 		return
 	}
-	web.OK(c).Data(outcome).Send()
+	web.Succeed(c).Data(outcome).Send()
 }
 
 func (h *HandlerMonitor) StartCrawl(c *gin.Context) {
@@ -94,7 +94,7 @@ func (h *HandlerMonitor) StartCrawl(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(job).Send()
+	web.Succeed(c).Data(job).Send()
 }
 
 func (h *HandlerMonitor) GetCrawlJob(c *gin.Context) {
@@ -111,7 +111,7 @@ func (h *HandlerMonitor) GetCrawlJob(c *gin.Context) {
 	if impl, ok := h.svc.(*serviceMonitor); ok && impl.screenshotBaseURL != "" {
 		resp.ScreenshotBaseURL = impl.screenshotBaseURL
 	}
-	web.OK(c).Data(resp).Send()
+	web.Succeed(c).Data(resp).Send()
 }
 
 func (h *HandlerMonitor) ApplyCrawlPaths(c *gin.Context) {
@@ -124,7 +124,7 @@ func (h *HandlerMonitor) ApplyCrawlPaths(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(gin.H{"created": n}).Send()
+	web.Succeed(c).Data(gin.H{"created": n}).Send()
 }
 
 func (h *HandlerMonitor) CreateTasksFromAssets(c *gin.Context) {
@@ -138,7 +138,7 @@ func (h *HandlerMonitor) CreateTasksFromAssets(c *gin.Context) {
 		return
 	}
 	c.Set("_created_path_task_ids", createdIDs)
-	web.OK(c).Data(resp).Send()
+	web.Succeed(c).Data(resp).Send()
 }
 
 func (h *HandlerMonitor) FetchTaskMeta(c *gin.Context) {
@@ -149,10 +149,10 @@ func (h *HandlerMonitor) FetchTaskMeta(c *gin.Context) {
 	}
 	title, finalURL, err := h.svc.FetchTaskMeta(c.Request.Context(), url)
 	if err != nil {
-		web.OK(c).Data(gin.H{"title": "", "url": url, "error": err.Error()}).Send()
+		web.Succeed(c).Data(gin.H{"title": "", "url": url, "error": err.Error()}).Send()
 		return
 	}
-	web.OK(c).Data(gin.H{"title": title, "url": finalURL}).Send()
+	web.Succeed(c).Data(gin.H{"title": title, "url": finalURL}).Send()
 }
 
 func (h *HandlerMonitor) UpdateTargetSchedule(c *gin.Context) {
@@ -173,5 +173,5 @@ func (h *HandlerMonitor) UpdateTargetSchedule(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(gin.H{"target_id": id}).Send()
+	web.Succeed(c).Data(gin.H{"target_id": id}).Send()
 }

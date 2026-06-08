@@ -7,9 +7,9 @@ import (
 	"sync"
 	"time"
 
-	"code.yt-security.com/public/core/v2/cache"
-	cachemem "code.yt-security.com/public/core/v2/cache/memory"
-	cacheredis "code.yt-security.com/public/core/v2/cache/redis"
+	"code.yt-security.com/public/core/cache"
+	cachemem "code.yt-security.com/public/core/cache/memory"
+	cacheredis "code.yt-security.com/public/core/cache/redis"
 	goredis "github.com/redis/go-redis/v9"
 )
 

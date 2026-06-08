@@ -3,8 +3,8 @@ package formdesign
 import (
 	"vulnscan-backend/model"
 
-	"code.yt-security.com/public/core/v2/web"
-	iamsdk "code.yt-security.com/public/sdk"
+	iamsdk "code.yt-security.com/public/access"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 )
 
@@ -92,7 +92,7 @@ func (h *Handler) ListTemplates(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).List(count, items).Send()
+	web.Succeed(c).List(count, items).Send()
 }
 
 func (h *Handler) GetTemplate(c *gin.Context) {
@@ -105,7 +105,7 @@ func (h *Handler) GetTemplate(c *gin.Context) {
 		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.OK(c).Data(item).Send()
+	web.Succeed(c).Data(item).Send()
 }
 
 func (h *Handler) CreateTemplate(c *gin.Context) {
@@ -119,7 +119,7 @@ func (h *Handler) CreateTemplate(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(created).Send()
+	web.Succeed(c).Data(created).Send()
 }
 
 func (h *Handler) UpdateTemplate(c *gin.Context) {
@@ -136,7 +136,7 @@ func (h *Handler) UpdateTemplate(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *Handler) DeleteTemplate(c *gin.Context) {
@@ -148,7 +148,7 @@ func (h *Handler) DeleteTemplate(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *Handler) ListVersions(c *gin.Context) {
@@ -161,7 +161,7 @@ func (h *Handler) ListVersions(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(items).Send()
+	web.Succeed(c).Data(items).Send()
 }
 
 func (h *Handler) GetVersion(c *gin.Context) {
@@ -174,7 +174,7 @@ func (h *Handler) GetVersion(c *gin.Context) {
 		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.OK(c).Data(item).Send()
+	web.Succeed(c).Data(item).Send()
 }
 
 func (h *Handler) SaveDraft(c *gin.Context) {
@@ -192,7 +192,7 @@ func (h *Handler) SaveDraft(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(gin.H{"id": draftID}).Send()
+	web.Succeed(c).Data(gin.H{"id": draftID}).Send()
 }
 
 func (h *Handler) CreateDraft(c *gin.Context) {
@@ -206,7 +206,7 @@ func (h *Handler) CreateDraft(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(draft).Send()
+	web.Succeed(c).Data(draft).Send()
 }
 
 func (h *Handler) PublishDraft(c *gin.Context) {
@@ -224,7 +224,7 @@ func (h *Handler) PublishDraft(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(published).Send()
+	web.Succeed(c).Data(published).Send()
 }
 
 func (h *Handler) ListSubmissions(c *gin.Context) {
@@ -237,7 +237,7 @@ func (h *Handler) ListSubmissions(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).List(count, items).Send()
+	web.Succeed(c).List(count, items).Send()
 }
 
 func (h *Handler) GetSubmission(c *gin.Context) {
@@ -250,7 +250,7 @@ func (h *Handler) GetSubmission(c *gin.Context) {
 		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.OK(c).Data(gin.H{"submission": item, "version": version}).Send()
+	web.Succeed(c).Data(gin.H{"submission": item, "version": version}).Send()
 }
 
 func (h *Handler) SaveSubmission(c *gin.Context) {
@@ -264,7 +264,7 @@ func (h *Handler) SaveSubmission(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(gin.H{"id": result.ID, "template_version_id": result.TemplateVersionID}).Send()
+	web.Succeed(c).Data(gin.H{"id": result.ID, "template_version_id": result.TemplateVersionID}).Send()
 }
 
 func (h *Handler) DeleteSubmission(c *gin.Context) {
@@ -276,5 +276,5 @@ func (h *Handler) DeleteSubmission(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }

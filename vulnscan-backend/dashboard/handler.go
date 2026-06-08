@@ -4,10 +4,10 @@ import (
 	"context"
 	"time"
 
-	"code.yt-security.com/public/core/v2/db"
-	"code.yt-security.com/public/core/v2/web"
-	iamsdk "code.yt-security.com/public/sdk"
-	"code.yt-security.com/public/sdk/authorize"
+	iamsdk "code.yt-security.com/public/access"
+	"code.yt-security.com/public/access/authorize"
+	"code.yt-security.com/public/core/db"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 
 	"vulnscan-backend/pkg/definition"
@@ -28,13 +28,13 @@ func (h *Handler) Overview(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 
-	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
 	posture, err := h.agg.GetSecurityPosture(ctx, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(posture).Send()
+	web.Succeed(c).Data(posture).Send()
 }
 
 func (h *Handler) VulnTrend(c *gin.Context) {
@@ -42,9 +42,9 @@ func (h *Handler) VulnTrend(c *gin.Context) {
 	defer cancel()
 
 	days := 30
-	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
 	trend := h.agg.getVulnTrend(ctx, days, scope)
-	web.OK(c).Data(trend).Send()
+	web.Succeed(c).Data(trend).Send()
 }
 
 func (h *Handler) TaskTrend(c *gin.Context) {
@@ -52,34 +52,34 @@ func (h *Handler) TaskTrend(c *gin.Context) {
 	defer cancel()
 
 	trend := h.agg.getTaskTrend(ctx, 30)
-	web.OK(c).Data(trend).Send()
+	web.Succeed(c).Data(trend).Send()
 }
 
 func (h *Handler) TopVulnAssets(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 
-	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
 	assets := h.agg.getTopVulnAssets(ctx, 10, scope)
-	web.OK(c).Data(assets).Send()
+	web.Succeed(c).Data(assets).Send()
 }
 
 func (h *Handler) TaskStatusDist(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 
-	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
 	result := h.agg.GetTaskStatusDist(ctx, scope)
-	web.OK(c).Data(result).Send()
+	web.Succeed(c).Data(result).Send()
 }
 
 func (h *Handler) RecentActivity(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 
-	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
 	activities := h.agg.GetRecentActivity(ctx, scope)
-	web.OK(c).Data(activities).Send()
+	web.Succeed(c).Data(activities).Send()
 }
 
 type Dashboard struct {

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"code.yt-security.com/public/sdk/permission"
+	"code.yt-security.com/public/access/permission"
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 

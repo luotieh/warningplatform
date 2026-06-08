@@ -9,7 +9,7 @@ import (
 
 	"vulnscan-backend/model"
 
-	"code.yt-security.com/public/core/v2/web"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -87,7 +87,7 @@ func (h *Handler) SearchCVE(c *gin.Context) {
 	}
 	results := filtered[start:end]
 
-	web.OK(c).Data(gin.H{
+	web.Succeed(c).Data(gin.H{
 		"total":     total,
 		"page":      page,
 		"page_size": pageSize,
@@ -102,7 +102,7 @@ func (h *Handler) GetCVE(c *gin.Context) {
 		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.OK(c).Data(entry).Send()
+	web.Succeed(c).Data(entry).Send()
 }
 
 func (h *Handler) MatchFingerprint(c *gin.Context) {
@@ -114,7 +114,7 @@ func (h *Handler) MatchFingerprint(c *gin.Context) {
 	}
 
 	matches := h.matcher.MatchByFingerprint(product, version)
-	web.OK(c).Data(gin.H{
+	web.Succeed(c).Data(gin.H{
 		"product": product,
 		"version": version,
 		"matches": matches,
@@ -124,7 +124,7 @@ func (h *Handler) MatchFingerprint(c *gin.Context) {
 
 func (h *Handler) GetSources(c *gin.Context) {
 	sources := h.sync.GetSources()
-	web.OK(c).Data(sources).Send()
+	web.Succeed(c).Data(sources).Send()
 }
 
 func (h *Handler) AddSource(c *gin.Context) {
@@ -143,7 +143,7 @@ func (h *Handler) AddSource(c *gin.Context) {
 		Custom:       true,
 	}
 	h.sync.AddSource(source)
-	web.OK(c).Data(source).Send()
+	web.Succeed(c).Data(source).Send()
 }
 
 func (h *Handler) UpdateSource(c *gin.Context) {
@@ -173,7 +173,7 @@ func (h *Handler) UpdateSource(c *gin.Context) {
 		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *Handler) DeleteSource(c *gin.Context) {
@@ -182,7 +182,7 @@ func (h *Handler) DeleteSource(c *gin.Context) {
 		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *Handler) SyncNow(c *gin.Context) {
@@ -191,7 +191,7 @@ func (h *Handler) SyncNow(c *gin.Context) {
 		defer cancel()
 		h.sync.syncOnce(ctx)
 	}()
-	web.OK(c).Data(gin.H{
+	web.Succeed(c).Data(gin.H{
 		"message": "同步任务已异步触发，后台执行中",
 		"sources": h.sync.GetSources(),
 	}).Send()
@@ -219,7 +219,7 @@ func (h *Handler) GetStats(c *gin.Context) {
 		}
 	}
 
-	web.OK(c).Data(gin.H{
+	web.Succeed(c).Data(gin.H{
 		"total":        total,
 		"critical":     critical,
 		"high":         high,
@@ -284,7 +284,7 @@ func (h *Handler) AnalyzeAsset(c *gin.Context) {
 		}
 	}
 
-	web.OK(c).Data(gin.H{
+	web.Succeed(c).Data(gin.H{
 		"asset_id":     assetID,
 		"services":     len(findings),
 		"matched_cves": totalMatches,
@@ -323,7 +323,7 @@ func (h *Handler) TrendAnalysis(c *gin.Context) {
 		if len(entries) > 24 {
 			entries = entries[len(entries)-24:]
 		}
-		web.OK(c).Data(gin.H{"dimension": "time", "data": entries}).Send()
+		web.Succeed(c).Data(gin.H{"dimension": "time", "data": entries}).Send()
 
 	case "severity":
 		severityMap := map[string]int{"critical": 0, "high": 0, "medium": 0, "low": 0}
@@ -342,7 +342,7 @@ func (h *Handler) TrendAnalysis(c *gin.Context) {
 			{Severity: "medium", Count: severityMap["medium"]},
 			{Severity: "low", Count: severityMap["low"]},
 		}
-		web.OK(c).Data(gin.H{"dimension": "severity", "data": entries}).Send()
+		web.Succeed(c).Data(gin.H{"dimension": "severity", "data": entries}).Send()
 
 	case "product":
 		productMap := make(map[string]int)
@@ -375,7 +375,7 @@ func (h *Handler) TrendAnalysis(c *gin.Context) {
 		if len(entries) > 20 {
 			entries = entries[:20]
 		}
-		web.OK(c).Data(gin.H{"dimension": "product", "data": entries}).Send()
+		web.Succeed(c).Data(gin.H{"dimension": "product", "data": entries}).Send()
 
 	case "exploit":
 		exploitTypeMap := make(map[string]int)
@@ -390,7 +390,7 @@ func (h *Handler) TrendAnalysis(c *gin.Context) {
 				}
 			}
 		}
-		web.OK(c).Data(gin.H{
+		web.Succeed(c).Data(gin.H{
 			"dimension":     "exploit",
 			"exploit_types": exploitTypeMap,
 			"impacts":       impactMap,
@@ -431,7 +431,7 @@ func (h *Handler) TopEPSS(c *gin.Context) {
 		all = all[:limit]
 	}
 
-	web.OK(c).Data(gin.H{
+	web.Succeed(c).Data(gin.H{
 		"total":   len(all),
 		"results": all,
 	}).Send()
@@ -509,7 +509,7 @@ func (h *Handler) BatchAnalyze(c *gin.Context) {
 		analyses = append(analyses, analysis)
 	}
 
-	web.OK(c).Data(gin.H{
+	web.Succeed(c).Data(gin.H{
 		"analyzed": len(analyses),
 		"results":  analyses,
 	}).Send()

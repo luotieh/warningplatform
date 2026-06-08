@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"code.yt-security.com/public/core/v2/web"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 )
 
@@ -89,7 +89,7 @@ func (h *Handler) Preview(c *gin.Context) {
 	}
 
 	data := h.svc.BuildReportData(req.Title, req.Type, req.TaskID)
-	web.OK(c).Data(data).Send()
+	web.Succeed(c).Data(data).Send()
 }
 
 func (h *Handler) Compare(c *gin.Context) {
@@ -106,12 +106,12 @@ func (h *Handler) Compare(c *gin.Context) {
 		web.Fail(c).Msg("对比任务失败").Err(err).Send()
 		return
 	}
-	web.OK(c).Data(result).Send()
+	web.Succeed(c).Data(result).Send()
 }
 
 func (h *Handler) AvailableTasks(c *gin.Context) {
 	tasks := h.svc.AvailableTasks()
-	web.OK(c).Data(tasks).Send()
+	web.Succeed(c).Data(tasks).Send()
 }
 
 func (h *Handler) TaskReport(c *gin.Context) {
@@ -130,7 +130,7 @@ func (h *Handler) TaskReport(c *gin.Context) {
 	title := fmt.Sprintf("扫描任务报告 - %s", task.Name)
 	data := h.svc.BuildReportData(title, TypeTechnical, uri.TaskID)
 	if format == FormatJSON {
-		web.OK(c).Data(data).Send()
+		web.Succeed(c).Data(data).Send()
 		return
 	}
 

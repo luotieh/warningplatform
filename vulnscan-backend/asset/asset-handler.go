@@ -9,9 +9,9 @@ import (
 	"vulnscan-backend/model"
 	"vulnscan-backend/pkg/assetextra"
 
-	"code.yt-security.com/public/core/v2/generate/qulid"
-	"code.yt-security.com/public/core/v2/web"
-	iamsdk "code.yt-security.com/public/sdk"
+	iamsdk "code.yt-security.com/public/access"
+	"code.yt-security.com/public/core/generate/ulid"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 	"github.com/xuri/excelize/v2"
 )
@@ -48,14 +48,14 @@ func (h *HandlerAsset) List(c *gin.Context) {
 		return
 	}
 
-	scope := iamsdk.DataFilterScope(c, assetFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, assetFieldMapping)
 	items, count, err := h.svc.List(query, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
 	}
 
-	web.OK(c).List(count, items).Send()
+	web.Succeed(c).List(count, items).Send()
 }
 
 func (h *HandlerAsset) GetByID(c *gin.Context) {
@@ -71,7 +71,7 @@ func (h *HandlerAsset) GetByID(c *gin.Context) {
 		return
 	}
 
-	web.OK(c).Data(item).Send()
+	web.Succeed(c).Data(item).Send()
 }
 
 func (h *HandlerAsset) Create(c *gin.Context) {
@@ -91,7 +91,7 @@ func (h *HandlerAsset) Create(c *gin.Context) {
 
 	user, _ := iamsdk.GetCurrentUser(c)
 	item := model.Asset{
-		ID:         qulid.GenerateID(),
+		ID:         ulid.GenerateID(),
 		Name:       req.Name,
 		Type:       req.Type,
 		Address:    normalizedAddress,
@@ -140,7 +140,7 @@ func (h *HandlerAsset) Create(c *gin.Context) {
 		go h.screenshot.CaptureAndSave(item.ID, item.Address)
 	}
 
-	web.OK(c).Data(item).Send()
+	web.Succeed(c).Data(item).Send()
 }
 
 type updateAssetReq struct {
@@ -378,7 +378,7 @@ func (h *HandlerAsset) Update(c *gin.Context) {
 		go h.screenshot.CaptureAndSave(id, *req.Address)
 	}
 
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerAsset) Delete(c *gin.Context) {
@@ -393,7 +393,7 @@ func (h *HandlerAsset) Delete(c *gin.Context) {
 		return
 	}
 
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerAsset) BatchUpdate(c *gin.Context) {
@@ -426,7 +426,7 @@ func (h *HandlerAsset) BatchUpdate(c *gin.Context) {
 		return
 	}
 
-	web.OK(c).Data(gin.H{"affected": affected}).Send()
+	web.Succeed(c).Data(gin.H{"affected": affected}).Send()
 }
 
 func (h *HandlerAsset) BatchDelete(c *gin.Context) {
@@ -441,7 +441,7 @@ func (h *HandlerAsset) BatchDelete(c *gin.Context) {
 		return
 	}
 
-	web.OK(c).Data(gin.H{"affected": affected}).Send()
+	web.Succeed(c).Data(gin.H{"affected": affected}).Send()
 }
 
 func (h *HandlerAsset) Export(c *gin.Context) {
@@ -449,7 +449,7 @@ func (h *HandlerAsset) Export(c *gin.Context) {
 	query.Page = 1
 	query.PageSize = 10000
 
-	scope := iamsdk.DataFilterScope(c, assetFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, assetFieldMapping)
 	items, _, err := h.svc.List(query, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()

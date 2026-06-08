@@ -10,7 +10,7 @@ import (
 
 	"vulnscan-backend/model"
 
-	"code.yt-security.com/public/core/v2/web"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 )
 
@@ -36,7 +36,7 @@ func NewHandler(svc *ServiceASM, extraCollectors ...AssetCollector) *Handler {
 
 func (h *Handler) ListProjects(c *gin.Context) {
 	projects, count := h.svc.ListProjects()
-	web.OK(c).List(count, projects).Send()
+	web.Succeed(c).List(count, projects).Send()
 }
 
 func (h *Handler) GetProject(c *gin.Context) {
@@ -46,7 +46,7 @@ func (h *Handler) GetProject(c *gin.Context) {
 		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.OK(c).Data(gin.H{"project": project, "seeds": seeds}).Send()
+	web.Succeed(c).Data(gin.H{"project": project, "seeds": seeds}).Send()
 }
 
 func (h *Handler) CreateProject(c *gin.Context) {
@@ -86,7 +86,7 @@ func (h *Handler) CreateProject(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(project).Send()
+	web.Succeed(c).Data(project).Send()
 }
 
 func (h *Handler) UpdateProject(c *gin.Context) {
@@ -99,13 +99,13 @@ func (h *Handler) UpdateProject(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *Handler) DeleteProject(c *gin.Context) {
 	id := c.Param("id")
 	h.svc.DeleteProject(id)
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *Handler) AddSeed(c *gin.Context) {
@@ -128,13 +128,13 @@ func (h *Handler) AddSeed(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(seed).Send()
+	web.Succeed(c).Data(seed).Send()
 }
 
 func (h *Handler) DeleteSeed(c *gin.Context) {
 	seedID := c.Param("seed_id")
 	h.svc.DeleteSeed(seedID)
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *Handler) RunDiscovery(c *gin.Context) {
@@ -152,7 +152,7 @@ func (h *Handler) RunDiscovery(c *gin.Context) {
 
 	go h.executeDiscovery(project, dbSeeds)
 
-	web.OK(c).Data(gin.H{"status": "running", "project_id": projectID}).Send()
+	web.Succeed(c).Data(gin.H{"status": "running", "project_id": projectID}).Send()
 }
 
 func (h *Handler) executeDiscovery(project *model.ASMProject, dbSeeds []model.ASMSeed) {
@@ -279,7 +279,7 @@ func (h *Handler) DiscoveryStatus(c *gin.Context) {
 		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.OK(c).Data(gin.H{
+	web.Succeed(c).Data(gin.H{
 		"status":            project.DiscoveryStatus,
 		"last_discovery_at": project.LastDiscoveryAt,
 	}).Send()
@@ -292,19 +292,19 @@ func (h *Handler) ListDiscoveredAssets(c *gin.Context) {
 		return
 	}
 	assets, count := h.svc.ListDiscoveredAssets(projectID, query)
-	web.OK(c).List(count, assets).Send()
+	web.Succeed(c).List(count, assets).Send()
 }
 
 func (h *Handler) ListChanges(c *gin.Context) {
 	projectID := c.Param("id")
 	changes, count := h.svc.ListChanges(projectID)
-	web.OK(c).List(count, changes).Send()
+	web.Succeed(c).List(count, changes).Send()
 }
 
 func (h *Handler) ListAlertRules(c *gin.Context) {
 	projectID := c.Param("id")
 	rules := h.svc.ListAlertRules(projectID)
-	web.OK(c).Data(rules).Send()
+	web.Succeed(c).Data(rules).Send()
 }
 
 func (h *Handler) CreateAlertRule(c *gin.Context) {
@@ -332,19 +332,19 @@ func (h *Handler) CreateAlertRule(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(rule).Send()
+	web.Succeed(c).Data(rule).Send()
 }
 
 func (h *Handler) DeleteAlertRule(c *gin.Context) {
 	ruleID := c.Param("rule_id")
 	h.svc.DeleteAlertRule(ruleID)
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *Handler) ExposureReport(c *gin.Context) {
 	projectID := c.Param("id")
 	report := h.svc.ExposureReport(projectID)
-	web.OK(c).Data(gin.H{
+	web.Succeed(c).Data(gin.H{
 		"total_assets":      report.TotalAssets,
 		"type_distribution": report.TypeDistribution,
 		"source_stats":      report.SourceStats,

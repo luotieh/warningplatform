@@ -7,7 +7,7 @@ import (
 	"vulnscan-backend/model"
 	"vulnscan-backend/sitemonitor/contract"
 
-	"code.yt-security.com/public/core/v2/generate/qulid"
+	"code.yt-security.com/public/core/generate/ulid"
 	"gorm.io/gorm"
 )
 
@@ -15,7 +15,7 @@ import (
 
 func (s *serviceMonitor) CreateWordLibrary(ctx context.Context, lib *model.MonitorWordLibrary) error {
 	if lib.ID == "" {
-		lib.ID = qulid.GenerateID()
+		lib.ID = ulid.GenerateID()
 	}
 	if err := s.session().WithContext(ctx).Create(lib).Error; err != nil {
 		return fmt.Errorf("创建词库失败: %w", err)
@@ -116,7 +116,7 @@ func (s *serviceMonitor) ListWordLibraries(ctx context.Context, req contract.Wor
 
 func (s *serviceMonitor) CreateWordCategory(ctx context.Context, cat *model.MonitorWordCategory) error {
 	if cat.ID == "" {
-		cat.ID = qulid.GenerateID()
+		cat.ID = ulid.GenerateID()
 	}
 	if err := s.session().WithContext(ctx).Create(cat).Error; err != nil {
 		return fmt.Errorf("创建分类失败: %w", err)
@@ -236,7 +236,7 @@ func (s *serviceMonitor) ListWordEntries(ctx context.Context, req contract.WordE
 
 func (s *serviceMonitor) CreateFileLibrary(ctx context.Context, lib *model.MonitorFileLibrary) error {
 	if lib.ID == "" {
-		lib.ID = qulid.GenerateID()
+		lib.ID = ulid.GenerateID()
 	}
 	if err := s.session().WithContext(ctx).Create(lib).Error; err != nil {
 		return fmt.Errorf("创建文件库失败: %w", err)

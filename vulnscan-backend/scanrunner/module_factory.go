@@ -6,52 +6,64 @@ import (
 
 	"gorm.io/gorm"
 
-	"vulnscan-backend/dict"
-	"vulnscan-backend/knowledge/nuclei"
-	"vulnscan-backend/pkg/payload"
-	"vulnscan-backend/scan/core"
-	"vulnscan-backend/scan/module/advancedvuln"
-	"vulnscan-backend/scan/module/apidisc"
-	"vulnscan-backend/scan/module/apisec"
-	"vulnscan-backend/scan/module/bruteforce"
-	"vulnscan-backend/scan/module/certcheck"
-	"vulnscan-backend/scan/module/cmdi"
-	"vulnscan-backend/scan/module/company"
-	"vulnscan-backend/scan/module/dirscan"
-	"vulnscan-backend/scan/module/dnsall"
-	"vulnscan-backend/scan/module/emailcollect"
-	"vulnscan-backend/scan/module/favicon"
-	"vulnscan-backend/scan/module/fingerprint"
-	"vulnscan-backend/scan/module/fpenhance"
-	"vulnscan-backend/scan/module/icmp"
-	"vulnscan-backend/scan/module/infoleak"
-	"vulnscan-backend/scan/module/ipattr"
-	"vulnscan-backend/scan/module/jsanalyze"
-	"vulnscan-backend/scan/module/jwtsec"
-	"vulnscan-backend/scan/module/lfi"
-	"vulnscan-backend/scan/module/nettopo"
-	"vulnscan-backend/scan/module/nosqli"
-	"vulnscan-backend/scan/module/portscan"
-	"vulnscan-backend/scan/module/realip"
-	"vulnscan-backend/scan/module/screenshot"
-	"vulnscan-backend/scan/module/serviceprobe"
-	"vulnscan-backend/scan/module/sqli"
-	"vulnscan-backend/scan/module/ssrf"
-	"vulnscan-backend/scan/module/ssti"
-	"vulnscan-backend/scan/module/subdomain"
-	"vulnscan-backend/scan/module/synscan"
-	"vulnscan-backend/scan/module/techdetect"
-	"vulnscan-backend/scan/module/udpscan"
-	"vulnscan-backend/scan/module/unauth"
-	"vulnscan-backend/scan/module/wafdetect"
-	"vulnscan-backend/scan/module/weakpass"
-	"vulnscan-backend/scan/module/webcrawl"
-	"vulnscan-backend/scan/module/xss"
-	"vulnscan-backend/scan/module/xxe"
-	"vulnscan-backend/scan/rulestore"
-)
+	"code.yt-security.com/public/scanengine/core"
+	"code.yt-security.com/public/scanengine/dict"
+	"code.yt-security.com/public/scanengine/module/advancedvuln"
+	"code.yt-security.com/public/scanengine/module/apidisc"
+	"code.yt-security.com/public/scanengine/module/apisec"
+	"code.yt-security.com/public/scanengine/module/apisecurity"
+	"code.yt-security.com/public/scanengine/module/bruteforce"
+	"code.yt-security.com/public/scanengine/module/certcheck"
+	"code.yt-security.com/public/scanengine/module/cmdi"
+	"code.yt-security.com/public/scanengine/module/company"
+	"code.yt-security.com/public/scanengine/module/cors"
+	"code.yt-security.com/public/scanengine/module/credential"
+	"code.yt-security.com/public/scanengine/module/dirscan"
+	"code.yt-security.com/public/scanengine/module/dnsall"
+	"code.yt-security.com/public/scanengine/module/dnsaxfr"
+	"code.yt-security.com/public/scanengine/module/emailcollect"
+	"code.yt-security.com/public/scanengine/module/favicon"
+	"code.yt-security.com/public/scanengine/module/fingerprint"
+	"code.yt-security.com/public/scanengine/module/fpenhance"
+	"code.yt-security.com/public/scanengine/module/graphql"
+	"code.yt-security.com/public/scanengine/module/hpp"
+	"code.yt-security.com/public/scanengine/module/icmp"
+	"code.yt-security.com/public/scanengine/module/idor"
+	"code.yt-security.com/public/scanengine/module/infoleak"
+	"code.yt-security.com/public/scanengine/module/injection"
+	"code.yt-security.com/public/scanengine/module/ipattr"
+	"code.yt-security.com/public/scanengine/module/jsanalyze"
+	"code.yt-security.com/public/scanengine/module/jwtsec"
+	"code.yt-security.com/public/scanengine/module/lfi"
+	"code.yt-security.com/public/scanengine/module/nettopo"
+	"code.yt-security.com/public/scanengine/module/nosqli"
+	"code.yt-security.com/public/scanengine/module/openredirect"
+	"code.yt-security.com/public/scanengine/module/portscan"
+	"code.yt-security.com/public/scanengine/module/realip"
+	"code.yt-security.com/public/scanengine/module/screenshot"
+	"code.yt-security.com/public/scanengine/module/secheaders"
+	"code.yt-security.com/public/scanengine/module/serviceprobe"
+	"code.yt-security.com/public/scanengine/module/sqli"
+	"code.yt-security.com/public/scanengine/module/ssrf"
+	"code.yt-security.com/public/scanengine/module/ssti"
+	"code.yt-security.com/public/scanengine/module/subdomain"
+	"code.yt-security.com/public/scanengine/module/subtakeover"
+	"code.yt-security.com/public/scanengine/module/synscan"
+	"code.yt-security.com/public/scanengine/module/techdetect"
+	"code.yt-security.com/public/scanengine/module/udpscan"
+	"code.yt-security.com/public/scanengine/module/unauth"
+	"code.yt-security.com/public/scanengine/module/wafdetect"
+	"code.yt-security.com/public/scanengine/module/weakpass"
+	"code.yt-security.com/public/scanengine/module/webcrawl"
+	"code.yt-security.com/public/scanengine/module/webmisc"
+	"code.yt-security.com/public/scanengine/module/wssec"
+	"code.yt-security.com/public/scanengine/module/xss"
+	"code.yt-security.com/public/scanengine/module/xxe"
+	"code.yt-security.com/public/scanengine/payload"
+	"code.yt-security.com/public/scanengine/rulestore"
 
-// PLACEHOLDER_FACTORY_BODY
+	"vulnscan-backend/knowledge/nuclei"
+)
 
 var registerModulesOnce sync.Once
 
@@ -65,11 +77,10 @@ type ModuleFactory struct {
 	db     *gorm.DB
 	rs     *rulestore.Store
 	ds     *dict.Store
-	loader *payload.Loader
+	loader payload.Provider
 	reg    *KnowledgeRegistry
 }
 
-// NewModuleFactory 优先使用 DefaultKnowledgeRegistry，否则临时创建（测试用）。
 func NewModuleFactory(db *gorm.DB) *ModuleFactory {
 	ensureModulesRegistered()
 	if reg := DefaultKnowledgeRegistry(); reg != nil {
@@ -82,16 +93,21 @@ func NewModuleFactory(db *gorm.DB) *ModuleFactory {
 
 func (f *ModuleFactory) registerAll() {
 	RegisterModule("icmp_ping", func(_ *ModuleDeps) core.ScanModule { return icmp.New() })
-	RegisterModule("port_scan", func(_ *ModuleDeps) core.ScanModule { return portscan.New() })
+	RegisterModule("port_scan", func(_ *ModuleDeps) core.ScanModule {
+		if core.CanRawSYNScan() {
+			return synscan.New()
+		}
+		return portscan.New()
+	})
 	RegisterModule("syn_scan", func(_ *ModuleDeps) core.ScanModule { return synscan.New() })
 	RegisterModule("udp_scan", func(_ *ModuleDeps) core.ScanModule { return udpscan.New() })
-	RegisterModule("service_probe", func(d *ModuleDeps) core.ScanModule { return serviceprobe.NewWithDB(d.Factory.db) })
+	RegisterModule("service_probe", func(_ *ModuleDeps) core.ScanModule { return serviceprobe.New() })
 	RegisterModule("subdomain_brute", func(d *ModuleDeps) core.ScanModule { return subdomain.New(d.Factory.ds) })
 	RegisterModule("web_crawl", func(_ *ModuleDeps) core.ScanModule { return webcrawl.New() })
 	RegisterModule("js_analyze", func(d *ModuleDeps) core.ScanModule { return jsanalyze.New(d.Factory.rs) })
 	RegisterModule("waf_detect", func(d *ModuleDeps) core.ScanModule { return wafdetect.New(d.Factory.rs) })
 	RegisterModule("tech_detect", func(d *ModuleDeps) core.ScanModule { return techdetect.New(d.Factory.rs) })
-	RegisterModule("web_fingerprint", func(d *ModuleDeps) core.ScanModule { return fingerprint.NewWithDB(d.Factory.db) })
+	RegisterModule("web_fingerprint", func(_ *ModuleDeps) core.ScanModule { return fingerprint.New() })
 	RegisterModule("dns_all", func(_ *ModuleDeps) core.ScanModule { return dnsall.New() })
 	RegisterModule("favicon", func(_ *ModuleDeps) core.ScanModule { return favicon.New() })
 	RegisterModule("cert_check", func(_ *ModuleDeps) core.ScanModule { return certcheck.New() })
@@ -125,6 +141,21 @@ func (f *ModuleFactory) registerAll() {
 	})
 	RegisterModule("advanced_vuln", func(d *ModuleDeps) core.ScanModule { return advancedvuln.New(d.Factory.loader) })
 	RegisterModule("unauth", func(_ *ModuleDeps) core.ScanModule { return unauth.New() })
+	RegisterModule("cors", func(_ *ModuleDeps) core.ScanModule { return cors.New() })
+	RegisterModule("open_redirect", func(_ *ModuleDeps) core.ScanModule { return openredirect.New() })
+	RegisterModule("hpp", func(_ *ModuleDeps) core.ScanModule { return hpp.New() })
+	RegisterModule("sub_takeover", func(_ *ModuleDeps) core.ScanModule { return subtakeover.New() })
+	RegisterModule("graphql", func(_ *ModuleDeps) core.ScanModule { return graphql.New() })
+	RegisterModule("ws_sec", func(_ *ModuleDeps) core.ScanModule { return wssec.New() })
+	RegisterModule("idor", func(_ *ModuleDeps) core.ScanModule { return idor.New() })
+	RegisterModule("sec_headers", func(_ *ModuleDeps) core.ScanModule { return secheaders.New() })
+	RegisterModule("dns_axfr", func(_ *ModuleDeps) core.ScanModule { return dnsaxfr.New() })
+
+	RegisterModule("injection", func(d *ModuleDeps) core.ScanModule { return injection.New(d.Factory.loader) })
+	RegisterModule("api_security", func(_ *ModuleDeps) core.ScanModule { return apisecurity.New() })
+	RegisterModule("credential", func(d *ModuleDeps) core.ScanModule { return credential.New(d.Factory.ds) })
+	RegisterModule("web_misc", func(_ *ModuleDeps) core.ScanModule { return webmisc.New() })
+
 	registerBundleModules()
 }
 

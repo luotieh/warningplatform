@@ -3,8 +3,8 @@ package core
 import (
 	coreContract "vulnscan-backend/incident/core/core-contract"
 
-	"code.yt-security.com/public/core/v2/web"
-	iamsdk "code.yt-security.com/public/sdk"
+	iamsdk "code.yt-security.com/public/access"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 	"vulnscan-backend/pkg/definition"
 )
@@ -26,13 +26,13 @@ func (h *HandlerCore) List(c *gin.Context) {
 	if !ok {
 		return
 	}
-	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
 	items, count, err := h.svc.ListIncidents(c.Request.Context(), req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).List(count, items).Send()
+	web.Succeed(c).List(count, items).Send()
 }
 
 func (h *HandlerCore) Create(c *gin.Context) {
@@ -45,7 +45,7 @@ func (h *HandlerCore) Create(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerCore) Detail(c *gin.Context) {
@@ -58,7 +58,7 @@ func (h *HandlerCore) Detail(c *gin.Context) {
 		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.OK(c).Data(item).Send()
+	web.Succeed(c).Data(item).Send()
 }
 
 func (h *HandlerCore) Update(c *gin.Context) {
@@ -74,7 +74,7 @@ func (h *HandlerCore) Update(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerCore) Delete(c *gin.Context) {
@@ -86,7 +86,7 @@ func (h *HandlerCore) Delete(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerCore) DashboardStats(c *gin.Context) {
@@ -95,7 +95,7 @@ func (h *HandlerCore) DashboardStats(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(stats).Send()
+	web.Succeed(c).Data(stats).Send()
 }
 
 func (h *HandlerCore) ChartByType(c *gin.Context) {
@@ -104,7 +104,7 @@ func (h *HandlerCore) ChartByType(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(items).Send()
+	web.Succeed(c).Data(items).Send()
 }
 
 func (h *HandlerCore) ChartByLevel(c *gin.Context) {
@@ -113,7 +113,7 @@ func (h *HandlerCore) ChartByLevel(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(items).Send()
+	web.Succeed(c).Data(items).Send()
 }
 
 func (h *HandlerCore) ChartByTrend(c *gin.Context) {
@@ -128,7 +128,7 @@ func (h *HandlerCore) ChartByTrend(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(items).Send()
+	web.Succeed(c).Data(items).Send()
 }
 
 func (h *HandlerCore) OplogList(c *gin.Context) {
@@ -153,7 +153,7 @@ func (h *HandlerCore) OplogList(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(items).Send()
+	web.Succeed(c).Data(items).Send()
 }
 
 func (h *HandlerCore) ReceiveOplogCallback(c *gin.Context) {
@@ -165,5 +165,5 @@ func (h *HandlerCore) ReceiveOplogCallback(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }

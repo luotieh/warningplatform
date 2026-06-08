@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"strings"
 
-	"code.yt-security.com/public/core/v2/web"
-	"code.yt-security.com/public/sdk/middleware"
+	"code.yt-security.com/public/access/middleware"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 )
 

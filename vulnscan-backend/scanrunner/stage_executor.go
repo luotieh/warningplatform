@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"vulnscan-backend/scan/core"
+	"code.yt-security.com/public/scanengine/core"
 	"vulnscan-backend/scan/orchestrate"
 )
 
@@ -17,6 +17,7 @@ type moduleResult struct {
 	targets  []*core.Target
 	err      error
 	duration time.Duration
+	streamed bool
 }
 
 type StageCallbacks struct {
@@ -221,7 +222,19 @@ func executeSingleWithOpts(
 	var result *core.ModuleResult
 	var err error
 
-	if opts.Circuit != nil {
+	streamMod, isStreaming := mod.(core.StreamingModule)
+
+	if isStreaming {
+		var streamingCallback core.FindingCallback
+		if cb.OnModuleResult != nil {
+			streamingCallback = func(findings []*core.Finding, newTargets []*core.Target) {
+				if len(findings) > 0 {
+					cb.OnModuleResult(findings, stageName, mod.ID())
+				}
+			}
+		}
+		result, err = streamMod.RunStreaming(modCtx, targets, ModuleConfigFor(mod.ID(), config), streamingCallback)
+	} else if opts.Circuit != nil {
 		result, err = orchestrate.RunWithRetry(modCtx, mod, targets, ModuleConfigFor(mod.ID(), config), orchestrate.DefaultRetryConfig)
 	} else {
 		result, err = mod.Run(modCtx, targets, ModuleConfigFor(mod.ID(), config))
@@ -292,7 +305,7 @@ func executeSingleWithOpts(
 	if cb.OnLog != nil {
 		cb.OnLog("info", fmt.Sprintf("模块 [%s] 完成，发现 %d 条结果 (耗时 %s)", mod.ID(), len(modFindings), dur.Round(time.Millisecond)), stageName, mod.ID())
 	}
-	if cb.OnModuleResult != nil {
+	if cb.OnModuleResult != nil && !isStreaming {
 		cb.OnModuleResult(modFindings, stageName, mod.ID())
 	}
 
@@ -404,7 +417,19 @@ func executeConcurrentWithOpts(
 			var res *core.ModuleResult
 			var err error
 			modCfg := ModuleConfigFor(m.ID(), config)
-			if opts.Circuit != nil {
+
+			streamMod, isStreamable := m.(core.StreamingModule)
+			if isStreamable {
+				var streamCB core.FindingCallback
+				if cb.OnModuleResult != nil {
+					streamCB = func(findings []*core.Finding, newTargets []*core.Target) {
+						if len(findings) > 0 {
+							cb.OnModuleResult(findings, stage.name, m.ID())
+						}
+					}
+				}
+				res, err = streamMod.RunStreaming(modCtx, targets, modCfg, streamCB)
+			} else if opts.Circuit != nil {
 				res, err = orchestrate.RunWithRetry(modCtx, m, targets, modCfg, orchestrate.DefaultRetryConfig)
 			} else {
 				res, err = m.Run(modCtx, targets, modCfg)
@@ -421,6 +446,7 @@ func executeConcurrentWithOpts(
 				moduleID: m.ID(),
 				err:      err,
 				duration: dur,
+				streamed: isStreamable,
 			}
 
 			if err != nil {
@@ -515,7 +541,7 @@ func collectResults(
 			allFindings = append(allFindings, mr.findings...)
 			allTargets = append(allTargets, mr.targets...)
 
-			if cb.OnModuleResult != nil {
+			if cb.OnModuleResult != nil && !mr.streamed {
 				cb.OnModuleResult(mr.findings, stage.name, mr.moduleID)
 			}
 

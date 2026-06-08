@@ -3,8 +3,8 @@ package schedule
 import (
 	"vulnscan-backend/model"
 
-	"code.yt-security.com/public/core/v2/db"
-	"code.yt-security.com/public/core/v2/generate/qulid"
+	"code.yt-security.com/public/core/db"
+	"code.yt-security.com/public/core/generate/ulid"
 	"gorm.io/gorm"
 )
 
@@ -59,7 +59,7 @@ func (s *ServiceSchedule) GetByID(id string) (*model.ScanSchedule, error) {
 }
 
 func (s *ServiceSchedule) Create(item *model.ScanSchedule) error {
-	item.ID = qulid.GenerateID()
+	item.ID = ulid.GenerateID()
 	item.Status = model.ScheduleStatusIdle
 
 	next := calcNextRun(*item)

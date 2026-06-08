@@ -1,6 +1,6 @@
 package asset
 
-import "code.yt-security.com/public/sdk/permission"
+import "code.yt-security.com/public/access/permission"
 
 // assetFieldMapping aligns IAM data-scope columns with local asset tables.
 var assetFieldMapping = permission.FieldMapping{

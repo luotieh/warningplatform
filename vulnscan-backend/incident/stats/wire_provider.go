@@ -3,7 +3,7 @@ package stats
 import (
 	"vulnscan-backend/sitemonitor"
 
-	"code.yt-security.com/public/core/v2/db"
+	"code.yt-security.com/public/core/db"
 )
 
 // ProvideServiceStats 注入站点监测对象存储，用于导出报告时嵌入截图等证据。

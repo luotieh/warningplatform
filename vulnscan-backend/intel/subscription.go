@@ -8,9 +8,9 @@ import (
 
 	"vulnscan-backend/model"
 
-	"code.yt-security.com/public/core/v2/generate/qulid"
-	"code.yt-security.com/public/core/v2/web"
-	"code.yt-security.com/public/sdk/middleware"
+	"code.yt-security.com/public/access/middleware"
+	"code.yt-security.com/public/core/generate/ulid"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -47,7 +47,7 @@ func (s *SubscriptionService) MatchNewCVEs(entries []CVEEntry) {
 
 		for _, cve := range matched {
 			n := model.Notification{
-				ID:       qulid.GenerateID(),
+				ID:       ulid.GenerateID(),
 				UserID:   sub.UserID,
 				Type:     model.NotifyTypeIntelMatch,
 				Title:    fmt.Sprintf("[情报订阅] %s: %s", sub.Name, cve.ID),
@@ -163,7 +163,7 @@ func (h *Handler) ListSubscriptions(c *gin.Context) {
 	}
 	tx.Order("created_at DESC").Find(&items)
 
-	web.OK(c).Data(items).Send()
+	web.Succeed(c).Data(items).Send()
 }
 
 func (h *Handler) CreateSubscription(c *gin.Context) {
@@ -179,7 +179,7 @@ func (h *Handler) CreateSubscription(c *gin.Context) {
 	}
 
 	sub := model.IntelSubscription{
-		ID:          qulid.GenerateID(),
+		ID:          ulid.GenerateID(),
 		UserID:      userID,
 		Name:        req.Name,
 		Products:    model.StringArray(req.Products),
@@ -194,7 +194,7 @@ func (h *Handler) CreateSubscription(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(sub).Send()
+	web.Succeed(c).Data(sub).Send()
 }
 
 func (h *Handler) UpdateSubscription(c *gin.Context) {
@@ -239,13 +239,13 @@ func (h *Handler) UpdateSubscription(c *gin.Context) {
 	}
 
 	h.db.Where("id = ?", id).First(&sub)
-	web.OK(c).Data(sub).Send()
+	web.Succeed(c).Data(sub).Send()
 }
 
 func (h *Handler) DeleteSubscription(c *gin.Context) {
 	id := c.Param("id")
 	h.db.Where("id = ?", id).Delete(&model.IntelSubscription{})
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *Handler) TestSubscription(c *gin.Context) {
@@ -268,7 +268,7 @@ func (h *Handler) TestSubscription(c *gin.Context) {
 		matched = matched[:20]
 	}
 
-	web.OK(c).Data(gin.H{
+	web.Succeed(c).Data(gin.H{
 		"subscription": sub,
 		"matched":      len(matched),
 		"preview":      matched,

@@ -6,20 +6,23 @@ import (
 
 	"gorm.io/gorm"
 
-	"vulnscan-backend/dict"
+	"code.yt-security.com/public/scanengine/dict"
+	"code.yt-security.com/public/scanengine/payload"
+	"code.yt-security.com/public/scanengine/rulestore"
+
 	"vulnscan-backend/knowledge/nuclei"
-	"vulnscan-backend/pkg/payload"
-	"vulnscan-backend/scan/rulestore"
+	rawpayload "vulnscan-backend/pkg/payload"
 )
 
 // KnowledgeRegistry 扫描引擎与知识库共享的单例：payload、规则、字典、PoC 缓存。
 type KnowledgeRegistry struct {
-	mu     sync.RWMutex
-	db     *gorm.DB
-	Loader *payload.Loader
-	Rules  *rulestore.Store
-	Dict   *dict.Store
-	Poc    *nuclei.PocStore
+	mu        sync.RWMutex
+	db        *gorm.DB
+	RawLoader *rawpayload.Loader
+	Loader    payload.Provider
+	Rules     *rulestore.Store
+	Dict      *dict.Store
+	Poc       *nuclei.PocStore
 }
 
 var (
@@ -31,30 +34,41 @@ var (
 func NewKnowledgeRegistry(db *gorm.DB) *KnowledgeRegistry {
 	var rs *rulestore.Store
 	if db != nil {
-		rs = rulestore.New(db)
+		rs = rulestore.New(NewRuleStoreDataSourceAdapter(db))
 	} else {
-		rs = rulestore.NewWithoutDB()
+		rs = rulestore.New(nil)
 	}
-	ds := dict.NewStore(db)
-	pl := payload.NewLoader(db)
-	if err := pl.LoadAll(); err != nil {
+
+	var ds *dict.Store
+	if db != nil {
+		ds = dict.NewStore(NewDictDataSourceAdapter(db))
+	} else {
+		ds = dict.NewStore(nil)
+	}
+
+	rawLoader := rawpayload.NewLoader(db)
+	if err := rawLoader.LoadAll(); err != nil {
 		slog.Warn("[Knowledge] 数据文库 payload 加载失败", "error", err)
 	}
+	loader := NewPayloadAdapter(rawLoader)
+
 	var poc *nuclei.PocStore
 	if db != nil {
 		poc = nuclei.NewPocStore(db)
 	} else {
 		poc = nuclei.NewPocStoreNoDB()
 	}
+
 	reg := &KnowledgeRegistry{
-		db:     db,
-		Loader: pl,
-		Rules:  rs,
-		Dict:   ds,
-		Poc:    poc,
+		db:        db,
+		RawLoader: rawLoader,
+		Loader:    loader,
+		Rules:     rs,
+		Dict:      ds,
+		Poc:       poc,
 	}
 	ensureModulesRegistered()
-	logKnowledgeBootstrap(db, ds, rs, pl)
+	logKnowledgeBootstrap(db, ds, rs, rawLoader)
 	return reg
 }
 
@@ -88,7 +102,7 @@ func (r *KnowledgeRegistry) NewModuleFactory() *ModuleFactory {
 	}
 }
 
-// ReloadAll 数据文库 / PoC / 规则变更后热重载（字典条目每次 Get 查库，无需刷新）。
+// ReloadAll 数据文库 / PoC / 规则变更后热重载。
 func (r *KnowledgeRegistry) ReloadAll() error {
 	if r == nil {
 		return nil
@@ -96,14 +110,15 @@ func (r *KnowledgeRegistry) ReloadAll() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if err := r.Loader.Reload(); err != nil {
+	if err := r.RawLoader.Reload(); err != nil {
 		return err
 	}
+	r.Loader = NewPayloadAdapter(r.RawLoader)
 	r.Rules.Reload()
 	if r.Poc != nil {
 		r.Poc.Invalidate()
 	}
 	slog.Info("[Knowledge] 热重载完成（payload + scan_rule + poc_cache）")
-	logKnowledgeBootstrap(r.db, r.Dict, r.Rules, r.Loader)
+	logKnowledgeBootstrap(r.db, r.Dict, r.Rules, r.RawLoader)
 	return nil
 }

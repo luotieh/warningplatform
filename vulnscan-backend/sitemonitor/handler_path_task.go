@@ -4,7 +4,7 @@ import (
 	"vulnscan-backend/model"
 	"vulnscan-backend/sitemonitor/contract"
 
-	"code.yt-security.com/public/core/v2/web"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 )
 
@@ -18,7 +18,7 @@ func (h *HandlerMonitor) CreatePathTask(c *gin.Context) {
 		return
 	}
 	c.Set("_created_path_task_id", req.ID)
-	web.OK(c).Data(req).Send()
+	web.Succeed(c).Data(req).Send()
 }
 
 func (h *HandlerMonitor) UpdatePathTask(c *gin.Context) {
@@ -31,7 +31,7 @@ func (h *HandlerMonitor) UpdatePathTask(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerMonitor) DeletePathTask(c *gin.Context) {
@@ -39,7 +39,7 @@ func (h *HandlerMonitor) DeletePathTask(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerMonitor) GetPathTask(c *gin.Context) {
@@ -48,7 +48,7 @@ func (h *HandlerMonitor) GetPathTask(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(pt).Send()
+	web.Succeed(c).Data(pt).Send()
 }
 
 func (h *HandlerMonitor) ListPathTasks(c *gin.Context) {
@@ -61,7 +61,7 @@ func (h *HandlerMonitor) ListPathTasks(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).List(total, list).Send()
+	web.Succeed(c).List(total, list).Send()
 }
 
 func (h *HandlerMonitor) RunPathTask(c *gin.Context) {
@@ -75,7 +75,7 @@ func (h *HandlerMonitor) RunPathTask(c *gin.Context) {
 		web.Fail(c).Err(err).Data(outcome).Send()
 		return
 	}
-	web.OK(c).Data(outcome).Send()
+	web.Succeed(c).Data(outcome).Send()
 }
 
 func (h *HandlerMonitor) BatchDeletePathTasks(c *gin.Context) {
@@ -89,7 +89,7 @@ func (h *HandlerMonitor) BatchDeletePathTasks(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerMonitor) UpdatePathTaskSchedule(c *gin.Context) {
@@ -110,5 +110,5 @@ func (h *HandlerMonitor) UpdatePathTaskSchedule(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(gin.H{"path_task_id": id}).Send()
+	web.Succeed(c).Data(gin.H{"path_task_id": id}).Send()
 }

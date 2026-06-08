@@ -8,7 +8,7 @@ import (
 	fedSync "vulnscan-backend/federation/sync"
 	"vulnscan-backend/model"
 
-	"code.yt-security.com/public/core/v2/web"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 )
 

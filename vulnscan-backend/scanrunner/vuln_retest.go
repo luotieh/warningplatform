@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"code.yt-security.com/public/core/v2/generate/qulid"
+	"code.yt-security.com/public/core/generate/ulid"
 
 	"vulnscan-backend/model"
 
@@ -372,7 +372,7 @@ func stringParam(m model.JSONMap, key string) string {
 
 func writeVulnHistory(db *gorm.DB, vulnID, oldStatus, newStatus, comment, operator string) {
 	_ = db.Create(&model.VulnStatusHistory{
-		ID:        qulid.GenerateID(),
+		ID:        ulid.GenerateID(),
 		VulnID:    vulnID,
 		OldStatus: oldStatus,
 		NewStatus: newStatus,

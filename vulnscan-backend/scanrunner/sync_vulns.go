@@ -3,10 +3,11 @@ package scanrunner
 import (
 	"crypto/sha256"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
-	"code.yt-security.com/public/core/v2/generate/qulid"
+	"code.yt-security.com/public/core/generate/ulid"
 	"gorm.io/gorm"
 
 	"vulnscan-backend/model"
@@ -32,6 +33,13 @@ func SyncVulnerabilitiesFromTask(db *gorm.DB, task *model.ScanTask) (int, error)
 	if err := db.Where("task_id = ? AND category = ?", task.ID, model.FindingCategoryVuln).Find(&findings).Error; err != nil {
 		return 0, err
 	}
+
+	slog.Info("[SyncVuln] 查询漏洞类发现",
+		"task_id", task.ID,
+		"category", model.FindingCategoryVuln,
+		"found_count", len(findings),
+	)
+
 	if len(findings) == 0 {
 		return 0, nil
 	}
@@ -67,8 +75,18 @@ func SyncVulnerabilitiesFromTask(db *gorm.DB, task *model.ScanTask) (int, error)
 		}
 
 		if err == gorm.ErrRecordNotFound {
+			solution := ""
+			var cweIDs model.StringArray
+			if f.Data != nil {
+				if r, ok := f.Data["remediation"].(string); ok {
+					solution = r
+				}
+				if c, ok := f.Data["cwe_ids"].(string); ok && c != "" {
+					cweIDs = strings.Split(c, ",")
+				}
+			}
 			v := model.Vulnerability{
-				ID:          qulid.GenerateID(),
+				ID:          ulid.GenerateID(),
 				TaskID:      task.ID,
 				AssetID:     f.AssetID,
 				Target:      f.Target,
@@ -76,7 +94,9 @@ func SyncVulnerabilitiesFromTask(db *gorm.DB, task *model.ScanTask) (int, error)
 				Protocol:    f.Protocol,
 				Title:       f.Title,
 				Description: f.Description,
+				Solution:    solution,
 				Severity:    f.Severity,
+				CWEIDs:      cweIDs,
 				ModuleID:    f.ModuleID,
 				TemplateID:  tplID,
 				ProductID:   productID,
@@ -182,7 +202,7 @@ func EnsureVulnFromFinding(db *gorm.DB, findingID string) (string, error) {
 	}
 	productID := resolveVulnProductID(db, f, tplID, map[string]string{})
 	v := model.Vulnerability{
-		ID:          qulid.GenerateID(),
+		ID:          ulid.GenerateID(),
 		TaskID:      f.TaskID,
 		AssetID:     f.AssetID,
 		Target:      f.Target,

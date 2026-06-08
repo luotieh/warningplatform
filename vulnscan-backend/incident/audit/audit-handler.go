@@ -5,7 +5,7 @@ import (
 
 	auditContract "vulnscan-backend/incident/audit/audit-contract"
 
-	"code.yt-security.com/public/core/v2/web"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 )
 
@@ -27,7 +27,7 @@ func (h *HandlerAudit) AIPreAudit(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(result).Send()
+	web.Succeed(c).Data(result).Send()
 }
 
 func (h *HandlerAudit) ManualAudit(c *gin.Context) {
@@ -48,7 +48,7 @@ func (h *HandlerAudit) ManualAudit(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func bindManualAuditBody(c *gin.Context) (auditContract.ManualAuditBody, bool) {
@@ -85,5 +85,5 @@ func (h *HandlerAudit) AIClassify(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(result).Send()
+	web.Succeed(c).Data(result).Send()
 }

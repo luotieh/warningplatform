@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"code.yt-security.com/public/core/v2/generate/qulid"
+	"code.yt-security.com/public/core/generate/ulid"
 	"gopkg.in/yaml.v3"
 	"gorm.io/gorm"
 
@@ -440,7 +440,7 @@ func (s *PocStore) ImportFromDir(dir string) (imported int, skipped int, errors 
 
 		if result.Error == gorm.ErrRecordNotFound {
 			record := model.PocTemplate{
-				ID:            qulid.GenerateID(),
+				ID:            ulid.GenerateID(),
 				PocID:         tmpl.ID,
 				Name:          tmpl.Info.Name,
 				Author:        tmpl.Info.Author,
@@ -523,7 +523,7 @@ func (s *PocStore) ImportFromYAML(yamlContent string) (*model.PocTemplate, error
 
 	if result.Error == gorm.ErrRecordNotFound {
 		record := &model.PocTemplate{
-			ID:            qulid.GenerateID(),
+			ID:            ulid.GenerateID(),
 			PocID:         tmpl.ID,
 			Name:          tmpl.Info.Name,
 			Author:        tmpl.Info.Author,

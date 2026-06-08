@@ -9,8 +9,8 @@ import (
 	coreContract "vulnscan-backend/incident/core/core-contract"
 	remediationContract "vulnscan-backend/incident/remediation/remediation-contract"
 
-	"code.yt-security.com/public/core/v2/db"
-	"code.yt-security.com/public/core/v2/generate/qulid"
+	"code.yt-security.com/public/core/db"
+	"code.yt-security.com/public/core/generate/ulid"
 	"gorm.io/gorm"
 )
 
@@ -224,7 +224,7 @@ func (s *serviceRemediation) BatchImport(ctx context.Context, records []remediat
 			incidentNo := generateIncidentNo()
 			incident := model.SecurityIncident{
 				FullModel: model.FullModel{
-					Id:        qulid.GenerateID(),
+					Id:        ulid.GenerateID(),
 					CreatedAt: now,
 					CreatedBy: createdBy,
 					UpdatedAt: now,

@@ -13,8 +13,8 @@ import (
 	"vulnscan-backend/circular/verify"
 	"vulnscan-backend/model"
 
-	"code.yt-security.com/public/core/v2/db"
-	"code.yt-security.com/public/sdk/authorize"
+	"code.yt-security.com/public/access/authorize"
+	"code.yt-security.com/public/core/db"
 	"github.com/gin-gonic/gin"
 )
 
@@ -60,7 +60,7 @@ func (m *Circular) TransferService() transferContract.ServiceTransfer {
 func (m *Circular) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
 	return authorize.RegisterRoutes(e.Group("/circular"), []authorize.Route{
 		{
-			Name: "通报录入", Path: "inputs", Enabled: true,
+			Name: "通报列表", Path: "inputs", Enabled: true,
 			Children: []authorize.Route{
 				{Name: "录入列表", Method: "GET", Handler: m.inputHandler.List, Enabled: true},
 				{Name: "录入创建", Method: "POST", Handler: m.inputHandler.Add, Enabled: true},

@@ -3,8 +3,8 @@ package scanrunner
 import (
 	"strings"
 
+	"code.yt-security.com/public/scanengine/core"
 	"vulnscan-backend/model"
-	"vulnscan-backend/scan/core"
 )
 
 // ModuleConfigFor 见 scan/core/config_merge.go

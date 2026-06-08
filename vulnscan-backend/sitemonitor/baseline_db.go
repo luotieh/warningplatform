@@ -9,7 +9,7 @@ import (
 
 	"vulnscan-backend/model"
 
-	"code.yt-security.com/public/core/v2/generate/qulid"
+	"code.yt-security.com/public/core/generate/ulid"
 	"gorm.io/gorm"
 )
 
@@ -91,7 +91,7 @@ func SaveBaselineFromUpdate(ctx context.Context, tx *gorm.DB, executionID, url, 
 		SuspicionScore:        bu.SuspicionScore,
 		SuspicionDetail:       bu.SuspicionDetail,
 	}
-	baseline.ID = qulid.GenerateID()
+	baseline.ID = ulid.GenerateID()
 	return tx.Create(&baseline).Error
 }
 

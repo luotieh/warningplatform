@@ -6,8 +6,8 @@ import (
 	"vulnscan-backend/model"
 	tc "vulnscan-backend/tagging/tagging-contract"
 
-	"code.yt-security.com/public/core/v2/web"
-	iamsdk "code.yt-security.com/public/sdk"
+	iamsdk "code.yt-security.com/public/access"
+	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 	"vulnscan-backend/pkg/definition"
 )
@@ -25,13 +25,13 @@ func (h *HandlerTag) List(c *gin.Context) {
 	if !ok {
 		return
 	}
-	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
 	items, count, err := h.svc.List(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).List(count, items).Send()
+	web.Succeed(c).List(count, items).Send()
 }
 
 func (h *HandlerTag) GetByID(c *gin.Context) {
@@ -41,7 +41,7 @@ func (h *HandlerTag) GetByID(c *gin.Context) {
 		web.Err(c, web.NotFound).Send()
 		return
 	}
-	web.OK(c).Data(item).Send()
+	web.Succeed(c).Data(item).Send()
 }
 
 func (h *HandlerTag) Create(c *gin.Context) {
@@ -53,7 +53,7 @@ func (h *HandlerTag) Create(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(tag).Send()
+	web.Succeed(c).Data(tag).Send()
 }
 
 func (h *HandlerTag) Update(c *gin.Context) {
@@ -66,7 +66,7 @@ func (h *HandlerTag) Update(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerTag) Delete(c *gin.Context) {
@@ -75,7 +75,7 @@ func (h *HandlerTag) Delete(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 func (h *HandlerTag) GetAssetTags(c *gin.Context) {
@@ -84,7 +84,7 @@ func (h *HandlerTag) GetAssetTags(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(tags).Send()
+	web.Succeed(c).Data(tags).Send()
 }
 
 func (h *HandlerTag) SetAssetTags(c *gin.Context) {
@@ -96,7 +96,7 @@ func (h *HandlerTag) SetAssetTags(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Send()
+	web.Succeed(c).Send()
 }
 
 // ── ChangeLog Handler ──
@@ -114,13 +114,13 @@ func (h *HandlerChangeLog) List(c *gin.Context) {
 	if !ok {
 		return
 	}
-	scope := iamsdk.DataFilterScope(c, definition.VulnscanFieldMapping)
+	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
 	items, count, err := h.svc.List(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).List(count, items).Send()
+	web.Succeed(c).List(count, items).Send()
 }
 
 func (h *HandlerChangeLog) GetByAssetID(c *gin.Context) {
@@ -129,5 +129,5 @@ func (h *HandlerChangeLog) GetByAssetID(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.OK(c).Data(items).Send()
+	web.Succeed(c).Data(items).Send()
 }

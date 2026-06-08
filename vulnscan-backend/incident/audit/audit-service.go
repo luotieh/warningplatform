@@ -12,19 +12,19 @@ import (
 	transferContract "vulnscan-backend/circular/transfer/transfer-contract"
 	auditContract "vulnscan-backend/incident/audit/audit-contract"
 
-	"code.yt-security.com/public/core/v2/db"
-	"code.yt-security.com/public/sdk/ai"
+	"code.yt-security.com/public/access/ai"
+	"code.yt-security.com/public/core/db"
 	"gorm.io/gorm"
 )
 
 type serviceAudit struct {
 	db          *db.DB
 	transferSvc transferContract.ServiceTransfer
-	chatSvc     *ai.ChatService
+	chatSvc     ai.Service
 	aiModel     string
 }
 
-func NewServiceAudit(database *db.DB, transferSvc transferContract.ServiceTransfer, chatSvc *ai.ChatService) *serviceAudit {
+func NewServiceAudit(database *db.DB, transferSvc transferContract.ServiceTransfer, chatSvc ai.Service) *serviceAudit {
 	return &serviceAudit{db: database, transferSvc: transferSvc, chatSvc: chatSvc, aiModel: ""}
 }
 
@@ -277,7 +277,7 @@ func (s *serviceAudit) callLLMAnalysis(ctx context.Context, incident *model.Secu
 		}
 	}
 
-	resp, err := s.chatSvc.ChatCompletions(ctx, "", &ai.ChatCompletionsRequest{
+	resp, err := s.chatSvc.ChatCompletions(ctx, "", &ai.CompletionsRequest{
 		Model: modelName,
 		Messages: []ai.ChatMessage{
 			{Role: "system", Content: systemPrompt},

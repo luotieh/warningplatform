@@ -3,8 +3,8 @@ package fingerprint
 import (
 	"vulnscan-backend/model"
 
-	"code.yt-security.com/public/core/v2/db"
-	"code.yt-security.com/public/core/v2/generate/qulid"
+	"code.yt-security.com/public/core/db"
+	"code.yt-security.com/public/core/generate/ulid"
 	"gorm.io/gorm"
 )
 
@@ -121,7 +121,7 @@ func (s *ServiceWebFingerprint) Create(req WebFingerprintCreateReq, createdBy st
 		MetaRules:   req.MetaRules,
 		VersionExpr: req.VersionExpr,
 	}
-	item.ID = qulid.GenerateID()
+	item.ID = ulid.GenerateID()
 	item.CreatedBy = createdBy
 
 	if item.Priority == 0 {
