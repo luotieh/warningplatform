@@ -21,7 +21,7 @@
 [iam]
   base_url = "http://iam.dev.yt-security.com:32000"
   client_id = "01KSM36602167DKAAAJE6RM2AD"
-  client_secret = "sk-711067227963316dcd6ab15d89763cfd"
+  client_secret = "sk-de22bb8b2acbb2b1d9a0e1e40cd67fcd"
   path_prefix = "/api"
 
 [sso]
