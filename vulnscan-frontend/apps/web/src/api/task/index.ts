@@ -337,3 +337,46 @@ export function subscribeScanEvents(
     close: () => es.close(),
   };
 }
+
+export interface AIEnrichResult {
+  description: string;
+  cause: string;
+  remediation: string;
+}
+
+export async function aiEnrichFinding(
+  taskId: string,
+  findingId: string,
+): Promise<AIEnrichResult> {
+  return requestClient.post(`/task/${taskId}/findings/${findingId}/ai-enrich`);
+}
+
+export interface VulnKnowledgeItem {
+  id: string;
+  vuln_key: string;
+  vuln_type: string;
+  title: string;
+  cve_id: string;
+  description: string;
+  cause: string;
+  remediation: string;
+  hit_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function getVulnKnowledgeList(params?: Record<string, any>) {
+  const res = await baseRequestClient.get('/task/vuln-knowledge', { params });
+  return normalizePagedResponse<VulnKnowledgeItem>(res);
+}
+
+export async function updateVulnKnowledge(
+  id: string,
+  data: { description?: string; cause?: string; remediation?: string },
+) {
+  return requestClient.put(`/task/vuln-knowledge/${id}`, data);
+}
+
+export async function deleteVulnKnowledge(id: string) {
+  return requestClient.delete(`/task/vuln-knowledge/${id}`);
+}

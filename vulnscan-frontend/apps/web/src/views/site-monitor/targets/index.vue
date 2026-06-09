@@ -461,6 +461,26 @@ async function handleRunTarget(row: MonitorTarget) {
 
 const importVisible = ref(false);
 const importUploading = ref(false);
+const templateDownloading = ref(false);
+
+async function handleDownloadTemplate() {
+  templateDownloading.value = true;
+  try {
+    const blob = await downloadImportTemplate();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'import_template.xlsx';
+    document.body.append(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    handleError(e, '下载模板失败');
+  } finally {
+    templateDownloading.value = false;
+  }
+}
 
 async function handleImportUpload(options: { file: UploadFileInfo }) {
   const raw = options.file.file;
@@ -862,10 +882,20 @@ onMounted(onSearch);
     </NModal>
 
     <NModal v-model:show="importVisible" preset="card" title="批量导入" style="width: 480px">
-      <p class="text-muted-foreground mb-3 text-sm">
-        <a :href="downloadImportTemplate()" target="_blank">下载模板</a>
-        后按列填写；支持域名或 IP（IP 目标需填写请求 Host）。
-      </p>
+      <div class="mb-3 text-sm text-gray-500">
+        <p class="mb-1">
+          <NButton
+            text
+            type="primary"
+            :loading="templateDownloading"
+            @click="handleDownloadTemplate"
+          >
+            下载模板
+          </NButton>
+          后按列填写；最简只需填写"监测URL"列即可，系统自动识别域名/IP并启用全部检测维度。
+        </p>
+        <p class="text-xs text-gray-400">支持域名或 IP 目标（IP 目标需填写请求 Host）。</p>
+      </div>
       <NUpload :custom-request="handleImportUpload as any" :show-file-list="false">
         <NUploadDragger>
           <div>点击或拖拽 Excel 到此处上传</div>

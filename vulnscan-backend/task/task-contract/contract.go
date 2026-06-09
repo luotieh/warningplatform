@@ -1,10 +1,18 @@
 package taskContract
 
 import (
+	"context"
 	"vulnscan-backend/model"
 
+	"code.yt-security.com/public/access/ai"
 	"gorm.io/gorm"
 )
+
+type AIEnrichResult struct {
+	Description string `json:"description"`
+	Cause       string `json:"cause"`
+	Remediation string `json:"remediation"`
+}
 
 type TaskQuery struct {
 	Page         int    `form:"page"`
@@ -84,4 +92,6 @@ type ServiceTask interface {
 	FindingSummary(taskID string) (*FindingSummary, error)
 	ListAssets(taskID string) ([]AssetSummary, error)
 	ListLogs(taskID string, limit int) ([]model.ScanLog, error)
+	AIEnrichFinding(ctx context.Context, findingID string, chatSvc ai.Service) (*AIEnrichResult, error)
+	DB() *gorm.DB
 }

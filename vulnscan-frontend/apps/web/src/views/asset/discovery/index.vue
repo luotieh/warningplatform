@@ -6,6 +6,7 @@ import { useRouter } from 'vue-router';
 
 import {
   createDiscoveryProbe,
+  deleteDiscoveryProbe,
   getDiscoveryCandidates,
   getDiscoveryProbe,
   getDiscoveryProbeList,
@@ -26,6 +27,7 @@ import {
   NFormItem,
   NInput,
   NModal,
+  NPopconfirm,
   NSelect,
   NSpace,
   NTag,
@@ -71,7 +73,7 @@ const createForm = reactive({
   targets_text: '',
   ports_preset: 'top1000',
   ports_custom: '22,80,443,3389,8080',
-  timeout_ms: 800,
+  timeout_ms: '800',
 });
 
 /** 发现超时过短会导致大量主机被判为不存活，建议 ≥500ms */
@@ -206,7 +208,7 @@ const probeColumns: DataTableColumns<AssetDiscoveryProbe> = [
   {
     title: '操作',
     key: 'actions',
-    width: 200,
+    width: 240,
     fixed: 'right',
     render: (row) =>
       h(NSpace, { size: 4 }, () => [
@@ -231,6 +233,19 @@ const probeColumns: DataTableColumns<AssetDiscoveryProbe> = [
               () => '扫描详情',
             )
           : null,
+        h(
+          NPopconfirm,
+          { onPositiveClick: () => handleDeleteProbe(row) },
+          {
+            trigger: () =>
+              h(
+                NButton,
+                { size: 'small', quaternary: true, type: 'error' },
+                () => '删除',
+              ),
+            default: () => '将删除该探测任务及全部候选资产，不可恢复',
+          },
+        ),
       ]),
   },
 ];
@@ -436,6 +451,16 @@ function closeCandidateModal() {
   stopPoll();
 }
 
+async function handleDeleteProbe(probe: AssetDiscoveryProbe) {
+  try {
+    await deleteDiscoveryProbe(probe.id);
+    message.success('已删除');
+    await fetchProbes();
+  } catch (e: any) {
+    message.error(e?.message ?? '删除失败');
+  }
+}
+
 async function handleCreate() {
   const text = createForm.targets_text.trim();
   if (!text) {
@@ -570,7 +595,7 @@ onUnmounted(() => {
         <NButton @click="fetchProbes">查询</NButton>
       </NSpace>
       <NText depth="3" class="block mb-3 text-sm">
-        在此创建与管理资产探测任务（与「漏洞扫描 → 任务列表」分离）。支持 IP、域名、CIDR 与自定义端口；完成后在「候选资产」中核验入库。历史漏扫中的资产探测任务会在刷新列表时自动同步到此页。
+        在此创建与管理资产探测任务（与「漏洞扫描 → 任务列表」分离）。支持 IP、域名、CIDR、IP 范围（如 10.0.0.1-10.0.0.254）与自定义端口；完成后在「候选资产」中核验入库。历史漏扫中的资产探测任务会在刷新列表时自动同步到此页。
       </NText>
       <NDataTable
         :columns="probeColumns"
@@ -592,7 +617,7 @@ onUnmounted(() => {
             v-model:value="createForm.targets_text"
             type="textarea"
             :rows="6"
-            placeholder="每行一个：IP、域名或 CIDR（如 192.168.1.0/24）"
+            placeholder="每行一个：IP、域名、CIDR 或 IP 范围&#10;示例：192.168.1.0/24&#10;      10.0.0.1-10.0.0.254&#10;      example.com"
           />
         </NFormItem>
         <NFormItem label="端口范围">

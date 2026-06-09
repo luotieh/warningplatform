@@ -1,6 +1,8 @@
 package task
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -9,7 +11,9 @@ import (
 	"vulnscan-backend/model"
 	taskContract "vulnscan-backend/task/task-contract"
 
+	"code.yt-security.com/public/access/ai"
 	"code.yt-security.com/public/core/db"
+	"code.yt-security.com/public/core/generate/ulid"
 	"gorm.io/gorm"
 )
 
@@ -24,6 +28,10 @@ func NewServiceTask(database *db.DB) *serviceTask {
 func (s *serviceTask) session() *gorm.DB {
 	session, _ := s.db.GetDBSession()
 	return session
+}
+
+func (s *serviceTask) DB() *gorm.DB {
+	return s.session()
 }
 
 func (s *serviceTask) List(query taskContract.TaskQuery, scopes ...func(*gorm.DB) *gorm.DB) ([]model.ScanTask, int64, error) {
@@ -468,6 +476,139 @@ func extractBaseHost(target string) string {
 		}
 	}
 	return t
+}
+
+func (s *serviceTask) AIEnrichFinding(ctx context.Context, findingID string, chatSvc ai.Service) (*taskContract.AIEnrichResult, error) {
+	if chatSvc == nil {
+		return nil, fmt.Errorf("AI 服务未配置")
+	}
+	var finding model.ScanFinding
+	if err := s.session().WithContext(ctx).Where("id = ?", findingID).First(&finding).Error; err != nil {
+		return nil, fmt.Errorf("漏洞发现不存在")
+	}
+
+	models, err := chatSvc.ListModels(ctx, "")
+	if err != nil || len(models.Data) == 0 {
+		return nil, fmt.Errorf("无可用 AI 模型")
+	}
+	modelName := models.Data[0].ID
+
+	cacheKey := vulnKnowledgeCacheKey(finding)
+	var cached model.VulnKnowledgeCache
+	if err := s.session().WithContext(ctx).Where("vuln_key = ?", cacheKey).First(&cached).Error; err == nil {
+		s.session().WithContext(ctx).Model(&cached).UpdateColumn("hit_count", cached.HitCount+1)
+		result := &taskContract.AIEnrichResult{
+			Description: cached.Description,
+			Cause:       cached.Cause,
+			Remediation: cached.Remediation,
+		}
+		s.applyEnrichToFinding(ctx, findingID, finding, result)
+		return result, nil
+	}
+
+	systemPrompt := `你是一位资深网络安全专家。根据提供的漏洞扫描发现信息，生成以下三项内容：
+1. 漏洞描述：简洁描述该漏洞是什么、存在于哪里
+2. 漏洞成因：分析该漏洞产生的技术原因
+3. 修复建议：给出具体可操作的修复方案
+
+请以 JSON 格式返回，字段为 description、cause、remediation，每个字段使用中文。`
+
+	findingInfo := fmt.Sprintf("漏洞标题: %s\n类型: %s\n严重程度: %s\n目标: %s\n端口: %d\n协议: %s",
+		finding.Title, finding.Type, finding.Severity, finding.Target, finding.Port, finding.Protocol)
+	if finding.Description != "" {
+		findingInfo += "\n原始描述: " + finding.Description
+	}
+	if finding.Evidence != "" {
+		findingInfo += "\n证据: " + finding.Evidence
+	}
+	if finding.Data != nil {
+		if cve, ok := finding.Data["cve_id"].(string); ok && cve != "" {
+			findingInfo += "\nCVE编号: " + cve
+		}
+		if rem, ok := finding.Data["remediation"].(string); ok && rem != "" {
+			findingInfo += "\n原始修复建议: " + rem
+		}
+	}
+
+	resp, err := chatSvc.ChatCompletions(ctx, "", &ai.CompletionsRequest{
+		Model: modelName,
+		Messages: []ai.ChatMessage{
+			{Role: "system", Content: systemPrompt},
+			{Role: "user", Content: findingInfo},
+		},
+		Temperature: 0.3,
+		MaxTokens:   2000,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("AI 调用失败: %w", err)
+	}
+	if len(resp.Choices) == 0 {
+		return nil, fmt.Errorf("AI 未返回内容")
+	}
+
+	content := strings.TrimSpace(resp.Choices[0].Message.Content)
+	content = strings.TrimPrefix(content, "```json")
+	content = strings.TrimPrefix(content, "```")
+	content = strings.TrimSuffix(content, "```")
+	content = strings.TrimSpace(content)
+
+	var result taskContract.AIEnrichResult
+	if err := json.Unmarshal([]byte(content), &result); err != nil {
+		result = taskContract.AIEnrichResult{Description: content}
+	}
+
+	cve := ""
+	if finding.Data != nil {
+		if v, ok := finding.Data["cve_id"].(string); ok {
+			cve = v
+		}
+	}
+	entry := model.VulnKnowledgeCache{
+		ID:          ulid.GenerateID(),
+		VulnKey:     cacheKey,
+		VulnType:    finding.Type,
+		Title:       finding.Title,
+		CveID:       cve,
+		Description: result.Description,
+		Cause:       result.Cause,
+		Remediation: result.Remediation,
+	}
+	_ = s.session().WithContext(ctx).Create(&entry).Error
+
+	s.applyEnrichToFinding(ctx, findingID, finding, &result)
+	return &result, nil
+}
+
+func vulnKnowledgeCacheKey(f model.ScanFinding) string {
+	if f.Data != nil {
+		if cve, ok := f.Data["cve_id"].(string); ok && cve != "" {
+			return "cve:" + strings.ToUpper(cve)
+		}
+	}
+	return fmt.Sprintf("%s:%s", f.Type, f.Title)
+}
+
+func (s *serviceTask) applyEnrichToFinding(ctx context.Context, findingID string, finding model.ScanFinding, result *taskContract.AIEnrichResult) {
+	updates := map[string]any{}
+	if result.Description != "" && finding.Description == "" {
+		updates["description"] = result.Description
+	}
+	if finding.Data == nil {
+		finding.Data = model.JSONMap{}
+	}
+	if result.Cause != "" {
+		finding.Data["vuln_cause"] = result.Cause
+		updates["data"] = finding.Data
+	}
+	if result.Remediation != "" {
+		if _, ok := finding.Data["remediation"]; !ok {
+			finding.Data["remediation"] = result.Remediation
+			updates["data"] = finding.Data
+		}
+	}
+	if len(updates) > 0 {
+		s.session().WithContext(ctx).Model(&model.ScanFinding{}).Where("id = ?", findingID).Updates(updates)
+	}
 }
 
 func dataStr(data model.JSONMap, key string) string {

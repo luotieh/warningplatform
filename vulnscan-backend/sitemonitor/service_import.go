@@ -23,13 +23,80 @@ func (s *serviceMonitor) GenerateImportTemplate(_ context.Context) ([]byte, erro
 	f.SetSheetName("Sheet1", sheet)
 
 	headers := []string{
-		"名称", "目标类型(domain/ip)", "目标值", "虚拟Host(IP必填)", "路径或完整URL",
-		"可用性", "域名劫持", "篡改", "敏感词", "敏感文件", "黑链",
+		"名称", "目标类型", "目标值", "请求Host", "监测URL",
+		"可用性", "域名劫持", "篡改", "敏感词", "敏感文件", "暗链",
 	}
+	descriptions := []string{
+		"可选，留空自动取域名",
+		"domain 或 ip，留空自动识别",
+		"域名或IP，填URL时可留空",
+		"仅IP目标必填，如 www.example.com",
+		"完整URL或路径，留空默认 /",
+		"留空=启用，填\"关闭\"=不启用",
+		"同左",
+		"同左",
+		"同左",
+		"同左",
+		"同左",
+	}
+	examples := []string{
+		"示例官网",
+		"",
+		"",
+		"",
+		"https://www.example.com",
+		"",
+		"",
+		"",
+		"",
+		"",
+		"",
+	}
+
+	headerStyle, _ := f.NewStyle(&excelize.Style{
+		Font:      &excelize.Font{Bold: true, Size: 11, Color: "FFFFFF"},
+		Fill:      excelize.Fill{Type: "pattern", Pattern: 1, Color: []string{"4472C4"}},
+		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center"},
+		Border: []excelize.Border{
+			{Type: "bottom", Color: "2F5597", Style: 2},
+		},
+	})
+	descStyle, _ := f.NewStyle(&excelize.Style{
+		Font:      &excelize.Font{Size: 9, Color: "808080", Italic: true},
+		Fill:      excelize.Fill{Type: "pattern", Pattern: 1, Color: []string{"F2F2F2"}},
+		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center", WrapText: true},
+	})
+	exampleStyle, _ := f.NewStyle(&excelize.Style{
+		Font:      &excelize.Font{Size: 10, Color: "2E75B6"},
+		Fill:      excelize.Fill{Type: "pattern", Pattern: 1, Color: []string{"DEEBF7"}},
+		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center"},
+	})
+
+	colWidths := []float64{16, 14, 22, 24, 32, 10, 10, 10, 10, 10, 10}
+	for i, w := range colWidths {
+		colName, _ := excelize.ColumnNumberToName(i + 1)
+		f.SetColWidth(sheet, colName, colName, w)
+	}
+
 	for i, h := range headers {
-		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
-		f.SetCellValue(sheet, cell, h)
+		c, _ := excelize.CoordinatesToCellName(i+1, 1)
+		f.SetCellValue(sheet, c, h)
+		f.SetCellStyle(sheet, c, c, headerStyle)
 	}
+	for i, d := range descriptions {
+		c, _ := excelize.CoordinatesToCellName(i+1, 2)
+		f.SetCellValue(sheet, c, d)
+		f.SetCellStyle(sheet, c, c, descStyle)
+	}
+	for i, e := range examples {
+		c, _ := excelize.CoordinatesToCellName(i+1, 3)
+		f.SetCellValue(sheet, c, e)
+		f.SetCellStyle(sheet, c, c, exampleStyle)
+	}
+
+	f.SetRowHeight(sheet, 1, 28)
+	f.SetRowHeight(sheet, 2, 36)
+	f.SetRowHeight(sheet, 3, 22)
 
 	var buf bytes.Buffer
 	if err := f.Write(&buf); err != nil {
@@ -56,13 +123,15 @@ func (s *serviceMonitor) ImportTasks(ctx context.Context, fileData []byte) (*con
 
 	result := &contract.ImportResult{
 		ID:        ulid.GenerateID(),
-		Total:     len(rows) - 1,
 		CreatedAt: time.Now().Format(time.RFC3339),
 	}
 	defaults, _ := s.loadDefaultConfigs(ctx)
 
 	for i, row := range rows {
 		if i == 0 {
+			continue
+		}
+		if isTemplateHelperRow(row) {
 			continue
 		}
 		rowResult := contract.ImportRowResult{Row: i + 1}
@@ -167,12 +236,32 @@ func (s *serviceMonitor) ImportTasks(ctx context.Context, fileData []byte) (*con
 		}
 		result.Results = append(result.Results, rowResult)
 	}
+	result.Total = result.Success + result.Failed
 	return result, nil
 }
 
 func cell(row []string, idx int) string {
 	if idx < len(row) {
 		return strings.TrimSpace(row[idx])
+	}
+	return ""
+}
+
+func isTemplateHelperRow(row []string) bool {
+	first := strings.TrimSpace(safeGet(row, 0))
+	second := strings.TrimSpace(safeGet(row, 1))
+	if first == "可选，留空自动取域名" || first == "示例官网" {
+		return true
+	}
+	if second == "domain 或 ip，留空自动识别" {
+		return true
+	}
+	return false
+}
+
+func safeGet(row []string, idx int) string {
+	if idx < len(row) {
+		return row[idx]
 	}
 	return ""
 }

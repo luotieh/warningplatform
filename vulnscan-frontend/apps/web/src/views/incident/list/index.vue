@@ -215,7 +215,21 @@ async function handleAiAudit(id: string) {
   try { await aiPreAudit(id); message.success('AI预审已完成'); await fetchData(); } catch (e: any) { message.error(e?.message || 'AI预审失败'); }
 }
 async function handleDelete(id: string) {
+  if (!window.confirm('确认删除该安全事件？此操作不可恢复。')) return;
   try { await deleteIncident(id); message.success('已删除'); await fetchData(); } catch (e: any) { message.error(e?.message || '删除失败'); }
+}
+
+async function handleBatchDelete() {
+  const ids = checkedRowKeys.value as string[];
+  if (!ids.length) return;
+  let success = 0;
+  let fail = 0;
+  for (const id of ids) {
+    try { await deleteIncident(id); success++; } catch { fail++; }
+  }
+  message.success(`删除完成：成功 ${success}，失败 ${fail}`);
+  checkedRowKeys.value = [];
+  await fetchData();
 }
 
 function openCreate() {
@@ -261,6 +275,18 @@ onMounted(fetchData);
               批量导出
             </NButton>
           </NDropdown>
+          <NPopconfirm
+            :positive-text="'确认删除'"
+            :negative-text="'取消'"
+            @positive-click="handleBatchDelete"
+          >
+            <template #trigger>
+              <NButton v-perm.disable="perm('delete')" size="small" type="error" :disabled="!checkedRowKeys.length">
+                批量删除
+              </NButton>
+            </template>
+            确认删除选中的 {{ checkedRowKeys.length }} 条安全事件？此操作不可恢复。
+          </NPopconfirm>
           <NButton v-perm.disable="perm('create')" size="small" type="primary" @click="openCreate">新建事件</NButton>
         </NSpace>
       </template>

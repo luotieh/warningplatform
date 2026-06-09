@@ -31,3 +31,21 @@ const (
 	FindingCategoryRecon = "recon"
 	FindingCategoryVuln  = "vuln"
 )
+
+// VulnKnowledgeCache stores AI-generated vulnerability descriptions to avoid
+// repeated LLM calls for the same vulnerability type.
+type VulnKnowledgeCache struct {
+	ID          string    `gorm:"primarykey;type:varchar(36)" json:"id"`
+	VulnKey     string    `gorm:"type:varchar(500);uniqueIndex;not null" json:"vuln_key"`
+	VulnType    string    `gorm:"type:varchar(50);index" json:"vuln_type"`
+	Title       string    `gorm:"type:varchar(500)" json:"title"`
+	CveID       string    `gorm:"type:varchar(50);index" json:"cve_id"`
+	Description string    `gorm:"type:text" json:"description"`
+	Cause       string    `gorm:"type:text" json:"cause"`
+	Remediation string    `gorm:"type:text" json:"remediation"`
+	HitCount    int       `gorm:"default:1" json:"hit_count"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+func (VulnKnowledgeCache) TableName() string { return "vs_vuln_knowledge_cache" }

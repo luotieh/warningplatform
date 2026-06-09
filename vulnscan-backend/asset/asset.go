@@ -80,6 +80,7 @@ func (m *Asset) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
 				{Name: "探测任务列表", Path: "probes", Method: "GET", Handler: m.discoveryHandler.ListProbes, Enabled: true},
 				{Name: "创建探测任务", Path: "probes", Method: "POST", Handler: m.discoveryHandler.CreateProbe, Enabled: true},
 				{Name: "探测任务详情", Path: "probes/:id", Method: "GET", Handler: m.discoveryHandler.GetProbe, Enabled: true},
+				{Name: "删除探测任务", Path: "probes/:id", Method: "DELETE", Handler: m.discoveryHandler.DeleteProbe, Enabled: true},
 				{Name: "候选资产列表", Path: "probes/:id/candidates", Method: "GET", Handler: m.discoveryHandler.ListCandidates, Enabled: true},
 				{Name: "同步候选", Path: "probes/:id/sync", Method: "POST", Handler: m.discoveryHandler.SyncCandidates, Enabled: true},
 				{Name: "下发核验", Path: "probes/:id/candidates/verify", Method: "POST", Handler: m.discoveryHandler.VerifyCandidates, Enabled: true},

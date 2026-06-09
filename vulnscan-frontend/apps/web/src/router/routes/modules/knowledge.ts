@@ -175,6 +175,24 @@ const routes: RouteRecordRaw[] = [
         },
       },
       {
+        name: 'VulnKnowledge',
+        path: 'vuln',
+        component: () => import('#/views/knowledge/vuln-knowledge/index.vue'),
+        meta: {
+          icon: 'lucide:shield-check',
+          title: '漏洞知识',
+          perms: [
+            { action: 'update', label: '编辑' },
+            { action: 'delete', label: '删除' },
+          ],
+          apis: ['GET /task/vuln-knowledge'],
+          apisByAction: {
+            update: ['PUT /task/vuln-knowledge/:id'],
+            delete: ['DELETE /task/vuln-knowledge/:id'],
+          },
+        },
+      },
+      {
         name: 'KnowledgeArticles',
         path: 'articles',
         component: () => import('#/views/knowledge/articles/index.vue'),

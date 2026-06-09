@@ -40,7 +40,7 @@ function resolvePathTaskFetchUrl(
   return `${scheme}://${target.target_value}${path}`;
 }
 
-import { requestClient } from '#/api/request';
+import { baseRequestClient, requestClient } from '#/api/request';
 
 const base = (url: string) => `/sitemonitor${url}`;
 
@@ -486,7 +486,16 @@ export const getAlertConfig = () =>
 export const updateAlertConfig = (config: Partial<AlertConfig>) =>
   requestClient.put(base('/alert-config'), config);
 
-export const downloadImportTemplate = () => base('/import/template');
+export async function downloadImportTemplate(): Promise<Blob> {
+  const res = await baseRequestClient.get(base('/import/template'), {
+    responseType: 'blob',
+  });
+  const raw = res?.data;
+  if (raw instanceof Blob) return raw;
+  if (typeof raw === 'string' || raw instanceof ArrayBuffer)
+    return new Blob([raw]);
+  throw new Error('模板下载响应格式异常');
+}
 
 export const exportImportResultUrl = (importId: string) =>
   base(`/import/${importId}/export`);

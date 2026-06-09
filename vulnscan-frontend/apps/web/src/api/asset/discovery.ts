@@ -82,6 +82,10 @@ export async function getDiscoveryProbe(id: string) {
   return requestClient.get<AssetDiscoveryProbe>(`/asset/discovery/probes/${id}`);
 }
 
+export async function deleteDiscoveryProbe(id: string) {
+  return requestClient.delete<{ deleted: string }>(`/asset/discovery/probes/${id}`);
+}
+
 export async function getDiscoveryCandidates(
   probeId: string,
   params: { page?: number; page_size?: number; status?: string; keyword?: string },

@@ -29,6 +29,7 @@ import (
 	"vulnscan-backend/setting"
 	tmplAPI "vulnscan-backend/template/api"
 
+	"code.yt-security.com/public/access/ai"
 	"code.yt-security.com/public/access/authorize"
 	"github.com/gin-gonic/gin"
 )
@@ -49,10 +50,15 @@ func (h *Handlers) initScheduler(authGroup *gin.RouterGroup, backends *[]authori
 
 	h.sched = scanrunner.New(session, 10)
 	if h.Incident != nil {
+		var chatSvc ai.Service
+		if h.IAM != nil {
+			chatSvc = h.IAM.AI
+		}
 		eb := scanrunner.NewEventBridge(
 			session,
 			h.Incident.CoreService(),
 			h.Circular.TransferService(),
+			chatSvc,
 			scanrunner.DefaultEventBridgeConfig(),
 		)
 		h.sched.SetEventBridge(eb)

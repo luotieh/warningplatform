@@ -26,6 +26,7 @@ const configValues = ref<Record<string, Record<string, any>>>({});
 const categoryGroups = computed(() => {
   const groups: Record<string, ModuleConfigInfo[]> = {};
   for (const m of modules.value) {
+    if (!m.params?.length) continue;
     const cat = m.category || '其他';
     if (!groups[cat]) groups[cat] = [];
     groups[cat].push(m);
@@ -48,6 +49,7 @@ async function loadConfigs() {
     );
     const initial: Record<string, Record<string, any>> = {};
     for (const m of modules.value) {
+      if (!Array.isArray(m.params)) m.params = [];
       const entry: Record<string, any> = {};
       for (const p of m.params) {
         entry[p.key] = props.moduleConfigs?.[m.id]?.[p.key] ?? p.default_value;
@@ -67,7 +69,7 @@ function handleSave() {
     if (!mod) continue;
 
     const changed: Record<string, any> = {};
-    for (const p of mod.params) {
+    for (const p of mod.params ?? []) {
       if (params[p.key] !== p.default_value) {
         changed[p.key] = params[p.key];
       }
@@ -84,7 +86,7 @@ function resetAll() {
   for (const m of modules.value) {
     const entry = configValues.value[m.id];
     if (!entry) continue;
-    for (const p of m.params) {
+    for (const p of m.params ?? []) {
       entry[p.key] = p.default_value;
     }
   }

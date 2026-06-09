@@ -29,6 +29,10 @@ func (m *Task) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
 				{Name: "任务发现摘要", Path: ":id/findings/summary", Method: "GET", Handler: m.handler.FindingSummary, Enabled: true},
 				{Name: "任务资产视图", Path: ":id/assets", Method: "GET", Handler: m.handler.ListAssets, Enabled: true},
 				{Name: "任务运行日志", Path: ":id/logs", Method: "GET", Handler: m.handler.ListLogs, Enabled: true},
+				{Name: "AI补充漏洞信息", Path: ":id/findings/:findingId/ai-enrich", Method: "POST", Handler: m.handler.AIEnrichFinding, Enabled: true},
+				{Name: "漏洞知识列表", Path: "vuln-knowledge", Method: "GET", Handler: m.handler.ListVulnKnowledge, Enabled: true},
+				{Name: "编辑漏洞知识", Path: "vuln-knowledge/:id", Method: "PUT", Handler: m.handler.UpdateVulnKnowledge, Enabled: true},
+				{Name: "删除漏洞知识", Path: "vuln-knowledge/:id", Method: "DELETE", Handler: m.handler.DeleteVulnKnowledge, Enabled: true},
 			},
 		},
 	})

@@ -65,7 +65,7 @@ const checkedRowKeys = ref<DataTableRowKey[]>([]);
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
 
 /** 新建任务默认扫描模板（与内置模板 id 一致，按优先级回退） */
-const DEFAULT_SCAN_TEMPLATE_IDS = ['quick', 'full', 'recon', 'vuln'] as const;
+const DEFAULT_SCAN_TEMPLATE_IDS = ['full', 'vuln', 'quick', 'recon'] as const;
 
 const showCreate = ref(false);
 const creating = ref(false);
@@ -479,7 +479,10 @@ async function loadEnginePresets() {
 }
 
 const templateOptions = computed(() =>
-  templates.value.map(t => ({ label: `${t.name} ${t.builtin ? '(内置)' : ''}`, value: t.id })),
+  templates.value.map(t => ({
+    label: `${t.name}${t.builtin ? ' (内置)' : ''}${t.description ? ' — ' + t.description : ''}`,
+    value: t.id,
+  })),
 );
 
 const enginePresetOptions = computed(() => [
@@ -723,7 +726,7 @@ onUnmounted(() => {
           <NInput v-model:value="form.name" placeholder="留空将自动生成名称" />
         </NFormItem>
 
-        <NFormItem label="执行节点" required>
+        <NFormItem v-if="scanExecutor.executorNodeOptions.value.length > 1" label="执行节点" required>
           <NSelect
             v-model:value="form.executor_node_ids"
             :options="scanExecutor.executorNodeOptions.value"
@@ -775,57 +778,6 @@ onUnmounted(() => {
             <NSelect v-model:value="form.verification_level" :options="verificationOptions" />
           </NFormItem>
         </div>
-        <NFormItem label="发现超时(ms)">
-          <NInputNumber
-            v-model:value="form.discover_timeout_ms"
-            :min="100"
-            :max="5000"
-            :step="100"
-            placeholder="留空=系统默认（推荐）"
-            clearable
-            style="width: 260px"
-          />
-        </NFormItem>
-
-        <NFormItem label="引擎预设">
-          <NSelect
-            v-model:value="form.engine_preset"
-            :options="enginePresetOptions"
-            placeholder="auto = 按目标数自动推导性能参数"
-            filterable
-          />
-        </NFormItem>
-        <div
-          v-if="form.engine_preset === 'auto' && derivedSummary"
-          style="margin:-4px 0 8px 80px;font-size:12px;color:var(--text-color-3)"
-        >
-          <span v-if="suggestLoading">正在推导性能参数…</span>
-          <span v-else>自动推导：{{ derivedSummary }}</span>
-        </div>
-
-        <NFormItem label="无 HTTP 跳过 Web 漏洞">
-          <NSwitch v-model:value="form.auto_skip_web_vulns" />
-          <span style="margin-left: 8px; font-size: 12px; color: var(--text-color-3)">
-            未发现 Web 服务时跳过 web_vuln_scan 等阶段
-          </span>
-        </NFormItem>
-
-        <div style="display: flex; gap: 16px; flex-wrap: wrap">
-          <NFormItem label="Nuclei Interactsh" style="flex: 1; min-width: 200px">
-            <NSelect v-model:value="form.nuclei_interactsh_disable" :options="nucleiInteractshOptions" />
-          </NFormItem>
-          <NFormItem label="请求速率覆盖" style="flex: 1; min-width: 200px">
-            <NInputNumber
-              v-model:value="form.rate_limit"
-              :min="1"
-              :max="10000"
-              placeholder="留空则使用自动推导"
-              clearable
-              style="width: 100%"
-            />
-          </NFormItem>
-        </div>
-
         <!-- Advanced Toggle -->
         <div class="advanced-toggle" @click="showAdvanced = !showAdvanced">
           <span class="advanced-arrow" :class="{ expanded: showAdvanced }">&#9654;</span>
@@ -833,7 +785,58 @@ onUnmounted(() => {
         </div>
 
         <template v-if="showAdvanced">
-          <NFormItem label="优先级" style="margin-top: 12px">
+          <NFormItem label="引擎预设" style="margin-top: 12px">
+            <NSelect
+              v-model:value="form.engine_preset"
+              :options="enginePresetOptions"
+              placeholder="auto = 按目标数自动推导性能参数"
+              filterable
+            />
+          </NFormItem>
+          <div
+            v-if="form.engine_preset === 'auto' && derivedSummary"
+            style="margin:-4px 0 8px 80px;font-size:12px;color:var(--text-color-3)"
+          >
+            <span v-if="suggestLoading">正在推导性能参数…</span>
+            <span v-else>自动推导：{{ derivedSummary }}</span>
+          </div>
+
+          <NFormItem label="发现超时(ms)">
+            <NInputNumber
+              v-model:value="form.discover_timeout_ms"
+              :min="100"
+              :max="5000"
+              :step="100"
+              placeholder="留空=系统默认（推荐）"
+              clearable
+              style="width: 260px"
+            />
+          </NFormItem>
+
+          <NFormItem label="无HTTP跳过Web漏洞">
+            <NSwitch v-model:value="form.auto_skip_web_vulns" />
+            <span style="margin-left: 8px; font-size: 12px; color: var(--text-color-3)">
+              未发现 Web 服务时跳过 web_vuln_scan 等阶段
+            </span>
+          </NFormItem>
+
+          <div style="display: flex; gap: 16px; flex-wrap: wrap">
+            <NFormItem label="Nuclei Interactsh" style="flex: 1; min-width: 200px">
+              <NSelect v-model:value="form.nuclei_interactsh_disable" :options="nucleiInteractshOptions" />
+            </NFormItem>
+            <NFormItem label="请求速率覆盖" style="flex: 1; min-width: 200px">
+              <NInputNumber
+                v-model:value="form.rate_limit"
+                :min="1"
+                :max="10000"
+                placeholder="留空则使用自动推导"
+                clearable
+                style="width: 100%"
+              />
+            </NFormItem>
+          </div>
+
+          <NFormItem label="优先级">
             <NSelect v-model:value="form.priority" :options="priorityOptions" style="max-width: 240px" />
           </NFormItem>
         </template>

@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-const defaultMaxExpandedHosts = 4096
+const defaultMaxExpandedHosts = 100000
 
 // ExpandScanTargets 将 IP、CIDR、域名等目标展开为扫描用的主机列表（CIDR 展开为单 IP，跳过网络/广播地址）。
 func ExpandScanTargets(raw []string, maxHosts int) ([]string, error) {
@@ -61,6 +61,9 @@ func expandOneTarget(t string, budget int) ([]string, error) {
 	if _, ipNet, err := net.ParseCIDR(t); err == nil {
 		return expandCIDRHosts(ipNet, budget)
 	}
+	if startIP, endIP, ok := parseIPRange(t); ok {
+		return expandIPRange(startIP, endIP, budget)
+	}
 	if h, p, err := net.SplitHostPort(t); err == nil && h != "" {
 		if ip := net.ParseIP(h); ip != nil {
 			return []string{net.JoinHostPort(ip.String(), p)}, nil
@@ -68,6 +71,54 @@ func expandOneTarget(t string, budget int) ([]string, error) {
 		return []string{t}, nil
 	}
 	return []string{t}, nil
+}
+
+// parseIPRange parses "startIP-endIP" format, e.g. "19.20.30.10-21.22.23.24".
+func parseIPRange(t string) (net.IP, net.IP, bool) {
+	idx := strings.IndexByte(t, '-')
+	if idx <= 0 || idx >= len(t)-1 {
+		return nil, nil, false
+	}
+	startStr := strings.TrimSpace(t[:idx])
+	endStr := strings.TrimSpace(t[idx+1:])
+	startIP := net.ParseIP(startStr)
+	endIP := net.ParseIP(endStr)
+	if startIP == nil || endIP == nil {
+		return nil, nil, false
+	}
+	startIP = startIP.To4()
+	endIP = endIP.To4()
+	if startIP == nil || endIP == nil {
+		return nil, nil, false
+	}
+	return startIP, endIP, true
+}
+
+func expandIPRange(startIP, endIP net.IP, budget int) ([]string, error) {
+	if ipToUint32(startIP) > ipToUint32(endIP) {
+		startIP, endIP = endIP, startIP
+	}
+	start := ipToUint32(startIP)
+	end := ipToUint32(endIP)
+	count := int(end - start + 1)
+	if count > budget {
+		return nil, fmt.Errorf("IP 范围 %s-%s 展开后有 %d 个地址，超过剩余配额 %d",
+			startIP, endIP, count, budget)
+	}
+	ips := make([]string, 0, count)
+	for n := start; n <= end; n++ {
+		ips = append(ips, uint32ToIP(n).String())
+	}
+	return ips, nil
+}
+
+func ipToUint32(ip net.IP) uint32 {
+	ip = ip.To4()
+	return uint32(ip[0])<<24 | uint32(ip[1])<<16 | uint32(ip[2])<<8 | uint32(ip[3])
+}
+
+func uint32ToIP(n uint32) net.IP {
+	return net.IPv4(byte(n>>24), byte(n>>16&0xFF), byte(n>>8&0xFF), byte(n&0xFF))
 }
 
 func expandCIDRHosts(ipNet *net.IPNet, budget int) ([]string, error) {

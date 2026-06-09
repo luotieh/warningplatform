@@ -735,8 +735,25 @@ const importUploading = ref(false);
 const importResultVisible = ref(false);
 const importResult = ref<ImportResult | null>(null);
 
-function handleDownloadTemplate() {
-  window.open(downloadImportTemplate(), '_blank');
+const templateDownloading = ref(false);
+
+async function handleDownloadTemplate() {
+  templateDownloading.value = true;
+  try {
+    const blob = await downloadImportTemplate();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'import_template.xlsx';
+    document.body.append(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    handleError(e, '下载模板失败');
+  } finally {
+    templateDownloading.value = false;
+  }
 }
 
 async function handleImportFile({ file }: { file: UploadFileInfo }) {
@@ -1114,7 +1131,7 @@ onMounted(async () => {
       <template #footer>
         <NSpace justify="end">
           <NButton @click="importDialogVisible = false">取消</NButton>
-          <NButton type="primary" @click="handleDownloadTemplate">
+          <NButton type="primary" :loading="templateDownloading" @click="handleDownloadTemplate">
             下载模板
           </NButton>
         </NSpace>

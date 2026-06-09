@@ -5,6 +5,7 @@ import (
 	taskContract "vulnscan-backend/task/task-contract"
 
 	iamsdk "code.yt-security.com/public/access"
+	"code.yt-security.com/public/access/ai"
 	"code.yt-security.com/public/core/generate/ulid"
 	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
@@ -12,11 +13,12 @@ import (
 )
 
 type HandlerTask struct {
-	svc taskContract.ServiceTask
+	svc     taskContract.ServiceTask
+	chatSvc ai.Service
 }
 
-func NewHandlerTask(svc taskContract.ServiceTask) *HandlerTask {
-	return &HandlerTask{svc: svc}
+func NewHandlerTask(svc taskContract.ServiceTask, chatSvc ai.Service) *HandlerTask {
+	return &HandlerTask{svc: svc, chatSvc: chatSvc}
 }
 
 func (h *HandlerTask) List(c *gin.Context) {
@@ -199,4 +201,19 @@ func (h *HandlerTask) ListLogs(c *gin.Context) {
 	}
 
 	web.Succeed(c).Data(logs).Send()
+}
+
+func (h *HandlerTask) AIEnrichFinding(c *gin.Context) {
+	findingID := c.Param("findingId")
+	if findingID == "" {
+		web.Err(c, web.ParamsMissingRequired).Send()
+		return
+	}
+
+	result, err := h.svc.AIEnrichFinding(c.Request.Context(), findingID, h.chatSvc)
+	if err != nil {
+		web.Fail(c).Msg(err.Error()).Send()
+		return
+	}
+	web.Succeed(c).Data(result).Send()
 }

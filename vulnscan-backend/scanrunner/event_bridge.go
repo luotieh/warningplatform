@@ -2,6 +2,7 @@ package scanrunner
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -10,6 +11,8 @@ import (
 
 	"gorm.io/gorm"
 
+	"code.yt-security.com/public/access/ai"
+	"code.yt-security.com/public/core/generate/ulid"
 	circularscope "vulnscan-backend/circular/scope"
 	transferContract "vulnscan-backend/circular/transfer/transfer-contract"
 	coreContract "vulnscan-backend/incident/core/core-contract"
@@ -21,6 +24,7 @@ type EventBridge struct {
 	db             *gorm.DB
 	incidentSvc    coreContract.ServiceCore
 	transferSvc    transferContract.ServiceTransfer
+	chatSvc        ai.Service
 	config         EventBridgeConfig
 	mu             sync.Mutex
 	processedTasks map[string]time.Time
@@ -46,11 +50,12 @@ func DefaultEventBridgeConfig() EventBridgeConfig {
 	}
 }
 
-func NewEventBridge(db *gorm.DB, incidentSvc coreContract.ServiceCore, transferSvc transferContract.ServiceTransfer, config EventBridgeConfig) *EventBridge {
+func NewEventBridge(db *gorm.DB, incidentSvc coreContract.ServiceCore, transferSvc transferContract.ServiceTransfer, chatSvc ai.Service, config EventBridgeConfig) *EventBridge {
 	return &EventBridge{
 		db:             db,
 		incidentSvc:    incidentSvc,
 		transferSvc:    transferSvc,
+		chatSvc:        chatSvc,
 		config:         config,
 		processedTasks: make(map[string]time.Time),
 	}
@@ -111,6 +116,8 @@ func (eb *EventBridge) OnScanComplete(ctx context.Context, taskID string) {
 		slog.Info("[EventBridge] 扫描发现自动创建安全事件",
 			"task_id", taskID, "findings", len(findings), "incidents_created", created)
 	}
+
+	go eb.autoEnrichFindings(ctx, taskID)
 }
 
 // OnIncidentReviewPassed is called when an incident passes review.
@@ -179,6 +186,151 @@ func (eb *EventBridge) OnIncidentReviewPassed(ctx context.Context, incident mode
 
 	slog.Info("[EventBridge] 事件自动流转到通报系统",
 		"incident_no", incident.IncidentNo, "circular_code", circularCode)
+}
+
+func (eb *EventBridge) autoEnrichFindings(ctx context.Context, taskID string) {
+	if eb.chatSvc == nil {
+		return
+	}
+
+	var findings []model.ScanFinding
+	if err := eb.db.WithContext(ctx).
+		Where("task_id = ? AND category = ?", taskID, model.FindingCategoryVuln).
+		Where("description = '' OR description IS NULL").
+		Limit(50).
+		Find(&findings).Error; err != nil {
+		slog.Warn("[EventBridge] AI补充-查询发现失败", "task_id", taskID, "error", err)
+		return
+	}
+	if len(findings) == 0 {
+		return
+	}
+
+	models, err := eb.chatSvc.ListModels(ctx, "")
+	if err != nil || len(models.Data) == 0 {
+		slog.Warn("[EventBridge] AI补充-无可用模型", "task_id", taskID)
+		return
+	}
+	modelName := models.Data[0].ID
+
+	enriched := 0
+	for _, f := range findings {
+		if err := eb.enrichOneFinding(ctx, f, modelName); err != nil {
+			slog.Warn("[EventBridge] AI补充失败", "finding_id", f.ID, "error", err)
+			continue
+		}
+		enriched++
+	}
+	if enriched > 0 {
+		slog.Info("[EventBridge] AI自动补充漏洞信息", "task_id", taskID, "enriched", enriched, "total", len(findings))
+	}
+}
+
+func vulnCacheKey(f model.ScanFinding) string {
+	cve := extractStr(f.Data, "cve_id", "cve")
+	if cve != "" {
+		return "cve:" + strings.ToUpper(cve)
+	}
+	return fmt.Sprintf("%s:%s", f.Type, f.Title)
+}
+
+func (eb *EventBridge) enrichOneFinding(ctx context.Context, f model.ScanFinding, modelName string) error {
+	key := vulnCacheKey(f)
+
+	var cached model.VulnKnowledgeCache
+	if err := eb.db.WithContext(ctx).Where("vuln_key = ?", key).First(&cached).Error; err == nil {
+		eb.db.WithContext(ctx).Model(&cached).UpdateColumn("hit_count", cached.HitCount+1)
+		return eb.applyEnrichResult(ctx, f, cached.Description, cached.Cause, cached.Remediation)
+	}
+
+	systemPrompt := `你是一位资深网络安全专家。根据提供的漏洞扫描发现信息，生成以下三项内容：
+1. 漏洞描述：简洁描述该漏洞是什么、存在于哪里
+2. 漏洞成因：分析该漏洞产生的技术原因
+3. 修复建议：给出具体可操作的修复方案
+
+请以 JSON 格式返回，字段为 description、cause、remediation，每个字段使用中文。`
+
+	info := fmt.Sprintf("漏洞标题: %s\n类型: %s\n严重程度: %s\n目标: %s\n端口: %d",
+		f.Title, f.Type, f.Severity, f.Target, f.Port)
+	if f.Evidence != "" {
+		info += "\n证据: " + f.Evidence
+	}
+	if cve := extractStr(f.Data, "cve_id", "cve"); cve != "" {
+		info += "\nCVE: " + cve
+	}
+
+	resp, err := eb.chatSvc.ChatCompletions(ctx, "", &ai.CompletionsRequest{
+		Model: modelName,
+		Messages: []ai.ChatMessage{
+			{Role: "system", Content: systemPrompt},
+			{Role: "user", Content: info},
+		},
+		Temperature: 0.3,
+		MaxTokens:   1500,
+	})
+	if err != nil {
+		return err
+	}
+	if len(resp.Choices) == 0 {
+		return fmt.Errorf("AI未返回内容")
+	}
+
+	content := strings.TrimSpace(resp.Choices[0].Message.Content)
+	content = strings.TrimPrefix(content, "```json")
+	content = strings.TrimPrefix(content, "```")
+	content = strings.TrimSuffix(content, "```")
+	content = strings.TrimSpace(content)
+
+	var result struct {
+		Description string `json:"description"`
+		Cause       string `json:"cause"`
+		Remediation string `json:"remediation"`
+	}
+	if err := json.Unmarshal([]byte(content), &result); err != nil {
+		result.Description = content
+	}
+
+	cve := extractStr(f.Data, "cve_id", "cve")
+	cacheEntry := model.VulnKnowledgeCache{
+		ID:          ulid.GenerateID(),
+		VulnKey:     key,
+		VulnType:    f.Type,
+		Title:       f.Title,
+		CveID:       cve,
+		Description: result.Description,
+		Cause:       result.Cause,
+		Remediation: result.Remediation,
+	}
+	if err := eb.db.WithContext(ctx).Create(&cacheEntry).Error; err != nil {
+		slog.Debug("[EventBridge] 写入知识缓存失败", "key", key, "error", err)
+	}
+
+	return eb.applyEnrichResult(ctx, f, result.Description, result.Cause, result.Remediation)
+}
+
+func (eb *EventBridge) applyEnrichResult(ctx context.Context, f model.ScanFinding, description, cause, remediation string) error {
+	updates := map[string]any{}
+	if description != "" {
+		updates["description"] = description
+	}
+	data := f.Data
+	if data == nil {
+		data = model.JSONMap{}
+	}
+	if cause != "" {
+		data["vuln_cause"] = cause
+		updates["data"] = data
+	}
+	if remediation != "" {
+		if _, exists := data["remediation"]; !exists {
+			data["remediation"] = remediation
+			updates["data"] = data
+		}
+	}
+	if len(updates) > 0 {
+		return eb.db.WithContext(ctx).Model(&model.ScanFinding{}).Where("id = ?", f.ID).Updates(updates).Error
+	}
+	return nil
 }
 
 func (eb *EventBridge) createIncidentFromFinding(ctx context.Context, f model.ScanFinding) error {

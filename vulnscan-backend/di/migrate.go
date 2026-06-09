@@ -109,6 +109,8 @@ func (h *Handlers) autoMigrate() {
 		&model.SyncLog{},
 		// 提示词模板
 		&model.PromptTemplate{},
+		// 漏洞知识缓存
+		&model.VulnKnowledgeCache{},
 	}
 
 	if migrateErr := session.AutoMigrate(tables...); migrateErr != nil {

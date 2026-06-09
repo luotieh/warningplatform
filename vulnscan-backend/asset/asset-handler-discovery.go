@@ -243,7 +243,7 @@ func (h *DiscoveryHandler) CreateProbe(c *gin.Context) {
 	}
 	rawTargets := parseDiscoveryTargets(req)
 	if len(rawTargets) == 0 {
-		web.Fail(c).Msg("请填写探测目标（支持 IP、域名、CIDR 网段，每行一个）").Send()
+		web.Fail(c).Msg("请填写探测目标（支持 IP、域名、CIDR 网段、IP 范围如 10.0.0.1-10.0.0.254，每行一个）").Send()
 		return
 	}
 	if h.scanDB == nil || h.scanScheduler == nil {
@@ -251,7 +251,7 @@ func (h *DiscoveryHandler) CreateProbe(c *gin.Context) {
 		return
 	}
 
-	expanded, err := scanrunner.ExpandScanTargets(rawTargets, 4096)
+	expanded, err := scanrunner.ExpandScanTargets(rawTargets, 0)
 	if err != nil {
 		web.Fail(c).Msg(err.Error()).Send()
 		return
@@ -420,6 +420,25 @@ func (h *DiscoveryHandler) GetProbe(c *gin.Context) {
 		}
 	}
 	web.Succeed(c).Data(probe).Send()
+}
+
+func (h *DiscoveryHandler) DeleteProbe(c *gin.Context) {
+	id := c.Param("id")
+	sess := h.probeDB()
+	var probe model.AssetDiscoveryProbe
+	if err := sess.First(&probe, "id = ?", id).Error; err != nil {
+		web.Err(c, web.NotFound).Send()
+		return
+	}
+	if err := sess.Where("probe_id = ?", id).Delete(&model.AssetDiscoveryCandidate{}).Error; err != nil {
+		web.Fail(c).Msg("删除候选资产失败: " + err.Error()).Send()
+		return
+	}
+	if err := sess.Delete(&probe).Error; err != nil {
+		web.Fail(c).Msg("删除探测任务失败: " + err.Error()).Send()
+		return
+	}
+	web.Succeed(c).Data(gin.H{"deleted": id}).Send()
 }
 
 func (h *DiscoveryHandler) ListCandidates(c *gin.Context) {
