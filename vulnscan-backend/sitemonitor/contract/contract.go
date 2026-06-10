@@ -9,8 +9,8 @@ import (
 )
 
 type PageReq struct {
-	Index int `form:"index"`
-	Size  int `form:"size"`
+	Page     int `form:"page"`
+	PageSize int `form:"page_size"`
 }
 
 type WordLibraryUpdateReq struct {

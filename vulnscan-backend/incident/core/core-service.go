@@ -259,7 +259,7 @@ func (s *serviceCore) ListIncidents(ctx context.Context, req coreContract.Incide
 	if err := tx.
 		Preload("AssetDetail").
 		Select("security_incidents.*").
-		Scopes(db.Paginate(req.Index, req.Size)).
+		Scopes(db.Paginate(req.Page, req.PageSize)).
 		Order("security_incidents.status ASC, security_incidents.created_at DESC").
 		Find(&incidents).Error; err != nil {
 		return nil, 0, err

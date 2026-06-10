@@ -375,10 +375,10 @@ async function onSearch() {
     const [taskRes, statsRes] = await Promise.all([
       getTaskList({
         enabled: form.enabled,
-        index: pagination.page,
+        page: pagination.page,
         name: form.name,
         target_homepage: form.target_homepage,
-        size: pagination.pageSize,
+        page_size: pagination.pageSize,
       }),
       getTaskExecutionStats(),
     ]);
@@ -505,7 +505,7 @@ async function loadDefaultConfigs() {
 
 async function loadLibraries() {
   try {
-    const fRes = await getFileLibraryList({ size: 100 });
+    const fRes = await getFileLibraryList({ page: 1, page_size: 100 });
     fileLibraries.value = fRes?.data || [];
   } catch {
     // ignore

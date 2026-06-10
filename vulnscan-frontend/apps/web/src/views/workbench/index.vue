@@ -281,7 +281,7 @@ async function fetchWorkbench() {
         getDashboardOverview(),
         visibleModules.value.incidents ? getIncidentStats() : Promise.resolve(null),
         visibleModules.value.scans ? getTaskList({ page: 1, page_size: 6 }) : Promise.resolve(null),
-        visibleModules.value.incidents ? getIncidentList({ index: 1, size: 6 }) : Promise.resolve(null),
+        visibleModules.value.incidents ? getIncidentList({ page: 1, page_size: 6 }) : Promise.resolve(null),
         getRecentActivity(),
       ]);
 

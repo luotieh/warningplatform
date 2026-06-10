@@ -1529,6 +1529,17 @@ async function fetchData() {
   }
 }
 
+function handleFindingsPageChange(p: number) {
+  findingsPage.value = p;
+  void fetchFindings();
+}
+
+function handleFindingsPageSizeChange(ps: number) {
+  findingsPageSize.value = ps;
+  findingsPage.value = 1;
+  void fetchFindings();
+}
+
 async function fetchFindings() {
   findingsLoading.value = true;
   try {
@@ -2662,8 +2673,8 @@ onUnmounted(() => {
                   :item-count="findingsTotal"
                   :page-sizes="[20, 50, 100]"
                   show-size-picker
-                  @update:page="(p: number) => { findingsPage = p; fetchFindings(); }"
-                  @update:page-size="(ps: number) => { findingsPageSize = ps; findingsPage = 1; fetchFindings(); }"
+                  @update:page="handleFindingsPageChange"
+                  @update:page-size="handleFindingsPageSizeChange"
                 />
               </div>
               <NEmpty v-if="!findingsLoading && mergedFindings.length === 0" description="该主机暂无发现" style="padding: 60px 0" />
@@ -2709,8 +2720,8 @@ onUnmounted(() => {
                 :item-count="findingsTotal"
                 :page-sizes="[20, 50, 100]"
                 show-size-picker
-                @update:page="(p: number) => { findingsPage = p; fetchFindings(); }"
-                @update:page-size="(ps: number) => { findingsPageSize = ps; findingsPage = 1; fetchFindings(); }"
+                @update:page="handleFindingsPageChange"
+                @update:page-size="handleFindingsPageSizeChange"
               />
             </div>
             <NEmpty v-if="!findingsLoading && mergedFindings.length === 0" description="暂无扫描发现" style="padding: 60px 0" />

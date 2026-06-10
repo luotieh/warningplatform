@@ -186,8 +186,8 @@ export function useCrudPage<T extends Record<string, any>, ID = number | string>
         query: async ({ page }: any) => {
           const params: Record<string, any> = {
             ...searchPayload.value,
-            index: page.currentPage,
-            size: page.pageSize,
+            page: page.currentPage,
+            page_size: page.pageSize,
           };
           try {
             const raw: any = await options.api.list(params);

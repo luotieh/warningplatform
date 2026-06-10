@@ -158,8 +158,8 @@ async function loadCenterIssues() {
       dimension: selectedDimension.value,
       disposition: centerIssueFilter.disposition,
       has_issue: 'true',
-      index: centerIssuePagination.page,
-      size: centerIssuePagination.pageSize,
+      page: centerIssuePagination.page,
+      page_size: centerIssuePagination.pageSize,
     };
     const res = await getExecutionList(params);
     centerIssueList.value = res.data || [];
@@ -180,7 +180,7 @@ async function fetchDashboardStats() {
     const [statsRes, taskStatsRes, taskRes] = await Promise.all([
       getDashboardStats(),
       getTaskExecutionStats(),
-      getTaskList({ index: 1, size: 200 }),
+      getTaskList({ page: 1, page_size: 200 }),
     ]);
     const overview = ((statsRes as any)?.data ?? statsRes ?? {}) as DashboardStats;
     stats.totalTasks =
@@ -364,10 +364,10 @@ async function fetchTaskList() {
     const [taskRes, statsRes] = await Promise.all([
       getTaskList({
         enabled: taskForm.enabled,
-        index: taskPagination.page,
+        page: taskPagination.page,
         name: taskForm.name,
         target_homepage: taskForm.target_homepage,
-        size: taskPagination.pageSize,
+        page_size: taskPagination.pageSize,
       }),
       getTaskExecutionStats(),
     ]);
@@ -641,8 +641,8 @@ async function loadRecords() {
   recordsLoading.value = true;
   try {
     const params: any = {
-      index: recordsPagination.page,
-      size: recordsPagination.pageSize,
+      page: recordsPagination.page,
+      page_size: recordsPagination.pageSize,
       task_id: recordsTask.value.id,
     };
     if (recordsFilter.dimension) params.dimension = recordsFilter.dimension;
@@ -823,8 +823,8 @@ function handleDeleteAllExecutions() {
     onPositiveClick: async () => {
       try {
         const params: any = {
-          index: 1,
-          size: 500,
+          page: 1,
+          page_size: 500,
           task_id: recordsTask.value!.id,
         };
         if (recordsFilter.dimension) params.dimension = recordsFilter.dimension;

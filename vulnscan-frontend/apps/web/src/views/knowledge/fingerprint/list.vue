@@ -23,6 +23,7 @@ import {
   useMessage,
 } from 'naive-ui';
 
+import { useNaiveTablePagination } from '#/composables/useNaiveTablePagination';
 import {
   getFingerprintList,
   createFingerprint,
@@ -135,6 +136,8 @@ async function fetchData() {
   }
 }
 
+const { pagination } = useNaiveTablePagination({ page, pageSize, total, onFetch: fetchData });
+
 function openCreate() {
   editorMode.value = 'create';
   editingId.value = '';
@@ -207,7 +210,7 @@ onMounted(fetchData);
         </NSpace>
       </template>
 
-      <NDataTable :columns="columns" :data="data" :loading="loading" :bordered="false" size="small" striped :scroll-x="900" :pagination="{ page, pageSize, itemCount: total, showSizePicker: true, pageSizes: [20, 50, 100], onUpdatePage: (p: number) => { page = p; fetchData(); }, onUpdatePageSize: (s: number) => { pageSize = s; page = 1; fetchData(); } }" />
+      <NDataTable :columns="columns" :data="data" :loading="loading" :bordered="false" size="small" striped remote :scroll-x="900" :pagination="pagination" />
     </NCard>
 
     <!-- Editor Modal -->

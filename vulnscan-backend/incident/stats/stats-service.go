@@ -99,7 +99,7 @@ func (s *serviceStats) GetOverdueList(ctx context.Context, req statsContract.Ove
 
 	var incidents []model.SecurityIncident
 	if err := tx.Preload("AssetDetail").
-		Scopes(db.Paginate(req.Index, req.Size)).
+		Scopes(db.Paginate(req.Page, req.PageSize)).
 		Order("remediation_deadline ASC").
 		Find(&incidents).Error; err != nil {
 		return nil, 0, err
@@ -727,7 +727,7 @@ func (s *serviceStats) ListAssetSummary(ctx context.Context, req statsContract.A
 
 	var rows []assetRow
 	if err := tx.Order("incident_count DESC").
-		Scopes(db.Paginate(req.Index, req.Size)).
+		Scopes(db.Paginate(req.Page, req.PageSize)).
 		Find(&rows).Error; err != nil {
 		return nil, 0, err
 	}

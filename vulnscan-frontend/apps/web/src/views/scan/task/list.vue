@@ -42,6 +42,7 @@ import {
   type SuggestScanParameters,
   type EngineRuleInfo,
 } from '#/api/task';
+import { useNaiveTablePagination } from '#/composables/useNaiveTablePagination';
 import { getTemplateList, seedBuiltins, type ScanTemplate } from '#/api/template';
 import { taskStatusLabels, taskStatusTypes } from '#/constants/status';
 import ModuleConfigPanel from '../components/module-config-panel.vue';
@@ -313,6 +314,15 @@ async function fetchData() {
     loading.value = false;
   }
 }
+
+const { pagination } = useNaiveTablePagination({
+  page,
+  pageSize,
+  total,
+  onFetch: fetchData,
+  pageSizes: [20, 50, 100],
+  prefix: ({ itemCount }) => `共 ${itemCount} 条`,
+});
 
 async function handleCreate() {
   if (!form.value.template_id) {
@@ -663,19 +673,11 @@ onUnmounted(() => {
         :bordered="false"
         size="small"
         striped
+        remote
         :scroll-x="1120"
         :row-key="(row: ScanTask) => row.id"
         v-model:checked-row-keys="checkedRowKeys"
-        :pagination="{
-          page: page,
-          pageSize: pageSize,
-          itemCount: total,
-          showSizePicker: true,
-          pageSizes: [20, 50, 100],
-          prefix: ({ itemCount }) => `共 ${itemCount} 条`,
-          onUpdatePage: (p: number) => { page = p; fetchData(); },
-          onUpdatePageSize: (s: number) => { pageSize = s; page = 1; fetchData(); },
-        }"
+        :pagination="pagination"
       />
     </NCard>
 

@@ -42,10 +42,10 @@ type UpdateReq struct {
 }
 
 type ListReq struct {
-	Scene   string `form:"scene"`
-	Keyword string `form:"keyword"`
-	Index   int    `form:"index"`
-	Size    int    `form:"size" binding:"lte=100"`
+	Scene    string `form:"scene"`
+	Keyword  string `form:"keyword"`
+	Page     int    `form:"page"`
+	PageSize int    `form:"page_size" binding:"lte=100"`
 }
 
 type ListItem struct {

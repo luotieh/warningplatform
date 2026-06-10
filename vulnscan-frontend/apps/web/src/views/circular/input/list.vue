@@ -4,6 +4,7 @@ import { NButton, NCard, NDataTable, NInput, NSelect, NSpace, NTag, NPopconfirm,
 import { useRouter } from 'vue-router';
 import { getInputList, deleteInput, submitForVerify, type CircularItem, CircularStatusLabels, CircularStatusTypes, DataSourceLabels } from '#/api/circular';
 import { formatCircularTime } from '../utils';
+import { useNaiveTablePagination } from '#/composables/useNaiveTablePagination';
 import CircularInputDrawer from './components/circular-input-drawer.vue';
 
 defineOptions({ name: 'CircularInputList' });
@@ -58,10 +59,12 @@ function openEditDrawer(id: string) {
 async function fetchData() {
   loading.value = true;
   try {
-    const r = await getInputList({ index: page.value, size: pageSize.value, keyword: keyword.value || undefined, status: statusFilter.value || undefined });
+    const r = await getInputList({ page: page.value, page_size: pageSize.value, keyword: keyword.value || undefined, status: statusFilter.value || undefined });
     data.value = r.items; total.value = r.total;
   } finally { loading.value = false; }
 }
+
+const { pagination } = useNaiveTablePagination({ page, pageSize, total, onFetch: fetchData });
 
 async function handleSubmit(id: string) {
   try { await submitForVerify(id); message.success('已提交核验'); await fetchData(); } catch (e: any) { message.error(e?.message || '提交失败'); }
@@ -102,7 +105,7 @@ onMounted(async () => {
         </NSpace>
       </template>
       <NDataTable :columns="columns" :data="data" :loading="loading" :bordered="false" size="small" striped :scroll-x="1000"
-        :pagination="{ page, pageSize, itemCount: total, showSizePicker: true, pageSizes: [20,50,100], onUpdatePage: (p:number)=>{page=p;fetchData()}, onUpdatePageSize: (s:number)=>{pageSize=s;page=1;fetchData()} }" />
+        remote :pagination="pagination" />
     </NCard>
 
     <CircularInputDrawer

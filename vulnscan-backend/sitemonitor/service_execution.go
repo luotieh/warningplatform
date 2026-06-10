@@ -50,7 +50,7 @@ func (s *serviceMonitor) ListExecutions(ctx context.Context, req contract.Execut
 		return 0, nil, err
 	}
 	var list []model.MonitorExecution
-	if err := paginateQuery(query, req.Index, req.Size).Order("monitor_executions.created_at DESC").Find(&list).Error; err != nil {
+	if err := paginateQuery(query, req.Page, req.PageSize).Order("monitor_executions.created_at DESC").Find(&list).Error; err != nil {
 		return 0, nil, err
 	}
 	return total, list, nil

@@ -417,7 +417,7 @@ const headerExtraSlot = 'header-extra';
             </NSpace>
             <NButton size="small" type="primary" @click="showDictCreateModal = true">新建字典</NButton>
           </NSpace>
-          <NDataTable :columns="dictColumns" :data="dictData" :loading="dictLoading" :bordered="false" size="small" striped :scroll-x="900" :pagination="{ page: dictPage, pageSize: dictPageSize, itemCount: dictTotal, showSizePicker: true, pageSizes: [20, 50, 100], onUpdatePage: (p: number) => { dictPage = p; fetchDictList(); }, onUpdatePageSize: (s: number) => { dictPageSize = s; dictPage = 1; fetchDictList(); } }" />
+          <NDataTable :columns="dictColumns" :data="dictData" :loading="dictLoading" :bordered="false" size="small" striped remote :scroll-x="900" :pagination="{ page: dictPage, pageSize: dictPageSize, itemCount: dictTotal, showSizePicker: true, pageSizes: [20, 50, 100], onUpdatePage: (p: number) => { dictPage = p; fetchDictList(); }, onUpdatePageSize: (s: number) => { dictPageSize = s; dictPage = 1; fetchDictList(); } }" />
         </NTabPane>
 
         <!-- Tab 2: 漏洞载荷 (Payload) -->
@@ -429,7 +429,7 @@ const headerExtraSlot = 'header-extra';
               <NButton size="small" type="primary" @click="() => { payloadPage = 1; fetchPayloadList(); }">搜索</NButton>
             </NSpace>
           </NSpace>
-          <NDataTable :columns="payloadColumns" :data="payloadData" :loading="payloadLoading" :bordered="false" size="small" striped :scroll-x="900" :pagination="{ page: payloadPage, pageSize: payloadPageSize, itemCount: payloadTotal, showSizePicker: true, pageSizes: [20, 50, 100], onUpdatePage: (p: number) => { payloadPage = p; fetchPayloadList(); }, onUpdatePageSize: (s: number) => { payloadPageSize = s; payloadPage = 1; fetchPayloadList(); } }" />
+          <NDataTable :columns="payloadColumns" :data="payloadData" :loading="payloadLoading" :bordered="false" size="small" striped remote :scroll-x="900" :pagination="{ page: payloadPage, pageSize: payloadPageSize, itemCount: payloadTotal, showSizePicker: true, pageSizes: [20, 50, 100], onUpdatePage: (p: number) => { payloadPage = p; fetchPayloadList(); }, onUpdatePageSize: (s: number) => { payloadPageSize = s; payloadPage = 1; fetchPayloadList(); } }" />
         </NTabPane>
 
       </NTabs>

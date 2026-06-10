@@ -19,6 +19,7 @@ import {
   type IncidentExportFormat,
 } from '../incident-export';
 import IncidentPreviewDrawer from '../components/IncidentPreviewDrawer.vue';
+import { useNaiveTablePagination } from '#/composables/useNaiveTablePagination';
 import { useRoutePerm } from '#/composables/use-route-perm';
 
 defineOptions({ name: 'IncidentList' });
@@ -206,10 +207,12 @@ const columns = computed(() => [
 async function fetchData() {
   loading.value = true;
   try {
-    const r = await getIncidentList({ index: page.value, size: pageSize.value, name: keyword.value || undefined, status: statusFilter.value ?? undefined, level: levelFilter.value ?? undefined });
+    const r = await getIncidentList({ page: page.value, page_size: pageSize.value, name: keyword.value || undefined, status: statusFilter.value ?? undefined, level: levelFilter.value ?? undefined });
     data.value = r.items; total.value = r.total;
   } finally { loading.value = false; }
 }
+
+const { pagination } = useNaiveTablePagination({ page, pageSize, total, onFetch: fetchData });
 
 async function handleAiAudit(id: string) {
   try { await aiPreAudit(id); message.success('AI预审已完成'); await fetchData(); } catch (e: any) { message.error(e?.message || 'AI预审失败'); }
@@ -298,9 +301,10 @@ onMounted(fetchData);
         :bordered="false"
         size="small"
         striped
+        remote
         :scroll-x="1280"
         :row-key="(row: SecurityIncident) => row.id"
-        :pagination="{ page, pageSize, itemCount: total, showSizePicker: true, pageSizes: [20,50,100], onUpdatePage:(p:number)=>{page=p;fetchData()}, onUpdatePageSize:(s:number)=>{pageSize=s;page=1;fetchData()} }" />
+        :pagination="pagination" />
     </NCard>
 
     <IncidentPreviewDrawer

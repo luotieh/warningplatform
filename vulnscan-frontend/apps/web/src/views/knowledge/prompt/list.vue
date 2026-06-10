@@ -33,6 +33,7 @@ import {
   type PromptTemplate,
   updatePrompt,
 } from '#/api/prompt/index';
+import { useNaiveTablePagination } from '#/composables/useNaiveTablePagination';
 import { usePerm } from '#/composables/usePerm';
 import { useRoutePerm } from '#/composables/use-route-perm';
 import { isAdminRole } from '#/permissions/admin-role';
@@ -66,8 +67,8 @@ async function fetchData() {
   loading.value = true;
   try {
     const res = await getPromptList({
-      index: page.value,
-      size: pageSize.value,
+      page: page.value,
+      page_size: pageSize.value,
       keyword: keyword.value || undefined,
       scene: sceneFilter.value || undefined,
     });
@@ -77,6 +78,8 @@ async function fetchData() {
     loading.value = false;
   }
 }
+
+const { pagination } = useNaiveTablePagination({ page, pageSize, total, onFetch: fetchData });
 
 function openCreate() {
   editorMode.value = 'create';
@@ -276,18 +279,11 @@ onMounted(fetchData);
         :columns="columns"
         :data="data"
         :loading="loading"
-        :pagination="{
-          page: page,
-          pageSize: pageSize,
-          itemCount: total,
-          showSizePicker: true,
-          pageSizes: [10, 20, 50],
-          onUpdatePage: (p: number) => { page = p; fetchData(); },
-          onUpdatePageSize: (s: number) => { pageSize = s; page = 1; fetchData(); },
-        }"
+        :pagination="pagination"
         :scroll-x="900"
         size="small"
         striped
+        remote
       />
     </NCard>
 

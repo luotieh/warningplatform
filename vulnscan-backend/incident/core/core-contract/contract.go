@@ -82,8 +82,8 @@ type IncidentListReq struct {
 	Unit      string `form:"unit"`
 	Level     *int   `form:"level"`
 	Status    *int   `form:"status"`
-	Index     int    `form:"index"`
-	Size      int    `form:"size" binding:"lte=100"`
+	Page      int    `form:"page"`
+	PageSize  int    `form:"page_size" binding:"lte=100"`
 }
 
 type IncidentListItem struct {

@@ -61,9 +61,9 @@ async function onSearch() {
   loading.value = true;
   try {
     const res = await getWordLibraryList({
-      index: pagination.page,
+      page: pagination.page,
       name: searchForm.name,
-      size: pagination.pageSize,
+      page_size: pagination.pageSize,
     });
     dataList.value = res.data || [];
     pagination.itemCount = (res as any).count || 0;

@@ -127,7 +127,7 @@ func (s *serviceKnowledge) ListArticles(ctx context.Context, req knowledgeContra
 		return nil, 0, err
 	}
 
-	if err := tx.Scopes(db.Paginate(req.Index, req.Size)).
+	if err := tx.Scopes(db.Paginate(req.Page, req.PageSize)).
 		Order("created_at DESC").Find(&items).Error; err != nil {
 		return nil, 0, err
 	}

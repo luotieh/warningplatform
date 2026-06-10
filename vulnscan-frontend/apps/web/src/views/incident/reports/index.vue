@@ -179,7 +179,7 @@ async function loadAll() {
   try {
     const [remediationResult, overdueResult, trendResult, aiResult] = await Promise.all([
       getRemediationStats(),
-      getOverdueList({ index: 1, size: 10 }),
+      getOverdueList({ page: 1, page_size: 10 }),
       getTrendPrediction({ range_type: '30d', predict_days: 7 }),
       getAIAnalysis(),
     ]);

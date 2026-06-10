@@ -101,8 +101,8 @@ async function onSearch() {
   loading.value = true;
   try {
     const params: Record<string, unknown> = {
-      index: pagination.page,
-      size: pagination.pageSize,
+      page: pagination.page,
+      page_size: pagination.pageSize,
       dimension: form.dimension || undefined,
       disposition: form.disposition || undefined,
       has_issue: form.has_issue || undefined,

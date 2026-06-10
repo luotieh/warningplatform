@@ -3,15 +3,15 @@
  */
 
 export interface PageParams {
-  index?: number;
-  size?: number;
+  page?: number;
+  page_size?: number;
 }
 
 export interface PageResult<T> {
   list: T[];
   total: number;
-  index?: number;
-  size?: number;
+  page?: number;
+  page_size?: number;
 }
 
 // ════════════════════════════════════════

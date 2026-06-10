@@ -276,11 +276,11 @@ async function onSearch() {
   try {
     const res = await getTargetList({
       enabled: form.enabled,
-      index: pagination.page,
+      page: pagination.page,
       name: form.name,
       target_type: form.target_type,
       target_value: form.target_value,
-      size: pagination.pageSize,
+      page_size: pagination.pageSize,
     });
     dataList.value = res.data || [];
     pagination.itemCount = (res as any).count || 0;
@@ -520,7 +520,7 @@ async function handleExpandChange(keys: DataTableRowKey[]) {
     if (expandedPathTasks.value[id]) continue;
     expandLoading.value[id] = true;
     try {
-      const res = await getPathTaskList({ target_id: id, size: 200, index: 1 });
+      const res = await getPathTaskList({ target_id: id, page_size: 200, page: 1 });
       expandedPathTasks.value[id] = res.data || [];
     } catch {
       expandedPathTasks.value[id] = [];

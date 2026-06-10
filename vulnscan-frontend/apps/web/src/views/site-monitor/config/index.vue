@@ -96,7 +96,7 @@ async function loadConfigs() {
 
 async function loadLibraries() {
   try {
-    const fRes = await getFileLibraryList({ size: 100 });
+    const fRes = await getFileLibraryList({ page: 1, page_size: 100 });
     fileLibraries.value = fRes?.data || [];
   } catch {
     /* ignore */

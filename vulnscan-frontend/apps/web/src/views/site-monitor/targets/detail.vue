@@ -119,8 +119,8 @@ async function loadPathTasks() {
     const [listRes, statsRes] = await Promise.all([
       getPathTaskList({
         target_id: targetId.value,
-        size: pathPagination.pageSize,
-        index: pathPagination.page,
+        page_size: pathPagination.pageSize,
+        page: pathPagination.page,
       }),
       getPathTaskExecutionStats(),
     ]);
@@ -650,7 +650,7 @@ async function openThumbnailPreview(page: CrawlPage) {
 
 async function loadLibraries() {
   try {
-    const f = await getFileLibraryList({ size: 100 });
+    const f = await getFileLibraryList({ page: 1, page_size: 100 });
     fileLibraries.value = f.data || [];
   } catch {
     // ignore

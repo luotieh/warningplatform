@@ -124,6 +124,11 @@ export function getImportErrorPayload(
   };
 }
 
+/** 统一分页请求参数：page 从 1 开始，page_size 为每页条数 */
+export function pageParams(page: number, pageSize: number): { page: number; page_size: number } {
+  return { page, page_size: pageSize };
+}
+
 export function normalizePagedResponse<T = any>(res: any): { items: T[]; total: number } {
   const envelope = res?.data ?? res;
   const payload = envelope?.data ?? envelope;

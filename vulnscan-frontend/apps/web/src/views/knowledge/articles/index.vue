@@ -2,6 +2,7 @@
 import { h, onMounted, ref, computed } from 'vue';
 import { NButton, NCard, NDataTable, NInput, NSelect, NSpace, NTag, NPopconfirm, NModal, NForm, NFormItem, useMessage } from 'naive-ui';
 import { useRouter } from 'vue-router';
+import { useNaiveTablePagination } from '#/composables/useNaiveTablePagination';
 import { getKnowledgeList, createKnowledge, updateKnowledge, deleteKnowledge, archiveKnowledge, type KnowledgeArticle } from '#/api/incident';
 
 defineOptions({ name: 'KnowledgeArticles' });
@@ -43,9 +44,11 @@ function openEdit(row: KnowledgeArticle) { editingId.value = row.id; form.value 
 
 async function fetchData() {
   loading.value = true;
-  try { const r = await getKnowledgeList({ index: page.value, size: pageSize.value, keyword: keyword.value || undefined, category: categoryFilter.value || undefined }); data.value = r.items; total.value = r.total; }
+  try { const r = await getKnowledgeList({ page: page.value, page_size: pageSize.value, keyword: keyword.value || undefined, category: categoryFilter.value || undefined }); data.value = r.items; total.value = r.total; }
   finally { loading.value = false; }
 }
+
+const { pagination } = useNaiveTablePagination({ page, pageSize, total, onFetch: fetchData });
 
 async function handleSave() {
   if (!form.value.title) { message.warning('请输入标题'); return; }
@@ -74,7 +77,7 @@ onMounted(fetchData);
         </NSpace>
       </template>
       <NDataTable :columns="columns" :data="data" :loading="loading" :bordered="false" size="small" striped
-        :pagination="{ page, pageSize, itemCount: total, showSizePicker: true, pageSizes: [20,50,100], onUpdatePage:(p:number)=>{page=p;fetchData()}, onUpdatePageSize:(s:number)=>{pageSize=s;page=1;fetchData()} }" />
+        remote :pagination="pagination" />
     </NCard>
     <NModal v-model:show="showModal" preset="dialog" :title="editingId?'编辑文章':'新建文章'" positive-text="保存" negative-text="取消" @positive-click="handleSave" style="width:600px">
       <NForm label-placement="left" label-width="60">

@@ -106,10 +106,10 @@ async function onSearch() {
     const [taskRes, statsRes] = await Promise.all([
       getTaskList({
         enabled: form.enabled,
-        index: pagination.page,
+        page: pagination.page,
         name: form.name,
         target_homepage: form.target_homepage,
-        size: pagination.pageSize,
+        page_size: pagination.pageSize,
       }),
       getTaskExecutionStats(),
     ]);
@@ -365,8 +365,8 @@ async function loadRecords() {
   recordsLoading.value = true;
   try {
     const params: any = {
-      index: recordsPagination.page,
-      size: recordsPagination.pageSize,
+      page: recordsPagination.page,
+      page_size: recordsPagination.pageSize,
       task_id: recordsTask.value.id,
     };
     if (recordsFilter.dimension) params.dimension = recordsFilter.dimension;
@@ -523,8 +523,8 @@ function handleDeleteAllExecutions() {
     onPositiveClick: async () => {
       try {
         const params: any = {
-          index: 1,
-          size: 500,
+          page: 1,
+          page_size: 500,
           task_id: recordsTask.value!.id,
         };
         if (recordsFilter.dimension) params.dimension = recordsFilter.dimension;

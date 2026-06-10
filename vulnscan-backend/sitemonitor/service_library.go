@@ -106,7 +106,7 @@ func (s *serviceMonitor) ListWordLibraries(ctx context.Context, req contract.Wor
 		return 0, nil, err
 	}
 	var list []model.MonitorWordLibrary
-	if err := paginateQuery(query, req.Index, req.Size).Order("created_at DESC").Find(&list).Error; err != nil {
+	if err := paginateQuery(query, req.Page, req.PageSize).Order("created_at DESC").Find(&list).Error; err != nil {
 		return 0, nil, err
 	}
 	return total, list, nil
@@ -221,12 +221,12 @@ func (s *serviceMonitor) ListWordEntries(ctx context.Context, req contract.WordE
 	if err := query.Count(&total).Error; err != nil {
 		return 0, nil, err
 	}
-	size := req.Size
+	size := req.PageSize
 	if size <= 0 {
 		size = 50
 	}
 	var list []model.MonitorWordEntry
-	if err := paginateQuery(query, req.Index, size).Order("id ASC").Find(&list).Error; err != nil {
+	if err := paginateQuery(query, req.Page, size).Order("id ASC").Find(&list).Error; err != nil {
 		return 0, nil, err
 	}
 	return total, list, nil
@@ -297,7 +297,7 @@ func (s *serviceMonitor) ListFileLibraries(ctx context.Context, req contract.Fil
 		return 0, nil, err
 	}
 	var list []model.MonitorFileLibrary
-	if err := paginateQuery(query, req.Index, req.Size).Order("created_at DESC").Find(&list).Error; err != nil {
+	if err := paginateQuery(query, req.Page, req.PageSize).Order("created_at DESC").Find(&list).Error; err != nil {
 		return 0, nil, err
 	}
 	return total, list, nil
@@ -359,12 +359,12 @@ func (s *serviceMonitor) ListFileEntries(ctx context.Context, req contract.FileE
 	if err := query.Count(&total).Error; err != nil {
 		return 0, nil, err
 	}
-	size := req.Size
+	size := req.PageSize
 	if size <= 0 {
 		size = 50
 	}
 	var list []model.MonitorFileEntry
-	if err := paginateQuery(query, req.Index, size).Order("id ASC").Find(&list).Error; err != nil {
+	if err := paginateQuery(query, req.Page, size).Order("id ASC").Find(&list).Error; err != nil {
 		return 0, nil, err
 	}
 	return total, list, nil

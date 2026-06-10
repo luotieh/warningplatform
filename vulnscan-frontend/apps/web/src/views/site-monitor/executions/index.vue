@@ -83,8 +83,8 @@ async function onSearch() {
   try {
     const res = await getExecutionList({
       dimension: form.dimension,
-      index: pagination.page,
-      size: pagination.pageSize,
+      page: pagination.page,
+      page_size: pagination.pageSize,
       status: form.status,
       path_task_id: form.path_task_id,
     });

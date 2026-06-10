@@ -12,7 +12,7 @@ export interface FetchResult {
 }
 
 export interface UseRemoteSelectOptions {
-  fetchFn: (params: { index: number; size: number; keyword?: string }) => Promise<FetchResult>;
+  fetchFn: (params: { page: number; page_size: number; keyword?: string }) => Promise<FetchResult>;
   pageSize?: number;
   immediate?: boolean;
 }
@@ -38,8 +38,8 @@ export function useRemoteSelect(opts: UseRemoteSelectOptions) {
     loading.value = true;
     try {
       const { items, total } = await opts.fetchFn({
-        index: page.value,
-        size: pageSize,
+        page: page.value,
+        page_size: pageSize,
         keyword: keyword.value || undefined,
       });
       options.value = reset ? items : [...options.value, ...items];

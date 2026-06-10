@@ -134,8 +134,8 @@ async function fetchEntries() {
   try {
     const res = await getWordEntryList({
       category_id: activeCatId.value,
-      index: entryPagination.page,
-      size: entryPagination.pageSize,
+      page: entryPagination.page,
+      page_size: entryPagination.pageSize,
       word: entrySearch.value,
     });
     entryList.value = res.data || [];

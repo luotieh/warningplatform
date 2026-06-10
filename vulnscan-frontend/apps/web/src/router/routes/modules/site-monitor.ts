@@ -17,6 +17,7 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '监测中心',
           icon: 'ri:dashboard-line',
+          order: 1,
           perms: [{ action: 'view', label: '查看' }],
           apis: [
             'GET /sitemonitor/dashboard/stats',
@@ -30,12 +31,45 @@ const routes: RouteRecordRaw[] = [
         },
       },
       {
+        name: 'MonitorTargets',
+        path: 'targets',
+        component: () => import('#/views/site-monitor/targets/index.vue'),
+        meta: {
+          title: '监测任务',
+          icon: 'ri:task-line',
+          order: 2,
+          perms: [
+            { action: 'create', label: '新建目标' },
+            { action: 'update', label: '编辑' },
+            { action: 'delete', label: '删除' },
+            { action: 'run', label: '手动执行' },
+            { action: 'import', label: '批量导入' },
+          ],
+          apis: [
+            'GET /sitemonitor/targets',
+            'GET /sitemonitor/path-tasks',
+            'GET /sitemonitor/fetch-meta',
+          ],
+          apisByAction: {
+            create: ['POST /sitemonitor/targets', 'POST /sitemonitor/path-tasks'],
+            update: ['PUT /sitemonitor/targets/:id', 'PUT /sitemonitor/path-tasks/:id'],
+            delete: ['DELETE /sitemonitor/targets/:id', 'DELETE /sitemonitor/path-tasks/:id'],
+            run: [
+              'POST /sitemonitor/targets/run/:id',
+              'POST /sitemonitor/path-tasks/run/:id',
+            ],
+            import: ['POST /sitemonitor/import'],
+          },
+        },
+      },
+      {
         name: 'MonitorIssues',
         path: 'issues',
         component: () => import('#/views/site-monitor/issues/index.vue'),
         meta: {
           title: '问题处置',
           icon: 'ri:alarm-warning-line',
+          order: 3,
           perms: [
             { action: 'view', label: '查看' },
             { action: 'dispose', label: '处置' },
@@ -62,42 +96,12 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '监测报告',
           icon: 'lucide:file-bar-chart-2',
+          order: 4,
           perms: [{ action: 'view', label: '查看' }, { action: 'export', label: '导出' }],
           apis: ['GET /sitemonitor/reports'],
           apisByAction: {
             view: ['GET /sitemonitor/reports'],
             export: ['POST /sitemonitor/reports/generate'],
-          },
-        },
-      },
-      {
-        name: 'MonitorTargets',
-        path: 'targets',
-        component: () => import('#/views/site-monitor/targets/index.vue'),
-        meta: {
-          title: '监测任务',
-          icon: 'ri:task-line',
-          perms: [
-            { action: 'create', label: '新建目标' },
-            { action: 'update', label: '编辑' },
-            { action: 'delete', label: '删除' },
-            { action: 'run', label: '手动执行' },
-            { action: 'import', label: '批量导入' },
-          ],
-          apis: [
-            'GET /sitemonitor/targets',
-            'GET /sitemonitor/path-tasks',
-            'GET /sitemonitor/fetch-meta',
-          ],
-          apisByAction: {
-            create: ['POST /sitemonitor/targets', 'POST /sitemonitor/path-tasks'],
-            update: ['PUT /sitemonitor/targets/:id', 'PUT /sitemonitor/path-tasks/:id'],
-            delete: ['DELETE /sitemonitor/targets/:id', 'DELETE /sitemonitor/path-tasks/:id'],
-            run: [
-              'POST /sitemonitor/targets/run/:id',
-              'POST /sitemonitor/path-tasks/run/:id',
-            ],
-            import: ['POST /sitemonitor/import'],
           },
         },
       },
@@ -185,6 +189,7 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '监测配置',
           icon: 'ri:settings-4-line',
+          order: 5,
           perms: [
             { action: 'view', label: '查看' },
             { action: 'update', label: '保存配置' },

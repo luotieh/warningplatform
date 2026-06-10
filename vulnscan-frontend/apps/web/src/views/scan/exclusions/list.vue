@@ -11,6 +11,7 @@ import {
   deleteExclusion, toggleExclusion,
   type ScanExclusion,
 } from '#/api/scan-exclusion';
+import { useNaiveTablePagination } from '#/composables/useNaiveTablePagination';
 
 const message = useMessage();
 const loading = ref(false);
@@ -29,6 +30,8 @@ async function fetchData() {
     loading.value = false;
   }
 }
+
+const { pagination } = useNaiveTablePagination({ page, pageSize, total, onFetch: fetchData });
 
 onMounted(fetchData);
 
@@ -157,18 +160,11 @@ async function handleDelete(id: string) {
         :columns="columns"
         :data="data"
         :loading="loading"
-        :pagination="{
-          page,
-          pageSize,
-          itemCount: total,
-          onUpdatePage: (p: number) => { page = p; fetchData(); },
-          onUpdatePageSize: (s: number) => { pageSize = s; page = 1; fetchData(); },
-          showSizePicker: true,
-          pageSizes: [10, 20, 50],
-        }"
+        :pagination="pagination"
         :scroll-x="900"
         size="small"
         striped
+        remote
       />
     </NCard>
 

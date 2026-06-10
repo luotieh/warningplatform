@@ -1,11 +1,9 @@
 package scanrunner
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"code.yt-security.com/public/core/generate/ulid"
@@ -89,101 +87,6 @@ func LaunchScan(db *gorm.DB, sched *Scheduler, p LaunchScanParams) (*LaunchScanR
 		return launchPinnedWorkerScan(db, sched, p, tmpl, params, priority, pinned)
 	}
 
-	splitter := NewTaskSplitter(db)
-
-	remoteWorkers := RemoteWorkerIDs(executorIDs)
-	autoShard := len(remoteWorkers) > 1
-	if autoShard {
-		params["worker_target_sharding"] = true
-	}
-
-	// 多 Worker 目标分片：子任务 worker_id 非空时仅由对应 Worker Poll 领取，不进入本机内存队列。
-	if workerTargetShardingEnabled(params) || autoShard {
-		probe := model.ScanTask{Targets: p.Targets, Parameters: params}
-		shards, err := ShardScanTaskByWorkers(db, context.Background(), probe, remoteWorkers)
-		if err != nil {
-			return nil, fmt.Errorf("worker target shard: %w", err)
-		}
-		multi := len(shards) > 1
-		pinned := false
-		for _, sh := range shards {
-			if strings.TrimSpace(sh.WorkerID) != "" {
-				pinned = true
-				break
-			}
-		}
-		if multi || pinned {
-			now := time.Now()
-			parent := model.ScanTask{
-				ID:           ulid.GenerateID(),
-				Name:         p.Name,
-				TemplateID:   tmpl.ID,
-				TemplateName: tmpl.Name,
-				Targets:      p.Targets,
-				Parameters:   params,
-				Priority:     priority,
-				Status:       model.TaskStatusSplitting,
-				TotalTargets: len(p.Targets),
-				ScheduleID:   p.ScheduleID,
-				CreatedBy:    p.CreatedBy,
-				OrganizeID:   p.OrganizeID,
-				Type:         p.TaskType,
-				ParentID:     p.ParentTaskID,
-				CreatedAt:    now,
-				UpdatedAt:    now,
-			}
-			if err := db.Create(&parent).Error; err != nil {
-				return nil, fmt.Errorf("create parent task: %w", err)
-			}
-
-			for i, sh := range shards {
-				subParams := stripWorkerShardSchedulingParams(params)
-				subParams["_shard_index"] = i + 1
-				subParams["_total_shards"] = len(shards)
-				subNow := time.Now()
-				wid := strings.TrimSpace(sh.WorkerID)
-				sub := model.ScanTask{
-					ID:           ulid.GenerateID(),
-					Name:         fmt.Sprintf("%s [节点分片 %d/%d]", p.Name, i+1, len(shards)),
-					TemplateID:   tmpl.ID,
-					TemplateName: tmpl.Name,
-					Type:         p.TaskType,
-					Targets:      sh.Targets,
-					Parameters:   subParams,
-					Priority:     priority,
-					ScheduleID:   p.ScheduleID,
-					CreatedBy:    p.CreatedBy,
-					OrganizeID:   p.OrganizeID,
-					Status:       model.TaskStatusQueued,
-					TotalTargets: len(sh.Targets),
-					ParentID:     parent.ID,
-					WorkerID:     wid,
-					CreatedAt:    subNow,
-					UpdatedAt:    subNow,
-				}
-				if err := db.Create(&sub).Error; err != nil {
-					return nil, fmt.Errorf("create shard subtask: %w", err)
-				}
-				if wid == "" {
-					sched.Enqueue(&sub)
-				}
-			}
-
-			if err := db.Model(&parent).Updates(map[string]interface{}{
-				"sub_count": len(shards),
-			}).Error; err != nil {
-				return nil, fmt.Errorf("update parent sub_count: %w", err)
-			}
-
-			slog.Info("[LaunchScan] 多节点目标分片已创建",
-				"parent_task_id", parent.ID,
-				"shards", len(shards),
-				"template", tmpl.ID,
-			)
-			return &LaunchScanResult{Task: &parent, SplitMode: true, SubCount: len(shards)}, nil
-		}
-	}
-
 	task := model.ScanTask{
 		ID:           ulid.GenerateID(),
 		Name:         p.Name,
@@ -201,24 +104,6 @@ func LaunchScan(db *gorm.DB, sched *Scheduler, p LaunchScanParams) (*LaunchScanR
 		ParentID:     p.ParentTaskID,
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
-	}
-
-	if splitter.ShouldSplit(p.Targets) {
-		task.Status = model.TaskStatusSplitting
-		if err := db.Create(&task).Error; err != nil {
-			return nil, fmt.Errorf("create parent task: %w", err)
-		}
-
-		subTasks, err := splitter.Split(task)
-		if err != nil {
-			return nil, fmt.Errorf("split task: %w", err)
-		}
-
-		for i := range subTasks {
-			sched.Enqueue(&subTasks[i])
-		}
-
-		return &LaunchScanResult{Task: &task, SplitMode: true, SubCount: len(subTasks)}, nil
 	}
 
 	if err := db.Create(&task).Error; err != nil {

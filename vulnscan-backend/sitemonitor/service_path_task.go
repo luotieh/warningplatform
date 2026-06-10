@@ -146,7 +146,7 @@ func (s *serviceMonitor) ListPathTasks(ctx context.Context, req contract.PathTas
 		return 0, nil, err
 	}
 	var list []model.MonitorPathTask
-	if err := paginateQuery(q, req.Index, req.Size).Order("created_at DESC").Find(&list).Error; err != nil {
+	if err := paginateQuery(q, req.Page, req.PageSize).Order("created_at DESC").Find(&list).Error; err != nil {
 		return 0, nil, err
 	}
 	return total, list, nil

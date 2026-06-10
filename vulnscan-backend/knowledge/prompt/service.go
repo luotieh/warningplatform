@@ -129,7 +129,7 @@ func (s *service) List(ctx context.Context, req ListReq) ([]ListItem, int64, err
 		return nil, 0, err
 	}
 
-	if err := tx.Scopes(db.Paginate(req.Index, req.Size)).
+	if err := tx.Scopes(db.Paginate(req.Page, req.PageSize)).
 		Order("is_builtin DESC, created_at DESC").Find(&items).Error; err != nil {
 		return nil, 0, err
 	}

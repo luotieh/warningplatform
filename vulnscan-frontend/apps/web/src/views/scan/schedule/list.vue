@@ -13,6 +13,7 @@ import {
 } from '#/api/schedule';
 import { getTemplateList, type ScanTemplate } from '#/api/template';
 import { getScanEnginePresets, type ScanEnginePreset } from '#/api/task';
+import { useNaiveTablePagination } from '#/composables/useNaiveTablePagination';
 
 const message = useMessage();
 const loading = ref(false);
@@ -34,6 +35,14 @@ async function fetchData() {
     loading.value = false;
   }
 }
+
+const { pagination } = useNaiveTablePagination({
+  page,
+  pageSize,
+  total,
+  onFetch: fetchData,
+  prefix: ({ itemCount }) => `共 ${itemCount} 条`,
+});
 
 async function loadTemplates() {
   try {
@@ -307,14 +316,8 @@ function openDetail(row: ScanSchedule) {
 
       <NDataTable
         :columns="columns" :data="data" :loading="loading" size="small"
-        :bordered="false" striped :scroll-x="1200"
-        :pagination="{
-          page, pageSize, itemCount: total, showSizePicker: true,
-          pageSizes: [20, 50, 100],
-          prefix: ({ itemCount }: any) => `共 ${itemCount} 条`,
-          onUpdatePage: (p: number) => { page = p; fetchData(); },
-          onUpdatePageSize: (s: number) => { pageSize = s; page = 1; fetchData(); },
-        }"
+        :bordered="false" striped remote :scroll-x="1200"
+        :pagination="pagination"
       />
     </NCard>
 

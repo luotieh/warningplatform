@@ -146,7 +146,7 @@ const complianceColumns: DataTableColumns<MonitorReportComplianceItem> = [
 ];
 
 async function fetchTasks() {
-  const result = await getPathTaskList({ index: 1, size: 200 });
+  const result = await getPathTaskList({ page: 1, page_size: 200 });
   tasks.value = result.data ?? [];
 }
 

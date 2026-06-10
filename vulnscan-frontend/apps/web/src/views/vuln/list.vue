@@ -27,6 +27,7 @@ import {
   retestVuln,
   type Vulnerability,
 } from '#/api/vuln';
+import { useNaiveTablePagination } from '#/composables/useNaiveTablePagination';
 import { sevLabels, sevColors } from '#/constants/severity';
 import { vulnStatusLabels as statusLabels, vulnStatusTypes as statusTypes } from '#/constants/status';
 
@@ -131,6 +132,13 @@ async function fetchData() {
     loading.value = false;
   }
 }
+
+const { pagination } = useNaiveTablePagination({
+  page,
+  pageSize,
+  total,
+  onFetch: fetchData,
+});
 
 async function fetchStats() {
   try {
@@ -279,16 +287,9 @@ onMounted(() => {
         :bordered="false"
         size="small"
         striped
+        remote
         :scroll-x="1000"
-        :pagination="{
-          page: page,
-          pageSize: pageSize,
-          itemCount: total,
-          showSizePicker: true,
-          pageSizes: [20, 50, 100],
-          onUpdatePage: (p: number) => { page = p; fetchData(); },
-          onUpdatePageSize: (s: number) => { pageSize = s; page = 1; fetchData(); },
-        }"
+        :pagination="pagination"
       />
     </NCard>
   </div>

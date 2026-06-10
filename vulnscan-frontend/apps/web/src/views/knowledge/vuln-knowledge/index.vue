@@ -123,7 +123,7 @@ async function fetchData() {
       page_size: pageSize.value,
       keyword: keyword.value || undefined,
     });
-    data.value = res.list;
+    data.value = res.items;
     total.value = res.total;
   } catch {
     message.error('加载漏洞知识失败');
@@ -207,13 +207,14 @@ onMounted(fetchData);
         :columns="columns"
         :data="data"
         :loading="loading"
+        remote
         :pagination="{
           page,
           pageSize,
-          pageCount: Math.ceil(total / pageSize),
+          itemCount: total,
           showSizePicker: true,
           pageSizes: [10, 20, 50],
-          onChange: handlePageChange,
+          onUpdatePage: handlePageChange,
           onUpdatePageSize: handlePageSizeChange,
           prefix: () => `共 ${total} 条`,
         }"

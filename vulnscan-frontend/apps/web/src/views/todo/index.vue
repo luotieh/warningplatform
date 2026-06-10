@@ -11,6 +11,7 @@ import {
   createTodo, deleteTodo, getTodoList, getTodoStats,
   type TodoItem, type TodoStats, updateTodo, updateTodoStatus,
 } from '#/api/message';
+import { useNaiveTablePagination } from '#/composables/useNaiveTablePagination';
 
 defineOptions({ name: 'MyTodo' });
 
@@ -174,8 +175,8 @@ async function fetchData() {
   loading.value = true;
   try {
     const params: Record<string, any> = {
-      index: page.value,
-      size: pageSize.value,
+      page: page.value,
+      page_size: pageSize.value,
       source: sourceFilter.value,
     };
     if (keyword.value) params.keyword = keyword.value;
@@ -187,6 +188,8 @@ async function fetchData() {
     loading.value = false;
   }
 }
+
+const { pagination } = useNaiveTablePagination({ page, pageSize, total, onFetch: fetchData });
 
 async function refreshStats() {
   try {
@@ -368,14 +371,10 @@ onMounted(() => {
         :bordered="false"
         size="small"
         striped
+        remote
         :scroll-x="1200"
         :row-key="(row: TodoItem) => row.id"
-        :pagination="{
-          page, pageSize, itemCount: total,
-          showSizePicker: true, pageSizes: [20, 50, 100],
-          onUpdatePage: (p: number) => { page = p; fetchData(); },
-          onUpdatePageSize: (s: number) => { pageSize = s; page = 1; fetchData(); },
-        }"
+        :pagination="pagination"
       />
     </NCard>
 

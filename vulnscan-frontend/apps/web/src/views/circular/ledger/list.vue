@@ -3,6 +3,7 @@ import { h, onMounted, ref, computed } from 'vue';
 import { NButton, NCard, NDataTable, NInput, NSelect, NSpace, NTag } from 'naive-ui';
 import { useRouter } from 'vue-router';
 import { getLedgerList, type CircularItem, CircularStatusLabels, CircularStatusTypes } from '#/api/circular';
+import { useNaiveTablePagination } from '#/composables/useNaiveTablePagination';
 import { formatCircularTime } from '../utils';
 
 defineOptions({ name: 'CircularLedgerList' });
@@ -33,9 +34,11 @@ const columns = computed(() => [
 
 async function fetchData() {
   loading.value = true;
-  try { const r = await getLedgerList({ index: page.value, size: pageSize.value, keyword: keyword.value || undefined, status: statusFilter.value || undefined }); data.value = r.items; total.value = r.total; }
+  try { const r = await getLedgerList({ page: page.value, page_size: pageSize.value, keyword: keyword.value || undefined, status: statusFilter.value || undefined }); data.value = r.items; total.value = r.total; }
   finally { loading.value = false; }
 }
+
+const { pagination } = useNaiveTablePagination({ page, pageSize, total, onFetch: fetchData });
 
 onMounted(fetchData);
 </script>
@@ -51,7 +54,7 @@ onMounted(fetchData);
         </NSpace>
       </template>
       <NDataTable :columns="columns" :data="data" :loading="loading" :bordered="false" size="small" striped
-        :pagination="{ page, pageSize, itemCount: total, showSizePicker: true, pageSizes: [20,50,100], onUpdatePage:(p:number)=>{page=p;fetchData()}, onUpdatePageSize:(s:number)=>{pageSize=s;page=1;fetchData()} }" />
+        remote :pagination="pagination" />
     </NCard>
   </div>
 </template>

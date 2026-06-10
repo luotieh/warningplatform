@@ -94,10 +94,10 @@ async function fetchEntries() {
   loading.value = true;
   try {
     const res = await getFileEntryList({
-      index: entryPagination.page,
+      page: entryPagination.page,
       library_id: libraryId,
       path: entrySearch.value,
-      size: entryPagination.pageSize,
+      page_size: entryPagination.pageSize,
     });
     entryList.value = res.data || [];
     entryPagination.itemCount = (res as any).count || 0;

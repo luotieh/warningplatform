@@ -445,11 +445,12 @@ onMounted(() => {
           :columns="columns"
           :data="data"
           :loading="loading"
+          remote
           :pagination="{
             page: page,
             pageSize: pageSize,
             itemCount: total,
-            onChange: handlePageChange,
+            onUpdatePage: handlePageChange,
             showSizePicker: false,
           }"
           :row-key="(row: Product) => row.id"

@@ -331,8 +331,8 @@ export interface TodoQuery {
   priority?: number;
   keyword?: string;
   overdue?: string;
-  index?: number;
-  size?: number;
+  page?: number;
+  page_size?: number;
 }
 
 export interface TodoStats {
@@ -345,7 +345,14 @@ export interface TodoStats {
 }
 
 export async function getTodoList(params?: TodoQuery) {
-  const res = await baseRequestClient.get<any>('/iam/todos', { params });
+  const { page, page_size, ...rest } = params ?? {};
+  const res = await baseRequestClient.get<any>('/iam/todos', {
+    params: {
+      ...rest,
+      index: page ?? 1,
+      size: page_size ?? 20,
+    },
+  });
   return normalizePagedResponse<TodoItem>(res);
 }
 

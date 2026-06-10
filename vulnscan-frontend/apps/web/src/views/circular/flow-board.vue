@@ -16,6 +16,7 @@ import {
   getInputDetail,
   type CircularItem, CircularStatusLabels, CircularStatusTypes,
 } from '#/api/circular';
+import { useNaiveTablePagination } from '#/composables/useNaiveTablePagination';
 import { useCircularOrganizeMaps } from './composables/use-circular-organize';
 import { extractCircularUnitHint, formatCircularTime } from './utils';
 import { useRouter, useRoute } from 'vue-router';
@@ -120,7 +121,7 @@ async function openActionModal(row: CircularItem) {
 
 async function fetchData() {
   loading.value = true;
-  const params: Record<string, any> = { index: page.value, size: pageSize.value };
+  const params: Record<string, any> = { page: page.value, page_size: pageSize.value };
   if (keyword.value) params.keyword = keyword.value;
 
   let fetcher: Promise<any>;
@@ -138,11 +139,13 @@ async function fetchData() {
   }
 }
 
+const { pagination } = useNaiveTablePagination({ page, pageSize, total, onFetch: fetchData });
+
 async function fetchAllCounts() {
   const [v, d, r] = await Promise.allSettled([
-    getVerifyList({ index: 1, size: 1 }),
-    getDistributeList({ index: 1, size: 1 }),
-    getReviewList({ index: 1, size: 1 }),
+    getVerifyList({ page: 1, page_size: 1 }),
+    getDistributeList({ page: 1, page_size: 1 }),
+    getReviewList({ page: 1, page_size: 1 }),
   ]);
   if (v.status === 'fulfilled') tabCounts.value.verify = v.value.total;
   if (d.status === 'fulfilled') tabCounts.value.distribute = d.value.total;
@@ -239,11 +242,8 @@ onMounted(() => {
         :bordered="false"
         size="small"
         striped
-        :pagination="{
-          page, pageSize, itemCount: total, showSizePicker: true, pageSizes: [20, 50, 100],
-          onUpdatePage: (p: number) => { page = p; fetchData(); },
-          onUpdatePageSize: (s: number) => { pageSize = s; page = 1; fetchData(); },
-        }"
+        remote
+        :pagination="pagination"
       />
     </NCard>
 

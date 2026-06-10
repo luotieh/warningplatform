@@ -113,8 +113,8 @@ const fileLibraries = ref<FileLibrary[]>([]);
 async function fetchLibraries() {
   try {
     const [wRes, fRes] = await Promise.all([
-      getWordLibraryList({ index: 1, size: 100 }),
-      getFileLibraryList({ index: 1, size: 100 }),
+      getWordLibraryList({ page: 1, page_size: 100 }),
+      getFileLibraryList({ page: 1, page_size: 100 }),
     ]);
     wordLibraries.value = wRes?.data || [];
     fileLibraries.value = fRes?.data || [];

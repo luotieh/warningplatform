@@ -12,6 +12,7 @@ import {
   CircularStatusLabels,
   CircularStatusTypes,
 } from '#/api/circular';
+import { useNaiveTablePagination } from '#/composables/useNaiveTablePagination';
 import { useCircularOrganizeMaps } from '../composables/use-circular-organize';
 import { extractCircularUnitHint, formatCircularTime } from '../utils';
 
@@ -79,13 +80,15 @@ async function openRedistModal(row: CircularItem) {
 async function fetchData() {
   loading.value = true;
   try {
-    const r = await getDisposalList({ index: page.value, size: pageSize.value, keyword: keyword.value || undefined });
+    const r = await getDisposalList({ page: page.value, page_size: pageSize.value, keyword: keyword.value || undefined });
     data.value = r.items;
     total.value = r.total;
   } finally {
     loading.value = false;
   }
 }
+
+const { pagination } = useNaiveTablePagination({ page, pageSize, total, onFetch: fetchData });
 
 async function handleRedistribute() {
   if (!redistForm.value.target_organize) { message.warning('请选择目标单位'); return; }
@@ -127,7 +130,7 @@ onMounted(fetchData);
         </NSpace>
       </template>
       <NDataTable :columns="columns" :data="data" :loading="loading" :bordered="false" size="small" striped
-        :pagination="{ page, pageSize, itemCount: total, showSizePicker: true, pageSizes: [20,50,100], onUpdatePage:(p:number)=>{page=p;fetchData()}, onUpdatePageSize:(s:number)=>{pageSize=s;page=1;fetchData()} }" />
+        remote :pagination="pagination" />
     </NCard>
     <NModal v-model:show="showRedist" preset="dialog" title="转派通报" positive-text="确认" negative-text="取消" @positive-click="handleRedistribute">
       <NForm label-placement="left" label-width="88">

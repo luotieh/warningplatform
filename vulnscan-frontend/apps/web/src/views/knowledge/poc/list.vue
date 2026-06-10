@@ -48,6 +48,7 @@ import {
   validatePocYaml,
   type PocTemplate,
 } from '#/api/poc/index';
+import { useNaiveTablePagination } from '#/composables/useNaiveTablePagination';
 import { sevLabels, sevColors } from '#/constants/severity';
 
 const YamlEditor = defineAsyncComponent(() => import('./yaml-editor.vue'));
@@ -396,6 +397,14 @@ async function fetchData() {
   }
 }
 
+const { pagination } = useNaiveTablePagination({
+  page,
+  pageSize,
+  total,
+  onFetch: fetchData,
+  pageSizes: [20, 50, 100],
+});
+
 async function handleToggle(id: string, enabled: boolean) {
   try {
     await togglePoc(id, enabled);
@@ -717,16 +726,9 @@ onMounted(() => {
             :bordered="false"
             size="small"
             striped
+            remote
             :scroll-x="1100"
-            :pagination="{
-              page,
-              pageSize,
-              itemCount: total,
-              showSizePicker: true,
-              pageSizes: [20, 50, 100],
-              onUpdatePage: (p: number) => { page = p; fetchData(); },
-              onUpdatePageSize: (s: number) => { pageSize = s; page = 1; fetchData(); },
-            }"
+            :pagination="pagination"
           />
         </NCard>
       </div>

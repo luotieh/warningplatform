@@ -14,6 +14,7 @@ import {
   deleteTemplate, toggleTemplate, seedBuiltins,
   type ScanTemplate, type TemplateStage, type TemplateParam,
 } from '#/api/template';
+import { useNaiveTablePagination } from '#/composables/useNaiveTablePagination';
 import { getPipelineModules, type ModuleInfo } from '#/api/pipeline';
 
 const message = useMessage();
@@ -63,6 +64,8 @@ async function fetchData() {
     loading.value = false;
   }
 }
+
+const { pagination } = useNaiveTablePagination({ page, pageSize, total, onFetch: fetchData });
 
 async function loadModules() {
   try {
@@ -290,12 +293,7 @@ function openDetail(row: ScanTemplate) {
       </template>
       <NDataTable
         :columns="columns" :data="data" :loading="loading" size="small"
-        :scroll-x="1200" :pagination="{
-          page, pageSize, itemCount: total, showSizePicker: true,
-          pageSizes: [10, 20, 50],
-          onUpdatePage: (p: number) => { page = p; fetchData(); },
-          onUpdatePageSize: (s: number) => { pageSize = s; page = 1; fetchData(); },
-        }"
+        remote :scroll-x="1200" :pagination="pagination"
       />
     </NCard>
 

@@ -168,8 +168,8 @@ async function loadData(dimKey: string) {
 
   try {
     const params: any = {
-      index: pagination.page,
-      size: pagination.pageSize,
+      page: pagination.page,
+      page_size: pagination.pageSize,
       path_task_id: pathTaskId.value,
     };
 
@@ -212,8 +212,8 @@ async function loadAllDimStats() {
       const targetDim = dimKey === 'all' ? '' : dimKey;
       try {
         const params: any = {
-          index: 1,
-          size: 1,
+          page: 1,
+          page_size: 1,
           path_task_id: pathTaskId.value,
         };
         if (targetDim) params.dimension = targetDim;

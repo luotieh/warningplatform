@@ -537,9 +537,9 @@ export async function getTaskList(
 ) {
   const res = await getPathTaskList({
     enabled: params?.enabled,
-    index: params?.index,
+    page: params?.page,
     name: params?.name || params?.target_homepage,
-    size: params?.size,
+    page_size: params?.page_size,
   });
   return {
     ...res,

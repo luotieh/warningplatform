@@ -145,14 +145,14 @@ func mergeAttributes(old, incoming model.JSONMap) model.JSONMap {
 }
 
 type AssetListQuery struct {
-	Index   int    `form:"index"`
-	Size    int    `form:"size" binding:"lte=100"`
-	Keyword string `form:"keyword"`
-	Type    string `form:"type"`
-	Status  string `form:"status"`
-	MinRisk int    `form:"min_risk"`
-	MaxRisk int    `form:"max_risk"`
-	Source  string `form:"source"`
+	Page     int    `form:"page"`
+	PageSize int    `form:"page_size" binding:"lte=100"`
+	Keyword  string `form:"keyword"`
+	Type     string `form:"type"`
+	Status   string `form:"status"`
+	MinRisk  int    `form:"min_risk"`
+	MaxRisk  int    `form:"max_risk"`
+	Source   string `form:"source"`
 }
 
 func (s *ServiceASM) ListDiscoveredAssets(projectID string, query AssetListQuery) ([]model.ASMDiscoveredAsset, int64) {
@@ -181,11 +181,11 @@ func (s *ServiceASM) ListDiscoveredAssets(projectID string, query AssetListQuery
 
 	tx.Count(&count)
 
-	page := query.Index
+	page := query.Page
 	if page <= 0 {
 		page = 1
 	}
-	size := query.Size
+	size := query.PageSize
 	if size <= 0 || size > 100 {
 		size = 20
 	}

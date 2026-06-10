@@ -116,8 +116,8 @@ type RemediationStatsResp struct {
 }
 
 type OverdueListReq struct {
-	Index int `form:"index"`
-	Size  int `form:"size" binding:"lte=100"`
+	Page     int `form:"page"`
+	PageSize int `form:"page_size" binding:"lte=100"`
 }
 
 type MultiDimItem struct {
@@ -191,9 +191,9 @@ type AssetTimelineItem struct {
 }
 
 type AssetListReq struct {
-	Keyword string `form:"keyword"`
-	Index   int    `form:"index"`
-	Size    int    `form:"size" binding:"lte=100"`
+	Keyword  string `form:"keyword"`
+	Page     int    `form:"page"`
+	PageSize int    `form:"page_size" binding:"lte=100"`
 }
 
 type AssetSummaryItem struct {
