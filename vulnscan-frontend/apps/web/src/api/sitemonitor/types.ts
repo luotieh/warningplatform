@@ -367,11 +367,16 @@ export interface ImportRowResult {
   error?: string;
 }
 
+export type ImportStatus = 'completed' | 'failed' | 'pending' | 'running';
+
 export interface ImportResult {
   id: string;
+  status: ImportStatus;
   total: number;
   success: number;
   failed: number;
+  processed: number;
+  error?: string;
   results: ImportRowResult[];
   created_at: string;
 }

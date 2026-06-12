@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { onMounted, onUnmounted, ref, computed, h, nextTick } from 'vue';
+import { onMounted, onUnmounted, ref, computed, h, nextTick, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import {
@@ -62,11 +62,39 @@ import {
   primaryDataHint,
 } from '../components/finding-display';
 import { downloadTaskReport } from '#/api/report';
+import {
+  stageLabels,
+  typeLabels,
+  typeColors,
+  moduleLabels,
+  profileLabels,
+  severityConfig,
+  subTabDefs,
+  sourceLabels,
+  wellKnownPorts,
+  dnsTypeColors,
+  hostOnlyTabs,
+  formatTime,
+  cleanTarget,
+  getConfColor,
+  confLabel,
+} from '../scan-constants';
 
 defineOptions({ name: 'ScanTaskDetail' });
 
+const props = defineProps<{
+  taskId?: string;
+}>();
+
+const emit = defineEmits<{
+  (e: 'close'): void;
+}>();
+
 const route = useRoute();
 const router = useRouter();
+
+const resolvedTaskId = computed(() => props.taskId || (route.params.id as string));
+const isDrawerMode = computed(() => !!props.taskId);
 const message = useMessage();
 const loading = ref(true);
 const task = ref<ScanTask | null>(null);
@@ -118,7 +146,7 @@ interface EndpointNode {
 
 const selectedEndpoint = ref('');
 
-const hostOnlyTabs = new Set(['subdomain', 'dns_record', 'cert_info', 'port_open', 'infra', 'nettopo', 'info_collect', 'all']);
+// hostOnlyTabs imported from scan-constants
 
 const cachedEndpointList = ref<EndpointNode[]>([]);
 
@@ -164,13 +192,7 @@ interface LogEntry {
 const liveLogs = ref<LogEntry[]>([]);
 const liveModuleProgress = ref({ done: 0, total: 0 });
 
-const stageLabels: Record<string, string> = {
-  discover: '资产发现',
-  recon: '信息收集',
-  vuln: '漏洞检测',
-  exploit: '漏洞利用',
-  report: '报告生成',
-};
+// stageLabels imported from scan-constants
 
 function formatLogTime(iso?: string): string {
   const d = iso ? new Date(iso) : new Date();
@@ -202,74 +224,7 @@ function mergeApiLogs(entries: ScanLogEntry[]) {
   liveLogs.value = [...fresh.map(scanLogToEntry), ...liveLogs.value].slice(0, 200);
 }
 
-const dataKeyLabels: Record<string, string> = {
-  url: 'URL',
-  ip: 'IP',
-  port: '端口',
-  protocol: '协议',
-  host: '主机',
-  domain: '域名',
-  service: '服务',
-  version: '版本',
-  banner: 'Banner',
-  server: '服务器',
-  powered_by: '技术栈',
-  status_code: '状态码',
-  title: '页面标题',
-  name: '名称',
-  category: '分类',
-  method: '方法',
-  record_type: '记录类型',
-  value: '值',
-  hash: 'Hash',
-  username: '用户名',
-  password: '密码',
-  param: '参数',
-  payload: 'Payload',
-  type: '攻击类型',
-  context: '上下文',
-  cipher_suite: '密码套件',
-  algorithm: '算法',
-  key_size: '密钥大小',
-  common_name: 'CN',
-  issuer: '签发者',
-  expired_at: '过期时间',
-  expires_at: '到期时间',
-  tls_version: 'TLS版本',
-  waf: 'WAF',
-  api_type: 'API类型',
-  status: '状态',
-  path: '路径',
-  action: '表单Action',
-  inputs: '输入字段',
-  parameters: '参数',
-  enctype: '编码类型',
-  email: '邮箱',
-  source: '来源',
-  confidence_basis: '置信度依据',
-  matched_seed: '命中种子域',
-  matched_seed_root: '命中根域',
-  matched_company: '命中公司名',
-  query_company: '查询企业名称',
-  matched_host: '搜索结果主机',
-  tag: '标签',
-  attribute: '属性',
-  technologies: '技术栈',
-  content_length: '内容长度',
-  cdn_name: 'CDN',
-  is_cdn: 'CDN检测',
-  subdomain: '子域名',
-  internal_ips: '内网IP',
-  record_count: '记录数',
-  scheme: '协议',
-  response_time: '响应时间',
-  redirect_url: '跳转地址',
-  favicon_hash: 'Favicon Hash',
-  jarm_hash: 'JARM Hash',
-  content_type: '内容类型',
-  header_server: '服务器',
-  screenshot: '页面截图',
-};
+// dataKeyLabels imported from scan-constants
 
 const retestingFindingId = ref<string | null>(null);
 
@@ -394,238 +349,7 @@ async function convertFindingToIncident(finding: ScanFinding) {
   }
 }
 
-const profileLabels: Record<string, string> = {
-  full: '全面扫描',
-  quick: '快速扫描',
-  recon: '信息收集',
-  vuln: '漏洞扫描',
-  'vuln-full': '深度漏洞',
-};
-
-const typeLabels: Record<string, string> = {
-  // 资产发现
-  host_alive: '主机存活',
-  port_open: 'TCP端口',
-  udp_port: 'UDP端口',
-  service: '服务识别',
-  // 网页/URL
-  web_page: '网页',
-  web_info: '网页',
-  url: 'URL发现',
-  form: '表单',
-  script: '脚本',
-  crawler: '爬虫发现',
-  xhr: 'XHR请求',
-  // DNS/子域名
-  dns_record: 'DNS记录',
-  subdomain: '子域名',
-  dns_cname: 'DNS CNAME',
-  dns_multi_ip: 'DNS多IP',
-  dns_nameservers: 'DNS服务器',
-  reverse_dns: '反向DNS',
-  zone_transfer: '域传送',
-  // 证书/TLS
-  cert_info: '证书信息',
-  cert_expired: '证书过期',
-  cert_expiring_soon: '证书即将过期',
-  self_signed_cert: '自签名证书',
-  weak_tls: 'TLS弱配置',
-  tls_fingerprint: 'TLS指纹',
-  tls_cert_expired: 'TLS证书过期',
-  tls_weak_version: 'TLS弱版本',
-  weak_cipher: '弱加密套件',
-  weak_signature: '弱签名算法',
-  weak_key: '弱密钥',
-  // 指纹/技术
-  tech: '技术栈',
-  tech_stack: '技术栈',
-  fingerprint: '指纹',
-  favicon: 'Favicon',
-  favicon_hash: 'Favicon Hash',
-  header_fingerprint: 'HTTP头指纹',
-  js_fingerprint: 'JS指纹',
-  screenshot: '页面截图',
-  waf: 'WAF检测',
-  waf_detected: 'WAF检测',
-  // 网络拓扑/基础设施
-  cdn_detected: 'CDN检测',
-  load_balancer_detected: '负载均衡',
-  traceroute: '路由追踪',
-  network_gateway: '网络网关',
-  ip_attribution: 'IP归属',
-  real_ip: '真实IP',
-  asn: 'ASN信息',
-  organization: '组织信息',
-  domain: '域名信息',
-  ip_range: 'IP段',
-  internal_ip_leak: '内网IP泄露',
-  // 信息收集
-  email: '邮箱',
-  api_endpoint: 'API端点',
-  directory: '目录',
-  missing_security_headers: '缺失安全头',
-  code_leak: '代码泄露',
-  cyber_asset: '网络资产',
-  nuclei: 'Nuclei检测',
-  // 信息泄露
-  info_leak: '信息泄露',
-  body_regex: '正则匹配',
-  body_contains: '内容匹配',
-  header: 'HTTP头',
-  git_leak: 'Git泄露',
-  dir_found: '目录发现',
-  // SQL注入
-  sqli: 'SQL注入',
-  sqli_error: 'SQLi(错误)',
-  sqli_boolean: 'SQLi(布尔)',
-  sqli_time: 'SQLi(时间)',
-  sqli_union: 'SQLi(联合)',
-  // XSS
-  xss: 'XSS',
-  xss_reflected: 'XSS(反射)',
-  xss_dom: 'XSS(DOM)',
-  // SSRF
-  ssrf: 'SSRF',
-  ssrf_potential: 'SSRF(疑似)',
-  // 命令注入
-  cmdi_time: '命令注入(时间)',
-  cmdi_output: '命令注入(回显)',
-  // 文件包含
-  lfi: '文件包含',
-  // SSTI
-  ssti: 'SSTI',
-  ssti_error: 'SSTI(错误)',
-  ssti_exploit: 'SSTI(利用)',
-  // XXE
-  xxe_error: 'XXE(错误)',
-  xxe_entity: 'XXE(实体)',
-  xxe_file_read: 'XXE(文件读取)',
-  xxe_ssrf: 'XXE(SSRF)',
-  // NoSQL注入
-  nosqli_error: 'NoSQLi(错误)',
-  nosqli_boolean: 'NoSQLi(布尔)',
-  nosqli_operator: 'NoSQLi(运算符)',
-  nosqli_auth_bypass: 'NoSQLi(认证绕过)',
-  // JWT
-  jwt_alg_none: 'JWT(alg:none)',
-  jwt_no_expiry: 'JWT(无过期)',
-  jwt_long_expiry: 'JWT(长过期)',
-  jwt_weak_secret: 'JWT(弱密钥)',
-  jwt_alg_none_bypass: 'JWT(none绕过)',
-  jwt_empty_sig: 'JWT(空签名)',
-  // 弱口令/暴力破解
-  weak_pass: '弱口令',
-  weak_password: '弱口令',
-  // API安全
-  api_endpoint_exposed: 'API暴露',
-  api_unauth_access: 'API未授权',
-  api_no_rate_limit: 'API无限流',
-  api_info_leak_header: 'API头泄露',
-  api_cors_wildcard: 'CORS通配',
-  api_verbose_error: 'API详细错误',
-  api_idor: 'IDOR',
-  api_graphql_introspection: 'GraphQL自省',
-  api_graphql_types: 'GraphQL类型',
-};
-
-const typeColors: Record<string, string> = {
-  // 资产发现
-  host_alive: '#38a169',
-  port_open: '#3182ce', udp_port: '#2b6cb0',
-  service: '#805ad5',
-  // 网页/URL
-  web_page: '#dd6b20', web_info: '#dd6b20', url: '#718096', form: '#d69e2e', script: '#805ad5', xhr: '#805ad5', crawler: '#718096',
-  // DNS/子域名
-  dns_record: '#d69e2e', subdomain: '#319795',
-  dns_cname: '#d69e2e', dns_multi_ip: '#d69e2e', dns_nameservers: '#d69e2e', reverse_dns: '#d69e2e', zone_transfer: '#e53e3e',
-  // 证书/TLS
-  cert_info: '#e53e3e', cert_expired: '#e53e3e', cert_expiring_soon: '#ed8936', self_signed_cert: '#e53e3e',
-  weak_tls: '#c53030', tls_fingerprint: '#805ad5', tls_cert_expired: '#e53e3e', tls_weak_version: '#c53030',
-  weak_cipher: '#c53030', weak_signature: '#c53030', weak_key: '#c53030',
-  // 指纹/技术
-  tech: '#9f7aea', tech_stack: '#9f7aea', fingerprint: '#9f7aea', favicon: '#805ad5', favicon_hash: '#805ad5',
-  header_fingerprint: '#9f7aea', js_fingerprint: '#667eea', screenshot: '#a0aec0',
-  waf: '#fc8181', waf_detected: '#fc8181',
-  // 网络拓扑/基础设施
-  cdn_detected: '#38b2ac', load_balancer_detected: '#38b2ac',
-  traceroute: '#2b6cb0', network_gateway: '#805ad5',
-  ip_attribution: '#4a5568', real_ip: '#2d3748', asn: '#4a5568', organization: '#4a5568', domain: '#4a5568', ip_range: '#4a5568',
-  internal_ip_leak: '#ed8936',
-  // 信息收集
-  email: '#667eea', api_endpoint: '#3182ce', directory: '#718096',
-  missing_security_headers: '#ed8936', code_leak: '#c53030', cyber_asset: '#4a5568', nuclei: '#e53e3e',
-  // 信息泄露
-  info_leak: '#ecc94b', body_regex: '#ecc94b', body_contains: '#ecc94b', header: '#718096',
-  git_leak: '#c53030', dir_found: '#718096',
-  // 漏洞
-  sqli: '#e53e3e', sqli_error: '#e53e3e', sqli_boolean: '#e53e3e', sqli_time: '#e53e3e', sqli_union: '#e53e3e',
-  xss: '#ed8936', xss_reflected: '#ed8936', xss_dom: '#ed8936',
-  ssrf: '#e53e3e', ssrf_potential: '#fc8181',
-  cmdi_time: '#c53030', cmdi_output: '#c53030',
-  lfi: '#e53e3e',
-  ssti: '#d53f8c', ssti_error: '#d53f8c', ssti_exploit: '#c53030',
-  xxe_error: '#9b2c2c', xxe_entity: '#9b2c2c', xxe_file_read: '#9b2c2c', xxe_ssrf: '#9b2c2c',
-  nosqli_error: '#b83280', nosqli_boolean: '#b83280', nosqli_operator: '#b83280', nosqli_auth_bypass: '#c53030',
-  jwt_alg_none: '#805ad5', jwt_no_expiry: '#805ad5', jwt_long_expiry: '#805ad5', jwt_weak_secret: '#c53030', jwt_alg_none_bypass: '#c53030', jwt_empty_sig: '#c53030',
-  weak_pass: '#ed8936', weak_password: '#ed8936',
-  // API安全
-  api_endpoint_exposed: '#e53e3e', api_unauth_access: '#c53030', api_no_rate_limit: '#ed8936',
-  api_info_leak_header: '#ecc94b', api_cors_wildcard: '#e53e3e', api_verbose_error: '#ed8936',
-  api_idor: '#c53030', api_graphql_introspection: '#805ad5', api_graphql_types: '#805ad5',
-  // Tab 聚合类型
-  vuln: '#e53e3e', infra: '#4a5568', api_disc: '#3182ce', info_collect: '#667eea',
-};
-
-const moduleLabels: Record<string, string> = {
-  host_discover: '主机发现',
-  web_recon: 'Web 信息收集',
-  asset_enrich: '资产富化',
-  web_vuln_scan: 'Web 漏洞检测',
-  credential_audit: '凭据安全',
-  infra_extra: '网络拓扑',
-  icmp_ping: 'ICMP存活探测',
-  port_scan: '端口扫描',
-  syn_scan: 'SYN扫描',
-  udp_scan: 'UDP扫描',
-  service_probe: '服务识别',
-  web_crawl: '网站爬虫',
-  subdomain_brute: '子域名枚举',
-  dns_all: 'DNS全量查询',
-  tech_detect: '技术栈识别',
-  waf_detect: 'WAF检测',
-  web_fingerprint: '指纹识别',
-  cert_check: '证书安全检查',
-  favicon: '图标哈希识别',
-  js_analyze: 'JS敏感信息分析',
-  api_disc: 'API接口发现',
-  dir_scan: '目录扫描',
-  real_ip: '真实IP探测',
-  ip_attr: 'IP属性查询',
-  email_collect: '邮箱收集',
-  company_recon: '企业资产发现',
-  fpenhance: '增强指纹探测',
-  nettopo: '网络拓扑探测',
-  cyberspace: '网络空间测绘',
-  sqli: 'SQL注入检测',
-  xss: 'XSS检测',
-  ssrf: 'SSRF检测',
-  cmdi: '命令注入检测',
-  lfi: '文件包含检测',
-  ssti: '模板注入检测',
-  xxe: 'XXE注入检测',
-  nosqli: 'NoSQL注入检测',
-  jwt_sec: 'JWT安全检测',
-  weak_pass: '弱口令检测',
-  brute_force: '密码爆破',
-  info_leak: '信息泄露检测',
-  git_leak: 'Git仓库泄露',
-  apisec: 'API安全检测',
-  screenshot: '页面截图',
-  nuclei: 'Nuclei PoC',
-  'nuclei-poc': 'Nuclei PoC',
-  advanced_vuln: '高级漏洞检测',
-  unauth: '未授权访问检测',
-};
+// profileLabels, typeLabels, typeColors, moduleLabels imported from scan-constants
 
 const runStatusText = computed(() => {
   if (!isActive.value || !task.value) return '';
@@ -643,42 +367,7 @@ const runStatusText = computed(() => {
   return parts.join(' · ');
 });
 
-const severityConfig: Record<string, { color: string; label: string }> = {
-  critical: { color: '#e53e3e', label: '严重' },
-  high: { color: '#ed8936', label: '高危' },
-  medium: { color: '#ecc94b', label: '中危' },
-  low: { color: '#48bb78', label: '低危' },
-  info: { color: '#4299e1', label: '信息' },
-};
-
-/** 「全部」Tab 不展示的发现类型（在「开放端口/服务」等专用 Tab 查看） */
-const TYPES_IN_PORT_SERVICE_TAB = ['port_open', 'udp_port', 'service'] as const;
-const EXCLUDE_FROM_ALL_TAB = ['host_alive', ...TYPES_IN_PORT_SERVICE_TAB].join(',');
-
-const subTabDefs = [
-  { key: 'overview', label: '任务概览', isOverview: true, group: 'summary' },
-  { key: 'all', label: '全部', group: 'summary' },
-  {
-    key: 'port_open',
-    label: '开放端口/服务',
-    mergeTypes: [...TYPES_IN_PORT_SERVICE_TAB],
-    group: 'summary',
-  },
-  { key: 'vuln', label: '漏洞', group: 'summary' },
-  { key: 'host_alive', label: '存活主机', group: 'findings' },
-  { key: 'subdomain', label: '子域名', group: 'findings' },
-  { key: 'dns_record', label: 'DNS', mergeTypes: ['dns_record', 'dns_cname', 'dns_multi_ip', 'dns_nameservers', 'reverse_dns', 'zone_transfer'], group: 'findings' },
-  { key: 'web_page', label: '网站/URL', mergeTypes: ['web_page', 'web_info', 'url', 'script', 'screenshot'], group: 'findings' },
-  { key: 'crawler', label: '爬虫', mergeTypes: ['crawler', 'xhr'], group: 'findings' },
-  { key: 'tech', label: '指纹', mergeTypes: ['tech', 'tech_stack', 'fingerprint', 'favicon', 'favicon_hash', 'header_fingerprint', 'js_fingerprint'], group: 'findings' },
-  { key: 'cert_info', label: '证书/TLS', mergeTypes: ['cert_info', 'cert_expired', 'cert_expiring_soon', 'self_signed_cert', 'weak_tls', 'tls_fingerprint', 'tls_cert_expired', 'tls_weak_version', 'weak_cipher', 'weak_signature', 'weak_key'], group: 'findings' },
-  { key: 'waf', label: 'WAF', mergeTypes: ['waf', 'waf_detected'], group: 'findings' },
-  { key: 'infra', label: '基础设施', mergeTypes: ['ip_attribution', 'real_ip', 'asn', 'organization', 'domain', 'ip_range', 'internal_ip_leak'], group: 'findings' },
-  { key: 'nettopo', label: '网络拓扑', mergeTypes: ['traceroute', 'network_gateway', 'dns_multi_ip', 'dns_cname', 'dns_nameservers', 'reverse_dns', 'cdn_detected', 'load_balancer_detected'], group: 'findings' },
-  { key: 'form', label: '表单', group: 'findings' },
-  { key: 'api_disc', label: 'API', mergeTypes: ['api_endpoint', 'api_endpoint_exposed', 'api_unauth_access', 'api_no_rate_limit', 'api_info_leak_header', 'api_cors_wildcard', 'api_verbose_error', 'api_idor', 'api_graphql_introspection', 'api_graphql_types'], group: 'findings' },
-  { key: 'info_collect', label: '信息收集', mergeTypes: ['email', 'directory', 'dir_found', 'code_leak', 'cyber_asset', 'missing_security_headers', 'info_leak', 'body_regex', 'body_contains', 'header', 'git_leak', 'nuclei'], group: 'findings' },
-];
+// severityConfig, TYPES_IN_PORT_SERVICE_TAB, EXCLUDE_FROM_ALL_TAB, subTabDefs imported from scan-constants
 
 const typeGroupedData = computed<TypeGroup[]>(() => {
   if (!summary.value?.by_type) return [];
@@ -710,13 +399,7 @@ function onTypeCardClick(tabKey: string) {
   fetchFindings();
 }
 
-function formatTime(raw?: string) {
-  if (!raw) return '-';
-  const d = new Date(raw);
-  if (isNaN(d.getTime())) return raw;
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-}
+// formatTime imported from scan-constants
 
 const duration = computed(() => {
   if (!task.value?.started_at) return '-';
@@ -879,12 +562,7 @@ const moduleOptions = computed(() => {
     }));
 });
 
-function getConfColor(conf: number): string {
-  if (conf >= 90) return '#52c41a';
-  if (conf >= 70) return '#faad14';
-  if (conf >= 50) return '#fa8c16';
-  return '#f5222d';
-}
+// getConfColor imported from scan-constants
 
 function d(row: ScanFinding, key: string): string {
   const val = row.data?.[key];
@@ -892,15 +570,7 @@ function d(row: ScanFinding, key: string): string {
   return typeof val === 'string' ? val : String(val);
 }
 
-function cleanTarget(raw: string): string {
-  let t = raw;
-  if (t.startsWith('http://')) t = t.slice(7);
-  else if (t.startsWith('https://')) t = t.slice(8);
-  t = t.replace(/\/+$/, '');
-  const portMatch = t.match(/:(\d+)$/);
-  if (portMatch) t = t.slice(0, -portMatch[0].length);
-  return t;
-}
+// cleanTarget imported from scan-constants
 
 /** 表格/筛选用的主机标识（不含端口，优先 data.ip） */
 function findingHost(row: ScanFinding): string {
@@ -945,22 +615,36 @@ const colSeverity = {
     return h(NTag, { size: 'small', bordered: false, round: true, style: `background: ${sc.color}18; color: ${sc.color}; font-weight: 500` }, () => sc.label);
   },
 };
-function confLabel(conf: number): string {
-  if (conf >= 90) return '高';
-  if (conf >= 70) return '中高';
-  if (conf >= 50) return '中';
-  return '低';
-}
+// confLabel imported from scan-constants
 
 const colConfidence = {
-  title: '置信度', key: 'confidence', width: 100, align: 'center' as const,
+  title: '置信度', key: 'confidence', width: 60, align: 'center' as const,
   render: (row: ScanFinding) => {
     const color = getConfColor(row.confidence);
-    const badge = h('div', { class: 'conf-badge', style: `--conf-color: ${color}` }, [
-      h('div', { class: 'conf-badge__bar' }, [
-        h('div', { class: 'conf-badge__fill', style: `width: ${row.confidence}%` }),
+    const pct = row.confidence;
+    const size = 36;
+    const radius = size / 2;
+    const strokeW = 3;
+    const r = radius - strokeW;
+    const circumference = 2 * Math.PI * r;
+    const dashOffset = circumference * (1 - pct / 100);
+
+    const badge = h('div', { class: 'conf-ring', style: `--conf-color: ${color}` }, [
+      h('svg', { width: size, height: size, viewBox: `0 0 ${size} ${size}`, class: 'conf-ring__svg' }, [
+        h('circle', { cx: radius, cy: radius, r, fill: 'none', stroke: '#f0f0f0', 'stroke-width': strokeW }),
+        h('circle', {
+          cx: radius, cy: radius, r, fill: 'none',
+          stroke: color, 'stroke-width': strokeW, 'stroke-linecap': 'round',
+          'stroke-dasharray': circumference, 'stroke-dashoffset': dashOffset,
+          transform: `rotate(-90 ${radius} ${radius})`,
+          class: 'conf-ring__progress',
+        }),
+        h('text', {
+          x: radius, y: radius, 'text-anchor': 'middle', 'dominant-baseline': 'central',
+          fill: color, 'font-size': '11', 'font-weight': '700',
+          style: 'font-variant-numeric: tabular-nums',
+        }, `${pct}`),
       ]),
-      h('span', { class: 'conf-badge__text' }, `${row.confidence}% ${confLabel(row.confidence)}`),
     ]);
 
     if (row.confidence_reason) {
@@ -968,7 +652,7 @@ const colConfidence = {
         trigger: () => badge,
         default: () => h('div', { class: 'conf-tooltip' }, [
           h('div', { class: 'conf-tooltip__header' }, [
-            h('span', { style: `color: ${color}; font-weight: 700` }, `${row.confidence}%`),
+            h('span', { style: `color: ${color}; font-weight: 700` }, `${pct}%`),
             h('span', { style: 'margin-left: 4px; opacity: 0.7' }, '置信度'),
           ]),
           h('div', { class: 'conf-tooltip__reason' }, row.confidence_reason),
@@ -1039,31 +723,13 @@ function dataCol(title: string, key: string, width: number, extra?: (row: ScanFi
   };
 }
 
-const sourceLabels: Record<string, string> = {
-  brute_pipeline: '字典爆破', brute_permutation: '排列爆破', brute_recursive: '递归爆破', brute: '暴力枚举',
-  passive_crtsh: 'CRT.sh', 'crt.sh': 'CRT.sh', passive_wayback: 'Wayback', passive_otx: 'OTX',
-  passive_rapiddns: 'RapidDNS', passive_hackertarget: 'HackerTarget',
-  passive_threatcrowd: 'ThreatCrowd', passive_virustotal: 'VirusTotal',
-  zone_transfer: '域传送', dns_transfer: '域传送', wildcard: '泛解析检测', tls_cert: 'TLS证书',
-  crawler: '爬虫', html_parse: 'HTML解析', regex: '正则提取',
-  bing_search: 'Bing搜索', github_search: 'GitHub搜索',
-  dns_history: 'DNS历史', cdn_bypass: 'CDN绕过',
-};
+// sourceLabels imported from scan-constants
 function sourceLabel(row: ScanFinding): string {
   const raw = d(row, 'source');
   return sourceLabels[raw] || raw || '-';
 }
 
-const wellKnownPorts: Record<number, string> = {
-  21: 'FTP', 22: 'SSH', 23: 'Telnet', 25: 'SMTP', 53: 'DNS', 80: 'HTTP', 110: 'POP3',
-  143: 'IMAP', 443: 'HTTPS', 445: 'SMB', 993: 'IMAPS', 995: 'POP3S', 1433: 'MSSQL',
-  1521: 'Oracle', 2375: 'Docker', 3306: 'MySQL', 3389: 'RDP', 5432: 'PostgreSQL',
-  5672: 'AMQP', 6379: 'Redis', 8080: 'HTTP-Alt', 8443: 'HTTPS-Alt', 9200: 'ES', 27017: 'MongoDB',
-};
-const dnsTypeColors: Record<string, string> = {
-  A: '#1890ff', AAAA: '#722ed1', CNAME: '#13c2c2', MX: '#eb2f96',
-  NS: '#fa8c16', TXT: '#52c41a', SOA: '#faad14', SRV: '#2f54eb', PTR: '#fa541c',
-};
+// wellKnownPorts, dnsTypeColors imported from scan-constants
 
 function portTag(row: ScanFinding) {
   const port = parseInt(d(row, 'port') || String(row.port), 10);
@@ -1520,7 +1186,7 @@ function openAssetDetail(row: AssetSummary) {
 
 async function fetchData() {
   try {
-    task.value = await getTaskDetail(route.params.id as string);
+    task.value = await getTaskDetail(resolvedTaskId.value);
     if (!summary.value) fetchSummary();
   } catch {
     /* silent */
@@ -1577,7 +1243,7 @@ async function fetchFindings() {
     if (filterModule.value) params.module_id = filterModule.value;
     if (filterKeyword.value.trim()) params.keyword = filterKeyword.value.trim();
 
-    const result = await getTaskFindings(route.params.id as string, params);
+    const result = await getTaskFindings(resolvedTaskId.value, params);
     findings.value = result.items ?? [];
     findingsTotal.value = result.total ?? 0;
   } finally {
@@ -1587,7 +1253,7 @@ async function fetchFindings() {
 
 async function fetchSummary() {
   try {
-    summary.value = await getTaskFindingSummary(route.params.id as string);
+    summary.value = await getTaskFindingSummary(resolvedTaskId.value);
   } catch {
     /* silent */
   }
@@ -1657,7 +1323,11 @@ async function handleDelete() {
   try {
     await deleteTask(task.value.id);
     message.success('已删除');
-    router.push('/scan/task');
+    if (isDrawerMode.value) {
+      emit('close');
+    } else {
+      router.push('/scan/task');
+    }
   } catch (e: any) {
     message.error(e?.message || '删除失败');
   }
@@ -1738,7 +1408,7 @@ const sseConnected = ref(false);
 
 function startSSE() {
   if (sseHandle) sseHandle.close();
-  const taskId = route.params.id as string;
+  const taskId = resolvedTaskId.value;
 
   sseHandle = subscribeScanEvents(taskId, {
     onFinding(payload) {
@@ -1944,7 +1614,7 @@ const portCardHosts = computed<PortCardHost[]>(() => {
 
 async function fetchLogs() {
   try {
-    const taskId = route.params.id as string;
+    const taskId = resolvedTaskId.value;
     const data = await getTaskLogs(taskId);
     if (data && data.length > 0) {
       if (liveLogs.value.length === 0) {
@@ -1970,7 +1640,17 @@ function stopLogPolling() {
   }
 }
 
-onMounted(async () => {
+async function initLoad() {
+  loading.value = true;
+  task.value = null;
+  summary.value = null;
+  findings.value = [];
+  liveFindings.value = [];
+  assets.value = [];
+  liveLogs.value = [];
+  activeSubTab.value = 'overview';
+  findingsPage.value = 1;
+
   await fetchData();
   await fetchSummary();
   if (isAssetDiscoveryTask.value && !isActive.value) {
@@ -1982,12 +1662,26 @@ onMounted(async () => {
     startSSE();
     startLogPolling();
   }
-  refreshTimer = setInterval(() => {
-    if (isActive.value && !sseConnected.value) {
-      fetchData();
-      if (findings.value.length > 0) fetchFindings();
-    }
-  }, 10000);
+  if (!refreshTimer) {
+    refreshTimer = setInterval(() => {
+      if (isActive.value && !sseConnected.value) {
+        fetchData();
+        if (findings.value.length > 0) fetchFindings();
+      }
+    }, 10000);
+  }
+}
+
+watch(() => props.taskId, (newId) => {
+  if (newId) {
+    stopSSE();
+    stopLogPolling();
+    initLoad();
+  }
+});
+
+onMounted(() => {
+  initLoad();
 });
 
 onUnmounted(() => {
@@ -1998,7 +1692,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="task-detail-page">
+  <div class="task-detail-page" :class="{ 'task-detail-page--drawer': isDrawerMode }">
     <NSpin :show="loading">
       <template v-if="task">
         <!-- Header Card -->
@@ -2835,6 +2529,10 @@ onUnmounted(() => {
   max-width: 1440px;
   margin: 0 auto;
 }
+.task-detail-page--drawer {
+  padding: 0;
+  max-width: none;
+}
 
 /* Header Card */
 .header-card {
@@ -3492,37 +3190,26 @@ onUnmounted(() => {
   color: var(--text-color-1, #1a1a1a);
 }
 
-/* Confidence badge */
-.conf-badge {
+/* Confidence ring */
+.conf-ring {
   display: inline-flex;
-  flex-direction: column;
   align-items: center;
-  gap: 2px;
+  justify-content: center;
   cursor: help;
   padding: 2px 0;
 }
 
-.conf-badge__bar {
-  width: 48px;
-  height: 4px;
-  background: #f0f0f0;
-  border-radius: 2px;
-  overflow: hidden;
+.conf-ring__svg {
+  flex-shrink: 0;
 }
-
-.conf-badge__fill {
-  height: 100%;
-  background: var(--conf-color, #52c41a);
-  border-radius: 2px;
-  transition: width 0.4s ease;
+.conf-ring__progress {
+  transition: stroke-dashoffset 0.5s ease;
 }
-
-.conf-badge__text {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--conf-color, #52c41a);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+.conf-ring__pct {
+  display: none;
+}
+.conf-ring__label {
+  display: none;
 }
 
 .conf-tooltip__header {

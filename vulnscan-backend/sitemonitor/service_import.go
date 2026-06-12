@@ -5,10 +5,13 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
+	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"vulnscan-backend/model"
@@ -146,147 +149,320 @@ func (s *serviceMonitor) ImportTasks(ctx context.Context, fileData []byte) (*con
 		return nil, fmt.Errorf("读取行数据失败: %w", err)
 	}
 
+	dataRows := filterDataRows(rows)
+	if len(dataRows) == 0 {
+		return nil, fmt.Errorf("无有效数据行")
+	}
+
 	result := &contract.ImportResult{
 		ID:        ulid.GenerateID(),
+		Status:    contract.ImportStatusPending,
+		Total:     len(dataRows),
 		CreatedAt: time.Now().Format(time.RFC3339),
 	}
-	defaults, _ := s.loadDefaultConfigs(ctx)
+
+	s.importMu.Lock()
+	s.importResults[result.ID] = result
+	s.importMu.Unlock()
+
 	useSchemeColumn := importUsesSchemeColumn(rows)
 
+	go s.runImportAsync(result, dataRows, useSchemeColumn)
+
+	return result, nil
+}
+
+func filterDataRows(rows [][]string) []importDataRow {
+	var dataRows []importDataRow
 	for i, row := range rows {
-		if i == 0 {
+		if i == 0 || isTemplateHelperRow(row) {
 			continue
 		}
-		if isTemplateHelperRow(row) {
+		allEmpty := true
+		for _, c := range row {
+			if strings.TrimSpace(c) != "" {
+				allEmpty = false
+				break
+			}
+		}
+		if allEmpty {
 			continue
 		}
-		rowResult := contract.ImportRowResult{Row: i + 1}
-		name := cell(row, 0)
-		targetType := strings.ToLower(cell(row, 1))
-		targetValue := cell(row, 2)
-		virtualHost := cell(row, 3)
-		pathOrURL := cell(row, 4)
-		if pathOrURL == "" {
-			pathOrURL = "/"
+		dataRows = append(dataRows, importDataRow{rowIndex: i + 1, cells: row})
+	}
+	return dataRows
+}
+
+type importDataRow struct {
+	rowIndex int
+	cells    []string
+}
+
+type parsedImportRow struct {
+	dataRow       importDataRow
+	name          string
+	targetType    string
+	targetValue   string
+	virtualHost   string
+	defaultScheme string
+	pathOrURL     string
+	dimStart      int
+	err           string
+}
+
+func (s *serviceMonitor) runImportAsync(result *contract.ImportResult, dataRows []importDataRow, useSchemeColumn bool) {
+	ctx := context.Background()
+	startTime := time.Now()
+
+	s.importMu.Lock()
+	result.Status = contract.ImportStatusRunning
+	s.importMu.Unlock()
+
+	defaults, _ := s.loadDefaultConfigs(ctx)
+	defaults = mergeWithSeeds(defaults)
+
+	// ── Phase 1: 解析所有行，识别需要探测协议的 URL ──
+	parsed := make([]parsedImportRow, len(dataRows))
+	var needProbe []int
+
+	for i, dr := range dataRows {
+		row := dr.cells
+		p := parsedImportRow{dataRow: dr, dimStart: 5}
+
+		p.name = cell(row, 0)
+		p.targetType = strings.ToLower(cell(row, 1))
+		p.targetValue = cell(row, 2)
+		p.virtualHost = cell(row, 3)
+		p.pathOrURL = cell(row, 4)
+		if p.pathOrURL == "" {
+			p.pathOrURL = "/"
 		}
 
-		defaultScheme := "https"
-		dimStart := 5
+		p.defaultScheme = "https"
 		schemeSpecified := false
 		if useSchemeColumn {
 			if scheme := normalizeImportScheme(cell(row, 5)); scheme != "" {
-				defaultScheme = scheme
+				p.defaultScheme = scheme
 				schemeSpecified = true
 			}
-			dimStart = 6
+			p.dimStart = 6
 		}
 
-		if !schemeSpecified && !strings.Contains(pathOrURL, "://") && pathOrURL != "" && pathOrURL != "/" {
-			if detected := detectImportScheme(ctx, pathOrURL); detected != "" {
-				defaultScheme = detected
+		if pr, ok := parseImportMonitorURL(p.pathOrURL, p.defaultScheme); ok {
+			if p.targetType == "" {
+				p.targetType = pr.targetType
+			}
+			if p.targetValue == "" {
+				p.targetValue = pr.targetValue
+			}
+			if p.virtualHost == "" {
+				p.virtualHost = pr.virtualHost
+			}
+			if pr.scheme != "" {
+				p.defaultScheme = pr.scheme
+			}
+			if pr.urlOverride != "" {
+				p.pathOrURL = pr.urlOverride
+			} else if pr.path != "" {
+				p.pathOrURL = pr.path
 			}
 		}
 
-		if parsed, ok := parseImportMonitorURL(pathOrURL, defaultScheme); ok {
-			if targetType == "" {
-				targetType = parsed.targetType
-			}
-			if targetValue == "" {
-				targetValue = parsed.targetValue
-			}
-			if virtualHost == "" {
-				virtualHost = parsed.virtualHost
-			}
-			if parsed.scheme != "" {
-				defaultScheme = parsed.scheme
-			}
-			if parsed.urlOverride != "" {
-				pathOrURL = parsed.urlOverride
-			} else if parsed.path != "" {
-				pathOrURL = parsed.path
-			}
-		}
-		if targetValue == "" {
-			rowResult.Error = "目标值为空"
-			result.Failed++
-			result.Results = append(result.Results, rowResult)
-			continue
-		}
-		if name == "" {
-			name = targetValue
-		}
-		rowResult.Name = name
-		rowResult.URL = pathOrURL
-
-		target := &model.MonitorTarget{
-			Name:          name,
-			TargetType:    targetType,
-			TargetValue:   targetValue,
-			DefaultScheme: defaultScheme,
-			VirtualHost:   virtualHost,
-			Enabled:       true,
-		}
-		target.ID = ulid.GenerateID()
-		if err := s.CreateTarget(ctx, target); err != nil {
-			rowResult.Error = err.Error()
-			result.Failed++
-			result.Results = append(result.Results, rowResult)
-			continue
+		if p.targetValue == "" {
+			p.err = "目标值为空"
+		} else if p.name == "" {
+			p.name = p.targetValue
 		}
 
-		pt := &model.MonitorPathTask{
-			TargetID: target.ID,
-			Name:     name,
-			Enabled:  true,
+		if !schemeSpecified && p.err == "" && !strings.Contains(p.pathOrURL, "://") && p.pathOrURL != "" && p.pathOrURL != "/" {
+			needProbe = append(needProbe, i)
 		}
-		if strings.Contains(pathOrURL, "://") {
-			pt.URLOverride = pathOrURL
-		} else {
-			pt.Path = pathOrURL
+
+		parsed[i] = p
+	}
+
+	// ── Phase 2: 并发协议探测（限制 20 并发） ──
+	if len(needProbe) > 0 {
+		slog.Info("[Import] 开始协议探测", "count", len(needProbe))
+		probeCtx, probeCancel := context.WithTimeout(ctx, 3*time.Minute)
+		defer probeCancel()
+
+		probeConcurrency := runtime.NumCPU() * 10
+		if probeConcurrency < 20 {
+			probeConcurrency = 20
 		}
-		for _, dc := range []struct {
-			offset int
-			dim    string
-		}{
-			{0, "availability"}, {1, "domain_hijack"}, {2, "tamper"},
-			{3, "sensitive_word"}, {4, "sensitive_file"}, {5, "blacklink"},
-		} {
-			enabled := cell(row, dimStart+dc.offset) != "关闭"
-			cfg := map[string]any{"enabled": enabled}
-			if defCfg, ok := defaults[dc.dim]; ok {
-				for k, v := range defCfg {
-					if k != "enabled" {
-						cfg[k] = v
+		if probeConcurrency > 200 {
+			probeConcurrency = 200
+		}
+		slog.Info("[Import] 协议探测并发", "concurrency", probeConcurrency)
+		sem := make(chan struct{}, probeConcurrency)
+		var wg sync.WaitGroup
+
+		for _, idx := range needProbe {
+			wg.Add(1)
+			sem <- struct{}{}
+			go func(i int) {
+				defer wg.Done()
+				defer func() { <-sem }()
+				if detected := detectImportScheme(probeCtx, parsed[i].pathOrURL); detected != "" {
+					parsed[i].defaultScheme = detected
+				}
+				if pr, ok := parseImportMonitorURL(parsed[i].pathOrURL, parsed[i].defaultScheme); ok {
+					if pr.urlOverride != "" {
+						parsed[i].pathOrURL = pr.urlOverride
+					}
+				}
+			}(idx)
+		}
+		wg.Wait()
+		slog.Info("[Import] 协议探测完成", "elapsed", time.Since(startTime))
+	}
+
+	// ── Phase 3: 批量数据库写入 ──
+	const batchSize = 100
+	for batchStart := 0; batchStart < len(parsed); batchStart += batchSize {
+		batchEnd := batchStart + batchSize
+		if batchEnd > len(parsed) {
+			batchEnd = len(parsed)
+		}
+		batch := parsed[batchStart:batchEnd]
+
+		var targets []*model.MonitorTarget
+		var pathTasks []*model.MonitorPathTask
+		rowResults := make([]contract.ImportRowResult, len(batch))
+
+		for i, p := range batch {
+			rr := contract.ImportRowResult{Row: p.dataRow.rowIndex, Name: p.name, URL: p.pathOrURL}
+			if p.err != "" {
+				rr.Error = p.err
+				rowResults[i] = rr
+				continue
+			}
+
+			target := &model.MonitorTarget{
+				Name:          p.name,
+				TargetType:    p.targetType,
+				TargetValue:   p.targetValue,
+				DefaultScheme: p.defaultScheme,
+				VirtualHost:   p.virtualHost,
+				Enabled:       true,
+			}
+			target.ID = ulid.GenerateID()
+
+			pt := &model.MonitorPathTask{
+				TargetID: target.ID,
+				Name:     p.name,
+				Enabled:  true,
+			}
+			pt.ID = ulid.GenerateID()
+			if strings.Contains(p.pathOrURL, "://") {
+				pt.URLOverride = p.pathOrURL
+			} else {
+				pt.Path = p.pathOrURL
+			}
+
+			row := p.dataRow.cells
+			for _, dc := range []struct {
+				offset int
+				dim    string
+			}{
+				{0, "availability"}, {1, "domain_hijack"}, {2, "tamper"},
+				{3, "sensitive_word"}, {4, "sensitive_file"}, {5, "blacklink"},
+			} {
+				enabled := cell(row, p.dimStart+dc.offset) != "关闭"
+				cfg := map[string]any{"enabled": enabled}
+				if defCfg, ok := defaults[dc.dim]; ok {
+					for k, v := range defCfg {
+						if k != "enabled" {
+							cfg[k] = v
+						}
+					}
+				}
+				if contains(model.MonitorPathDimensions, dc.dim) {
+					pt.SetDimensionConfig(dc.dim, cfg)
+				} else if contains(model.MonitorTargetDimensions, dc.dim) {
+					target.SetDimensionConfig(dc.dim, cfg)
+				}
+			}
+			seedPathTaskDefaults(pt)
+			if targetHasScheduledDimensions(target) {
+				target.ScheduleEnabled = true
+			}
+
+			targets = append(targets, target)
+			pathTasks = append(pathTasks, pt)
+			rr.Success = true
+			rr.TargetID = target.ID
+			rr.TaskID = pt.ID
+			rowResults[i] = rr
+		}
+
+		if len(targets) > 0 {
+			if err := s.session().WithContext(ctx).CreateInBatches(targets, batchSize).Error; err != nil {
+				slog.Error("[Import] 批量创建目标失败", "error", err)
+				for i := range rowResults {
+					if rowResults[i].Success {
+						rowResults[i].Success = false
+						rowResults[i].Error = "批量创建目标失败: " + err.Error()
+						rowResults[i].TaskID = ""
+					}
+				}
+				pathTasks = nil
+			}
+		}
+
+		if len(pathTasks) > 0 {
+			if err := s.session().WithContext(ctx).CreateInBatches(pathTasks, batchSize).Error; err != nil {
+				slog.Error("[Import] 批量创建路径任务失败", "error", err)
+				for i := range rowResults {
+					if rowResults[i].Success {
+						rowResults[i].Success = false
+						rowResults[i].Error = "批量创建路径任务失败: " + err.Error()
+						rowResults[i].TaskID = ""
 					}
 				}
 			}
-			if contains(model.MonitorPathDimensions, dc.dim) {
-				pt.SetDimensionConfig(dc.dim, cfg)
-			} else if contains(model.MonitorTargetDimensions, dc.dim) {
-				target.SetDimensionConfig(dc.dim, cfg)
+		}
+
+		s.importMu.Lock()
+		for _, rr := range rowResults {
+			if rr.Success {
+				result.Success++
+			} else {
+				result.Failed++
 			}
+			result.Processed++
+			result.Results = append(result.Results, rr)
 		}
-		if err := s.session().WithContext(ctx).Model(target).Updates(map[string]any{
-			"config_domain_hijack":  target.ConfigDomainHijack,
-			"config_sensitive_file": target.ConfigSensitiveFile,
-		}).Error; err != nil {
-			rowResult.Error = err.Error()
-			result.Failed++
-			result.Results = append(result.Results, rowResult)
-			continue
-		}
-		if err := s.CreatePathTask(ctx, pt); err != nil {
-			rowResult.Error = err.Error()
-			result.Failed++
-		} else {
-			rowResult.Success = true
-			rowResult.TaskID = pt.ID
-			result.Success++
-		}
-		result.Results = append(result.Results, rowResult)
+		s.importMu.Unlock()
 	}
-	result.Total = result.Success + result.Failed
-	return result, nil
+
+	s.importMu.Lock()
+	result.Status = contract.ImportStatusCompleted
+	s.importMu.Unlock()
+
+	slog.Info("[Import] 导入完成",
+		"total", result.Processed,
+		"success", result.Success,
+		"failed", result.Failed,
+		"elapsed", time.Since(startTime),
+	)
+
+	if s.onImportDone != nil {
+		s.onImportDone(result)
+	}
+}
+
+func (s *serviceMonitor) updateImportProgress(result *contract.ImportResult, rowResult contract.ImportRowResult, success bool, _ string) {
+	s.importMu.Lock()
+	defer s.importMu.Unlock()
+	if success {
+		result.Success++
+	} else {
+		result.Failed++
+	}
+	result.Processed++
+	result.Results = append(result.Results, rowResult)
 }
 
 type importURLParts struct {
@@ -341,9 +517,9 @@ func detectImportScheme(ctx context.Context, raw string) string {
 
 func importURLReachable(ctx context.Context, rawURL string) bool {
 	client := &http.Client{
-		Timeout: 5 * time.Second,
+		Timeout: 3 * time.Second,
 		CheckRedirect: func(_ *http.Request, via []*http.Request) error {
-			if len(via) >= 3 {
+			if len(via) >= 2 {
 				return http.ErrUseLastResponse
 			}
 			return nil
@@ -478,6 +654,34 @@ func contains(ss []string, v string) bool {
 	return false
 }
 
+func mergeWithSeeds(defaults map[string]map[string]any) map[string]map[string]any {
+	if defaults == nil {
+		defaults = make(map[string]map[string]any)
+	}
+	allDims := append(model.MonitorPathDimensions, model.MonitorTargetDimensions...)
+	for _, dim := range allDims {
+		seeds, hasSeed := model.MonitorDefaultConfigSeeds[dim]
+		if !hasSeed {
+			continue
+		}
+		existing, hasExisting := defaults[dim]
+		if !hasExisting {
+			merged := make(map[string]any)
+			for k, v := range seeds {
+				merged[k] = v
+			}
+			defaults[dim] = merged
+			continue
+		}
+		for k, v := range seeds {
+			if _, exists := existing[k]; !exists {
+				existing[k] = v
+			}
+		}
+	}
+	return defaults
+}
+
 func (s *serviceMonitor) loadDefaultConfigs(ctx context.Context) (map[string]map[string]any, error) {
 	var configs []model.MonitorDefaultConfig
 	if err := s.session().WithContext(ctx).Find(&configs).Error; err != nil {
@@ -490,10 +694,62 @@ func (s *serviceMonitor) loadDefaultConfigs(ctx context.Context) (map[string]map
 	return result, nil
 }
 
-func (s *serviceMonitor) GetImportResult(_ context.Context, _ string) (*contract.ImportResult, error) {
-	return nil, fmt.Errorf("导入结果缓存未实现")
+func (s *serviceMonitor) GetImportResult(_ context.Context, importID string) (*contract.ImportResult, error) {
+	s.importMu.RLock()
+	defer s.importMu.RUnlock()
+	r, ok := s.importResults[importID]
+	if !ok {
+		return nil, fmt.Errorf("导入任务不存在: %s", importID)
+	}
+	snapshot := *r
+	snapshot.Results = make([]contract.ImportRowResult, len(r.Results))
+	copy(snapshot.Results, r.Results)
+	return &snapshot, nil
 }
 
-func (s *serviceMonitor) ExportImportResult(_ context.Context, _ string) ([]byte, error) {
-	return nil, fmt.Errorf("导出导入结果未实现")
+func (s *serviceMonitor) ExportImportResult(_ context.Context, importID string) ([]byte, error) {
+	s.importMu.RLock()
+	r, ok := s.importResults[importID]
+	if !ok {
+		s.importMu.RUnlock()
+		return nil, fmt.Errorf("导入任务不存在: %s", importID)
+	}
+	snapshot := *r
+	snapshot.Results = make([]contract.ImportRowResult, len(r.Results))
+	copy(snapshot.Results, r.Results)
+	s.importMu.RUnlock()
+
+	ef := excelize.NewFile()
+	defer ef.Close()
+	sheet := "导入结果"
+	ef.SetSheetName("Sheet1", sheet)
+
+	headers := []string{"行号", "名称", "URL", "结果", "任务ID", "错误信息"}
+	for i, h := range headers {
+		c, _ := excelize.CoordinatesToCellName(i+1, 1)
+		ef.SetCellValue(sheet, c, h)
+	}
+	for i, rr := range snapshot.Results {
+		row := i + 2
+		ef.SetCellValue(sheet, cellName(1, row), rr.Row)
+		ef.SetCellValue(sheet, cellName(2, row), rr.Name)
+		ef.SetCellValue(sheet, cellName(3, row), rr.URL)
+		if rr.Success {
+			ef.SetCellValue(sheet, cellName(4, row), "成功")
+		} else {
+			ef.SetCellValue(sheet, cellName(4, row), "失败")
+		}
+		ef.SetCellValue(sheet, cellName(5, row), rr.TaskID)
+		ef.SetCellValue(sheet, cellName(6, row), rr.Error)
+	}
+	var buf bytes.Buffer
+	if err := ef.Write(&buf); err != nil {
+		return nil, fmt.Errorf("生成导出文件失败: %w", err)
+	}
+	return buf.Bytes(), nil
+}
+
+func cellName(col, row int) string {
+	name, _ := excelize.CoordinatesToCellName(col, row)
+	return name
 }

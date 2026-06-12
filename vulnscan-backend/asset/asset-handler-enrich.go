@@ -11,6 +11,7 @@ import (
 	assetContract "vulnscan-backend/asset/asset-contract"
 	"vulnscan-backend/model"
 	"vulnscan-backend/pkg/assethost"
+	"vulnscan-backend/pkg/definition"
 	"vulnscan-backend/scanrunner"
 
 	iamsdk "code.yt-security.com/public/access"
@@ -342,7 +343,7 @@ func (h *EnrichHandler) findLatestScreenshot(address string) string {
 }
 
 func (h *EnrichHandler) AggregateFromScans(c *gin.Context) {
-	scope := iamsdk.DataFilterScopeStatic(c, assetFieldMapping)
+	scope := definition.SafeDataFilterScope(c, assetFieldMapping)
 
 	var findings []struct {
 		Target   string
@@ -431,7 +432,7 @@ func (h *EnrichHandler) AssetStats(c *gin.Context) {
 	listQuery.Page = 0
 	listQuery.PageSize = 0
 
-	scope := iamsdk.DataFilterScopeStatic(c, assetFieldMapping)
+	scope := definition.SafeDataFilterScope(c, assetFieldMapping)
 
 	var totalAssets int64
 	if err := buildAssetListQuery(h.session(), listQuery, scope).Count(&totalAssets).Error; err != nil {
@@ -505,7 +506,7 @@ func (h *EnrichHandler) AssetStats(c *gin.Context) {
 // RegionScope 返回资产台账中实际出现的地域编码及数量（受数据权限约束，不含空地域）。
 // 优先使用组织表的 region_code（实时反映单位地址变动），fallback 到资产自身的 region_code。
 func (h *EnrichHandler) RegionScope(c *gin.Context) {
-	scope := iamsdk.DataFilterScopeStatic(c, assetFieldMapping)
+	scope := definition.SafeDataFilterScope(c, assetFieldMapping)
 
 	type row struct {
 		RegionCode string `json:"region_code"`
@@ -530,7 +531,7 @@ func (h *EnrichHandler) RegionScope(c *gin.Context) {
 
 // IndustryScope 返回资产关联组织中实际出现的行业分类及数量。
 func (h *EnrichHandler) IndustryScope(c *gin.Context) {
-	scope := iamsdk.DataFilterScopeStatic(c, assetFieldMapping)
+	scope := definition.SafeDataFilterScope(c, assetFieldMapping)
 
 	type row struct {
 		IndustryCategory string `json:"industry_category"`
@@ -554,7 +555,7 @@ func (h *EnrichHandler) IndustryScope(c *gin.Context) {
 
 // UnitTypeScope 返回资产关联组织中实际出现的单位类型及数量。
 func (h *EnrichHandler) UnitTypeScope(c *gin.Context) {
-	scope := iamsdk.DataFilterScopeStatic(c, assetFieldMapping)
+	scope := definition.SafeDataFilterScope(c, assetFieldMapping)
 
 	type row struct {
 		UnitType string `json:"unit_type"`
@@ -577,7 +578,7 @@ func (h *EnrichHandler) UnitTypeScope(c *gin.Context) {
 }
 
 func (h *EnrichHandler) GroupList(c *gin.Context) {
-	scope := iamsdk.DataFilterScopeStatic(c, assetFieldMapping)
+	scope := definition.SafeDataFilterScope(c, assetFieldMapping)
 	var groups []model.AssetGroup
 	h.session().Model(&model.AssetGroup{}).Scopes(scope).Order("created_at DESC").Find(&groups)
 
@@ -1026,7 +1027,7 @@ func (h *EnrichHandler) ImportSubdomainsFromScan(c *gin.Context) {
 
 // RepairSubdomainAddresses 根据资产名称「发现子域名: {fqdn}」修复被错误写成根域的访问地址。
 func (h *EnrichHandler) RepairSubdomainAddresses(c *gin.Context) {
-	scope := iamsdk.DataFilterScopeStatic(c, assetFieldMapping)
+	scope := definition.SafeDataFilterScope(c, assetFieldMapping)
 	var assets []model.Asset
 	if err := h.session().Model(&model.Asset{}).Scopes(scope).
 		Where("name LIKE ?", "发现子域名:%").Find(&assets).Error; err != nil {
@@ -1510,7 +1511,7 @@ func (h *EnrichHandler) buildTargetMatchers(asset *model.Asset) []string {
 // ── 资产报告 ──
 
 func (h *EnrichHandler) ComplianceReport(c *gin.Context) {
-	scope := iamsdk.DataFilterScopeStatic(c, assetFieldMapping)
+	scope := definition.SafeDataFilterScope(c, assetFieldMapping)
 
 	type complianceCounts struct {
 		Total           int64 `gorm:"column:total"`

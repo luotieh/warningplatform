@@ -351,6 +351,39 @@ export async function aiEnrichFinding(
   return requestClient.post(`/task/${taskId}/findings/${findingId}/ai-enrich`);
 }
 
+export interface EvidenceReport {
+  finding_id: string;
+  title: string;
+  severity: string;
+  target: string;
+  port: number;
+  vuln_type: string;
+  description: string;
+  confidence: number;
+  confidence_reason: string;
+  verification_level: string;
+  verification_detail: string;
+  evidence: string;
+  payload?: string;
+  matched_at?: string;
+  request?: string;
+  response?: string;
+  curl_command?: string;
+  screenshot?: string;
+  cve_id?: string;
+  cvss_score?: string;
+  remediation?: string;
+  created_at: string;
+  ai_verified: boolean;
+  ai_reasoning?: string;
+  ai_suggestion?: string;
+  ai_false_reason?: string;
+}
+
+export function getEvidenceReport(taskId: string, findingId: string) {
+  return requestClient.get<EvidenceReport>(`/task/${taskId}/findings/${findingId}/evidence-report`);
+}
+
 export interface VulnKnowledgeItem {
   id: string;
   vuln_key: string;

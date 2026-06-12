@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	iamsdk "code.yt-security.com/public/access"
 	"code.yt-security.com/public/access/authorize"
 	"code.yt-security.com/public/core/db"
 	"code.yt-security.com/public/core/web"
@@ -28,7 +27,7 @@ func (h *Handler) Overview(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 
-	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
+	scope := definition.SafeDataFilterScope(c, definition.VulnscanFieldMapping)
 	posture, err := h.agg.GetSecurityPosture(ctx, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
@@ -42,7 +41,7 @@ func (h *Handler) VulnTrend(c *gin.Context) {
 	defer cancel()
 
 	days := 30
-	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
+	scope := definition.SafeDataFilterScope(c, definition.VulnscanFieldMapping)
 	trend := h.agg.getVulnTrend(ctx, days, scope)
 	web.Succeed(c).Data(trend).Send()
 }
@@ -59,7 +58,7 @@ func (h *Handler) TopVulnAssets(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 
-	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
+	scope := definition.SafeDataFilterScope(c, definition.VulnscanFieldMapping)
 	assets := h.agg.getTopVulnAssets(ctx, 10, scope)
 	web.Succeed(c).Data(assets).Send()
 }
@@ -68,7 +67,7 @@ func (h *Handler) TaskStatusDist(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 
-	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
+	scope := definition.SafeDataFilterScope(c, definition.VulnscanFieldMapping)
 	result := h.agg.GetTaskStatusDist(ctx, scope)
 	web.Succeed(c).Data(result).Send()
 }
@@ -77,7 +76,7 @@ func (h *Handler) RecentActivity(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 
-	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
+	scope := definition.SafeDataFilterScope(c, definition.VulnscanFieldMapping)
 	activities := h.agg.GetRecentActivity(ctx, scope)
 	web.Succeed(c).Data(activities).Send()
 }

@@ -27,7 +27,7 @@ func (h *HandlerTask) List(c *gin.Context) {
 		return
 	}
 
-	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
+	scope := definition.SafeDataFilterScope(c, definition.VulnscanFieldMapping)
 	items, count, err := h.svc.List(query, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
@@ -216,4 +216,19 @@ func (h *HandlerTask) AIEnrichFinding(c *gin.Context) {
 		return
 	}
 	web.Succeed(c).Data(result).Send()
+}
+
+func (h *HandlerTask) GetEvidenceReport(c *gin.Context) {
+	findingID := c.Param("findingId")
+	if findingID == "" {
+		web.Err(c, web.ParamsMissingRequired).Send()
+		return
+	}
+
+	report, err := h.svc.GetEvidenceReport(findingID)
+	if err != nil {
+		web.Fail(c).Err(err).Send()
+		return
+	}
+	web.Succeed(c).Data(report).Send()
 }

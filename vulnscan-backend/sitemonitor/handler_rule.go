@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 
 	"vulnscan-backend/model"
+	"vulnscan-backend/pkg/definition"
 
-	iamsdk "code.yt-security.com/public/access"
 	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 )
@@ -133,7 +133,7 @@ func (h *HandlerMonitor) UpdateAlertConfig(c *gin.Context) {
 // ══ Agent ══
 
 func (h *HandlerMonitor) ListAgents(c *gin.Context) {
-	scope := iamsdk.DataFilterScopeStatic(c, monitorFieldMapping)
+	scope := definition.SafeDataFilterScope(c, monitorFieldMapping)
 	agents, err := h.svc.ListAgents(c.Request.Context(), scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()

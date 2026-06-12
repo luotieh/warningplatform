@@ -2,6 +2,7 @@ package sitemonitor
 
 import (
 	"vulnscan-backend/model"
+	"vulnscan-backend/pkg/definition"
 	"vulnscan-backend/sitemonitor/contract"
 
 	iamsdk "code.yt-security.com/public/access"
@@ -43,6 +44,20 @@ func (h *HandlerMonitor) DeleteTarget(c *gin.Context) {
 	web.Succeed(c).Send()
 }
 
+func (h *HandlerMonitor) BatchDeleteTargets(c *gin.Context) {
+	req, ok := web.BindJSON[struct {
+		IDs []string `json:"ids" binding:"required,min=1"`
+	}](c)
+	if !ok {
+		return
+	}
+	if err := h.svc.BatchDeleteTargets(c.Request.Context(), req.IDs); err != nil {
+		web.Fail(c).Err(err).Send()
+		return
+	}
+	web.Succeed(c).Send()
+}
+
 func (h *HandlerMonitor) GetTarget(c *gin.Context) {
 	t, err := h.svc.GetTarget(c.Request.Context(), c.Param("id"))
 	if err != nil {
@@ -57,7 +72,7 @@ func (h *HandlerMonitor) ListTargets(c *gin.Context) {
 	if !ok {
 		return
 	}
-	scope := iamsdk.DataFilterScopeStatic(c, monitorFieldMapping)
+	scope := definition.SafeDataFilterScope(c, monitorFieldMapping)
 	total, list, err := h.svc.ListTargets(c.Request.Context(), req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()

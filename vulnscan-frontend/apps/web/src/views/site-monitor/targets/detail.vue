@@ -19,7 +19,8 @@ import {
   watch,
 } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { useOpenTaskRecordsTab } from '../composables/useOpenTaskRecordsTab';
+
+import RecordDrawer from './RecordDrawer.vue';
 
 import { Page } from '@vben/common-ui';
 
@@ -70,8 +71,10 @@ defineOptions({ name: 'MonitorTargetDetail' });
 
 const route = useRoute();
 const router = useRouter();
-const { openTaskRecordsTab } = useOpenTaskRecordsTab();
 const { handleError } = useErrorHandler();
+
+const recordDrawerVisible = ref(false);
+const recordDrawerTaskId = ref('');
 
 const targetId = computed(() => String(route.params.id ?? ''));
 const target = ref<MonitorTarget | null>(null);
@@ -215,7 +218,10 @@ const columns = computed<DataTableColumns<MonitorPathTask>>(() => [
             text: true,
             type: 'info',
             size: 'small',
-            onClick: () => openTaskRecordsTab(row),
+            onClick: () => {
+              recordDrawerTaskId.value = row.id;
+              recordDrawerVisible.value = true;
+            },
           },
           { default: () => '记录' },
         ),
@@ -1030,6 +1036,11 @@ watch(targetId, refresh);
         </NSpace>
       </template>
     </NModal>
+
+    <RecordDrawer
+      v-model:show="recordDrawerVisible"
+      :path-task-id="recordDrawerTaskId"
+    />
 
     <!-- 截图预览 -->
     <NModal

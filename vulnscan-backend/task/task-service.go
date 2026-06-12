@@ -343,16 +343,29 @@ func (s *serviceTask) ListAssets(taskID string) ([]taskContract.AssetSummary, er
 				if proto == "" {
 					proto = f.Protocol
 				}
+				svc := dataStr(f.Data, "service")
+				ver := dataStr(f.Data, "version")
+				bnr := dataStr(f.Data, "banner")
 				found := false
-				for _, p := range asset.Ports {
-					if p.Port == port && p.Protocol == proto {
+				for i, p := range asset.Ports {
+					if p.Port == port {
 						found = true
+						if svc != "" && asset.Ports[i].Service == "" {
+							asset.Ports[i].Service = svc
+						}
+						if ver != "" && asset.Ports[i].Version == "" {
+							asset.Ports[i].Version = ver
+						}
+						if bnr != "" && asset.Ports[i].Banner == "" {
+							asset.Ports[i].Banner = bnr
+						}
 						break
 					}
 				}
 				if !found {
 					asset.Ports = append(asset.Ports, taskContract.AssetPort{
 						Port: port, Protocol: proto,
+						Service: svc, Version: ver, Banner: bnr,
 					})
 				}
 			}
@@ -364,11 +377,27 @@ func (s *serviceTask) ListAssets(taskID string) ([]taskContract.AssetSummary, er
 			if port == 0 {
 				port, _ = strconv.Atoi(dataStr(f.Data, "port"))
 			}
-			for i := range asset.Ports {
-				if asset.Ports[i].Port == port {
-					asset.Ports[i].Service = svc
-					asset.Ports[i].Version = ver
-					asset.Ports[i].Banner = banner
+			matched := false
+			if port > 0 {
+				for i := range asset.Ports {
+					if asset.Ports[i].Port == port {
+						if svc != "" {
+							asset.Ports[i].Service = svc
+						}
+						if ver != "" {
+							asset.Ports[i].Version = ver
+						}
+						if banner != "" {
+							asset.Ports[i].Banner = banner
+						}
+						matched = true
+					}
+				}
+				if !matched {
+					asset.Ports = append(asset.Ports, taskContract.AssetPort{
+						Port: port, Protocol: dataStr(f.Data, "protocol"),
+						Service: svc, Version: ver, Banner: banner,
+					})
 				}
 			}
 			if svc != "" {
@@ -609,6 +638,56 @@ func (s *serviceTask) applyEnrichToFinding(ctx context.Context, findingID string
 	if len(updates) > 0 {
 		s.session().WithContext(ctx).Model(&model.ScanFinding{}).Where("id = ?", findingID).Updates(updates)
 	}
+}
+
+func (s *serviceTask) GetEvidenceReport(findingID string) (*taskContract.EvidenceReportData, error) {
+	var finding model.ScanFinding
+	if err := s.session().Where("id = ?", findingID).First(&finding).Error; err != nil {
+		return nil, fmt.Errorf("漏洞发现不存在")
+	}
+
+	report := &taskContract.EvidenceReportData{
+		FindingID:    finding.ID,
+		Title:        finding.Title,
+		Severity:     finding.Severity,
+		Target:       finding.Target,
+		Port:         finding.Port,
+		VulnType:     finding.Type,
+		Description:  finding.Description,
+		Confidence:   finding.Confidence,
+		ConfReason:   finding.ConfidenceReason,
+		VerifyLevel:  finding.VerificationLevel,
+		VerifyDetail: finding.VerificationDetail,
+		Evidence:     finding.Evidence,
+		CreatedAt:    finding.CreatedAt.Format("2006-01-02 15:04:05"),
+	}
+
+	if finding.Data != nil {
+		report.Payload = dataStr(finding.Data, "payload")
+		report.MatchedAt = dataStr(finding.Data, "matched_at")
+		report.Request = dataStr(finding.Data, "request")
+		report.Response = dataStr(finding.Data, "response")
+		report.CurlCommand = dataStr(finding.Data, "curl_command")
+		report.CveID = dataStr(finding.Data, "cve_id")
+		if report.CveID == "" {
+			report.CveID = dataStr(finding.Data, "cve")
+		}
+		report.CvssScore = dataStr(finding.Data, "cvss_score")
+		report.Remediation = dataStr(finding.Data, "remediation")
+		if report.Remediation == "" {
+			report.Remediation = dataStr(finding.Data, "solution")
+		}
+		report.Screenshot = dataStr(finding.Data, "screenshot")
+
+		if dataStr(finding.Data, "ai_verified") == "true" {
+			report.AIVerified = true
+			report.AIReasoning = dataStr(finding.Data, "ai_verify_reasoning")
+			report.AISuggestion = dataStr(finding.Data, "ai_verify_suggestion")
+			report.AIFalseReason = dataStr(finding.Data, "ai_verify_false_reason")
+		}
+	}
+
+	return report, nil
 }
 
 func dataStr(data model.JSONMap, key string) string {

@@ -34,10 +34,14 @@ func (h *HandlerMonitor) ImportTasks(c *gin.Context) {
 	}
 	result, err := h.svc.ImportTasks(c.Request.Context(), fileData)
 	if err != nil {
-		web.Fail(c).Err(err).Send()
+		web.Fail(c).Err(err).Msg(err.Error()).Send()
 		return
 	}
-	web.Succeed(c).Data(result).Send()
+	web.Succeed(c).Data(gin.H{
+		"id":     result.ID,
+		"status": result.Status,
+		"total":  result.Total,
+	}).Send()
 }
 
 func (h *HandlerMonitor) GetImportResult(c *gin.Context) {

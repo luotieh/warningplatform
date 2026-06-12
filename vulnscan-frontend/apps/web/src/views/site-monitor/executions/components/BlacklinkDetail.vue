@@ -21,6 +21,22 @@ const r = computed(() => props.result || {});
 
 const blacklinks = computed(() => r.value.blacklink_matches || []);
 const backdoors = computed(() => r.value.backdoor_findings || []);
+const hiddenIframes = computed(() => r.value.hidden_iframes || []);
+const jsRedirects = computed(() => r.value.js_redirects || []);
+const maliciousJS = computed(() => r.value.malicious_js || []);
+const metaRedirects = computed(() => r.value.meta_redirects || []);
+const cloakingFindings = computed(() => r.value.cloaking || []);
+
+const allFindingsCount = computed(
+  () =>
+    blacklinks.value.length +
+    backdoors.value.length +
+    hiddenIframes.value.length +
+    jsRedirects.value.length +
+    maliciousJS.value.length +
+    metaRedirects.value.length +
+    cloakingFindings.value.length,
+);
 
 const annotatedScreenshotUrl = computed(
   () => r.value.tamper_screenshot_url || '',
@@ -157,6 +173,98 @@ const backdoorCols: DataTableColumns<any> = [
     render: (row) => row.context || '-',
   },
 ];
+
+const sevTag = (sev: string) =>
+  sev === 'critical'
+    ? 'error'
+    : sev === 'high'
+      ? 'warning'
+      : sev === 'medium'
+        ? 'info'
+        : 'default';
+
+const iframeCols: DataTableColumns<any> = [
+  {
+    key: 'src',
+    title: 'iframe 地址',
+    minWidth: 280,
+    ellipsis: { tooltip: true },
+    render: (row) => h('span', { class: 'font-mono text-xs' }, row.src || '-'),
+  },
+  { key: 'domain', title: '域名', width: 160, ellipsis: { tooltip: true } },
+  {
+    key: 'hidden',
+    title: '隐藏',
+    width: 80,
+    align: 'center',
+    render: (row) =>
+      h(NTag, { type: row.hidden ? 'error' : 'default', size: 'small', bordered: false }, { default: () => (row.hidden ? '是' : '否') }),
+  },
+  {
+    key: 'size',
+    title: '尺寸',
+    width: 120,
+    render: (row) => `${row.width ?? '?'} × ${row.height ?? '?'}`,
+  },
+];
+
+const jsRedirectCols: DataTableColumns<any> = [
+  { key: 'type', title: '类型', width: 160 },
+  {
+    key: 'target',
+    title: '跳转目标',
+    minWidth: 280,
+    ellipsis: { tooltip: true },
+    render: (row) => h('span', { class: 'font-mono text-xs' }, row.target || '-'),
+  },
+  { key: 'domain', title: '目标域名', width: 160, ellipsis: { tooltip: true } },
+  {
+    key: 'delay',
+    title: '延迟(ms)',
+    width: 100,
+    render: (row) => (row.delay != null ? `${row.delay}ms` : '-'),
+  },
+  {
+    key: 'severity',
+    title: '严重程度',
+    width: 100,
+    render: (row) =>
+      h(NTag, { type: sevTag(row.severity), size: 'small', bordered: false }, { default: () => row.severity || '-' }),
+  },
+];
+
+const maliciousJSCols: DataTableColumns<any> = [
+  { key: 'desc', title: '描述', width: 180 },
+  { key: 'category', title: '分类', width: 140 },
+  {
+    key: 'severity',
+    title: '严重程度',
+    width: 100,
+    render: (row) =>
+      h(NTag, { type: sevTag(row.severity), size: 'small', bordered: false }, { default: () => row.severity || '-' }),
+  },
+  {
+    key: 'src',
+    title: '脚本来源',
+    width: 140,
+    ellipsis: { tooltip: true },
+    render: (row) => row.src || '内联脚本',
+  },
+  {
+    key: 'snippet',
+    title: '代码片段',
+    minWidth: 200,
+    render: (row) =>
+      h(
+        'pre',
+        {
+          class: 'text-xs break-all whitespace-pre-wrap m-0',
+          style: 'max-height: 80px; overflow-y: auto; font-family: monospace',
+        },
+        row.snippet || '-',
+      ),
+  },
+];
 </script>
 
 <template>
@@ -182,6 +290,29 @@ const backdoorCols: DataTableColumns<any> = [
           {{ r.external_links ?? '-' }}
         </NDescriptionsItem>
       </NDescriptions>
+      <div v-if="allFindingsCount > 0" class="mt-3 flex flex-wrap gap-2">
+        <NTag v-if="blacklinks.length > 0" type="error" size="small">
+          暗链 {{ blacklinks.length }}
+        </NTag>
+        <NTag v-if="backdoors.length > 0" type="error" size="small">
+          后门 {{ backdoors.length }}
+        </NTag>
+        <NTag v-if="hiddenIframes.length > 0" type="warning" size="small">
+          隐藏iframe {{ hiddenIframes.length }}
+        </NTag>
+        <NTag v-if="jsRedirects.length > 0" type="warning" size="small">
+          JS重定向 {{ jsRedirects.length }}
+        </NTag>
+        <NTag v-if="maliciousJS.length > 0" type="info" size="small">
+          可疑JS {{ maliciousJS.length }}
+        </NTag>
+        <NTag v-if="metaRedirects.length > 0" type="warning" size="small">
+          Meta重定向 {{ metaRedirects.length }}
+        </NTag>
+        <NTag v-if="cloakingFindings.length > 0" type="error" size="small">
+          伪装 {{ cloakingFindings.length }}
+        </NTag>
+      </div>
     </NCard>
 
     <NCard
@@ -193,7 +324,6 @@ const backdoorCols: DataTableColumns<any> = [
         :columns="blacklinkCols"
         :data="blacklinks"
         size="small"
-        :max-height="400"
       />
     </NCard>
 
@@ -206,8 +336,85 @@ const backdoorCols: DataTableColumns<any> = [
         :columns="backdoorCols"
         :data="backdoors"
         size="small"
-        :max-height="400"
       />
+    </NCard>
+
+    <NCard
+      v-if="hiddenIframes.length > 0"
+      size="small"
+      :title="`隐藏 iframe（${hiddenIframes.length} 个）`"
+    >
+      <NDataTable
+        :columns="iframeCols"
+        :data="hiddenIframes"
+        size="small"
+      />
+    </NCard>
+
+    <NCard
+      v-if="jsRedirects.length > 0"
+      size="small"
+      :title="`JS/页面重定向（${jsRedirects.length} 条）`"
+    >
+      <NDataTable
+        :columns="jsRedirectCols"
+        :data="jsRedirects"
+        size="small"
+      />
+    </NCard>
+
+    <NCard
+      v-if="maliciousJS.length > 0"
+      size="small"
+      :title="`可疑 JS 行为（${maliciousJS.length} 条）`"
+    >
+      <NAlert type="info" :bordered="false" class="mb-2">
+        以下为页面 JS 中检测到的可疑模式，部分可能是正常的动态加载行为，请结合上下文判断。
+      </NAlert>
+      <NDataTable
+        :columns="maliciousJSCols"
+        :data="maliciousJS"
+        size="small"
+      />
+    </NCard>
+
+    <NCard
+      v-if="metaRedirects.length > 0"
+      size="small"
+      :title="`Meta 重定向（${metaRedirects.length} 条）`"
+    >
+      <div
+        v-for="(mr, idx) in metaRedirects"
+        :key="idx"
+        class="mb-1 text-sm"
+      >
+        <NTag type="warning" size="small" :bordered="false">重定向</NTag>
+        <span class="font-mono text-xs ml-2">{{ mr.url }}</span>
+        <span class="text-gray-400 text-xs ml-2">延迟 {{ mr.seconds ?? 0 }}s</span>
+      </div>
+    </NCard>
+
+    <NCard
+      v-if="cloakingFindings.length > 0"
+      size="small"
+      title="伪装检测 (Cloaking)"
+    >
+      <NAlert type="error" :bordered="false" class="mb-2">
+        检测到页面对搜索引擎爬虫展示不同内容（伪装行为），这通常是 SEO 黑帽手段。
+      </NAlert>
+      <div
+        v-for="(cf, idx) in cloakingFindings"
+        :key="idx"
+        class="mb-2 text-sm"
+      >
+        <NTag type="error" size="small">{{ cf.bot_name }}</NTag>
+        <span class="text-xs text-gray-500 ml-2">
+          相似度: {{ ((cf.similarity ?? 0) * 100).toFixed(1) }}%
+        </span>
+        <span v-if="cf.bot_title" class="text-xs text-gray-400 ml-2">
+          爬虫标题: {{ cf.bot_title }}
+        </span>
+      </div>
     </NCard>
 
     <NCard v-if="annotatedScreenshotUrl" size="small" title="页面标注截图">
@@ -309,7 +516,7 @@ const backdoorCols: DataTableColumns<any> = [
     </NModal>
 
     <NEmpty
-      v-if="!r.has_black && blacklinks.length === 0 && backdoors.length === 0"
+      v-if="!r.has_black && allFindingsCount === 0"
       description="未发现暗链或后门"
       class="py-8"
     />

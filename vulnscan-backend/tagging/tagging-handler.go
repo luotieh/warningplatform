@@ -4,12 +4,11 @@ import (
 	"strconv"
 
 	"vulnscan-backend/model"
+	"vulnscan-backend/pkg/definition"
 	tc "vulnscan-backend/tagging/tagging-contract"
 
-	iamsdk "code.yt-security.com/public/access"
 	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
-	"vulnscan-backend/pkg/definition"
 )
 
 type HandlerTag struct {
@@ -25,7 +24,7 @@ func (h *HandlerTag) List(c *gin.Context) {
 	if !ok {
 		return
 	}
-	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
+	scope := definition.SafeDataFilterScope(c, definition.VulnscanFieldMapping)
 	items, count, err := h.svc.List(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
@@ -114,7 +113,7 @@ func (h *HandlerChangeLog) List(c *gin.Context) {
 	if !ok {
 		return
 	}
-	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
+	scope := definition.SafeDataFilterScope(c, definition.VulnscanFieldMapping)
 	items, count, err := h.svc.List(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()

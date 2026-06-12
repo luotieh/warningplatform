@@ -28,7 +28,7 @@ export const overridesPreferences = defineOverridesPreferences({
     source: '/logo.webp',
   },
   tabbar: {
-    maxCount: 8,
+    maxCount: 0,
   },
   theme: {
     builtinType: 'default',

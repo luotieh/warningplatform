@@ -20,6 +20,7 @@ import {
 } from '../incident-export';
 import IncidentPreviewDrawer from '../components/IncidentPreviewDrawer.vue';
 import { useNaiveTablePagination } from '#/composables/useNaiveTablePagination';
+import CreateDispatchDrawer from '#/views/dispatch/CreateDispatchDrawer.vue';
 import { useRoutePerm } from '#/composables/use-route-perm';
 
 defineOptions({ name: 'IncidentList' });
@@ -41,6 +42,12 @@ const checkedRowKeys = ref<DataTableRowKey[]>([]);
 const exporting = ref(false);
 const showPreview = ref(false);
 const previewId = ref<string | null>(null);
+const showDispatchDrawer = ref(false);
+const dispatchIncident = ref<SecurityIncident | null>(null);
+function openDispatch(row: SecurityIncident) {
+  dispatchIncident.value = row;
+  showDispatchDrawer.value = true;
+}
 
 function openPreview(row: SecurityIncident) {
   previewId.value = row.id;
@@ -179,6 +186,7 @@ const columns = computed(() => [
   { title: '创建时间', key: 'created_at', width: 170, render: (row: SecurityIncident) => { if (!row.created_at) return '-'; const d = new Date(row.created_at); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; } },
   { title: '操作', key: 'actions', width: 200, fixed: 'right' as const, render: (row: SecurityIncident) => {
     const moreOpts: any[] = [
+      { label: '派发处置', key: 'dispatch' },
       { label: '转通报', key: 'transfer' },
       { label: '导出 Word', key: 'docx' },
       { label: '导出 PDF', key: 'pdf' },
@@ -189,7 +197,8 @@ const columns = computed(() => [
     moreOpts.push({ type: 'divider', key: 'd1' });
     moreOpts.push({ label: '删除', key: 'delete', props: { style: 'color: #d03050' } });
     function handleMoreSelect(key: string) {
-      if (key === 'transfer') handleTransferToCircular(row);
+      if (key === 'dispatch') openDispatch(row);
+      else if (key === 'transfer') handleTransferToCircular(row);
       else if (key === 'docx' || key === 'pdf') handleRowExport(row, key as IncidentExportFormat);
       else if (key === 'ai-audit') handleAiAudit(row.id);
       else if (key === 'delete') handleDelete(row.id);
@@ -421,5 +430,14 @@ onMounted(fetchData);
         </NSpace>
       </template>
     </NModal>
+
+    <CreateDispatchDrawer
+      v-model:show="showDispatchDrawer"
+      source-type="incident"
+      :source-id="dispatchIncident?.id"
+      :source-title="dispatchIncident?.name"
+      default-type="security_fix"
+      :source-detail="dispatchIncident ? { severity: levelLabels[dispatchIncident.level], status: statusLabels[dispatchIncident.status] } : undefined"
+    />
   </div>
 </template>

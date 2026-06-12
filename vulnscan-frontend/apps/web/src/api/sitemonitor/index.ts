@@ -196,6 +196,9 @@ export const updateTarget = (id: string, data: TargetUpdateDTO) =>
 export const deleteTarget = (id: string) =>
   requestClient.delete(base(`/targets/${id}`));
 
+export const batchDeleteTargets = (ids: string[]) =>
+  requestClient.delete(base('/targets/batch/delete'), { data: { ids } });
+
 export const runTarget = (id: string, dimensions?: string[]) =>
   requestClient.post<RunTaskOutcome>(base(`/targets/run/${id}`), {
     dimensions: dimensions ?? [],
@@ -500,13 +503,23 @@ export async function downloadImportTemplate(): Promise<Blob> {
 export const exportImportResultUrl = (importId: string) =>
   base(`/import/${importId}/export`);
 
+export interface ImportStartResult {
+  id: string;
+  status: string;
+  total: number;
+}
+
 export const importTargets = (file: File) => {
   const formData = new FormData();
   formData.append('file', file);
-  return requestClient.post<ImportResult>(base('/import'), formData, {
+  return requestClient.post<ImportStartResult>(base('/import'), formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 120_000,
   });
 };
+
+export const getImportResult = (importId: string) =>
+  requestClient.get<ImportResult>(base(`/import/${importId}`));
 
 /** @deprecated */
 export const importTasks = importTargets;

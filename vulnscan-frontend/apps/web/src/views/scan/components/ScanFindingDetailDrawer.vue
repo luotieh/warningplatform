@@ -14,9 +14,16 @@ import {
   useMessage,
 } from 'naive-ui';
 
-import { aiEnrichFinding, type AIEnrichResult, type ScanFinding } from '#/api/task';
+import {
+  aiEnrichFinding,
+  getEvidenceReport,
+  type AIEnrichResult,
+  type EvidenceReport,
+  type ScanFinding,
+} from '#/api/task';
 
 import { formatFindingDataValue } from './finding-display';
+import CreateDispatchDrawer from '#/views/dispatch/CreateDispatchDrawer.vue';
 
 const props = defineProps<{
   show: boolean;
@@ -279,6 +286,220 @@ function copyEvidence() {
     setTimeout(() => { evidenceCopied.value = false; }, 2000);
   }).catch(() => {});
 }
+
+const aiVerifyData = computed(() => {
+  const d = props.finding?.data;
+  if (!d || d.ai_verified !== 'true') return null;
+  return {
+    isVulnerable: d.ai_verify_is_vulnerable as boolean,
+    confidence: d.ai_verify_confidence as number,
+    reasoning: d.ai_verify_reasoning as string,
+    falseReason: d.ai_verify_false_reason as string | undefined,
+    suggestion: d.ai_verify_suggestion as string | undefined,
+  };
+});
+
+const verificationTimeline = computed(() => {
+  const steps: Array<{
+    icon: string;
+    color: string;
+    title: string;
+    description: string;
+    time?: string;
+  }> = [];
+
+  const f = props.finding;
+  if (!f) return steps;
+
+  steps.push({
+    icon: 'scan',
+    color: '#1890ff',
+    title: '扫描发现',
+    description: `模块 ${f.module_id} 检测到 ${typeLabels[f.type] ?? f.type} 类型漏洞`,
+    time: formatTime(f.created_at),
+  });
+
+  if (f.evidence || f.data?.proof) {
+    steps.push({
+      icon: 'evidence',
+      color: '#52c41a',
+      title: '证据采集',
+      description: f.evidence
+        ? `已采集验证证据 (${f.evidence.length} 字符)`
+        : '验证摘录已记录',
+    });
+  }
+
+  if (f.data?.request || f.data?.response) {
+    steps.push({
+      icon: 'network',
+      color: '#722ed1',
+      title: '请求/响应记录',
+      description: [
+        f.data.request ? '已记录攻击请求' : '',
+        f.data.response ? '已记录服务端响应' : '',
+        f.data.curl_command ? '已生成 cURL 命令' : '',
+      ].filter(Boolean).join('；'),
+    });
+  }
+
+  if (f.data?.screenshot) {
+    steps.push({
+      icon: 'screenshot',
+      color: '#13c2c2',
+      title: '页面截图',
+      description: '已自动采集目标页面截图',
+    });
+  }
+
+  if (f.verification_level) {
+    const levelLabel = f.verification_level === 'exploit' ? '实际利用验证' : '原理验证';
+    steps.push({
+      icon: 'verify',
+      color: f.verification_level === 'exploit' ? '#f5222d' : '#faad14',
+      title: `验证级别: ${levelLabel}`,
+      description: f.verification_detail || '已完成漏洞可利用性验证',
+    });
+  }
+
+  const av = aiVerifyData.value;
+  if (av) {
+    steps.push({
+      icon: 'ai',
+      color: av.isVulnerable ? '#52c41a' : '#ff4d4f',
+      title: av.isVulnerable ? 'AI 确认漏洞存在' : 'AI 判定可能误报',
+      description: `AI 置信度 ${av.confidence}%` +
+        (av.falseReason ? `，误报原因: ${av.falseReason}` : ''),
+    });
+  }
+
+  if (f.confidence > 0) {
+    steps.push({
+      icon: 'confidence',
+      color: getConfColor(f.confidence),
+      title: `综合置信度 ${f.confidence}%`,
+      description: f.confidence_reason || '基于多维度分析的置信度评估',
+    });
+  }
+
+  return steps;
+});
+
+const showDispatchDrawer = ref(false);
+
+const exportingReport = ref(false);
+async function handleExportReport() {
+  const f = props.finding;
+  if (!f) return;
+  exportingReport.value = true;
+  try {
+    const report = await getEvidenceReport(f.task_id, f.id);
+    downloadEvidenceReportHTML(report);
+    message.success('证据报告已导出');
+  } catch (e: any) {
+    message.error(e?.message || '导出失败');
+  } finally {
+    exportingReport.value = false;
+  }
+}
+
+function downloadEvidenceReportHTML(r: EvidenceReport) {
+  const sevLabels: Record<string, string> = {
+    critical: '严重', high: '高危', medium: '中危', low: '低危', info: '信息',
+  };
+  const sevColors: Record<string, string> = {
+    critical: '#cf1322', high: '#fa8c16', medium: '#faad14', low: '#52c41a', info: '#999',
+  };
+
+  let screenshotHTML = '';
+  if (r.screenshot) {
+    screenshotHTML = `<div class="section"><h3>📸 页面截图</h3><img src="data:image/jpeg;base64,${r.screenshot}" style="max-width:100%;border:1px solid #ddd;border-radius:8px"/></div>`;
+  }
+
+  let aiHTML = '';
+  if (r.ai_verified) {
+    aiHTML = `<div class="section"><h3>🤖 AI 验证分析</h3>
+      <div class="ai-box">
+        <div class="ai-reasoning">${escapeHTML(r.ai_reasoning || '')}</div>
+        ${r.ai_false_reason ? `<div class="ai-false"><strong>误报原因：</strong>${escapeHTML(r.ai_false_reason)}</div>` : ''}
+        ${r.ai_suggestion ? `<div class="ai-suggestion"><strong>进一步建议：</strong>${escapeHTML(r.ai_suggestion)}</div>` : ''}
+      </div>
+    </div>`;
+  }
+
+  const html = `<!DOCTYPE html><html lang="zh-CN"><head>
+<meta charset="UTF-8"><title>漏洞证据报告 - ${escapeHTML(r.title)}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,system-ui,sans-serif;background:#f5f7fa;color:#333;padding:40px 20px}
+.container{max-width:900px;margin:0 auto;background:#fff;border-radius:12px;box-shadow:0 2px 16px rgba(0,0,0,.08);overflow:hidden}
+.header{background:linear-gradient(135deg,#1a1a2e,#16213e);color:#fff;padding:32px 40px}
+.header h1{font-size:20px;margin-bottom:8px}
+.header .meta{display:flex;gap:12px;flex-wrap:wrap;font-size:13px;opacity:.85}
+.sev-badge{display:inline-block;padding:2px 12px;border-radius:4px;font-weight:700;font-size:12px;color:#fff;background:${sevColors[r.severity] || '#999'}}
+.body{padding:32px 40px}
+.section{margin-bottom:28px}
+.section h3{font-size:14px;font-weight:600;margin-bottom:12px;padding-left:10px;border-left:3px solid #1890ff;color:#1a1a2e}
+.info-grid{display:grid;grid-template-columns:140px 1fr;gap:1px;background:#eee;border:1px solid #eee;border-radius:8px;overflow:hidden}
+.info-grid .label{background:#f8f9fa;padding:10px 14px;font-size:12px;color:#666;font-weight:500}
+.info-grid .value{background:#fff;padding:10px 14px;font-size:12px;word-break:break-all}
+.code-block{background:#0d1117;color:#e6edf3;padding:14px 16px;border-radius:8px;font-family:'SF Mono',Consolas,monospace;font-size:11px;line-height:1.6;white-space:pre-wrap;word-break:break-all;max-height:300px;overflow:auto}
+.ai-box{background:#f0f7ff;border:1px solid #d6e4ff;border-radius:8px;padding:16px}
+.ai-reasoning{font-size:12px;line-height:1.7;white-space:pre-wrap;margin-bottom:8px}
+.ai-false,.ai-suggestion{font-size:12px;margin-top:8px;padding:8px 12px;background:#fff;border-radius:6px;border:1px solid #eee}
+.footer{padding:20px 40px;border-top:1px solid #f0f0f0;font-size:11px;color:#999;text-align:center}
+</style></head><body>
+<div class="container">
+<div class="header">
+  <h1>${escapeHTML(r.title)}</h1>
+  <div class="meta">
+    <span class="sev-badge">${sevLabels[r.severity] || r.severity}</span>
+    <span>目标: ${escapeHTML(r.target)}${r.port > 0 ? ':' + r.port : ''}</span>
+    <span>置信度: ${r.confidence}%</span>
+    ${r.cve_id ? `<span>CVE: ${escapeHTML(r.cve_id)}</span>` : ''}
+    <span>发现时间: ${escapeHTML(r.created_at)}</span>
+  </div>
+</div>
+<div class="body">
+  <div class="section"><h3>📋 基本信息</h3>
+    <div class="info-grid">
+      <div class="label">漏洞类型</div><div class="value">${escapeHTML(r.vuln_type)}</div>
+      <div class="label">验证级别</div><div class="value">${r.verification_level === 'exploit' ? '实际利用' : '原理验证'}</div>
+      ${r.cvss_score ? `<div class="label">CVSS 评分</div><div class="value">${escapeHTML(r.cvss_score)}</div>` : ''}
+      ${r.matched_at ? `<div class="label">匹配位置</div><div class="value">${escapeHTML(r.matched_at)}</div>` : ''}
+    </div>
+  </div>
+  ${r.description ? `<div class="section"><h3>📝 描述</h3><div style="font-size:12px;line-height:1.7">${escapeHTML(r.description)}</div></div>` : ''}
+  ${r.evidence ? `<div class="section"><h3>🔍 验证证据</h3><div class="code-block">${escapeHTML(r.evidence)}</div></div>` : ''}
+  ${r.verification_detail ? `<div class="section"><h3>✅ 验证详情</h3><div style="font-size:12px;line-height:1.7;white-space:pre-wrap">${escapeHTML(r.verification_detail)}</div></div>` : ''}
+  ${r.payload ? `<div class="section"><h3>💉 Payload</h3><div class="code-block">${escapeHTML(r.payload)}</div></div>` : ''}
+  ${r.request ? `<div class="section"><h3>📤 请求报文</h3><div class="code-block">${escapeHTML(r.request)}</div></div>` : ''}
+  ${r.response ? `<div class="section"><h3>📥 响应报文</h3><div class="code-block">${escapeHTML(r.response)}</div></div>` : ''}
+  ${r.curl_command ? `<div class="section"><h3>🖥️ cURL 命令</h3><div class="code-block">${escapeHTML(r.curl_command)}</div></div>` : ''}
+  ${screenshotHTML}
+  ${aiHTML}
+  ${r.remediation ? `<div class="section"><h3>🔧 修复建议</h3><div style="font-size:12px;line-height:1.7;background:#f6ffed;padding:14px 16px;border-radius:8px;border:1px solid #b7eb8f;white-space:pre-wrap">${escapeHTML(r.remediation)}</div></div>` : ''}
+</div>
+<div class="footer">漏洞证据报告 · 由安全扫描平台自动生成 · ${new Date().toLocaleString('zh-CN')}</div>
+</div></body></html>`;
+
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `证据报告_${r.title.replace(/[/\\?%*:|"<>]/g, '_').slice(0, 40)}_${r.finding_id.slice(0, 8)}.html`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function escapeHTML(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/\n/g, '<br>');
+}
 </script>
 
 <template>
@@ -438,6 +659,55 @@ function copyEvidence() {
           <pre class="fd-block fd-block--text">{{ (finding as any).verification_detail }}</pre>
         </section>
 
+        <!-- AI 验证分析 -->
+        <section v-if="aiVerifyData" class="fd-section">
+          <div class="fd-section__title">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#722ed1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 4px"><path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" /></svg>
+            AI 验证分析
+            <NTag size="small" :bordered="false" :type="aiVerifyData.isVulnerable ? 'error' : 'success'" style="margin-left: 4px">
+              {{ aiVerifyData.isVulnerable ? '确认漏洞' : '可能误报' }}
+            </NTag>
+          </div>
+          <div class="fd-ai-verify-card">
+            <div class="fd-ai-verify-header">
+              <span class="fd-ai-verify-score" :style="{ color: aiVerifyData.isVulnerable ? '#f5222d' : '#52c41a' }">
+                {{ aiVerifyData.confidence }}%
+              </span>
+              <span class="fd-ai-verify-label">AI 置信度</span>
+            </div>
+            <pre v-if="aiVerifyData.reasoning" class="fd-block fd-block--text" style="margin: 8px 0 0">{{ aiVerifyData.reasoning }}</pre>
+            <div v-if="aiVerifyData.falseReason" class="fd-ai-false-reason">
+              <strong>误报原因：</strong>{{ aiVerifyData.falseReason }}
+            </div>
+            <div v-if="aiVerifyData.suggestion" class="fd-ai-suggestion">
+              <strong>进一步建议：</strong>{{ aiVerifyData.suggestion }}
+            </div>
+          </div>
+        </section>
+
+        <!-- 验证时间线 -->
+        <section v-if="verificationTimeline.length > 1" class="fd-section">
+          <div class="fd-section__title">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#1890ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 4px"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
+            验证过程时间线
+          </div>
+          <div class="fd-timeline">
+            <div
+              v-for="(step, idx) in verificationTimeline"
+              :key="idx"
+              class="fd-timeline__item"
+            >
+              <div class="fd-timeline__line" :style="{ background: step.color }" />
+              <div class="fd-timeline__dot" :style="{ background: step.color }" />
+              <div class="fd-timeline__content">
+                <div class="fd-timeline__title">{{ step.title }}</div>
+                <div class="fd-timeline__desc">{{ step.description }}</div>
+                <div v-if="step.time" class="fd-timeline__time">{{ step.time }}</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <div class="fd-divider" />
 
         <section v-if="finding.data?.screenshot" class="fd-section">
@@ -535,6 +805,12 @@ function copyEvidence() {
               </template>
               标记误报
             </NButton>
+            <NButton size="small" secondary type="primary" @click="showDispatchDrawer = true">
+              <template #icon>
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>
+              </template>
+              派发处理
+            </NButton>
             <NButton
               size="small"
               secondary
@@ -548,11 +824,32 @@ function copyEvidence() {
               </template>
               {{ aiEnrichResult ? 'AI 已补充' : 'AI 补充' }}
             </NButton>
+            <NButton
+              size="small"
+              secondary
+              type="primary"
+              :loading="exportingReport"
+              @click="handleExportReport"
+            >
+              <template #icon>
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><polyline points="10 9 9 9 8 9" /></svg>
+              </template>
+              导出证据报告
+            </NButton>
           </NSpace>
         </section>
       </template>
     </NDrawerContent>
   </NDrawer>
+
+  <CreateDispatchDrawer
+    v-model:show="showDispatchDrawer"
+    source-type="finding"
+    :source-id="finding?.id"
+    :source-title="finding?.title || finding?.module"
+    default-type="vuln_retest"
+    :source-detail="finding ? { severity: finding.severity, target: finding.target, status: finding.status } : undefined"
+  />
 </template>
 
 <style scoped>
@@ -795,5 +1092,100 @@ function copyEvidence() {
 .fd-ref-link:hover {
   background: #e6f7ff;
   border-color: #91d5ff;
+}
+
+/* AI Verify */
+.fd-ai-verify-card {
+  background: linear-gradient(135deg, #f9f0ff, #f0f5ff);
+  border: 1px solid #d3adf7;
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+.fd-ai-verify-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.fd-ai-verify-score {
+  font-size: 20px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.fd-ai-verify-label {
+  font-size: 12px;
+  color: var(--text-color-2, #666);
+  font-weight: 500;
+}
+.fd-ai-false-reason {
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: #fff1f0;
+  border: 1px solid #ffa39e;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.fd-ai-suggestion {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: #e6fffb;
+  border: 1px solid #87e8de;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* Timeline */
+.fd-timeline {
+  position: relative;
+  padding-left: 24px;
+}
+.fd-timeline__item {
+  position: relative;
+  padding-bottom: 20px;
+}
+.fd-timeline__item:last-child {
+  padding-bottom: 0;
+}
+.fd-timeline__item:last-child .fd-timeline__line {
+  display: none;
+}
+.fd-timeline__line {
+  position: absolute;
+  left: -18px;
+  top: 14px;
+  bottom: -6px;
+  width: 2px;
+  opacity: 0.3;
+}
+.fd-timeline__dot {
+  position: absolute;
+  left: -22px;
+  top: 4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.9);
+}
+.fd-timeline__content {
+  padding-left: 4px;
+}
+.fd-timeline__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--n-text-color);
+  line-height: 1.4;
+}
+.fd-timeline__desc {
+  font-size: 12px;
+  color: var(--text-color-2, #666);
+  margin-top: 2px;
+  line-height: 1.5;
+}
+.fd-timeline__time {
+  font-size: 11px;
+  color: var(--text-color-3, #999);
+  margin-top: 2px;
 }
 </style>

@@ -28,6 +28,7 @@ import {
   type Vulnerability,
 } from '#/api/vuln';
 import { useNaiveTablePagination } from '#/composables/useNaiveTablePagination';
+import CreateDispatchDrawer from '#/views/dispatch/CreateDispatchDrawer.vue';
 import { sevLabels, sevColors } from '#/constants/severity';
 import { vulnStatusLabels as statusLabels, vulnStatusTypes as statusTypes } from '#/constants/status';
 
@@ -44,6 +45,13 @@ const keyword = ref('');
 const severityFilter = ref<string | null>(null);
 const statusFilter = ref<string | null>(null);
 const stats = ref<Record<string, any> | null>(null);
+
+const showDispatchDrawer = ref(false);
+const dispatchVuln = ref<Vulnerability | null>(null);
+function openDispatch(row: Vulnerability) {
+  dispatchVuln.value = row;
+  showDispatchDrawer.value = true;
+}
 
 const severityOptions = [
   { label: '严重', value: 'critical' },
@@ -96,7 +104,7 @@ const columns = computed(() => [
   { title: '模块', key: 'module_id', width: 110, ellipsis: { tooltip: true } },
   { title: '发现时间', key: 'first_seen_at', width: 150 },
   {
-    title: '操作', key: 'actions', width: 160, fixed: 'right' as const,
+    title: '操作', key: 'actions', width: 200, fixed: 'right' as const,
     render: (row: Vulnerability) => h(NSpace, { size: 4 }, () => {
       const items: any[] = [];
       items.push(h(NButton, { size: 'tiny', type: 'warning', secondary: true, onClick: () => handleRetest(row.id) }, () => '回测'));
@@ -107,6 +115,7 @@ const columns = computed(() => [
       if (row.status === 'fixed' || row.status === 'ignored') {
         items.push(h(NButton, { size: 'tiny', type: 'warning', secondary: true, onClick: () => handleReopen(row.id) }, () => '重开'));
       }
+      items.push(h(NButton, { size: 'tiny', type: 'primary', secondary: true, onClick: () => openDispatch(row) }, () => '派发'));
       items.push(h(NPopconfirm, { onPositiveClick: () => handleDelete(row.id) }, {
         trigger: () => h(NButton, { size: 'tiny', type: 'error', text: true }, () => '删除'),
         default: () => '确定删除？',
@@ -292,5 +301,14 @@ onMounted(() => {
         :pagination="pagination"
       />
     </NCard>
+
+    <CreateDispatchDrawer
+      v-model:show="showDispatchDrawer"
+      source-type="vuln"
+      :source-id="dispatchVuln?.id"
+      :source-title="dispatchVuln?.title"
+      default-type="vuln_retest"
+      :source-detail="dispatchVuln ? { severity: dispatchVuln.severity, address: dispatchVuln.address, status: dispatchVuln.status } : undefined"
+    />
   </div>
 </template>

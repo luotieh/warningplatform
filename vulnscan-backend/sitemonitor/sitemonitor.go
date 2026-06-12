@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"vulnscan-backend/boot"
+	"vulnscan-backend/sitemonitor/contract"
 
 	"code.yt-security.com/public/access/authorize"
 	"code.yt-security.com/public/core/db"
@@ -44,13 +45,33 @@ func NewMonitor(
 	scheduler := NewCronScheduler(database, svcImpl)
 	healthChecker := NewAgentHealthChecker(database)
 
-	return &Monitor{
+	m := &Monitor{
 		handler:       handler,
 		nats:          natsSvc,
 		db:            database,
 		scheduler:     scheduler,
 		healthChecker: healthChecker,
 	}
+
+	if svcImpl != nil {
+		svcImpl.onImportDone = func(result *contract.ImportResult) {
+			syncedTargets := make(map[string]bool)
+			for _, r := range result.Results {
+				if !r.Success {
+					continue
+				}
+				if r.TargetID != "" && !syncedTargets[r.TargetID] {
+					scheduler.SyncTargetFromDB(r.TargetID)
+					syncedTargets[r.TargetID] = true
+				}
+				if r.TaskID != "" {
+					scheduler.SyncPathTaskFromDB(r.TaskID)
+				}
+			}
+		}
+	}
+
+	return m
 }
 
 func (m *Monitor) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
@@ -97,6 +118,7 @@ func (m *Monitor) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
 			{Name: "目标详情", Path: "targets/:id", Method: "GET", Handler: m.handler.GetTarget, Enabled: true},
 			{Name: "更新目标", Path: "targets/:id", Method: "PUT", Handler: m.handleUpdateTarget, Enabled: true},
 			{Name: "删除目标", Path: "targets/:id", Method: "DELETE", Handler: m.handleDeleteTarget, Enabled: true},
+			{Name: "批量删除目标", Path: "targets/batch/delete", Method: "DELETE", Handler: m.handleBatchDeleteTargets, Enabled: true},
 			{Name: "执行目标维度", Path: "targets/run/:id", Method: "POST", Handler: m.handler.RunTarget, Enabled: true},
 			{Name: "更新目标调度", Path: "targets/:id/schedule", Method: "PUT", Handler: m.handleUpdateTargetSchedule, Enabled: true},
 			{Name: "启动爬虫", Path: "targets/:id/crawl", Method: "POST", Handler: m.handler.StartCrawl, Enabled: true},
@@ -205,6 +227,24 @@ func (m *Monitor) handleDeleteTarget(c *gin.Context) {
 	if c.Writer.Status() < 300 {
 		m.scheduler.RemoveTarget(id)
 	}
+}
+
+func (m *Monitor) handleBatchDeleteTargets(c *gin.Context) {
+	var req struct {
+		IDs []string `json:"ids" binding:"required,min=1"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		web.Err(c, web.ParamsMissingRequired).Send()
+		return
+	}
+	if err := m.handler.svc.BatchDeleteTargets(c.Request.Context(), req.IDs); err != nil {
+		web.Fail(c).Err(err).Send()
+		return
+	}
+	for _, id := range req.IDs {
+		m.scheduler.RemoveTarget(id)
+	}
+	web.Succeed(c).Send()
 }
 
 func (m *Monitor) handleCreatePathTask(c *gin.Context) {

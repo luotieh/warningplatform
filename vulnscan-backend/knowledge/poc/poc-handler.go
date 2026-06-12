@@ -18,7 +18,6 @@ import (
 	nucleilib "github.com/projectdiscovery/nuclei/v3/lib"
 	"github.com/projectdiscovery/nuclei/v3/pkg/output"
 
-	iamsdk "code.yt-security.com/public/access"
 	"code.yt-security.com/public/core/generate/ulid"
 	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
@@ -39,7 +38,7 @@ func (h *HandlerPoc) List(c *gin.Context) {
 		return
 	}
 
-	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
+	scope := definition.SafeDataFilterScope(c, definition.VulnscanFieldMapping)
 	items, count, err := h.svc.List(query, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
@@ -49,7 +48,7 @@ func (h *HandlerPoc) List(c *gin.Context) {
 }
 
 func (h *HandlerPoc) Stats(c *gin.Context) {
-	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
+	scope := definition.SafeDataFilterScope(c, definition.VulnscanFieldMapping)
 	stats, err := h.svc.Stats(scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
@@ -184,26 +183,31 @@ func (h *HandlerPoc) ImportUpload(c *gin.Context) {
 		web.Fail(c).Msg("创建临时目录失败").Send()
 		return
 	}
-	defer os.RemoveAll(tmpDir)
 
 	name := strings.ToLower(header.Filename)
 	switch {
 	case strings.HasSuffix(name, ".zip"):
 		tmpFile := filepath.Join(tmpDir, "upload.zip")
 		if err := saveUploadedFile(c, "file", tmpFile); err != nil {
+			os.RemoveAll(tmpDir)
 			web.Fail(c).Msg("保存上传文件失败").Send()
 			return
 		}
 		extractDir := filepath.Join(tmpDir, "extracted")
 		if err := unzip(tmpFile, extractDir); err != nil {
+			os.RemoveAll(tmpDir)
 			web.Fail(c).Msg(fmt.Sprintf("解压失败: %s", err.Error())).Send()
 			return
 		}
-		imported, skipped, errCount := h.svc.ImportDir(extractDir)
-		h.svc.InvalidateCache()
-		web.Succeed(c).Data(gin.H{"imported": imported, "skipped": skipped, "errors": errCount}).Send()
+		job := h.svc.StartAsyncImportDir(extractDir, true)
+		web.Succeed(c).Data(gin.H{
+			"job_id": job.ID,
+			"status": job.Status,
+			"async":  true,
+		}).Send()
 
 	case strings.HasSuffix(name, ".yaml") || strings.HasSuffix(name, ".yml"):
+		os.RemoveAll(tmpDir)
 		buf := make([]byte, header.Size)
 		if _, err := file.Read(buf); err != nil {
 			web.Fail(c).Msg("读取文件失败").Send()
@@ -215,11 +219,22 @@ func (h *HandlerPoc) ImportUpload(c *gin.Context) {
 			return
 		}
 		h.svc.InvalidateCache()
-		web.Succeed(c).Data(gin.H{"imported": 1, "skipped": 0, "errors": 0, "item": item}).Send()
+		web.Succeed(c).Data(gin.H{"imported": 1, "skipped": 0, "errors": 0, "item": item, "async": false}).Send()
 
 	default:
+		os.RemoveAll(tmpDir)
 		web.Fail(c).Msg("仅支持 .zip 或 .yaml/.yml 文件").Send()
 	}
+}
+
+func (h *HandlerPoc) GetImportJob(c *gin.Context) {
+	jobID := c.Param("jobId")
+	job, ok := h.svc.GetImportJob(jobID)
+	if !ok {
+		web.Err(c, web.NotFound).Msg("导入任务不存在").Send()
+		return
+	}
+	web.Succeed(c).Data(job).Send()
 }
 
 func saveUploadedFile(c *gin.Context, field, dst string) error {

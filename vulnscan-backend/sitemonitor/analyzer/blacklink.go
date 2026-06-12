@@ -99,12 +99,20 @@ func (a *BlacklinkAnalyzer) Analyze(ctx context.Context, input *Input) (*Output,
 	var cloakingFindings []map[string]any
 	if snap.Cloaking != nil && snap.Cloaking.Detected {
 		for _, bot := range snap.Cloaking.BotResults {
-			if bot.Similarity < 0.70 {
+			if bot.TitleMatch {
+				continue
+			}
+			if bot.Similarity < 0.50 {
+				sev := "high"
+				if bot.Similarity < 0.30 {
+					sev = "critical"
+				}
 				cloakingFindings = append(cloakingFindings, map[string]any{
-					"bot_name":   bot.BotName,
-					"similarity": bot.Similarity,
-					"bot_title":  bot.BotTitle,
-					"severity":   "critical",
+					"bot_name":    bot.BotName,
+					"similarity":  bot.Similarity,
+					"bot_title":   bot.BotTitle,
+					"title_match": bot.TitleMatch,
+					"severity":    sev,
 				})
 			}
 		}
@@ -118,6 +126,7 @@ func (a *BlacklinkAnalyzer) Analyze(ctx context.Context, input *Input) (*Output,
 			output.Severity = "critical"
 		}
 		detailMap := map[string]any{
+			"has_black":         true,
 			"blacklink_matches": blacklinks,
 			"backdoor_findings": backdoorFindings,
 			"hidden_iframes":    hiddenIframes,
@@ -238,7 +247,6 @@ var maliciousJSPatterns = []struct {
 	{regexp.MustCompile(`(?i)eval\s*\(\s*(?:unescape|decodeURIComponent|atob|String\.fromCharCode)\s*\(`), "obfuscated_eval", "critical", "混淆eval执行"},
 	{regexp.MustCompile(`(?i)document\.write\s*\(\s*(?:unescape|decodeURIComponent|atob)\s*\(`), "obfuscated_write", "high", "混淆document.write"},
 	{regexp.MustCompile(`(?i)document\.write(?:ln)?\s*\(\s*['"]<(?:script|iframe)[^>]*src=['"]https?://`), "injected_tag_write", "critical", "动态写入外部script/iframe"},
-	{regexp.MustCompile(`(?i)(?:createElement|appendChild)\s*\([^)]*(?:script|iframe)`), "dynamic_element", "high", "动态创建script/iframe元素"},
 	{regexp.MustCompile(`(?i)coinhive|cryptonight|minero|coin-?hive|jsecoin|crypto-?loot|authedmine`), "crypto_mining", "critical", "加密货币挖矿脚本"},
 	{regexp.MustCompile(`(?i)\\x[0-9a-f]{2}(?:\\x[0-9a-f]{2}){10,}`), "hex_encoded", "high", "大量十六进制编码字符串"},
 	{regexp.MustCompile(`(?i)\\u[0-9a-f]{4}(?:\\u[0-9a-f]{4}){10,}`), "unicode_encoded", "high", "大量Unicode编码字符串"},
@@ -283,18 +291,24 @@ func classifyBlacklinkSeverityFull(links, backdoors, iframes, jsRedirects, malic
 	if len(backdoors) > 0 {
 		return "critical"
 	}
-	for _, mjs := range maliciousJS {
-		if sev, _ := mjs["severity"].(string); sev == "critical" {
-			return "critical"
-		}
-	}
-	if len(iframes) > 0 {
+	if len(iframes) > 0 || len(links) > 0 {
 		return "high"
 	}
 	for _, jr := range jsRedirects {
 		if sev, _ := jr["severity"].(string); sev == "high" {
 			return "high"
 		}
+	}
+	if len(jsRedirects) > 0 {
+		return "medium"
+	}
+	for _, mjs := range maliciousJS {
+		if sev, _ := mjs["severity"].(string); sev == "critical" {
+			return "high"
+		}
+	}
+	if len(maliciousJS) > 0 {
+		return "low"
 	}
 	return classifyBlacklinkSeverity(links, backdoors)
 }

@@ -4,9 +4,11 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"sync"
 	"time"
 
 	coreContract "vulnscan-backend/incident/core/core-contract"
+	"vulnscan-backend/sitemonitor/contract"
 
 	"code.yt-security.com/public/core/db"
 	"gorm.io/gorm"
@@ -40,13 +42,21 @@ type serviceMonitor struct {
 	screenshotBaseURL string
 	crawlUploader     CrawlScreenshotUploader
 	fileDownloader    FileDownloader
+
+	importMu      sync.RWMutex
+	importResults map[string]*contract.ImportResult
+	onImportDone  func(result *contract.ImportResult) // 导入完成回调（用于调度器同步）
 }
 
 func NewServiceMonitor(database *db.DB, incidentSvc coreContract.ServiceCore) *serviceMonitor {
 	session, _ := database.GetDBSession()
 	bridge := NewMonitorEventBridge(session, incidentSvc)
 	SetMonitorIssueNotifier(bridge.OnIssueDetected)
-	return &serviceMonitor{db: database, eventBridge: bridge}
+	return &serviceMonitor{
+		db:            database,
+		eventBridge:   bridge,
+		importResults: make(map[string]*contract.ImportResult),
+	}
 }
 
 // SetCrawlScreenshotUploader 注入截图上传能力（IAM Storage）

@@ -154,19 +154,32 @@ type RuleDataSummary struct {
 }
 
 type ImportRowResult struct {
-	Row     int    `json:"row"`
-	Name    string `json:"name"`
-	URL     string `json:"url"`
-	Success bool   `json:"success"`
-	TaskID  string `json:"task_id,omitempty"`
-	Error   string `json:"error,omitempty"`
+	Row      int    `json:"row"`
+	Name     string `json:"name"`
+	URL      string `json:"url"`
+	Success  bool   `json:"success"`
+	TargetID string `json:"target_id,omitempty"`
+	TaskID   string `json:"task_id,omitempty"`
+	Error    string `json:"error,omitempty"`
 }
+
+type ImportStatus string
+
+const (
+	ImportStatusPending   ImportStatus = "pending"
+	ImportStatusRunning   ImportStatus = "running"
+	ImportStatusCompleted ImportStatus = "completed"
+	ImportStatusFailed    ImportStatus = "failed"
+)
 
 type ImportResult struct {
 	ID        string            `json:"id"`
+	Status    ImportStatus      `json:"status"`
 	Total     int               `json:"total"`
 	Success   int               `json:"success"`
 	Failed    int               `json:"failed"`
+	Processed int               `json:"processed"`
+	Error     string            `json:"error,omitempty"`
 	Results   []ImportRowResult `json:"results"`
 	CreatedAt string            `json:"created_at"`
 }
@@ -275,6 +288,7 @@ type ServiceMonitor interface {
 	CreateTarget(ctx context.Context, t *model.MonitorTarget) error
 	UpdateTarget(ctx context.Context, id string, req TargetUpdateReq) error
 	DeleteTarget(ctx context.Context, id string) error
+	BatchDeleteTargets(ctx context.Context, ids []string) error
 	GetTarget(ctx context.Context, id string) (*model.MonitorTarget, error)
 	ListTargets(ctx context.Context, req TargetListReq, scopes ...func(*gorm.DB) *gorm.DB) (int64, []model.MonitorTarget, error)
 	RunTarget(ctx context.Context, targetID string, dimensions []string) (*RunTaskOutcome, error)

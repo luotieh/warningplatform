@@ -3,6 +3,7 @@ package sitemonitor
 import (
 	"net/http"
 
+	"vulnscan-backend/pkg/definition"
 	"vulnscan-backend/sitemonitor/contract"
 
 	iamsdk "code.yt-security.com/public/access"
@@ -17,7 +18,7 @@ func (h *HandlerMonitor) ListExecutions(c *gin.Context) {
 	if !ok {
 		return
 	}
-	scope := iamsdk.DataFilterScopeStatic(c, monitorExecutionFieldMapping)
+	scope := definition.SafeDataFilterScope(c, monitorExecutionFieldMapping)
 	total, list, err := h.svc.ListExecutions(c.Request.Context(), req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()

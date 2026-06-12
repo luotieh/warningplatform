@@ -29,6 +29,12 @@ import {
   getIncidentList,
 } from '#/api/incident';
 import { getTaskList } from '#/api/task';
+import {
+  getOrderList, getDispatchStats,
+  type DispatchOrder, type StatsOverview,
+  DispatchStatusLabels, DispatchStatusTypes,
+  DispatchTypeLabels, PriorityLabels, PriorityColors,
+} from '#/api/dispatch';
 
 defineOptions({ name: 'WorkbenchOverview' });
 
@@ -40,6 +46,8 @@ const incidentStats = ref<DashboardStats | null>(null);
 const incidents = ref<SecurityIncident[]>([]);
 const recentTasks = ref<ScanTask[]>([]);
 const activities = ref<RecentActivity[]>([]);
+const dispatchStats = ref<StatsOverview | null>(null);
+const pendingDispatches = ref<DispatchOrder[]>([]);
 
 const severityMeta: Record<string, { color: string; label: string; type: 'default' | 'error' | 'info' | 'success' | 'warning' }> = {
   critical: { color: '#d03050', label: '严重', type: 'error' },
@@ -164,6 +172,14 @@ const todoItems = computed(() => {
       route: '/site-monitor/issues',
       visible: visibleModules.value.monitoring,
     },
+    {
+      color: '#722ed1',
+      count: (dispatchStats.value?.by_status?.['pending'] ?? 0) + (dispatchStats.value?.by_status?.['in_progress'] ?? 0),
+      icon: 'lucide:send',
+      label: '待处理派发',
+      route: '/dispatch/orders',
+      visible: router.hasRoute('DispatchOrders'),
+    },
   ].filter((item) => item.visible);
 });
 
@@ -276,13 +292,15 @@ function getAssetName(row: any) {
 async function fetchWorkbench() {
   loading.value = true;
   try {
-    const [overviewRes, statsRes, tasksRes, incidentListRes, activityRes] =
+    const [overviewRes, statsRes, tasksRes, incidentListRes, activityRes, dispatchStatsRes, dispatchListRes] =
       await Promise.allSettled([
         getDashboardOverview(),
         visibleModules.value.incidents ? getIncidentStats() : Promise.resolve(null),
         visibleModules.value.scans ? getTaskList({ page: 1, page_size: 6 }) : Promise.resolve(null),
         visibleModules.value.incidents ? getIncidentList({ page: 1, page_size: 6 }) : Promise.resolve(null),
         getRecentActivity(),
+        router.hasRoute('DispatchOrders') ? getDispatchStats() : Promise.resolve(null),
+        router.hasRoute('DispatchOrders') ? getOrderList({ page: 1, page_size: 5, status: 'pending' }) : Promise.resolve(null),
       ]);
 
     if (overviewRes.status === 'fulfilled') posture.value = overviewRes.value;
@@ -290,6 +308,8 @@ async function fetchWorkbench() {
     if (tasksRes.status === 'fulfilled') recentTasks.value = tasksRes.value?.items ?? [];
     if (incidentListRes.status === 'fulfilled') incidents.value = incidentListRes.value?.items ?? [];
     if (activityRes.status === 'fulfilled') activities.value = activityRes.value ?? [];
+    if (dispatchStatsRes.status === 'fulfilled') dispatchStats.value = dispatchStatsRes.value;
+    if (dispatchListRes.status === 'fulfilled') pendingDispatches.value = dispatchListRes.value?.items ?? [];
   } finally {
     loading.value = false;
   }
@@ -524,6 +544,26 @@ onMounted(fetchWorkbench);
             size="small"
           />
           <NEmpty v-else description="暂无待处理事件" />
+        </NCard>
+
+        <NCard v-if="router.hasRoute('DispatchOrders') && pendingDispatches.length > 0" title="待处理派发单" size="small" class="panel-card section-grid">
+          <div v-for="order in pendingDispatches" :key="order.id" class="dispatch-item" @click="go(`/dispatch/orders/${order.id}`)">
+            <div class="dispatch-item__header">
+              <NTag size="tiny" :bordered="false">{{ order.code }}</NTag>
+              <NTag size="tiny" :bordered="false"
+                :style="{ color: PriorityColors[order.priority], backgroundColor: PriorityColors[order.priority] + '18' }">
+                {{ PriorityLabels[order.priority] }}
+              </NTag>
+            </div>
+            <div class="dispatch-item__title">{{ order.title }}</div>
+            <div class="dispatch-item__meta">
+              <NTag size="tiny" :bordered="false">{{ DispatchTypeLabels[order.type] || order.type }}</NTag>
+              <span>{{ order.assignee_name || '-' }}</span>
+            </div>
+          </div>
+          <NButton size="small" block quaternary style="margin-top: 8px" @click="go('/dispatch/orders')">
+            查看全部派发单 →
+          </NButton>
         </NCard>
 
         <NCard v-if="visibleModules.scans" title="最近扫描任务" size="small" class="panel-card section-grid">
@@ -921,6 +961,44 @@ onMounted(fetchWorkbench);
   color: var(--workbench-text-2);
   font-size: 12px;
   padding: 3px 8px;
+}
+
+.dispatch-item {
+  padding: 10px 12px;
+  border: 1px solid var(--workbench-border);
+  border-radius: 6px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.dispatch-item:hover {
+  background: var(--workbench-card-hover, #f8f8fa);
+}
+
+.dispatch-item__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.dispatch-item__title {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  margin-bottom: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dispatch-item__meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: var(--workbench-text-2, #999);
 }
 
 @media (max-width: 768px) {

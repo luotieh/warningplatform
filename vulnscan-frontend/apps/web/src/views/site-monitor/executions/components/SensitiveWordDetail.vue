@@ -240,10 +240,32 @@ const matchCols: DataTableColumns<any> = [
         <NDescriptionsItem label="总命中次数">
           <span class="font-mono">{{ r.total_matches ?? 0 }} 次</span>
         </NDescriptionsItem>
-        <NDescriptionsItem label="页面文本长度">
-          {{ textLength }} 字符
-        </NDescriptionsItem>
       </NDescriptions>
+      <div v-if="matches.length > 0" class="mt-3 flex flex-wrap gap-2">
+        <NTag
+          v-for="(m, idx) in matches"
+          :key="idx"
+          :type="sevTag(m.severity)"
+          size="small"
+        >
+          {{ m.word }} ({{ m.count }}次)
+        </NTag>
+      </div>
+      <div v-if="textLength !== '-'" class="mt-2 text-xs text-gray-400">
+        页面文本长度：{{ textLength }} 字符
+      </div>
+    </NCard>
+
+    <NCard
+      v-if="matches.length > 0"
+      size="small"
+      :title="`命中详情（${matches.length} 项）`"
+    >
+      <NDataTable
+        :columns="matchCols"
+        :data="matches"
+        size="small"
+      />
     </NCard>
 
     <NCard v-if="hasScreenshot" size="small" title="敏感词标注截图">
@@ -307,19 +329,6 @@ const matchCols: DataTableColumns<any> = [
       <div
         class="sw-evidence-scroll sw-evidence rounded border border-gray-200 bg-gray-50 p-3 text-sm leading-relaxed text-gray-800"
         v-html="pageEvidenceHtml"
-      />
-    </NCard>
-
-    <NCard
-      v-if="matches.length > 0"
-      size="small"
-      :title="`命中详情（${matches.length} 项）`"
-    >
-      <NDataTable
-        :columns="matchCols"
-        :data="matches"
-        size="small"
-        :max-height="400"
       />
     </NCard>
 

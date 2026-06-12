@@ -34,7 +34,7 @@ func (h *HandlerVuln) List(c *gin.Context) {
 		return
 	}
 
-	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
+	scope := definition.SafeDataFilterScope(c, definition.VulnscanFieldMapping)
 	items, count, err := h.svc.List(query, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
@@ -197,7 +197,7 @@ func (h *HandlerVuln) RetestFromFinding(c *gin.Context) {
 }
 
 func (h *HandlerVuln) Stats(c *gin.Context) {
-	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
+	scope := definition.SafeDataFilterScope(c, definition.VulnscanFieldMapping)
 	stats, err := h.svc.Stats(scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()

@@ -111,6 +111,10 @@ func (h *Handlers) autoMigrate() {
 		&model.PromptTemplate{},
 		// 漏洞知识缓存
 		&model.VulnKnowledgeCache{},
+		// 任务派发
+		&model.DispatchOrder{},
+		&model.DispatchContact{},
+		&model.DispatchOplog{},
 	}
 
 	if migrateErr := session.AutoMigrate(tables...); migrateErr != nil {

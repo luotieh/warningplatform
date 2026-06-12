@@ -16,6 +16,7 @@ import (
 	"vulnscan-backend/cluster/ws"
 	"vulnscan-backend/compliance"
 	"vulnscan-backend/dashboard"
+	"vulnscan-backend/dispatch"
 	"vulnscan-backend/exclusion"
 	fedClient "vulnscan-backend/federation/client"
 	"vulnscan-backend/formdesign"
@@ -66,6 +67,7 @@ type Handlers struct {
 	AssetMgr    *assetmgr.AssetMgr
 	SiteMonitor *sitemon.Monitor
 	Circular    *circular.Circular
+	Dispatch    *dispatch.Dispatch
 	Incident    *incident.Incident
 	Dashboard   *dashboard.Dashboard
 	Notify      *notify.NotifyRoutes
@@ -138,6 +140,7 @@ func (h *Handlers) RouteLoad() {
 	backends = append(backends, h.AssetMgr.RoutesWithGroup(apiAuthorized)...)
 	backends = append(backends, h.SiteMonitor.RoutesWithGroup(apiAuthorized)...)
 	backends = append(backends, h.Circular.RoutesWithGroup(apiAuthorized)...)
+	backends = append(backends, h.Dispatch.RoutesWithGroup(apiAuthorized)...)
 	backends = append(backends, h.Incident.RoutesWithGroup(apiAuthorized)...)
 	backends = append(backends, h.Dashboard.RoutesWithGroup(apiAuthorized)...)
 	backends = append(backends, h.Notify.RoutesWithGroup(apiAuthorized)...)

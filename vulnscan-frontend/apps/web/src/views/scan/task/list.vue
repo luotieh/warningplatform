@@ -20,7 +20,7 @@ import {
   useMessage,
   type DataTableRowKey,
 } from 'naive-ui';
-import { useRouter } from 'vue-router';
+import ScanTaskDrawer from './ScanTaskDrawer.vue';
 
 /** 不在「漏洞扫描」任务列表展示的内部任务类型（在资产探测等专用页管理） */
 const SCAN_TASK_LIST_EXCLUDE_TYPES = 'asset_discovery,asset_enrich,vuln_retest';
@@ -54,8 +54,19 @@ import {
 
 defineOptions({ name: 'ScanTaskList' });
 
-const router = useRouter();
 const message = useMessage();
+const drawerVisible = ref(false);
+const drawerTaskId = ref('');
+
+function openTaskDrawer(taskId: string) {
+  drawerTaskId.value = taskId;
+  drawerVisible.value = true;
+}
+
+function handleDrawerClose() {
+  drawerVisible.value = false;
+  fetchData();
+}
 const loading = ref(false);
 const data = ref<ScanTask[]>([]);
 const total = ref(0);
@@ -160,7 +171,7 @@ const columns = [
     render: (row: ScanTask) =>
       h('a', {
         style: 'color: var(--primary-color); cursor: pointer; font-weight: 500',
-        onClick: () => router.push(`/scan/task/${row.id}`),
+        onClick: () => openTaskDrawer(row.id),
       }, row.name),
   },
   {
@@ -231,7 +242,7 @@ const columns = [
         size: 'tiny',
         type: 'primary',
         text: true,
-        onClick: () => router.push(`/scan/task/${row.id}`),
+        onClick: () => openTaskDrawer(row.id),
       }, () => row.status === 'completed' || row.status === 'failed' ? '结果' : '查看'));
 
       if (row.status === 'running' || row.status === 'queued') {
@@ -447,7 +458,7 @@ async function handleRerunRow(id: string) {
     const res = await rerunTask(id);
     message.success('已提交重新运行');
     if (res?.task_id) {
-      router.push(`/scan/task/${res.task_id}`);
+      openTaskDrawer(res.task_id);
     } else {
       await fetchData();
     }
@@ -902,6 +913,12 @@ onUnmounted(() => {
         </div>
       </template>
     </NModal>
+
+    <ScanTaskDrawer
+      v-model:visible="drawerVisible"
+      :task-id="drawerTaskId"
+      @close="handleDrawerClose"
+    />
   </div>
 </template>
 

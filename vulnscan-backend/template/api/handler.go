@@ -7,7 +7,6 @@ import (
 	"vulnscan-backend/model"
 	tmplEngine "vulnscan-backend/template/engine"
 
-	iamsdk "code.yt-security.com/public/access"
 	"code.yt-security.com/public/core/generate/ulid"
 	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
@@ -39,7 +38,7 @@ func (h *Handler) List(c *gin.Context) {
 		q.Page = 1
 	}
 
-	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
+	scope := definition.SafeDataFilterScope(c, definition.VulnscanFieldMapping)
 	tx := h.db.Model(&model.ScanTemplate{}).Scopes(scope)
 	if q.Keyword != "" {
 		tx = tx.Where("name LIKE ? OR description LIKE ?", "%"+q.Keyword+"%", "%"+q.Keyword+"%")

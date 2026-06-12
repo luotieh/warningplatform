@@ -117,6 +117,20 @@ func (s *serviceMonitor) DeleteTarget(ctx context.Context, id string) error {
 	})
 }
 
+func (s *serviceMonitor) BatchDeleteTargets(ctx context.Context, ids []string) error {
+	return s.session().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var pathIDs []string
+		tx.Model(&model.MonitorPathTask{}).Where("target_id IN ?", ids).Pluck("id", &pathIDs)
+		if len(pathIDs) > 0 {
+			tx.Where("path_task_id IN ?", pathIDs).Delete(&model.MonitorExecution{})
+			tx.Where("id IN ?", pathIDs).Delete(&model.MonitorPathTask{})
+		}
+		tx.Where("target_id IN ?", ids).Delete(&model.MonitorExecution{})
+		tx.Where("target_id IN ?", ids).Delete(&model.MonitorCrawlJob{})
+		return tx.Where("id IN ?", ids).Delete(&model.MonitorTarget{}).Error
+	})
+}
+
 func (s *serviceMonitor) GetTarget(ctx context.Context, id string) (*model.MonitorTarget, error) {
 	var t model.MonitorTarget
 	if err := s.session().WithContext(ctx).First(&t, "id = ?", id).Error; err != nil {

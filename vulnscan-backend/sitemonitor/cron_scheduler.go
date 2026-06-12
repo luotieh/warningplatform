@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math/rand"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -17,21 +18,86 @@ import (
 	"gorm.io/gorm"
 )
 
+type schedulerProfile struct {
+	maxConcurrency int
+	minJitter      int
+	taskTimeout    time.Duration
+}
+
+func detectSchedulerProfile() schedulerProfile {
+	cpus := runtime.NumCPU()
+
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	sysMemMB := int(m.Sys / 1024 / 1024)
+
+	profile := schedulerProfile{
+		maxConcurrency: 30,
+		minJitter:      15,
+		taskTimeout:    90 * time.Second,
+	}
+
+	if cpus >= 32 {
+		profile.maxConcurrency = 500
+		profile.minJitter = 3
+		profile.taskTimeout = 180 * time.Second
+	} else if cpus >= 16 {
+		profile.maxConcurrency = 300
+		profile.minJitter = 5
+		profile.taskTimeout = 150 * time.Second
+	} else if cpus >= 8 {
+		profile.maxConcurrency = 150
+		profile.minJitter = 5
+		profile.taskTimeout = 120 * time.Second
+	} else if cpus >= 4 {
+		profile.maxConcurrency = 80
+		profile.minJitter = 8
+		profile.taskTimeout = 90 * time.Second
+	} else {
+		profile.maxConcurrency = 40
+		profile.minJitter = 10
+		profile.taskTimeout = 60 * time.Second
+	}
+
+	if sysMemMB < 512 {
+		profile.maxConcurrency = min(profile.maxConcurrency, 20)
+		profile.minJitter = max(profile.minJitter, 15)
+	} else if sysMemMB < 1024 {
+		profile.maxConcurrency = min(profile.maxConcurrency, 50)
+	} else if sysMemMB >= 8192 {
+		profile.maxConcurrency = max(profile.maxConcurrency, 200)
+	}
+
+	slog.Info("[CronScheduler] auto-detected profile",
+		"cpus", cpus,
+		"sys_mem_mb", sysMemMB,
+		"max_concurrency", profile.maxConcurrency,
+		"min_jitter_sec", profile.minJitter,
+		"task_timeout", profile.taskTimeout,
+	)
+	return profile
+}
+
 type CronScheduler struct {
 	db      *db.DB
 	svc     *serviceMonitor
 	cron    *cron.Cron
 	mu      sync.RWMutex
 	entries map[string]cron.EntryID // scopeKey -> entryID
+	sem     chan struct{}           // 并发限制信号量
+	profile schedulerProfile
 	cancel  context.CancelFunc
 }
 
 func NewCronScheduler(database *db.DB, svc *serviceMonitor) *CronScheduler {
+	p := detectSchedulerProfile()
 	return &CronScheduler{
 		db:      database,
 		svc:     svc,
 		cron:    cron.New(cron.WithSeconds(), cron.WithChain(cron.Recover(cron.DefaultLogger))),
 		entries: make(map[string]cron.EntryID),
+		sem:     make(chan struct{}, p.maxConcurrency),
+		profile: p,
 	}
 }
 
@@ -95,6 +161,15 @@ func (cs *CronScheduler) registerDimensions(
 	if jitter < 0 {
 		jitter = 0
 	}
+	if jitter < cs.profile.minJitter {
+		jitter = cs.profile.minJitter
+	}
+	entryCount := len(cs.entries)
+	if entryCount > 10000 && jitter < 30 {
+		jitter = 30
+	} else if entryCount > 5000 && jitter < 20 {
+		jitter = 20
+	}
 	registered := 0
 	for _, dim := range dimensions {
 		cfg := getCfg(dim)
@@ -108,10 +183,14 @@ func (cs *CronScheduler) registerDimensions(
 		key := scheduleKey(scope, entityID, dim)
 		dimension := dim
 		entryID, err := cs.cron.AddFunc(dimCron, func() {
-			if jitter > 0 {
-				time.Sleep(time.Duration(rand.Intn(jitter)) * time.Second)
-			}
-			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+			// 随机 jitter 分散瞬时并发
+			time.Sleep(time.Duration(rand.Intn(jitter)) * time.Second)
+
+			// 并发限制：防止同时执行过多任务
+			cs.sem <- struct{}{}
+			defer func() { <-cs.sem }()
+
+			ctx, cancel := context.WithTimeout(context.Background(), cs.profile.taskTimeout)
 			defer cancel()
 			outcome, err := run(ctx, dimension)
 			if err != nil {

@@ -79,12 +79,28 @@ export function importPocsFromDir(dir: string) {
   return requestClient.post('/poc/import-dir', { dir });
 }
 
+export interface PocImportJob {
+  id: string;
+  status: 'completed' | 'failed' | 'pending' | 'running';
+  imported: number;
+  skipped: number;
+  errors: number;
+  total: number;
+  error?: string;
+  created_at: string;
+}
+
 export function importPocUpload(file: File) {
   const formData = new FormData();
   formData.append('file', file);
-  return requestClient.post<{ imported: number; skipped: number; errors: number }>('/poc/import-upload', formData, {
+  return requestClient.post<{ async: boolean; imported?: number; skipped?: number; errors?: number; job_id?: string; status?: string }>('/poc/import-upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 120_000,
   });
+}
+
+export function getPocImportJob(jobId: string) {
+  return requestClient.get<PocImportJob>(`/poc/import-job/${jobId}`);
 }
 
 export interface ValidateResult {

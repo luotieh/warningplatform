@@ -11,8 +11,8 @@ import (
 	assetContract "vulnscan-backend/asset/asset-contract"
 	"vulnscan-backend/model"
 	"vulnscan-backend/monitoragent"
+	"vulnscan-backend/pkg/definition"
 
-	iamsdk "code.yt-security.com/public/access"
 	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -58,7 +58,7 @@ func (h *EnrichHandler) SyncOnlineStatus(c *gin.Context) {
 		_ = c.ShouldBindJSON(&body)
 	}
 
-	scope := iamsdk.DataFilterScopeStatic(c, assetFieldMapping)
+	scope := definition.SafeDataFilterScope(c, assetFieldMapping)
 	sess := h.session()
 	tx := buildAssetListQuery(sess, listQuery, scope).Where("is_online = ?", true)
 

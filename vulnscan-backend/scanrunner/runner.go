@@ -404,6 +404,7 @@ func (r *Runner) persistAndPublish(findings []*core.Finding, stage, moduleID str
 
 	r.writebackServiceToPortOpen(records)
 	r.realtimeSyncVulns(records)
+	r.evidenceEnrichVulnFindings(records)
 
 	r.writeLog("info",
 		fmt.Sprintf("模块 [%s] 发现 %d 条新结果", moduleID, created),

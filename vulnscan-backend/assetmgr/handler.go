@@ -51,7 +51,7 @@ func NewHandler(
 
 func (h *Handler) LifecycleList(c *gin.Context) {
 	req, _ := web.BindQuery[ac.LifecycleListReq](c)
-	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
+	scope := definition.SafeDataFilterScope(c, definition.VulnscanFieldMapping)
 	items, count, err := h.lifecycle.ListTransitions(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
@@ -77,7 +77,7 @@ func (h *Handler) LifecycleTransition(c *gin.Context) {
 
 func (h *Handler) RiskList(c *gin.Context) {
 	req, _ := web.BindQuery[ac.RiskListReq](c)
-	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
+	scope := definition.SafeDataFilterScope(c, definition.VulnscanFieldMapping)
 	items, count, err := h.risk.List(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
@@ -116,7 +116,7 @@ func (h *Handler) RiskRecalculateAll(c *gin.Context) {
 
 func (h *Handler) AlertList(c *gin.Context) {
 	req, _ := web.BindQuery[ac.AlertListReq](c)
-	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
+	scope := definition.SafeDataFilterScope(c, definition.VulnscanFieldMapping)
 	items, count, err := h.alert.List(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
@@ -160,7 +160,7 @@ func (h *Handler) AlertResolve(c *gin.Context) {
 
 func (h *Handler) VerifyList(c *gin.Context) {
 	req, _ := web.BindQuery[ac.VerifyListReq](c)
-	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
+	scope := definition.SafeDataFilterScope(c, definition.VulnscanFieldMapping)
 	items, count, err := h.verify.List(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
@@ -204,7 +204,7 @@ func (h *Handler) VerifyTaskList(c *gin.Context) {
 	if !ok {
 		return
 	}
-	scope := iamsdk.DataFilterScopeStatic(c, definition.VerifyTaskFieldMapping)
+	scope := definition.SafeDataFilterScope(c, definition.VerifyTaskFieldMapping)
 	items, count, err := h.verifyTask.ListTasks(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
@@ -348,7 +348,7 @@ func (h *Handler) ArchiveList(c *gin.Context) {
 	if !ok {
 		return
 	}
-	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
+	scope := definition.SafeDataFilterScope(c, definition.VulnscanFieldMapping)
 	items, count, err := h.verifyTask.ListArchives(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
@@ -368,7 +368,7 @@ func (h *Handler) ArchiveDetail(c *gin.Context) {
 
 func (h *Handler) ComplianceList(c *gin.Context) {
 	req, _ := web.BindQuery[ac.ComplianceItemReq](c)
-	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
+	scope := definition.SafeDataFilterScope(c, definition.VulnscanFieldMapping)
 	items, count, err := h.compliance.List(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
@@ -415,7 +415,7 @@ func (h *Handler) ComplianceDelete(c *gin.Context) {
 
 func (h *Handler) ResponsibleList(c *gin.Context) {
 	req, _ := web.BindQuery[ac.ResponsibleListReq](c)
-	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
+	scope := definition.SafeDataFilterScope(c, definition.VulnscanFieldMapping)
 	items, count, err := h.responsible.List(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
@@ -462,7 +462,7 @@ func (h *Handler) ResponsibleDelete(c *gin.Context) {
 
 func (h *Handler) TemplateList(c *gin.Context) {
 	req, _ := web.BindQuery[ac.TemplateListReq](c)
-	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
+	scope := definition.SafeDataFilterScope(c, definition.VulnscanFieldMapping)
 	items, count, err := h.tmpl.List(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
@@ -510,7 +510,7 @@ func (h *Handler) TemplateItemCreate(c *gin.Context) {
 
 func (h *Handler) CheckResultList(c *gin.Context) {
 	req, _ := web.BindQuery[ac.CheckResultListReq](c)
-	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
+	scope := definition.SafeDataFilterScope(c, definition.VulnscanFieldMapping)
 	items, count, err := h.check.List(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
@@ -537,7 +537,7 @@ func (h *Handler) CheckResultUpsert(c *gin.Context) {
 
 func (h *Handler) IntSourceList(c *gin.Context) {
 	req, _ := web.BindQuery[ac.IntSourceListReq](c)
-	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
+	scope := definition.SafeDataFilterScope(c, definition.VulnscanFieldMapping)
 	items, count, err := h.integration.ListSources(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
@@ -584,7 +584,7 @@ func (h *Handler) IntSourceDelete(c *gin.Context) {
 
 func (h *Handler) WorkflowList(c *gin.Context) {
 	req, _ := web.BindQuery[ac.WorkflowListReq](c)
-	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
+	scope := definition.SafeDataFilterScope(c, definition.VulnscanFieldMapping)
 	items, count, err := h.workflow.List(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
@@ -631,7 +631,7 @@ func (h *Handler) WorkflowDelete(c *gin.Context) {
 
 func (h *Handler) WorkflowExecutions(c *gin.Context) {
 	req, _ := web.BindQuery[ac.ExecutionListReq](c)
-	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
+	scope := definition.SafeDataFilterScope(c, definition.VulnscanFieldMapping)
 	items, count, err := h.workflow.ListExecutions(req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()

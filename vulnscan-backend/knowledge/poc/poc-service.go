@@ -1,6 +1,10 @@
 package poc
 
 import (
+	"os"
+	"sync"
+	"time"
+
 	"vulnscan-backend/knowledge/nuclei"
 	"vulnscan-backend/model"
 
@@ -19,13 +23,40 @@ type PocQuery struct {
 	Enabled  *bool  `form:"enabled"`
 }
 
+type ImportJobStatus string
+
+const (
+	ImportJobPending   ImportJobStatus = "pending"
+	ImportJobRunning   ImportJobStatus = "running"
+	ImportJobCompleted ImportJobStatus = "completed"
+	ImportJobFailed    ImportJobStatus = "failed"
+)
+
+type ImportJob struct {
+	ID        string          `json:"id"`
+	Status    ImportJobStatus `json:"status"`
+	Imported  int             `json:"imported"`
+	Skipped   int             `json:"skipped"`
+	Errors    int             `json:"errors"`
+	Total     int             `json:"total"`
+	Error     string          `json:"error,omitempty"`
+	CreatedAt string          `json:"created_at"`
+}
+
 type ServicePoc struct {
 	db    *db.DB
 	store *nuclei.PocStore
+
+	importMu   sync.RWMutex
+	importJobs map[string]*ImportJob
 }
 
 func NewServicePoc(database *db.DB, store *nuclei.PocStore) *ServicePoc {
-	return &ServicePoc{db: database, store: store}
+	return &ServicePoc{
+		db:         database,
+		store:      store,
+		importJobs: make(map[string]*ImportJob),
+	}
 }
 
 func (s *ServicePoc) session() *gorm.DB {
@@ -122,6 +153,59 @@ func (s *ServicePoc) ImportYAML(yaml string) (*model.PocTemplate, error) {
 
 func (s *ServicePoc) ImportDir(dir string) (imported, skipped, errors int) {
 	return s.store.ImportFromDir(dir)
+}
+
+func (s *ServicePoc) StartAsyncImportDir(dir string, cleanupDir bool) *ImportJob {
+	job := &ImportJob{
+		ID:        ulid.GenerateID(),
+		Status:    ImportJobPending,
+		CreatedAt: time.Now().Format(time.RFC3339),
+	}
+	s.importMu.Lock()
+	s.importJobs[job.ID] = job
+	s.importMu.Unlock()
+
+	go func() {
+		if cleanupDir {
+			defer func() {
+				_ = removeAllSafe(dir)
+			}()
+		}
+		s.importMu.Lock()
+		job.Status = ImportJobRunning
+		s.importMu.Unlock()
+
+		imported, skipped, errors := s.store.ImportFromDir(dir)
+		s.InvalidateCache()
+
+		s.importMu.Lock()
+		job.Imported = imported
+		job.Skipped = skipped
+		job.Errors = errors
+		job.Total = imported + skipped + errors
+		job.Status = ImportJobCompleted
+		s.importMu.Unlock()
+	}()
+
+	return job
+}
+
+func (s *ServicePoc) GetImportJob(jobID string) (*ImportJob, bool) {
+	s.importMu.RLock()
+	defer s.importMu.RUnlock()
+	job, ok := s.importJobs[jobID]
+	if !ok {
+		return nil, false
+	}
+	snapshot := *job
+	return &snapshot, true
+}
+
+func removeAllSafe(dir string) error {
+	if dir == "" || dir == "/" || dir == "." {
+		return nil
+	}
+	return os.RemoveAll(dir)
 }
 
 type PocTagGroup struct {

@@ -2,11 +2,10 @@ package fingerprint
 
 import (
 	"vulnscan-backend/model"
+	"vulnscan-backend/pkg/definition"
 
-	iamsdk "code.yt-security.com/public/access"
 	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
-	"vulnscan-backend/pkg/definition"
 )
 
 type HandlerFingerprint struct {
@@ -23,7 +22,7 @@ func (h *HandlerFingerprint) List(c *gin.Context) {
 		return
 	}
 
-	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
+	scope := definition.SafeDataFilterScope(c, definition.VulnscanFieldMapping)
 	items, count, err := h.svc.List(query, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()

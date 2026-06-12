@@ -9,6 +9,7 @@ import { useRouter } from 'vue-router';
 import { Page } from '@vben/common-ui';
 
 import {
+  NAlert,
   NButton,
   NCard,
   NDataTable,
@@ -17,6 +18,7 @@ import {
   NInput,
   NModal,
   NPopconfirm,
+  NProgress,
   NSelect,
   NSpace,
   NSpin,
@@ -26,20 +28,23 @@ import {
   NUploadDragger,
 } from 'naive-ui';
 
-import { message } from '#/adapter/naive';
+import { dialog, message } from '#/adapter/naive';
 import { useErrorHandler } from '#/composables/useErrorHandler';
 import {
+  batchDeleteTargets,
   createPathTask,
   createTarget,
   deleteTarget,
   downloadImportTemplate,
   fetchPageMeta,
+  getImportResult,
   getPathTaskList,
   getTargetList,
   importTargets,
   runTarget,
   updateTarget,
 } from '#/api/sitemonitor';
+import type { ImportResult } from '#/api/sitemonitor/types';
 
 defineOptions({ name: 'MonitorTargets' });
 
@@ -48,6 +53,7 @@ const { handleError } = useErrorHandler();
 
 const loading = ref(false);
 const dataList = ref<MonitorTarget[]>([]);
+const checkedKeys = ref<DataTableRowKey[]>([]);
 const form = reactive({
   enabled: '',
   name: '',
@@ -99,6 +105,7 @@ function getHostHeaderHint(row: MonitorTarget) {
 }
 
 const columns = computed<DataTableColumns<MonitorTarget>>(() => [
+  { type: 'selection' },
   {
     key: 'name',
     title: '名称',
@@ -439,6 +446,29 @@ async function handleDelete(row: MonitorTarget) {
   }
 }
 
+function handleBatchDelete() {
+  if (checkedKeys.value.length === 0) {
+    message.warning('请先选择要删除的目标');
+    return;
+  }
+  dialog.error({
+    title: '确认批量删除',
+    content: `确定删除选中的 ${checkedKeys.value.length} 个目标？关联的路径任务和执行记录也会一并删除。`,
+    positiveText: '确认删除',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        await batchDeleteTargets(checkedKeys.value.map(String));
+        message.success(`已删除 ${checkedKeys.value.length} 个目标`);
+        checkedKeys.value = [];
+        onSearch();
+      } catch (e) {
+        handleError(e, '批量删除失败');
+      }
+    },
+  });
+}
+
 async function handleToggle(row: MonitorTarget) {
   try {
     await updateTarget(row.id, { enabled: !row.enabled });
@@ -461,6 +491,7 @@ async function handleRunTarget(row: MonitorTarget) {
 
 const importVisible = ref(false);
 const importUploading = ref(false);
+const importProgress = ref<ImportResult | null>(null);
 const templateDownloading = ref(false);
 
 async function handleDownloadTemplate() {
@@ -486,17 +517,55 @@ async function handleImportUpload(options: { file: UploadFileInfo }) {
   const raw = options.file.file;
   if (!raw) return;
   importUploading.value = true;
+  importProgress.value = null;
   try {
     const res = await importTargets(raw);
-    const data = (res as any)?.data ?? res;
-    message.success(`导入完成：成功 ${data.success}，失败 ${data.failed}`);
-    importVisible.value = false;
-    onSearch();
+    const startData = (res as any)?.data ?? res;
+    const importId = startData.id;
+    if (!importId) {
+      message.error('导入启动失败');
+      return;
+    }
+    importProgress.value = {
+      id: importId,
+      status: 'running',
+      total: startData.total || 0,
+      success: 0,
+      failed: 0,
+      processed: 0,
+      results: [],
+      created_at: '',
+    };
+    await pollImportResult(importId);
   } catch (e) {
     handleError(e, '导入失败');
   } finally {
     importUploading.value = false;
   }
+}
+
+async function pollImportResult(importId: string) {
+  const maxAttempts = 600;
+  for (let i = 0; i < maxAttempts; i++) {
+    await new Promise((r) => setTimeout(r, 1500));
+    try {
+      const res = await getImportResult(importId);
+      const data = (res as any)?.data ?? res;
+      importProgress.value = data;
+      if (data.status === 'completed' || data.status === 'failed') {
+        if (data.status === 'completed') {
+          message.success(`导入完成：成功 ${data.success}，失败 ${data.failed}`);
+        } else {
+          message.error(`导入异常：${data.error || '未知错误'}`);
+        }
+        onSearch();
+        return;
+      }
+    } catch {
+      // 轮询失败不中断
+    }
+  }
+  message.warning('导入轮询超时，请稍后查看结果');
 }
 
 // ═════ 展开行：显示路径任务与维度状态 ═════
@@ -700,6 +769,14 @@ onMounted(onSearch);
       </template>
       <template #header-extra>
         <NSpace>
+          <NButton
+            v-if="checkedKeys.length > 0"
+            size="small"
+            type="error"
+            @click="handleBatchDelete"
+          >
+            批量删除 ({{ checkedKeys.length }})
+          </NButton>
           <NButton size="small" @click="importVisible = true">批量导入</NButton>
           <NButton type="primary" size="small" @click="createVisible = true">+ 新建目标</NButton>
         </NSpace>
@@ -754,6 +831,7 @@ onMounted(onSearch);
       </div>
 
       <NDataTable
+        v-model:checked-row-keys="checkedKeys"
         :columns="columns"
         :data="dataList"
         :loading="loading"
@@ -881,26 +959,50 @@ onMounted(onSearch);
       </template>
     </NModal>
 
-    <NModal v-model:show="importVisible" preset="card" title="批量导入" style="width: 480px">
-      <div class="mb-3 text-sm text-gray-500">
-        <p class="mb-1">
-          <NButton
-            text
-            type="primary"
-            :loading="templateDownloading"
-            @click="handleDownloadTemplate"
-          >
-            下载模板
-          </NButton>
-          后按列填写；最简只需填写"监测URL"列即可，系统自动识别域名/IP并启用全部检测维度。
-        </p>
-        <p class="text-xs text-gray-400">支持域名或 IP 目标（IP 目标需填写请求 Host）。</p>
-      </div>
-      <NUpload :custom-request="handleImportUpload as any" :show-file-list="false">
-        <NUploadDragger>
-          <div>点击或拖拽 Excel 到此处上传</div>
-        </NUploadDragger>
-      </NUpload>
+    <NModal v-model:show="importVisible" preset="card" title="批量导入" style="width: 520px" :mask-closable="!importUploading">
+      <template v-if="importProgress && importProgress.status !== 'completed'">
+        <div class="mb-3 text-sm">
+          <p class="mb-2">正在导入，请勿关闭此窗口...</p>
+          <NProgress
+            type="line"
+            :percentage="importProgress.total ? Math.round((importProgress.processed / importProgress.total) * 100) : 0"
+            :status="importProgress.status === 'failed' ? 'error' : 'default'"
+          />
+          <p class="mt-2 text-xs text-gray-500">
+            进度：{{ importProgress.processed }} / {{ importProgress.total }}
+            （成功 {{ importProgress.success }}，失败 {{ importProgress.failed }}）
+          </p>
+        </div>
+      </template>
+      <template v-else-if="importProgress && importProgress.status === 'completed'">
+        <div class="mb-3">
+          <NAlert :type="importProgress.failed > 0 ? 'warning' : 'success'" class="mb-2">
+            导入完成：共 {{ importProgress.total }} 条，成功 {{ importProgress.success }} 条，失败 {{ importProgress.failed }} 条
+          </NAlert>
+          <NButton size="small" @click="importProgress = null">重新导入</NButton>
+        </div>
+      </template>
+      <template v-else>
+        <div class="mb-3 text-sm text-gray-500">
+          <p class="mb-1">
+            <NButton
+              text
+              type="primary"
+              :loading="templateDownloading"
+              @click="handleDownloadTemplate"
+            >
+              下载模板
+            </NButton>
+            后按列填写；最简只需填写"监测URL"列即可，系统自动识别域名/IP并启用全部检测维度。
+          </p>
+          <p class="text-xs text-gray-400">支持域名或 IP 目标（IP 目标需填写请求 Host）。</p>
+        </div>
+        <NUpload :custom-request="handleImportUpload as any" :show-file-list="false">
+          <NUploadDragger>
+            <div>点击或拖拽 Excel 到此处上传</div>
+          </NUploadDragger>
+        </NUpload>
+      </template>
     </NModal>
   </Page>
 </template>

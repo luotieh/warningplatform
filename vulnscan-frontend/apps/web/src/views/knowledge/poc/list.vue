@@ -38,6 +38,7 @@ import {
   createPoc,
   deletePoc,
   getPocDetail,
+  getPocImportJob,
   getPocList,
   getPocStats,
   importPocUpload,
@@ -46,6 +47,7 @@ import {
   togglePoc,
   updatePoc,
   validatePocYaml,
+  type PocImportJob,
   type PocTemplate,
 } from '#/api/poc/index';
 import { useNaiveTablePagination } from '#/composables/useNaiveTablePagination';
@@ -84,22 +86,62 @@ const yamlContent = ref("");
 // Upload
 const showUpload = ref(false);
 const uploading = ref(false);
+const uploadJob = ref<PocImportJob | null>(null);
 
 async function handleUploadFile(file: File) {
   uploading.value = true;
+  uploadJob.value = null;
   try {
     const res = await importPocUpload(file) as any;
-    const imported = res?.imported ?? 0;
-    const skipped = res?.skipped ?? 0;
-    const errors = res?.errors ?? 0;
-    message.success(`导入完成：成功 ${imported}，跳过 ${skipped}，失败 ${errors}`);
-    showUpload.value = false;
-    await fetchData();
+    const data = res?.data ?? res;
+    if (data?.async && data?.job_id) {
+      uploadJob.value = {
+        id: data.job_id,
+        status: 'running',
+        imported: 0,
+        skipped: 0,
+        errors: 0,
+        total: 0,
+        created_at: '',
+      };
+      await pollPocImportJob(data.job_id);
+    } else {
+      const imported = data?.imported ?? 0;
+      const skipped = data?.skipped ?? 0;
+      const errors = data?.errors ?? 0;
+      message.success(`导入完成：成功 ${imported}，跳过 ${skipped}，失败 ${errors}`);
+      showUpload.value = false;
+      await fetchData();
+    }
   } catch (e: any) {
     message.error(e?.message || "上传导入失败");
   } finally {
     uploading.value = false;
   }
+}
+
+async function pollPocImportJob(jobId: string) {
+  const maxAttempts = 600;
+  for (let i = 0; i < maxAttempts; i++) {
+    await new Promise((r) => setTimeout(r, 2000));
+    try {
+      const res = await getPocImportJob(jobId);
+      const data = (res as any)?.data ?? res;
+      uploadJob.value = data;
+      if (data.status === 'completed' || data.status === 'failed') {
+        if (data.status === 'completed') {
+          message.success(`导入完成：成功 ${data.imported}，跳过 ${data.skipped}，失败 ${data.errors}`);
+        } else {
+          message.error(`导入异常：${data.error || '未知错误'}`);
+        }
+        await fetchData();
+        return;
+      }
+    } catch {
+      // 轮询失败不中断
+    }
+  }
+  message.warning('导入轮询超时，请稍后刷新页面查看');
 }
 
 // Editor
@@ -767,37 +809,55 @@ onMounted(() => {
       title="上传检测模板"
       preset="card"
       style="width: 520px"
+      :mask-closable="!uploading"
     >
-      <NUpload
-        :max="1"
-        accept=".zip,.yaml,.yml"
-        :custom-request="({ file: uploadFile }) => {
-          if (uploadFile?.file) handleUploadFile(uploadFile.file);
-        }"
-        :show-file-list="false"
-        :disabled="uploading"
-        directory-dnd
-      >
-        <NUploadDragger style="padding: 32px 24px">
-          <div style="display: flex; flex-direction: column; align-items: center; gap: 12px">
-            <div v-if="uploading" style="font-size: 36px; animation: spin 1s linear infinite">⏳</div>
-            <div v-else style="font-size: 36px">📦</div>
-            <NText style="font-size: 15px; font-weight: 600">
-              {{ uploading ? '正在导入模板...' : '拖拽文件到此处，或点击选择' }}
-            </NText>
-            <NText depth="3" style="font-size: 12px; text-align: center; line-height: 1.8">
-              支持 <NTag size="tiny" :bordered="false" type="primary">.zip</NTag>
-              压缩包（批量导入）和
-              <NTag size="tiny" :bordered="false" type="info">.yaml</NTag>
-              <NTag size="tiny" :bordered="false" type="info">.yml</NTag>
-              单文件导入
-            </NText>
-            <NText depth="3" style="font-size: 11px; color: #999">
-              ZIP 包内所有 Nuclei YAML 模板将被自动解析导入
-            </NText>
-          </div>
-        </NUploadDragger>
-      </NUpload>
+      <template v-if="uploadJob && (uploadJob.status === 'running' || uploadJob.status === 'pending')">
+        <div style="padding: 24px; text-align: center">
+          <NSpin size="large" />
+          <p style="margin-top: 16px; font-size: 14px">正在后台导入模板，请稍候...</p>
+          <p style="margin-top: 8px; font-size: 12px; color: #999">
+            已导入 {{ uploadJob.imported }}，跳过 {{ uploadJob.skipped }}，失败 {{ uploadJob.errors }}
+          </p>
+        </div>
+      </template>
+      <template v-else-if="uploadJob && uploadJob.status === 'completed'">
+        <NAlert :type="uploadJob.errors > 0 ? 'warning' : 'success'" class="mb-3">
+          导入完成：成功 {{ uploadJob.imported }}，跳过 {{ uploadJob.skipped }}，失败 {{ uploadJob.errors }}
+        </NAlert>
+        <NButton size="small" @click="uploadJob = null">重新上传</NButton>
+      </template>
+      <template v-else>
+        <NUpload
+          :max="1"
+          accept=".zip,.yaml,.yml"
+          :custom-request="({ file: uploadFile }) => {
+            if (uploadFile?.file) handleUploadFile(uploadFile.file);
+          }"
+          :show-file-list="false"
+          :disabled="uploading"
+          directory-dnd
+        >
+          <NUploadDragger style="padding: 32px 24px">
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 12px">
+              <div v-if="uploading" style="font-size: 36px; animation: spin 1s linear infinite">⏳</div>
+              <div v-else style="font-size: 36px">📦</div>
+              <NText style="font-size: 15px; font-weight: 600">
+                {{ uploading ? '正在上传...' : '拖拽文件到此处，或点击选择' }}
+              </NText>
+              <NText depth="3" style="font-size: 12px; text-align: center; line-height: 1.8">
+                支持 <NTag size="tiny" :bordered="false" type="primary">.zip</NTag>
+                压缩包（批量导入）和
+                <NTag size="tiny" :bordered="false" type="info">.yaml</NTag>
+                <NTag size="tiny" :bordered="false" type="info">.yml</NTag>
+                单文件导入
+              </NText>
+              <NText depth="3" style="font-size: 11px; color: #999">
+                ZIP 包内所有 Nuclei YAML 模板将被自动解析导入
+              </NText>
+            </div>
+          </NUploadDragger>
+        </NUpload>
+      </template>
     </NModal>
 
     <!-- Editor Modal (Full-featured) -->

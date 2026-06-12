@@ -8,6 +8,7 @@ import (
 	assetContract "vulnscan-backend/asset/asset-contract"
 	"vulnscan-backend/model"
 	"vulnscan-backend/pkg/assetextra"
+	"vulnscan-backend/pkg/definition"
 
 	iamsdk "code.yt-security.com/public/access"
 	"code.yt-security.com/public/core/generate/ulid"
@@ -48,7 +49,7 @@ func (h *HandlerAsset) List(c *gin.Context) {
 		return
 	}
 
-	scope := iamsdk.DataFilterScopeStatic(c, assetFieldMapping)
+	scope := definition.SafeDataFilterScope(c, assetFieldMapping)
 	items, count, err := h.svc.List(query, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()
@@ -449,7 +450,7 @@ func (h *HandlerAsset) Export(c *gin.Context) {
 	query.Page = 1
 	query.PageSize = 10000
 
-	scope := iamsdk.DataFilterScopeStatic(c, assetFieldMapping)
+	scope := definition.SafeDataFilterScope(c, assetFieldMapping)
 	items, _, err := h.svc.List(query, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()

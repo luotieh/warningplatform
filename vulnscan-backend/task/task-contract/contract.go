@@ -79,6 +79,35 @@ type AssetPort struct {
 	Banner   string `json:"banner"`
 }
 
+type EvidenceReportData struct {
+	FindingID     string `json:"finding_id"`
+	Title         string `json:"title"`
+	Severity      string `json:"severity"`
+	Target        string `json:"target"`
+	Port          int    `json:"port"`
+	VulnType      string `json:"vuln_type"`
+	Description   string `json:"description"`
+	Confidence    int    `json:"confidence"`
+	ConfReason    string `json:"confidence_reason"`
+	VerifyLevel   string `json:"verification_level"`
+	VerifyDetail  string `json:"verification_detail"`
+	Evidence      string `json:"evidence"`
+	Payload       string `json:"payload,omitempty"`
+	MatchedAt     string `json:"matched_at,omitempty"`
+	Request       string `json:"request,omitempty"`
+	Response      string `json:"response,omitempty"`
+	CurlCommand   string `json:"curl_command,omitempty"`
+	Screenshot    string `json:"screenshot,omitempty"`
+	CveID         string `json:"cve_id,omitempty"`
+	CvssScore     string `json:"cvss_score,omitempty"`
+	Remediation   string `json:"remediation,omitempty"`
+	CreatedAt     string `json:"created_at"`
+	AIVerified    bool   `json:"ai_verified"`
+	AIReasoning   string `json:"ai_reasoning,omitempty"`
+	AISuggestion  string `json:"ai_suggestion,omitempty"`
+	AIFalseReason string `json:"ai_false_reason,omitempty"`
+}
+
 type ServiceTask interface {
 	List(query TaskQuery, scopes ...func(*gorm.DB) *gorm.DB) ([]model.ScanTask, int64, error)
 	GetByID(id string) (*model.ScanTask, error)
@@ -93,5 +122,6 @@ type ServiceTask interface {
 	ListAssets(taskID string) ([]AssetSummary, error)
 	ListLogs(taskID string, limit int) ([]model.ScanLog, error)
 	AIEnrichFinding(ctx context.Context, findingID string, chatSvc ai.Service) (*AIEnrichResult, error)
+	GetEvidenceReport(findingID string) (*EvidenceReportData, error)
 	DB() *gorm.DB
 }

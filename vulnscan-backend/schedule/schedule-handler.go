@@ -2,11 +2,10 @@ package schedule
 
 import (
 	"vulnscan-backend/model"
+	"vulnscan-backend/pkg/definition"
 
-	iamsdk "code.yt-security.com/public/access"
 	"code.yt-security.com/public/core/web"
 	"github.com/gin-gonic/gin"
-	"vulnscan-backend/pkg/definition"
 )
 
 type Handler struct {
@@ -31,7 +30,7 @@ type scheduleQuery struct {
 func (h *Handler) List(c *gin.Context) {
 	q, _ := web.BindQuery[scheduleQuery](c)
 
-	scope := iamsdk.DataFilterScopeStatic(c, definition.VulnscanFieldMapping)
+	scope := definition.SafeDataFilterScope(c, definition.VulnscanFieldMapping)
 	items, count, err := h.svc.List(q, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()

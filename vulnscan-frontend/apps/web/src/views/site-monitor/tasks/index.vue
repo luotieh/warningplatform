@@ -30,6 +30,7 @@ import {
   NInput,
   NModal,
   NPopconfirm,
+  NProgress,
   NRadio,
   NRadioGroup,
   NRow,
@@ -58,6 +59,7 @@ import {
   getFileLibraryList,
   getTaskExecutionStats,
   getTaskList,
+  getImportResult,
   importTasks,
   runTask,
   updateTask,
@@ -759,18 +761,58 @@ async function handleDownloadTemplate() {
 async function handleImportFile({ file }: { file: UploadFileInfo }) {
   if (!file.file) return false;
   importUploading.value = true;
+  importResult.value = null;
   try {
     const res = await importTasks(file.file);
-    importResult.value = (res as any)?.data ?? res;
+    const startData = (res as any)?.data ?? res;
+    const importId = startData.id;
+    if (!importId) {
+      message.error('导入启动失败');
+      return false;
+    }
+    importResult.value = {
+      id: importId,
+      status: 'running',
+      total: startData.total || 0,
+      success: 0,
+      failed: 0,
+      processed: 0,
+      results: [],
+      created_at: '',
+    };
     importDialogVisible.value = false;
     importResultVisible.value = true;
-    onSearch();
+    await pollImportProgress(importId);
   } catch (e) {
     handleError(e, '导入失败');
   } finally {
     importUploading.value = false;
   }
   return false;
+}
+
+async function pollImportProgress(importId: string) {
+  const maxAttempts = 600;
+  for (let i = 0; i < maxAttempts; i++) {
+    await new Promise((r) => setTimeout(r, 1500));
+    try {
+      const res = await getImportResult(importId);
+      const data = (res as any)?.data ?? res;
+      importResult.value = data;
+      if (data.status === 'completed' || data.status === 'failed') {
+        if (data.status === 'completed') {
+          message.success(`导入完成：成功 ${data.success}，失败 ${data.failed}`);
+        } else {
+          message.error(`导入异常：${data.error || '未知错误'}`);
+        }
+        onSearch();
+        return;
+      }
+    } catch {
+      // 轮询失败不中断
+    }
+  }
+  message.warning('导入轮询超时，请稍后查看结果');
 }
 
 function handleExportImportResult() {
@@ -1142,10 +1184,21 @@ onMounted(async () => {
     <NModal
       v-model:show="importResultVisible"
       preset="card"
-      title="导入结果"
+      :title="importResult?.status === 'running' || importResult?.status === 'pending' ? '导入中...' : '导入结果'"
       style="width: 800px"
+      :mask-closable="importResult?.status !== 'running'"
     >
       <template v-if="importResult">
+        <div v-if="importResult.status === 'running' || importResult.status === 'pending'" class="mb-4">
+          <NProgress
+            type="line"
+            :percentage="importResult.total ? Math.round((importResult.processed / importResult.total) * 100) : 0"
+          />
+          <p class="mt-2 text-sm text-gray-500">
+            进度：{{ importResult.processed }} / {{ importResult.total }}
+            （成功 {{ importResult.success }}，失败 {{ importResult.failed }}）
+          </p>
+        </div>
         <NSpace align="center" size="large" class="mb-4">
           <NStatistic label="总计" :value="importResult.total" />
           <NStatistic label="成功" :value="importResult.success" />

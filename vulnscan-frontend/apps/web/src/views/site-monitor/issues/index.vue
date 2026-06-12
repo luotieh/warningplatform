@@ -13,6 +13,8 @@ import {
   NCard,
   NDataTable,
   NDatePicker,
+  NDrawer,
+  NDrawerContent,
   NInput,
   NSelect,
   NSpace,
@@ -26,15 +28,16 @@ import {
   updateDisposition,
 } from '#/api/sitemonitor';
 import { createIncident, type CreateIncidentReq } from '#/api/incident';
-import { useMonitorRecordDetail } from '../composables/useMonitorRecordDetail';
 import { buildMonitorIncidentDescription } from '../monitor-incident-description';
+import RecordDetailContent from '../records/RecordDetailContent.vue';
 
 defineOptions({ name: 'MonitorIssues' });
 
 const route = useRoute();
 const router = useRouter();
 const msg = useMessage();
-const { openRecordDetail } = useMonitorRecordDetail();
+const detailDrawerVisible = ref(false);
+const detailRecordId = ref('');
 
 const loading = ref(false);
 const dataList = ref<MonitorExecution[]>([]);
@@ -135,8 +138,10 @@ function resetForm() {
   onSearch();
 }
 
-const goDetail = (row: MonitorExecution) =>
-  openRecordDetail(row.id, { taskId: row.path_task_id });
+function goDetail(row: MonitorExecution) {
+  detailRecordId.value = row.id;
+  detailDrawerVisible.value = true;
+}
 
 async function setDisposition(row: MonitorExecution, disposition: string) {
   try {
@@ -365,5 +370,15 @@ onMounted(() => {
         "
       />
     </NCard>
+
+    <NDrawer v-model:show="detailDrawerVisible" :width="920" placement="right">
+      <NDrawerContent title="监测记录详情" closable>
+        <RecordDetailContent
+          v-if="detailRecordId"
+          :record-id="detailRecordId"
+          @close="detailDrawerVisible = false"
+        />
+      </NDrawerContent>
+    </NDrawer>
   </Page>
 </template>
