@@ -35,6 +35,7 @@ import {
   createPathTask,
   createTarget,
   deleteTarget,
+  downloadImportResult,
   downloadImportTemplate,
   fetchPageMeta,
   getImportResult,
@@ -44,7 +45,7 @@ import {
   runTarget,
   updateTarget,
 } from '#/api/sitemonitor';
-import type { ImportResult } from '#/api/sitemonitor/types';
+import type { ImportResult, ImportRowResult } from '#/api/sitemonitor/types';
 
 defineOptions({ name: 'MonitorTargets' });
 
@@ -493,6 +494,36 @@ const importVisible = ref(false);
 const importUploading = ref(false);
 const importProgress = ref<ImportResult | null>(null);
 const templateDownloading = ref(false);
+
+const failedResults = computed(() =>
+  importProgress.value?.results?.filter((r) => !r.success) ?? [],
+);
+
+const importResultColumns = computed<DataTableColumns<ImportRowResult>>(() => [
+  { key: 'row', title: '行号', width: 60, align: 'center' },
+  { key: 'name', title: '名称', width: 140, ellipsis: { tooltip: true } },
+  { key: 'url', title: 'URL', minWidth: 200, ellipsis: { tooltip: true } },
+  { key: 'error', title: '失败原因', minWidth: 180, ellipsis: { tooltip: true },
+    render: (row) => h('span', { class: 'text-red-500' }, row.error || '未知错误'),
+  },
+]);
+
+async function handleExportImportResult() {
+  if (!importProgress.value?.id) return;
+  try {
+    const blob = await downloadImportResult(importProgress.value.id);
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `导入结果_${importProgress.value.id}.xlsx`;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    handleError(e, '导出失败');
+  }
+}
 
 async function handleDownloadTemplate() {
   templateDownloading.value = true;
@@ -959,7 +990,9 @@ onMounted(onSearch);
       </template>
     </NModal>
 
-    <NModal v-model:show="importVisible" preset="card" title="批量导入" style="width: 520px" :mask-closable="!importUploading">
+    <NModal v-model:show="importVisible" preset="card" title="批量导入"
+      :style="{ width: importProgress && importProgress.status === 'completed' && importProgress.failed > 0 ? '720px' : '520px' }"
+      :mask-closable="!importUploading">
       <template v-if="importProgress && importProgress.status !== 'completed'">
         <div class="mb-3 text-sm">
           <p class="mb-2">正在导入，请勿关闭此窗口...</p>
@@ -979,7 +1012,26 @@ onMounted(onSearch);
           <NAlert :type="importProgress.failed > 0 ? 'warning' : 'success'" class="mb-2">
             导入完成：共 {{ importProgress.total }} 条，成功 {{ importProgress.success }} 条，失败 {{ importProgress.failed }} 条
           </NAlert>
-          <NButton size="small" @click="importProgress = null">重新导入</NButton>
+          <template v-if="importProgress.failed > 0 && failedResults.length > 0">
+            <div class="mb-2 flex items-center justify-between">
+              <span class="text-sm font-medium text-red-600">失败明细（{{ failedResults.length }} 条）</span>
+              <NButton size="tiny" @click="handleExportImportResult">导出完整结果</NButton>
+            </div>
+            <NDataTable
+              :columns="importResultColumns"
+              :data="failedResults"
+              :bordered="false"
+              :single-line="false"
+              size="small"
+              :max-height="280"
+              :row-key="(row: ImportRowResult) => row.row"
+              striped
+            />
+          </template>
+          <NSpace class="mt-3" size="small">
+            <NButton size="small" @click="importProgress = null">重新导入</NButton>
+            <NButton size="small" type="primary" @click="handleExportImportResult">导出导入结果</NButton>
+          </NSpace>
         </div>
       </template>
       <template v-else>

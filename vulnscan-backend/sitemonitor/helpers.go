@@ -1,10 +1,16 @@
 package sitemonitor
 
 import (
+	"errors"
 	"strings"
 
 	"vulnscan-backend/sitemonitor/contract"
 )
+
+func isBusyErr(err error) bool {
+	var busyErr *contract.ErrDimensionBusy
+	return errors.As(err, &busyErr)
+}
 
 func formatRunTaskSkips(skips []contract.RunTaskSkip) string {
 	parts := make([]string, 0, len(skips))

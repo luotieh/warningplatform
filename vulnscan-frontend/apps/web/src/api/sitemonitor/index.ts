@@ -503,6 +503,13 @@ export async function downloadImportTemplate(): Promise<Blob> {
 export const exportImportResultUrl = (importId: string) =>
   base(`/import/${importId}/export`);
 
+export async function downloadImportResult(importId: string): Promise<Blob> {
+  const res = await baseRequestClient.get(base(`/import/${importId}/export`), {
+    responseType: 'blob',
+  });
+  return res instanceof Blob ? res : new Blob([res as any]);
+}
+
 export interface ImportStartResult {
   id: string;
   status: string;

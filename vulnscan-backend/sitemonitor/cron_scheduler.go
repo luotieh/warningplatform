@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"log/slog"
 	"math/rand"
+	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -31,41 +33,45 @@ func detectSchedulerProfile() schedulerProfile {
 	runtime.ReadMemStats(&m)
 	sysMemMB := int(m.Sys / 1024 / 1024)
 
+	// 监测任务是 I/O 密集型（网络请求等待），并发数可远超 CPU 核心数
+	// 基础并发 = CPU 逻辑核心数 * 倍率，按内存调整上限
+	multiplier := 200 // I/O 密集型任务每核可承载高并发
+	base := cpus * multiplier
+	if base < 500 {
+		base = 500
+	}
+
 	profile := schedulerProfile{
-		maxConcurrency: 30,
-		minJitter:      15,
-		taskTimeout:    90 * time.Second,
+		maxConcurrency: base,
+		minJitter:      3,
+		taskTimeout:    120 * time.Second,
 	}
 
-	if cpus >= 32 {
-		profile.maxConcurrency = 500
-		profile.minJitter = 3
+	if cpus >= 16 {
+		profile.minJitter = 1
 		profile.taskTimeout = 180 * time.Second
-	} else if cpus >= 16 {
-		profile.maxConcurrency = 300
-		profile.minJitter = 5
-		profile.taskTimeout = 150 * time.Second
 	} else if cpus >= 8 {
-		profile.maxConcurrency = 150
-		profile.minJitter = 5
-		profile.taskTimeout = 120 * time.Second
-	} else if cpus >= 4 {
-		profile.maxConcurrency = 80
-		profile.minJitter = 8
-		profile.taskTimeout = 90 * time.Second
-	} else {
-		profile.maxConcurrency = 40
-		profile.minJitter = 10
-		profile.taskTimeout = 60 * time.Second
+		profile.minJitter = 2
+		profile.taskTimeout = 150 * time.Second
 	}
 
-	if sysMemMB < 512 {
-		profile.maxConcurrency = min(profile.maxConcurrency, 20)
-		profile.minJitter = max(profile.minJitter, 15)
-	} else if sysMemMB < 1024 {
-		profile.maxConcurrency = min(profile.maxConcurrency, 50)
-	} else if sysMemMB >= 8192 {
-		profile.maxConcurrency = max(profile.maxConcurrency, 200)
+	// 按可用内存设上限：每个 goroutine 约占 8KB 栈空间 + 连接资源
+	memCapConcurrency := sysMemMB * 2 // 1GB 内存约可支撑 2000 并发
+	if memCapConcurrency < 200 {
+		memCapConcurrency = 200
+	}
+	profile.maxConcurrency = min(profile.maxConcurrency, memCapConcurrency)
+
+	// 环境变量覆盖
+	if v := os.Getenv("MONITOR_MAX_CONCURRENCY"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			profile.maxConcurrency = n
+		}
+	}
+	if v := os.Getenv("MONITOR_TASK_TIMEOUT"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			profile.taskTimeout = d
+		}
 	}
 
 	slog.Info("[CronScheduler] auto-detected profile",
@@ -165,10 +171,10 @@ func (cs *CronScheduler) registerDimensions(
 		jitter = cs.profile.minJitter
 	}
 	entryCount := len(cs.entries)
-	if entryCount > 10000 && jitter < 30 {
+	if entryCount > 20000 && jitter < 30 {
 		jitter = 30
-	} else if entryCount > 5000 && jitter < 20 {
-		jitter = 20
+	} else if entryCount > 10000 && jitter < 15 {
+		jitter = 15
 	}
 	registered := 0
 	for _, dim := range dimensions {
@@ -194,8 +200,13 @@ func (cs *CronScheduler) registerDimensions(
 			defer cancel()
 			outcome, err := run(ctx, dimension)
 			if err != nil {
-				slog.Warn("[CronScheduler] scheduled run failed",
-					"scope", scope, "id", entityID, "dimension", dimension, "error", err)
+				if isBusyErr(err) {
+					slog.Debug("[CronScheduler] skipped (already running)",
+						"scope", scope, "id", entityID, "dimension", dimension)
+				} else {
+					slog.Warn("[CronScheduler] scheduled run failed",
+						"scope", scope, "id", entityID, "dimension", dimension, "error", err)
+				}
 				return
 			}
 			slog.Info("[CronScheduler] scheduled run dispatched",

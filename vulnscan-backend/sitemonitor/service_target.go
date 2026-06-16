@@ -183,15 +183,22 @@ func (s *serviceMonitor) RunTarget(ctx context.Context, targetID string, dimensi
 		}
 	}
 	outcome := &contract.RunTaskOutcome{ExecutionIDs: []string{}, Skipped: []contract.RunTaskSkip{}}
+	busyCount := 0
 	for _, dim := range dimensions {
 		execID, err := s.runTargetDimension(ctx, &target, dim)
 		if err != nil {
+			if isBusyErr(err) {
+				busyCount++
+			}
 			outcome.Skipped = append(outcome.Skipped, contract.RunTaskSkip{Dimension: dim, Reason: err.Error()})
 			continue
 		}
 		outcome.ExecutionIDs = append(outcome.ExecutionIDs, execID)
 	}
 	if len(outcome.ExecutionIDs) == 0 && len(outcome.Skipped) > 0 {
+		if busyCount == len(outcome.Skipped) {
+			return outcome, &contract.ErrDimensionBusy{Dimension: "all"}
+		}
 		return outcome, fmt.Errorf("所有维度执行失败: %s", formatRunTaskSkips(outcome.Skipped))
 	}
 	return outcome, nil
@@ -227,7 +234,7 @@ func (s *serviceMonitor) runTargetDimension(ctx context.Context, target *model.M
 			Where("target_id = ? AND path_task_id = '' AND dimension = ? AND status IN ?", target.ID, dimension, []string{"pending", "running"}).
 			Count(&active)
 		if active > 0 {
-			return fmt.Errorf("维度 %s 已有执行中的记录", dimension)
+			return &contract.ErrDimensionBusy{Dimension: dimension}
 		}
 		return tx.Create(&exec).Error
 	}); txErr != nil {

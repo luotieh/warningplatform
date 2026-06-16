@@ -52,8 +52,8 @@ import {
   batchUpdateConfigs,
   createTask,
   deleteTask,
+  downloadImportResult,
   downloadImportTemplate,
-  exportImportResultUrl,
   fetchTaskMeta,
   getDefaultConfigList,
   getFileLibraryList,
@@ -815,9 +815,21 @@ async function pollImportProgress(importId: string) {
   message.warning('导入轮询超时，请稍后查看结果');
 }
 
-function handleExportImportResult() {
+async function handleExportImportResult() {
   if (!importResult.value?.id) return;
-  window.open(exportImportResultUrl(importResult.value.id), '_blank');
+  try {
+    const blob = await downloadImportResult(importResult.value.id);
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `导入结果_${importResult.value.id}.xlsx`;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    handleError(e, '导出失败');
+  }
 }
 
 const importSuccessRate = computed(() => {
@@ -826,6 +838,13 @@ const importSuccessRate = computed(() => {
     (importResult.value.success / importResult.value.total) *
     100
   ).toFixed(1)}%`;
+});
+
+const importResultFilter = ref<'all' | 'failed'>('all');
+const filteredImportResults = computed(() => {
+  const rows = importResult.value?.results ?? [];
+  if (importResultFilter.value === 'failed') return rows.filter((r) => !r.success);
+  return rows;
 });
 
 const batchModifyVisible = ref(false);
@@ -1205,6 +1224,12 @@ onMounted(async () => {
           <NStatistic label="失败" :value="importResult.failed" />
           <NStatistic label="成功率" :value="importSuccessRate" />
         </NSpace>
+        <div class="mb-2 flex items-center gap-2">
+          <NRadioGroup v-model:value="importResultFilter" size="small">
+            <NRadio value="all">全部 ({{ importResult?.results?.length ?? 0 }})</NRadio>
+            <NRadio value="failed">仅失败 ({{ importResult?.failed ?? 0 }})</NRadio>
+          </NRadioGroup>
+        </div>
         <NDataTable
           :columns="[
             { key: 'row', title: '行号', width: 60, align: 'center' },
@@ -1233,7 +1258,7 @@ onMounted(async () => {
                   : h('span', { class: 'text-muted-foreground' }, '-'),
             },
           ]"
-          :data="importResult?.results ?? []"
+          :data="filteredImportResults"
           :max-height="400"
           size="small"
         />

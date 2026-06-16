@@ -2,11 +2,22 @@ package contract
 
 import (
 	"context"
+	"fmt"
 	"vulnscan-backend/model"
 
 	"code.yt-security.com/public/core/db"
 	"gorm.io/gorm"
 )
+
+// ErrDimensionBusy indicates a dimension already has an active execution.
+// Callers (e.g. CronScheduler) can check for this to silently skip instead of logging a warning.
+type ErrDimensionBusy struct {
+	Dimension string
+}
+
+func (e *ErrDimensionBusy) Error() string {
+	return fmt.Sprintf("维度 %s 已有执行中的记录", e.Dimension)
+}
 
 type PageReq struct {
 	Page     int `form:"page"`

@@ -107,6 +107,7 @@ func (h *Handlers) RouteLoad() {
 
 	apiAuthenticated := apiGroup.Group("/", h.IAM.Middleware().Authentication())
 	h.registerPrivilegedFrontendSync(apiAuthenticated)
+	h.registerUserListAPI(apiAuthenticated)
 
 	apiAuthorized := apiAuthenticated.Group("", h.IAMAuthorization())
 

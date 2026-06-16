@@ -219,7 +219,7 @@ export interface IAMUser {
 }
 
 export async function getIAMUserList(params?: Record<string, any>) {
-  const res = await baseRequestClient.get<any>('/iam/admin/users', { params });
+  const res = await baseRequestClient.get<any>('/system/users', { params });
   const body = res?.data ?? res;
   const items: IAMUser[] = body?.data ?? body?.items ?? body?.list ?? [];
   const total = Number(body?.total ?? body?.count ?? items.length);
