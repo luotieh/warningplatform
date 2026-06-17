@@ -42,6 +42,8 @@ func NewMonitor(
 		}
 	}
 
+	handler.db = database
+
 	scheduler := NewCronScheduler(database, svcImpl)
 	healthChecker := NewAgentHealthChecker(database)
 
@@ -169,6 +171,7 @@ func (m *Monitor) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
 			{Name: "清理配置详情", Path: "cleanup-config", Method: "GET", Handler: m.handleGetCleanupConfig, Enabled: true},
 			{Name: "更新清理配置", Path: "cleanup-config", Method: "PUT", Handler: m.handleUpdateCleanupConfig, Enabled: true},
 			{Name: "手动清理", Path: "cleanup/run", Method: "POST", Handler: m.handleRunCleanup, Enabled: true},
+			{Name: "修复资产关联", Path: "fix-asset-links", Method: "POST", Handler: m.handleFixAssetLinks, Enabled: true},
 			// 报告
 			{Name: "生成报告", Path: "reports/generate", Method: "POST", Handler: m.handleGenerateReport, Enabled: true},
 		}},
@@ -367,6 +370,20 @@ func (m *Monitor) handleRunCleanup(c *gin.Context) {
 		return
 	}
 	web.Succeed(c).Data(gin.H{"deleted": n}).Send()
+}
+
+func (m *Monitor) handleFixAssetLinks(c *gin.Context) {
+	session, err := m.db.GetDBSession()
+	if err != nil {
+		web.Fail(c).Err(err).Send()
+		return
+	}
+	fixed, err := fixAssetLinks(session)
+	if err != nil {
+		web.Fail(c).Err(err).Send()
+		return
+	}
+	web.Succeed(c).Data(gin.H{"fixed": fixed}).Send()
 }
 
 func (m *Monitor) GetNatsService() *NatsServiceImpl {

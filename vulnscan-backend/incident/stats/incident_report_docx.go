@@ -4,13 +4,16 @@ import (
 	"bytes"
 	"encoding/base64"
 	"os"
+	"reflect"
 	"strings"
+	"unsafe"
 
 	statsContract "vulnscan-backend/incident/stats/stats-contract"
 
 	"github.com/gomutex/godocx"
 	"github.com/gomutex/godocx/common/units"
 	godocxdocx "github.com/gomutex/godocx/docx"
+	"github.com/gomutex/godocx/wml/ctypes"
 	"github.com/gomutex/godocx/wml/stypes"
 )
 
@@ -24,17 +27,16 @@ func generateIncidentDocx(data *statsContract.IncidentReportData) ([]byte, error
 	title.Justification(stypes.JustificationCenter)
 	title.AddText("网络安全隐患详情").Bold(true).Size(32)
 
-	// 两列表格：左标签、右内容，避免四列过窄导致竖排
 	tbl := doc.AddTable()
 	tbl.Style("TableGrid")
 
 	for _, row := range incidentReportMetaRows(data) {
-		docxAddMetaRow2Col(tbl, row[0], row[1], row[2], row[3])
+		docxAddMetaRow4Col(tbl, row[0], row[1], row[2], row[3])
 	}
-	docxAddDescriptionRow2Col(tbl, data)
-	docxAddRemediationRow2Col(tbl, data)
+	docxAddDescriptionRow(tbl, data)
+	docxAddRemediationRow(tbl, data)
 	if strings.TrimSpace(data.Attachment) != "" {
-		docxAddMetaRow2Col(tbl, "证据附件", data.Attachment, "", "")
+		docxAddMetaRow4Col(tbl, "证据附件", data.Attachment, "", "")
 	}
 
 	var buf bytes.Buffer
@@ -44,19 +46,44 @@ func generateIncidentDocx(data *statsContract.IncidentReportData) ([]byte, error
 	return buf.Bytes(), nil
 }
 
-func docxAddMetaRow2Col(tbl *godocxdocx.Table, k1, v1, k2, v2 string) {
+func docxAddMetaRow4Col(tbl *godocxdocx.Table, k1, v1, k2, v2 string) {
+	tr := tbl.AddRow()
+	lbl1 := tr.AddCell()
+	setCellWidth(lbl1, 1600, stypes.TableWidthDxa)
+	docxLabelCell(lbl1, k1)
 	if strings.TrimSpace(k2) != "" {
-		docxAddLabelValueRow(tbl, k1, v1)
-		docxAddLabelValueRow(tbl, k2, v2)
-		return
+		docxValueCell(tr.AddCell(), v1)
+		lbl2 := tr.AddCell()
+		setCellWidth(lbl2, 1600, stypes.TableWidthDxa)
+		docxLabelCell(lbl2, k2)
+		docxValueCell(tr.AddCell(), v2)
+	} else {
+		val := tr.AddCell()
+		setCellGridSpan(val, 3)
+		docxValueCell(val, v1)
 	}
-	docxAddLabelValueRow(tbl, k1, v1)
 }
 
-func docxAddLabelValueRow(tbl *godocxdocx.Table, label, value string) {
-	tr := tbl.AddRow()
-	docxLabelCell(tr.AddCell(), label)
-	docxValueCell(tr.AddCell(), value)
+func cellCT(cell *godocxdocx.Cell) *ctypes.Cell {
+	rv := reflect.ValueOf(cell).Elem()
+	ctField := rv.FieldByName("ct")
+	return (*ctypes.Cell)(unsafe.Pointer(ctField.UnsafeAddr()))
+}
+
+func setCellGridSpan(cell *godocxdocx.Cell, span int) {
+	ct := cellCT(cell)
+	if ct.Property == nil {
+		ct.Property = &ctypes.CellProperty{}
+	}
+	ct.Property.GridSpan = &ctypes.DecimalNum{Val: span}
+}
+
+func setCellWidth(cell *godocxdocx.Cell, w int, wType stypes.TableWidth) {
+	ct := cellCT(cell)
+	if ct.Property == nil {
+		ct.Property = &ctypes.CellProperty{}
+	}
+	ct.Property.Width = ctypes.NewTableWidth(w, wType)
 }
 
 func docxLabelCell(cell *godocxdocx.Cell, text string) {
@@ -86,14 +113,17 @@ func docxValueCell(cell *godocxdocx.Cell, text string) {
 	}
 }
 
-func docxAddDescriptionRow2Col(tbl *godocxdocx.Table, data *statsContract.IncidentReportData) {
+func docxAddDescriptionRow(tbl *godocxdocx.Table, data *statsContract.IncidentReportData) {
 	blocks := reportDescriptionBlocks(data)
 	if len(blocks) == 0 && len(data.EvidenceImages) == 0 {
 		return
 	}
 	tr := tbl.AddRow()
-	docxLabelCell(tr.AddCell(), "隐患描述")
+	lbl := tr.AddCell()
+	setCellWidth(lbl, 1600, stypes.TableWidthDxa)
+	docxLabelCell(lbl, "隐患描述")
 	valCell := tr.AddCell()
+	setCellGridSpan(valCell, 3)
 
 	for _, block := range blocks {
 		sec := valCell.AddParagraph("")
@@ -142,13 +172,16 @@ func docxAddPictureFromBytes(p *godocxdocx.Paragraph, raw []byte) {
 	_, _ = p.AddPicture(path, units.Inch(5.5), units.Inch(3.1))
 }
 
-func docxAddRemediationRow2Col(tbl *godocxdocx.Table, data *statsContract.IncidentReportData) {
+func docxAddRemediationRow(tbl *godocxdocx.Table, data *statsContract.IncidentReportData) {
 	if !hasAny(data.RemediationPlan, data.RemediationAdvice) {
 		return
 	}
 	tr := tbl.AddRow()
-	docxLabelCell(tr.AddCell(), "整改建议")
+	lbl := tr.AddCell()
+	setCellWidth(lbl, 1600, stypes.TableWidthDxa)
+	docxLabelCell(lbl, "整改建议")
 	valCell := tr.AddCell()
+	setCellGridSpan(valCell, 3)
 	if strings.TrimSpace(data.RemediationPlan) != "" {
 		for _, line := range strings.Split(data.RemediationPlan, "\n") {
 			if strings.TrimSpace(line) != "" {

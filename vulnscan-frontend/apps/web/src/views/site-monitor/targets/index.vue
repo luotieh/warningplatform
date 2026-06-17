@@ -120,8 +120,8 @@ const columns = computed<DataTableColumns<MonitorTarget>>(() => [
     title: '名称',
     minWidth: 220,
     ellipsis: { tooltip: true },
-    render: (row) =>
-      h('div', { class: 'flex flex-col gap-0.5' }, [
+    render: (row) => {
+      const parts: ReturnType<typeof h>[] = [
         h(
           'a',
           {
@@ -131,8 +131,20 @@ const columns = computed<DataTableColumns<MonitorTarget>>(() => [
           },
           row.name,
         ),
+      ];
+      if (row.asset_name) {
+        const assetText = row.asset_org
+          ? `${row.asset_name} · ${row.asset_org}`
+          : row.asset_name;
+        parts.push(
+          h('span', { class: 'text-xs text-blue-400' }, assetText),
+        );
+      }
+      parts.push(
         h('span', { class: 'text-xs text-gray-400' }, `更新于 ${row.updated_at?.slice(0, 16) || '-'}`),
-      ]),
+      );
+      return h('div', { class: 'flex flex-col gap-0.5' }, parts);
+    },
   },
   {
     key: 'target',

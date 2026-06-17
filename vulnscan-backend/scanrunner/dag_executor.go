@@ -160,13 +160,19 @@ func (r *Runner) executeDAG(
 			}
 
 			if len(res.targets) > 0 {
-				targetsMu.Lock()
-				if isHostDiscoveryStage(stage.name) && completed == 1 {
-					currentTargets = res.targets
-				} else {
-					currentTargets = r.enricher.EnrichTargets(currentTargets, res.targets)
+				scopedTargets := res.targets
+				if r.scopeFilter != nil {
+					scopedTargets = r.scopeFilter.FilterTargets(scopedTargets)
 				}
-				targetsMu.Unlock()
+				if len(scopedTargets) > 0 {
+					targetsMu.Lock()
+					if isHostDiscoveryStage(stage.name) && completed == 1 {
+						currentTargets = scopedTargets
+					} else {
+						currentTargets = r.enricher.EnrichTargets(currentTargets, scopedTargets)
+					}
+					targetsMu.Unlock()
+				}
 			}
 
 			if isReconStage(stage.name) && len(res.findings) > 0 {
@@ -272,13 +278,18 @@ func (r *Runner) executeSequential(
 		}
 
 		if len(stageTargets) > 0 {
-			if isHostDiscoveryStage(stage.name) && i == 0 {
-				currentTargets = stageTargets
-				r.writeLog("info",
-					fmt.Sprintf("主机发现阶段完成，存活 %d/%d 台主机", len(stageTargets), len(targets)),
-					stage.name, "")
-			} else {
-				currentTargets = r.enricher.EnrichTargets(currentTargets, stageTargets)
+			if r.scopeFilter != nil {
+				stageTargets = r.scopeFilter.FilterTargets(stageTargets)
+			}
+			if len(stageTargets) > 0 {
+				if isHostDiscoveryStage(stage.name) && i == 0 {
+					currentTargets = stageTargets
+					r.writeLog("info",
+						fmt.Sprintf("主机发现阶段完成，存活 %d/%d 台主机", len(stageTargets), len(targets)),
+						stage.name, "")
+				} else {
+					currentTargets = r.enricher.EnrichTargets(currentTargets, stageTargets)
+				}
 			}
 		}
 

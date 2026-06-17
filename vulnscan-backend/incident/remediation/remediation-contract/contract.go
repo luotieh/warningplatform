@@ -15,20 +15,20 @@ type ServiceRemediation interface {
 }
 
 type RemediationReq struct {
-	ID                  string     `json:"id" binding:"required"`
-	RemediationPlan     string     `json:"remediation_plan" binding:"required"`
+	ID                  string     `json:"id"`
+	RemediationPlan     string     `json:"remediation_plan"`
 	RemediationDeadline *time.Time `json:"remediation_deadline"`
 	RemediationAssignee string     `json:"remediation_assignee"`
 }
 
 type VerifyRemediationReq struct {
-	ID     string `json:"id" binding:"required"`
-	Result string `json:"result" binding:"required,oneof=pass reject"`
+	ID     string `json:"id"`
+	Result string `json:"result"`
 	Remark string `json:"remark"`
 }
 
 type CloseIncidentReq struct {
-	ID          string `json:"id" binding:"required"`
+	ID          string `json:"id"`
 	CloseReason string `json:"close_reason"`
 }
 

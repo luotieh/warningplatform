@@ -75,6 +75,22 @@ func bindManualAuditBody(c *gin.Context) (auditContract.ManualAuditBody, bool) {
 	return body, true
 }
 
+func (h *HandlerAudit) ResubmitForReview(c *gin.Context) {
+	uri, ok := web.BindUri[web.Id](c)
+	if !ok {
+		return
+	}
+	var body struct {
+		Reason string `json:"reason"`
+	}
+	_ = c.ShouldBindJSON(&body)
+	if err := h.svc.ResubmitForReview(c, uri.Id, body.Reason); err != nil {
+		web.Fail(c).Err(err).Send()
+		return
+	}
+	web.Succeed(c).Send()
+}
+
 func (h *HandlerAudit) AIClassify(c *gin.Context) {
 	uri, ok := web.BindUri[web.Id](c)
 	if !ok {

@@ -4,7 +4,6 @@ import (
 	coreContract "vulnscan-backend/incident/core/core-contract"
 
 	"vulnscan-backend/incident/audit"
-	"vulnscan-backend/incident/comment"
 	"vulnscan-backend/incident/core"
 	"vulnscan-backend/incident/knowledge"
 	"vulnscan-backend/incident/remediation"
@@ -23,7 +22,6 @@ type Incident struct {
 	auditHandler       *audit.HandlerAudit
 	remediationHandler *remediation.HandlerRemediation
 	slaHandler         *sla.HandlerSLA
-	commentHandler     *comment.HandlerComment
 	knowledgeHandler   *knowledge.HandlerKnowledge
 	statsHandler       *stats.HandlerStats
 }
@@ -33,7 +31,6 @@ func NewIncident(
 	auditHandler *audit.HandlerAudit,
 	remediationHandler *remediation.HandlerRemediation,
 	slaHandler *sla.HandlerSLA,
-	commentHandler *comment.HandlerComment,
 	knowledgeHandler *knowledge.HandlerKnowledge,
 	statsHandler *stats.HandlerStats,
 	database *db.DB,
@@ -44,7 +41,6 @@ func NewIncident(
 		auditHandler:       auditHandler,
 		remediationHandler: remediationHandler,
 		slaHandler:         slaHandler,
-		commentHandler:     commentHandler,
 		knowledgeHandler:   knowledgeHandler,
 		statsHandler:       statsHandler,
 	}
@@ -72,6 +68,7 @@ func (m *Incident) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
 				{Name: "事件删除", Path: ":id", Method: "DELETE", Handler: m.coreHandler.Delete, Enabled: true},
 				{Name: "AI预审", Path: ":id/ai-pre-audit", Method: "POST", Handler: m.auditHandler.AIPreAudit, Enabled: true},
 				{Name: "人工复核", Path: ":id/manual-audit", Method: "POST", Handler: m.auditHandler.ManualAudit, Enabled: true},
+				{Name: "重新提交复核", Path: ":id/resubmit", Method: "POST", Handler: m.auditHandler.ResubmitForReview, Enabled: true},
 				{Name: "AI智能分类", Path: ":id/ai-classify", Method: "POST", Handler: m.auditHandler.AIClassify, Enabled: true},
 				{Name: "提交整改", Path: ":id/remediation", Method: "POST", Handler: m.remediationHandler.SubmitRemediation, Enabled: true},
 				{Name: "验证整改", Path: ":id/verify-remediation", Method: "POST", Handler: m.remediationHandler.VerifyRemediation, Enabled: true},
@@ -107,14 +104,6 @@ func (m *Incident) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
 			Children: []authorize.Route{
 				{Name: "操作日志列表", Method: "GET", Handler: m.coreHandler.OplogList, Enabled: true},
 				{Name: "接收操作回调", Path: "callback", Method: "POST", Handler: m.coreHandler.ReceiveOplogCallback, Enabled: true},
-			},
-		},
-		{
-			Name: "事件评论", Path: "comments", Enabled: true,
-			Children: []authorize.Route{
-				{Name: "创建评论", Method: "POST", Handler: m.commentHandler.CreateComment, Enabled: true},
-				{Name: "评论列表", Method: "GET", Handler: m.commentHandler.ListComments, Enabled: true},
-				{Name: "删除评论", Path: ":id", Method: "DELETE", Handler: m.commentHandler.DeleteComment, Enabled: true},
 			},
 		},
 		{
@@ -154,7 +143,6 @@ func initModels(database *db.DB) {
 		&model.IncidentAsset{},
 		&model.IncidentMetadata{},
 		&model.IncidentOperationLog{},
-		&model.IncidentComment{},
 		&model.IncidentDispatch{},
 		&model.KnowledgeArticle{},
 		&model.ThreatIntelRecord{},

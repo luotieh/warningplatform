@@ -78,6 +78,14 @@ func (m *NucleiModule) Run(ctx context.Context, targets []*core.Target, config m
 		opts = buildNucleiOptions(tplFS, wfFS, config)
 	} else {
 		templates := m.loadTemplates(config)
+
+		taskID := configString(config, "scan_task_id", "")
+		if taskID != "" && len(templates) > 0 {
+			targetURLs := buildTargetURLs(targets)
+			dedup := GetGlobalTemplateDedup()
+			templates = dedup.FilterUnexecuted(taskID, templates, targetURLs)
+		}
+
 		if len(templates) == 0 && m.store.db != nil {
 			if n, perr := tryPullPocFromMaster(ctx, m.store.db, config); perr != nil {
 				slog.Warn("[NucleiModule] 从主控拉取 PoC 失败", append([]any{"error", perr}, nucleiScanLogAttrs(config)...)...)
@@ -157,6 +165,16 @@ func (m *NucleiModule) Run(ctx context.Context, targets []*core.Target, config m
 		mc.outcome = "execute_error"
 	}
 	mc.findings = len(findings)
+
+	if taskID := configString(config, "scan_task_id", ""); taskID != "" && !useFS {
+		dedup := GetGlobalTemplateDedup()
+		templates := m.loadTemplates(config)
+		pocIDs := make([]string, 0, len(templates))
+		for _, t := range templates {
+			pocIDs = append(pocIDs, t.ID)
+		}
+		dedup.RecordExecution(taskID, pocIDs, targetURLs)
+	}
 
 	logAttrs := []any{
 		"findings", len(findings),
@@ -308,6 +326,8 @@ func (m *NucleiModule) loadTemplates(config map[string]interface{}) []*PocEntry 
 	}
 
 	products := extractDetectedProducts(config)
+	products = NormalizeProductList(products)
+
 	if len(products) > 0 {
 		matched, decisions := m.store.LoadByProductsWithDecisions(products)
 		if len(decisions) > 0 {
@@ -336,6 +356,7 @@ func (m *NucleiModule) loadTemplates(config map[string]interface{}) []*PocEntry 
 				"total_decisions", len(decisions))
 		}
 		if len(matched) > 0 {
+			matched = filterWAFBlockedPoCs(matched, config)
 			slog.Info("[NucleiModule] 基于指纹识别智能匹配PoC",
 				"products", len(products), "matched_templates", len(matched))
 			return matched
@@ -354,7 +375,7 @@ func (m *NucleiModule) loadTemplates(config map[string]interface{}) []*PocEntry 
 	switch fallbackMode {
 	case "all":
 		slog.Info("[NucleiModule] 未检测到产品，按配置回退全量 PoC")
-		return m.store.LoadAll()
+		return filterWAFBlockedPoCs(m.store.LoadAll(), config)
 	case "skip":
 		slog.Info("[NucleiModule] 未检测到产品，跳过 PoC（poc_no_fingerprint_fallback=skip）")
 		return nil
@@ -362,8 +383,50 @@ func (m *NucleiModule) loadTemplates(config map[string]interface{}) []*PocEntry 
 		highCrit := m.store.LoadBySeverity([]string{"critical", "high"})
 		slog.Info("[NucleiModule] 未检测到产品，仅执行高/严重级别 PoC",
 			"count", len(highCrit), "hint", "设 poc_no_fingerprint_fallback=all 可改为全量")
-		return highCrit
+		return filterWAFBlockedPoCs(highCrit, config)
 	}
+}
+
+// filterWAFBlockedPoCs removes PoCs that are likely to be blocked when WAF is detected.
+func filterWAFBlockedPoCs(templates []*PocEntry, config map[string]interface{}) []*PocEntry {
+	if !hasDetectedWAFs(config) {
+		return templates
+	}
+
+	wafBlockedTags := map[string]bool{
+		"sqli": true, "xss": true, "rce": true, "cmdi": true,
+		"lfi": true, "rfi": true, "ssti": true, "xxe": true,
+		"injection": true, "oast": true, "intrusive": true,
+	}
+
+	var kept []*PocEntry
+	var skipped int
+	for _, t := range templates {
+		if t.Tags == "" {
+			kept = append(kept, t)
+			continue
+		}
+		blocked := false
+		for _, tag := range strings.Split(t.Tags, ",") {
+			tag = strings.ToLower(strings.TrimSpace(tag))
+			if wafBlockedTags[tag] {
+				blocked = true
+				break
+			}
+		}
+		if blocked {
+			skipped++
+		} else {
+			kept = append(kept, t)
+		}
+	}
+
+	if skipped > 0 {
+		slog.Info("[NucleiModule] WAF 感知过滤，跳过高拦截率 PoC",
+			"skipped", skipped, "remaining", len(kept))
+	}
+
+	return kept
 }
 
 func extractDetectedProducts(config map[string]interface{}) []string {

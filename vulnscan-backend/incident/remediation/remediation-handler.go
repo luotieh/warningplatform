@@ -22,9 +22,18 @@ func NewHandlerRemediation(svc remediationContract.ServiceRemediation) *HandlerR
 }
 
 func (h *HandlerRemediation) SubmitRemediation(c *gin.Context) {
-	req, ok := web.BindJSON[remediationContract.RemediationReq](c)
+	uri, ok := web.BindUri[web.Id](c)
 	if !ok {
 		return
+	}
+	var body struct {
+		RemediationPlan string `json:"remediation_plan"`
+		Result          string `json:"result"`
+	}
+	_ = c.ShouldBindJSON(&body)
+	req := remediationContract.RemediationReq{
+		ID:              uri.Id,
+		RemediationPlan: body.RemediationPlan,
 	}
 	if err := h.svc.SubmitRemediation(c, req); err != nil {
 		web.Fail(c).Err(err).Send()
@@ -34,9 +43,31 @@ func (h *HandlerRemediation) SubmitRemediation(c *gin.Context) {
 }
 
 func (h *HandlerRemediation) VerifyRemediation(c *gin.Context) {
-	req, ok := web.BindJSON[remediationContract.VerifyRemediationReq](c)
+	uri, ok := web.BindUri[web.Id](c)
 	if !ok {
 		return
+	}
+	var body struct {
+		Result string `json:"result"`
+		Passed *bool  `json:"passed"`
+		Remark string `json:"remark"`
+	}
+	_ = c.ShouldBindJSON(&body)
+	result := body.Result
+	if result == "" && body.Passed != nil {
+		if *body.Passed {
+			result = "pass"
+		} else {
+			result = "reject"
+		}
+	}
+	if result == "" {
+		result = "pass"
+	}
+	req := remediationContract.VerifyRemediationReq{
+		ID:     uri.Id,
+		Result: result,
+		Remark: body.Remark,
 	}
 	if err := h.svc.VerifyRemediation(c, req); err != nil {
 		web.Fail(c).Err(err).Send()
@@ -46,9 +77,17 @@ func (h *HandlerRemediation) VerifyRemediation(c *gin.Context) {
 }
 
 func (h *HandlerRemediation) CloseIncident(c *gin.Context) {
-	req, ok := web.BindJSON[remediationContract.CloseIncidentReq](c)
+	uri, ok := web.BindUri[web.Id](c)
 	if !ok {
 		return
+	}
+	var body struct {
+		CloseReason string `json:"close_reason"`
+	}
+	_ = c.ShouldBindJSON(&body)
+	req := remediationContract.CloseIncidentReq{
+		ID:          uri.Id,
+		CloseReason: body.CloseReason,
 	}
 	if err := h.svc.CloseIncident(c, req); err != nil {
 		web.Fail(c).Err(err).Send()

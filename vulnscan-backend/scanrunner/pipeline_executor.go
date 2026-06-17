@@ -198,6 +198,15 @@ func (r *Runner) executePipeline(
 					processPortBatch(batchTargets)
 					return
 				}
+				if r.scopeFilter != nil {
+					host := t.Host
+					if host == "" {
+						host = t.IP
+					}
+					if !r.scopeFilter.InScope(host) {
+						continue
+					}
+				}
 				batchTargets = append(batchTargets, t)
 				if len(batchTargets) >= 32 {
 					processPortBatch(batchTargets)
@@ -272,6 +281,15 @@ func (r *Runner) executePipeline(
 					if !ok {
 						processServiceBatch(batchTargets)
 						return
+					}
+					if r.scopeFilter != nil {
+						host := t.Host
+						if host == "" {
+							host = t.IP
+						}
+						if !r.scopeFilter.InScope(host) {
+							continue
+						}
 					}
 					batchTargets = append(batchTargets, t)
 					if len(batchTargets) >= 16 {

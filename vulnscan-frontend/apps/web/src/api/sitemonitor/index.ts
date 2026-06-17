@@ -175,6 +175,7 @@ export const fetchTaskMeta = fetchPageMeta;
 
 export const getTargetList = (
   params?: PageParams & {
+    asset_id?: string;
     enabled?: string;
     name?: string;
     target_type?: string;
@@ -606,6 +607,9 @@ export const updateCleanupConfig = (config: CleanupConfig) =>
 
 export const runCleanup = () =>
   requestClient.post<{ deleted: number }>(base('/cleanup/run'));
+
+export const fixAssetLinks = () =>
+  requestClient.post<{ fixed: number }>(base('/fix-asset-links'));
 
 export type { CrawlResult };
 

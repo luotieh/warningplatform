@@ -28,6 +28,12 @@ type EnginePolicy struct {
 	CacheTTLSeconds int
 
 	ModuleTimeoutSeconds int
+
+	HostRateLimitRPS   int
+	HostRateLimitBurst int
+
+	RejectPrincipleScan bool // true: reject vuln findings that are principle-only (no exploit verification)
+	RequireVerified     bool // true: only persist findings with Verified=true
 }
 
 func mergeTaskConfigSource(task model.ScanTask) map[string]interface{} {
@@ -46,6 +52,8 @@ func mergeTaskConfigSource(task model.ScanTask) map[string]interface{} {
 func ParseEnginePolicy(src map[string]interface{}) EnginePolicy {
 	p := EnginePolicy{
 		AutoSkipWebVulnsWithoutHTTP: true,
+		RejectPrincipleScan:         true,
+		RequireVulnEvidence:         true,
 	}
 	if len(src) == 0 {
 		return p
@@ -112,6 +120,27 @@ func applyEngineMap(p *EnginePolicy, m map[string]interface{}) {
 	if v, ok := intFromAny(m["engine.module_timeout_seconds"]); ok && v > 0 {
 		p.ModuleTimeoutSeconds = v
 	}
+	if v, ok := intFromAny(m["host_rate_limit"]); ok && v > 0 {
+		p.HostRateLimitRPS = v
+	}
+	if v, ok := intFromAny(m["engine.host_rate_limit"]); ok && v > 0 {
+		p.HostRateLimitRPS = v
+	}
+	if v, ok := intFromAny(m["engine.host_rate_burst"]); ok && v > 0 {
+		p.HostRateLimitBurst = v
+	}
+	if b, ok := boolFromAny(m["engine.reject_principle_scan"]); ok {
+		p.RejectPrincipleScan = b
+	}
+	if b, ok := boolFromAny(m["reject_principle_scan"]); ok {
+		p.RejectPrincipleScan = b
+	}
+	if b, ok := boolFromAny(m["engine.require_verified"]); ok {
+		p.RequireVerified = b
+	}
+	if b, ok := boolFromAny(m["require_verified"]); ok {
+		p.RequireVerified = b
+	}
 }
 
 func intFromAny(v interface{}) (int, bool) {
@@ -165,5 +194,15 @@ func (p EnginePolicy) AllowPersistFinding(f *core.Finding) bool {
 			return false
 		}
 	}
+
+	if cat == model.FindingCategoryVuln {
+		if p.RejectPrincipleScan && f.VerificationLevel == core.VerifyPrinciple && !f.Verified {
+			return false
+		}
+		if p.RequireVerified && !f.Verified {
+			return false
+		}
+	}
+
 	return true
 }

@@ -280,7 +280,7 @@ const columns = computed<DataTableColumns<MonitorExecution>>(() => [
     width: 280,
     fixed: 'right',
     render: (row) =>
-      h(NSpace, { size: 4, wrap: false }, () => [
+      h(NSpace, { size: 12, wrap: false }, () => [
         h(NButton, { text: true, type: 'primary', size: 'small', onClick: () => goDetail(row) }, () => '详情'),
         h(NButton, { text: true, type: 'success', size: 'small', onClick: () => setDisposition(row, 'valid') }, () => '有效'),
         h(NButton, { text: true, size: 'small', onClick: () => setDisposition(row, 'false_positive') }, () => '误报'),

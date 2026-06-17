@@ -26,6 +26,12 @@ import {
   getScanEnginePresets,
   type ScanEnginePreset,
 } from '#/api/task';
+import {
+  getTargetList,
+  getTargetStats,
+  type MonitorTarget,
+  type TargetSummary,
+} from '#/api/sitemonitor';
 import { fetchAuthImageObjectUrl } from '#/composables/useAuthImageObjectUrl';
 
 import {
@@ -528,6 +534,7 @@ function onTabChange(tab: string) {
   activeTab.value = tab;
   if (tab === 'riskTrend') fetchRiskTrend();
   if (tab === 'changelog') fetchChangeLogs();
+  if (tab === 'monitor') fetchMonitorTargets();
 }
 
 async function fetchChangeLogs() {
@@ -549,6 +556,36 @@ async function loadEnginePresetsForDetail() {
     enginePresets.value = await getScanEnginePresets();
   } catch {
     enginePresets.value = [];
+  }
+}
+
+const monitorTargets = ref<MonitorTarget[]>([]);
+const monitorStatsMap = ref<Record<string, TargetSummary>>({});
+const monitorLoading = ref(false);
+
+const dimensionLabels: Record<string, string> = {
+  availability: '可用性',
+  tamper: '篡改',
+  blacklink: '暗链',
+  sensitive_word: '敏感词',
+  domain_hijack: 'DNS劫持',
+  sensitive_file: '敏感文件',
+};
+
+async function fetchMonitorTargets() {
+  monitorLoading.value = true;
+  try {
+    const [res, stats] = await Promise.all([
+      getTargetList({ asset_id: assetId.value, page: 1, page_size: 50 }),
+      getTargetStats(),
+    ]);
+    monitorTargets.value = res?.data ?? [];
+    monitorStatsMap.value = stats ?? {};
+  } catch {
+    monitorTargets.value = [];
+    monitorStatsMap.value = {};
+  } finally {
+    monitorLoading.value = false;
   }
 }
 
@@ -1013,6 +1050,75 @@ onBeforeUnmount(() => {
             <NEmpty v-else description="暂无扫描历史" />
           </NTabPane>
 
+          <!-- 站点监测 -->
+          <NTabPane name="monitor" tab="站点监测">
+            <NSpin :show="monitorLoading">
+              <template v-if="monitorTargets.length">
+                <div
+                  v-for="mt in monitorTargets"
+                  :key="mt.id"
+                  class="asset-detail__monitor-card"
+                >
+                  <div class="asset-detail__monitor-head">
+                    <a
+                      class="cursor-pointer font-medium text-primary hover:underline"
+                      @click="router.push({ name: 'MonitorTargetDetail', params: { id: mt.id } })"
+                    >
+                      {{ mt.name || mt.target_value }}
+                    </a>
+                    <NTag
+                      :type="mt.enabled ? 'success' : 'default'"
+                      size="small"
+                    >
+                      {{ mt.enabled ? '启用' : '停用' }}
+                    </NTag>
+                  </div>
+                  <div class="asset-detail__monitor-dims">
+                    <template v-if="monitorStatsMap[mt.id]">
+                      <template
+                        v-for="(dim, key) in monitorStatsMap[mt.id]?.dimensions"
+                        :key="key"
+                      >
+                        <NTooltip>
+                          <template #trigger>
+                            <NTag
+                              :type="dim.last_has_issue ? 'error' : 'success'"
+                              size="small"
+                              round
+                            >
+                              {{ dimensionLabels[key as string] || key }}
+                              <template v-if="dim.issue_count > 0">
+                                · {{ dim.issue_count }}
+                              </template>
+                            </NTag>
+                          </template>
+                          执行 {{ dim.total }} 次，问题 {{ dim.issue_count }}
+                          次，待处理 {{ dim.pending }}
+                        </NTooltip>
+                      </template>
+                      <span
+                        v-if="monitorStatsMap[mt.id]!.total_issues > 0"
+                        class="asset-detail__monitor-summary"
+                      >
+                        共 {{ monitorStatsMap[mt.id]!.total_issues }} 个问题
+                        <template
+                          v-if="monitorStatsMap[mt.id]!.pending_count > 0"
+                        >
+                          （{{ monitorStatsMap[mt.id]!.pending_count }} 待处理）
+                        </template>
+                      </span>
+                    </template>
+                    <span v-else class="text-xs text-gray-400">暂无检测数据</span>
+                  </div>
+                </div>
+              </template>
+              <NEmpty
+                v-else-if="!monitorLoading"
+                description="暂无关联的监测任务"
+              />
+            </NSpin>
+          </NTabPane>
+
           <!-- 变更日志 -->
           <NTabPane name="changelog" tab="变更日志">
             <NSpin :show="changeLogsLoading">
@@ -1160,5 +1266,32 @@ onBeforeUnmount(() => {
 
 .asset-detail__screenshot:hover .asset-detail__screenshot-hint {
   opacity: 1;
+}
+
+.asset-detail__monitor-card {
+  border: 1px solid var(--n-border-color);
+  border-radius: 6px;
+  padding: 12px 16px;
+  margin-bottom: 10px;
+}
+
+.asset-detail__monitor-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.asset-detail__monitor-dims {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.asset-detail__monitor-summary {
+  font-size: 12px;
+  color: var(--n-text-color-3);
+  margin-left: 4px;
 }
 </style>

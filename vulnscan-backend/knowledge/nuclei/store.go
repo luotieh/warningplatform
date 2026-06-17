@@ -236,13 +236,25 @@ func (s *PocStore) LoadByProductsWithDecisions(products []string) ([]*PocEntry, 
 
 	nameSet := make(map[string]struct{})
 	for _, dp := range detected {
+		normalized := NormalizeProduct(dp.Name)
 		nameSet[strings.ToLower(dp.Name)] = struct{}{}
+		if normalized != strings.ToLower(dp.Name) {
+			nameSet[normalized] = struct{}{}
+		}
 	}
 	detectedByName := make(map[string]DetectedProduct)
 	for _, dp := range detected {
 		key := strings.ToLower(dp.Name)
 		if existing, ok := detectedByName[key]; !ok || (dp.Version != "" && existing.Version == "") {
 			detectedByName[key] = dp
+		}
+		normalized := NormalizeProduct(dp.Name)
+		if normalized != key {
+			if existing, ok := detectedByName[normalized]; !ok || (dp.Version != "" && existing.Version == "") {
+				detectedByName[normalized] = DetectedProduct{
+					Name: normalized, Version: dp.Version, Vendor: dp.Vendor,
+				}
+			}
 		}
 	}
 
@@ -251,12 +263,12 @@ func (s *PocStore) LoadByProductsWithDecisions(products []string) ([]*PocEntry, 
 	var decisions []MatchDecision
 
 	for i, entry := range all {
-		// Phase 1: Structured product+version match
+		// Phase 1: Structured product+version match (with CPE normalization)
 		if entry.Product != "" {
-			entryProduct := strings.ToLower(entry.Product)
+			_ = NormalizeProduct(entry.Product) // ensure normalized
 			for _, dp := range detected {
-				dpName := strings.ToLower(dp.Name)
-				if entryProduct != dpName && !strings.Contains(dpName, entryProduct) && !strings.Contains(entryProduct, dpName) {
+				matchScore := ProductMatchScore(dp.Name, entry.Product)
+				if matchScore < 50 {
 					continue
 				}
 				if entry.AffectedRange != "" && dp.Version != "" {

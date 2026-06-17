@@ -115,11 +115,13 @@ func (p *ClientPool) GetOrCreate(key string, opts ...ClientOption) *ScanHTTPClie
 			Transport:     transport,
 			CheckRedirect: redirectFn,
 		},
-		config:      cfg,
-		retryAfter:  make(map[string]time.Time),
-		authHeaders: cfg.AuthHeaders,
-		authCookies: cfg.AuthCookies,
-		rateLimiter: GetGlobalBucket(),
+		config:          cfg,
+		retryAfter:      make(map[string]time.Time),
+		authHeaders:     cfg.AuthHeaders,
+		authCookies:     cfg.AuthCookies,
+		rateLimiter:     GetGlobalBucket(),
+		hostRateLimiter: GetGlobalHostRateLimiter(),
+		responseCache:   GetGlobalResponseCache(),
 	}
 
 	p.clients[key] = &poolEntry{

@@ -15,6 +15,7 @@ import {
   enUS,
   lightTheme,
   NConfigProvider,
+  NDialogProvider,
   NMessageProvider,
   NNotificationProvider,
   zhCN,
@@ -85,9 +86,11 @@ const themeOverrides = computed((): GlobalThemeOverrides => {
     class="h-full"
   >
     <NNotificationProvider>
-      <NMessageProvider>
-        <RouterView />
-      </NMessageProvider>
+      <NDialogProvider>
+        <NMessageProvider>
+          <RouterView />
+        </NMessageProvider>
+      </NDialogProvider>
     </NNotificationProvider>
   </NConfigProvider>
 </template>

@@ -69,6 +69,9 @@ func (s *serviceMonitor) UpdateTarget(ctx context.Context, id string, req contra
 	if req.ExpectedIPs != "" {
 		updates["expected_ips"] = req.ExpectedIPs
 	}
+	if req.AssetID != nil {
+		updates["asset_id"] = *req.AssetID
+	}
 	if req.ScheduleEnabled != nil {
 		updates["schedule_enabled"] = *req.ScheduleEnabled
 	}
@@ -171,6 +174,9 @@ func (s *serviceMonitor) ListTargets(ctx context.Context, req contract.TargetLis
 		q = q.Where("enabled = ?", true)
 	} else if req.Enabled == "false" {
 		q = q.Where("enabled = ?", false)
+	}
+	if req.AssetID != "" {
+		q = q.Where("asset_id = ?", req.AssetID)
 	}
 	var total int64
 	if err := q.Count(&total).Error; err != nil {

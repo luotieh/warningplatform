@@ -183,6 +183,39 @@ func (s *serviceAudit) ManualAudit(ctx context.Context, req auditContract.Manual
 	return nil
 }
 
+func (s *serviceAudit) ResubmitForReview(ctx context.Context, id string, reason string) error {
+	sess := s.session()
+
+	var incident model.SecurityIncident
+	if err := sess.WithContext(ctx).First(&incident, "id = ?", id).Error; err != nil {
+		return fmt.Errorf("事件不存在: %w", err)
+	}
+
+	newStatus, err := model.IncidentSM.Apply(incident.Status, model.IncidentEvtResubmit)
+	if err != nil {
+		return fmt.Errorf("当前状态不允许重新提交复核: %w", err)
+	}
+
+	updates := map[string]interface{}{"status": newStatus}
+	if err := sess.WithContext(ctx).Model(&model.SecurityIncident{}).
+		Where("id = ?", id).Updates(updates).Error; err != nil {
+		return fmt.Errorf("更新事件状态失败: %w", err)
+	}
+
+	opLog := model.BuildIncidentOperationLog(
+		incident.Id, incident.IncidentNo,
+		"resubmit", "", "",
+		"重新提交复核",
+		map[string]interface{}{"reason": reason},
+		model.IncidentSourceSystemLocal,
+	)
+	if err := model.CreateIncidentOperationLog(sess.WithContext(ctx), opLog); err != nil {
+		return fmt.Errorf("创建操作日志失败: %w", err)
+	}
+
+	return nil
+}
+
 func (s *serviceAudit) transferToCircular(ctx context.Context, sess *gorm.DB, incident *model.SecurityIncident) error {
 	req := transferContract.TransferIncidentReq{
 		IncidentID:   incident.Id,

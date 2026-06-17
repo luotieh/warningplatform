@@ -26,6 +26,12 @@ import {
   type VulnStatusHistory,
 } from '#/api/vuln';
 import { getProductDetail, type Product } from '#/api/product/index';
+import {
+  getTargetList,
+  getTargetStats,
+  type MonitorTarget,
+  type TargetSummary,
+} from '#/api/sitemonitor';
 
 defineOptions({ name: 'VulnDetail' });
 
@@ -141,7 +147,42 @@ function copyEvidence() {
   }).catch(() => {});
 }
 
-onMounted(fetchData);
+const monitorTargets = ref<MonitorTarget[]>([]);
+const monitorStatsMap = ref<Record<string, TargetSummary>>({});
+const monitorLoading = ref(false);
+
+const dimensionLabels: Record<string, string> = {
+  availability: '可用性',
+  tamper: '篡改',
+  blacklink: '暗链',
+  sensitive_word: '敏感词',
+  domain_hijack: 'DNS劫持',
+  sensitive_file: '敏感文件',
+};
+
+async function fetchMonitorForAsset() {
+  const aid = vuln.value?.asset_id;
+  if (!aid) return;
+  monitorLoading.value = true;
+  try {
+    const [res, stats] = await Promise.all([
+      getTargetList({ asset_id: aid, page: 1, page_size: 10 }),
+      getTargetStats(),
+    ]);
+    monitorTargets.value = res?.data ?? [];
+    monitorStatsMap.value = stats ?? {};
+  } catch {
+    monitorTargets.value = [];
+    monitorStatsMap.value = {};
+  } finally {
+    monitorLoading.value = false;
+  }
+}
+
+onMounted(async () => {
+  await fetchData();
+  fetchMonitorForAsset();
+});
 </script>
 
 <template>
@@ -262,6 +303,45 @@ onMounted(fetchData);
                     <span v-else class="vd-muted">未关联</span>
                   </span>
                 </div>
+              </div>
+            </div>
+
+            <!-- 站点监测关联 -->
+            <div v-if="vuln.asset_id && monitorTargets.length" class="vd-info-card">
+              <div class="vd-info-card__title">站点监测</div>
+              <div
+                v-for="mt in monitorTargets"
+                :key="mt.id"
+                class="vd-monitor-row"
+              >
+                <NButton
+                  text
+                  type="info"
+                  size="small"
+                  @click="router.push({ name: 'MonitorTargetDetail', params: { id: mt.id } })"
+                >
+                  {{ mt.name || mt.target_value }}
+                </NButton>
+                <NTag
+                  :type="mt.enabled ? 'success' : 'default'"
+                  size="small"
+                >
+                  {{ mt.enabled ? '启用' : '停用' }}
+                </NTag>
+                <template v-if="monitorStatsMap[mt.id]">
+                  <NTag
+                    v-for="(dim, key) in monitorStatsMap[mt.id]?.dimensions"
+                    :key="key"
+                    :type="dim.last_has_issue ? 'error' : 'success'"
+                    size="small"
+                    round
+                  >
+                    {{ dimensionLabels[key as string] || key }}
+                    <template v-if="dim.issue_count > 0">
+                      · {{ dim.issue_count }}
+                    </template>
+                  </NTag>
+                </template>
               </div>
             </div>
 
@@ -753,5 +833,17 @@ onMounted(fetchData);
 }
 :global(html.dark) .vd-solution-card .vd-info-card__title {
   color: #34d399;
+}
+
+.vd-monitor-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 0;
+}
+
+.vd-monitor-row + .vd-monitor-row {
+  border-top: 1px solid var(--n-border-color, #eee);
 }
 </style>

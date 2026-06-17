@@ -1,6 +1,7 @@
 <script lang="ts" setup>
-import { computed, onMounted } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useMessage } from 'naive-ui';
+import { useRouter } from 'vue-router';
 import {
   NButton,
   NCard,
@@ -15,6 +16,7 @@ import {
   NTag,
   NTimeline,
   NTimelineItem,
+  NTooltip,
 } from 'naive-ui';
 
 import type { DynamicFormTemplate } from '#/api/formdesign';
@@ -27,6 +29,12 @@ import {
   type CircularDetailResp,
   type CircularOplog,
 } from '#/api/circular';
+import {
+  getTargetList,
+  getTargetStats,
+  type MonitorTarget,
+  type TargetSummary,
+} from '#/api/sitemonitor';
 import { downloadBlob } from '#/views/asset/ledger/file-utils';
 import DynamicFormRenderer from '#/components/dynamic-form/DynamicFormRenderer.vue';
 
@@ -81,12 +89,54 @@ const stepMap: Record<string, number> = {
   completed: 5,
 };
 
+const router = useRouter();
 const formData = computed(() => circularDataToFormMap(props.detail.circular_data));
 const summaryItems = computed(() => pickCircularSummary(formData.value));
 const assetUnitHint = computed(() => extractCircularUnitHint(props.detail));
 
+const monitorTargets = ref<MonitorTarget[]>([]);
+const monitorStatsMap = ref<Record<string, TargetSummary>>({});
+
+const dimensionLabels: Record<string, string> = {
+  availability: '可用性',
+  tamper: '篡改',
+  blacklink: '暗链',
+  sensitive_word: '敏感词',
+  domain_hijack: 'DNS劫持',
+  sensitive_file: '敏感文件',
+};
+
+function extractCircularDomainIp(): string {
+  const d = formData.value;
+  const raw = d['网站域名IP'] ?? d['域名IP'] ?? d['域名'] ?? d['IP'] ?? d['隐患URL'] ?? '';
+  const s = String(raw).trim();
+  if (!s) return '';
+  try {
+    const u = new URL(s.startsWith('http') ? s : `https://${s}`);
+    return u.hostname;
+  } catch {
+    return s.split(/[/:]/)[0] || '';
+  }
+}
+
+async function fetchMonitorForCircular() {
+  const keyword = extractCircularDomainIp();
+  if (!keyword) return;
+  try {
+    const [res, stats] = await Promise.all([
+      getTargetList({ target_value: keyword, page: 1, page_size: 10 }),
+      getTargetStats(),
+    ]);
+    monitorTargets.value = res?.data ?? [];
+    monitorStatsMap.value = stats ?? {};
+  } catch {
+    monitorTargets.value = [];
+  }
+}
+
 onMounted(() => {
   void ensureLoaded();
+  fetchMonitorForCircular();
 });
 </script>
 
@@ -176,6 +226,63 @@ onMounted(() => {
       />
     </NCard>
 
+    <NCard
+      v-if="monitorTargets.length"
+      title="站点监测关联"
+      size="small"
+      class="circular-detail__section"
+    >
+      <div
+        v-for="mt in monitorTargets"
+        :key="mt.id"
+        class="circular-monitor-row"
+      >
+        <NButton
+          text
+          type="info"
+          size="small"
+          @click="router.push({ name: 'MonitorTargetDetail', params: { id: mt.id } })"
+        >
+          {{ mt.name || mt.target_value }}
+        </NButton>
+        <NTag
+          :type="mt.enabled ? 'success' : 'default'"
+          size="small"
+        >
+          {{ mt.enabled ? '启用' : '停用' }}
+        </NTag>
+        <template v-if="monitorStatsMap[mt.id]">
+          <NTooltip
+            v-for="(dim, key) in monitorStatsMap[mt.id]?.dimensions"
+            :key="key"
+          >
+            <template #trigger>
+              <NTag
+                :type="dim.last_has_issue ? 'error' : 'success'"
+                size="small"
+                round
+              >
+                {{ dimensionLabels[key as string] || key }}
+                <template v-if="dim.issue_count > 0">
+                  · {{ dim.issue_count }}
+                </template>
+              </NTag>
+            </template>
+            执行 {{ dim.total }} 次，问题 {{ dim.issue_count }} 次，待处理 {{ dim.pending }}
+          </NTooltip>
+          <span
+            v-if="monitorStatsMap[mt.id]!.total_issues > 0"
+            class="circular-monitor-summary"
+          >
+            共 {{ monitorStatsMap[mt.id]!.total_issues }} 个问题
+            <template v-if="monitorStatsMap[mt.id]!.pending_count > 0">
+              （{{ monitorStatsMap[mt.id]!.pending_count }} 待处理）
+            </template>
+          </span>
+        </template>
+      </div>
+    </NCard>
+
     <NCard title="操作日志" size="small" class="circular-detail__section">
       <NTimeline v-if="oplogs.length">
         <NTimelineItem
@@ -243,5 +350,23 @@ onMounted(() => {
   font-size: 12px;
   color: var(--n-text-color-3);
   margin-top: 4px;
+}
+
+.circular-monitor-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 0;
+}
+
+.circular-monitor-row + .circular-monitor-row {
+  border-top: 1px solid var(--n-border-color, #eee);
+}
+
+.circular-monitor-summary {
+  font-size: 12px;
+  color: var(--n-text-color-3);
+  margin-left: 4px;
 }
 </style>

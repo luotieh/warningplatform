@@ -90,11 +90,32 @@ func (a *Aggregator) GetSecurityPosture(ctx context.Context, scopes ...func(*gor
 
 func (a *Aggregator) getMonitorStats(ctx context.Context) MonitorStats {
 	var stats MonitorStats
-	a.db.WithContext(ctx).Model(&model.MonitorTarget{}).Count(new(int64))
+
+	type targetAgg struct {
+		Total   int `gorm:"column:total"`
+		Enabled int `gorm:"column:enabled"`
+	}
+	var ta targetAgg
 	a.db.WithContext(ctx).Raw(`SELECT
-		COUNT(*) as total_tasks,
-		SUM(CASE WHEN enabled = true THEN 1 ELSE 0 END) as enabled_tasks
-		FROM monitor_tasks`).Scan(&stats)
+		COUNT(*) as total,
+		SUM(CASE WHEN enabled = true THEN 1 ELSE 0 END) as enabled
+		FROM monitor_targets`).Scan(&ta)
+	stats.TotalTargets = ta.Total
+	stats.EnabledTargets = ta.Enabled
+	stats.TotalTasks = ta.Total
+	stats.EnabledTasks = ta.Enabled
+
+	type ptAgg struct {
+		Total   int `gorm:"column:total"`
+		Enabled int `gorm:"column:enabled"`
+	}
+	var pa ptAgg
+	a.db.WithContext(ctx).Raw(`SELECT
+		COUNT(*) as total,
+		SUM(CASE WHEN enabled = true THEN 1 ELSE 0 END) as enabled
+		FROM monitor_path_tasks`).Scan(&pa)
+	stats.TotalPathTasks = pa.Total
+	stats.EnabledPathTasks = pa.Enabled
 
 	type alertCounts struct {
 		Total int `gorm:"column:total"`
@@ -103,8 +124,9 @@ func (a *Aggregator) getMonitorStats(ctx context.Context) MonitorStats {
 	var ac alertCounts
 	a.db.WithContext(ctx).Raw(`SELECT
 		COUNT(*) as total,
-		SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END) as open_count
-		FROM vs_alert`).Scan(&ac)
+		SUM(CASE WHEN has_issue = 1 AND disposition = 'pending' THEN 1 ELSE 0 END) as open_count
+		FROM monitor_executions
+		WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)`).Scan(&ac)
 	stats.TotalAlerts = ac.Total
 	stats.OpenAlerts = ac.Open
 

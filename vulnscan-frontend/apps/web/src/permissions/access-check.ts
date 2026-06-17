@@ -22,12 +22,22 @@ export function canAccessCodes(
 
   if (hasIamWildcard(codes)) return true;
 
-  if (!isStrictButtonPerm()) {
-    const userStore = useUserStore();
-    if (isAdminRole(userStore.userRoles as string[] | undefined)) return true;
-  }
+  const userStore = useUserStore();
+  if (isAdminRole(userStore.userRoles as string[] | undefined)) return true;
 
-  const hit = (c: string) => codes.has(c);
+  const hit = (c: string) => {
+    if (codes.has(c)) return true;
+    const parts = c.split(':');
+    const ns = parts.length >= 2 ? parts.slice(0, 2).join(':') : c;
+    let nsConfigured = false;
+    for (const cc of codes) {
+      if (cc === ns || cc.startsWith(`${ns}:`)) {
+        nsConfigured = true;
+        break;
+      }
+    }
+    return !nsConfigured;
+  };
   return options?.requireAll
     ? required.every(hit)
     : required.some(hit);

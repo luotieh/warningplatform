@@ -19,6 +19,7 @@ import (
 
 	"code.yt-security.com/public/core/generate/ulid"
 	"github.com/xuri/excelize/v2"
+	"gorm.io/gorm"
 )
 
 func (s *serviceMonitor) GenerateImportTemplate(_ context.Context) ([]byte, error) {
@@ -318,7 +319,13 @@ func (s *serviceMonitor) runImportAsync(result *contract.ImportResult, dataRows 
 		slog.Info("[Import] 协议探测完成", "elapsed", time.Since(startTime))
 	}
 
-	// ── Phase 3: 批量数据库写入 ──
+	// ── Phase 3: 去重检查 & 批量数据库写入 ──
+	session := s.session().WithContext(ctx)
+
+	existingTargets := s.buildExistingTargetIndex(session)
+	existingTasks := s.buildExistingTaskIndex(session)
+	assetIndex := s.buildAssetIndex(session)
+
 	const batchSize = 100
 	for batchStart := 0; batchStart < len(parsed); batchStart += batchSize {
 		batchEnd := batchStart + batchSize
@@ -339,18 +346,64 @@ func (s *serviceMonitor) runImportAsync(result *contract.ImportResult, dataRows 
 				continue
 			}
 
-			target := &model.MonitorTarget{
-				Name:          p.name,
-				TargetType:    p.targetType,
-				TargetValue:   p.targetValue,
-				DefaultScheme: p.defaultScheme,
-				VirtualHost:   p.virtualHost,
-				Enabled:       true,
+			taskURL := p.pathOrURL
+			if !strings.Contains(taskURL, "://") {
+				taskURL = p.defaultScheme + "://" + p.targetValue + p.pathOrURL
 			}
-			target.ID = ulid.GenerateID()
+			taskKey := strings.ToLower(p.targetValue + "|" + taskURL)
+			if _, dup := existingTasks[taskKey]; dup {
+				rr.Error = "该监测任务已存在，已跳过"
+				rowResults[i] = rr
+				continue
+			}
+
+			var targetID string
+			if existing, ok := existingTargets[strings.ToLower(p.targetValue)]; ok {
+				targetID = existing.ID
+			} else {
+				target := &model.MonitorTarget{
+					Name:          p.name,
+					TargetType:    p.targetType,
+					TargetValue:   p.targetValue,
+					DefaultScheme: p.defaultScheme,
+					VirtualHost:   p.virtualHost,
+					Enabled:       true,
+				}
+				target.ID = ulid.GenerateID()
+
+				if assetID, found := assetIndex[strings.ToLower(p.targetValue)]; found {
+					target.AssetID = assetID
+				}
+
+				row := p.dataRow.cells
+				for _, dc := range []struct {
+					offset int
+					dim    string
+				}{
+					{1, "domain_hijack"}, {4, "sensitive_file"},
+				} {
+					enabled := cell(row, p.dimStart+dc.offset) != "关闭"
+					cfg := map[string]any{"enabled": enabled}
+					if defCfg, ok := defaults[dc.dim]; ok {
+						for k, v := range defCfg {
+							if k != "enabled" {
+								cfg[k] = v
+							}
+						}
+					}
+					target.SetDimensionConfig(dc.dim, cfg)
+				}
+				if targetHasScheduledDimensions(target) {
+					target.ScheduleEnabled = true
+				}
+
+				targets = append(targets, target)
+				targetID = target.ID
+				existingTargets[strings.ToLower(p.targetValue)] = target
+			}
 
 			pt := &model.MonitorPathTask{
-				TargetID: target.ID,
+				TargetID: targetID,
 				Name:     p.name,
 				Enabled:  true,
 			}
@@ -361,13 +414,17 @@ func (s *serviceMonitor) runImportAsync(result *contract.ImportResult, dataRows 
 				pt.Path = p.pathOrURL
 			}
 
+			if assetID, found := assetIndex[strings.ToLower(p.targetValue)]; found {
+				pt.AssetID = assetID
+			}
+
 			row := p.dataRow.cells
 			for _, dc := range []struct {
 				offset int
 				dim    string
 			}{
-				{0, "availability"}, {1, "domain_hijack"}, {2, "tamper"},
-				{3, "sensitive_word"}, {4, "sensitive_file"}, {5, "blacklink"},
+				{0, "availability"}, {2, "tamper"},
+				{3, "sensitive_word"}, {5, "blacklink"},
 			} {
 				enabled := cell(row, p.dimStart+dc.offset) != "关闭"
 				cfg := map[string]any{"enabled": enabled}
@@ -378,27 +435,20 @@ func (s *serviceMonitor) runImportAsync(result *contract.ImportResult, dataRows 
 						}
 					}
 				}
-				if contains(model.MonitorPathDimensions, dc.dim) {
-					pt.SetDimensionConfig(dc.dim, cfg)
-				} else if contains(model.MonitorTargetDimensions, dc.dim) {
-					target.SetDimensionConfig(dc.dim, cfg)
-				}
+				pt.SetDimensionConfig(dc.dim, cfg)
 			}
 			seedPathTaskDefaults(pt)
-			if targetHasScheduledDimensions(target) {
-				target.ScheduleEnabled = true
-			}
 
-			targets = append(targets, target)
 			pathTasks = append(pathTasks, pt)
+			existingTasks[taskKey] = true
 			rr.Success = true
-			rr.TargetID = target.ID
+			rr.TargetID = targetID
 			rr.TaskID = pt.ID
 			rowResults[i] = rr
 		}
 
 		if len(targets) > 0 {
-			if err := s.session().WithContext(ctx).CreateInBatches(targets, batchSize).Error; err != nil {
+			if err := session.CreateInBatches(targets, batchSize).Error; err != nil {
 				slog.Error("[Import] 批量创建目标失败", "error", err)
 				for i := range rowResults {
 					if rowResults[i].Success {
@@ -412,7 +462,7 @@ func (s *serviceMonitor) runImportAsync(result *contract.ImportResult, dataRows 
 		}
 
 		if len(pathTasks) > 0 {
-			if err := s.session().WithContext(ctx).CreateInBatches(pathTasks, batchSize).Error; err != nil {
+			if err := session.CreateInBatches(pathTasks, batchSize).Error; err != nil {
 				slog.Error("[Import] 批量创建路径任务失败", "error", err)
 				for i := range rowResults {
 					if rowResults[i].Success {
@@ -652,6 +702,87 @@ func contains(ss []string, v string) bool {
 		}
 	}
 	return false
+}
+
+func (s *serviceMonitor) buildExistingTargetIndex(db *gorm.DB) map[string]*model.MonitorTarget {
+	var targets []model.MonitorTarget
+	db.Select("id, target_value, asset_id").Find(&targets)
+	idx := make(map[string]*model.MonitorTarget, len(targets))
+	for i := range targets {
+		idx[strings.ToLower(targets[i].TargetValue)] = &targets[i]
+	}
+	return idx
+}
+
+func (s *serviceMonitor) buildExistingTaskIndex(db *gorm.DB) map[string]bool {
+	type taskRow struct {
+		TargetValue string
+		URLOverride string
+		Path        string
+	}
+	var rows []taskRow
+	db.Model(&model.MonitorPathTask{}).
+		Select("t.target_value, pt.url_override, pt.path").
+		Joins("AS pt INNER JOIN monitor_targets t ON t.id = pt.target_id").
+		Scan(&rows)
+	idx := make(map[string]bool, len(rows))
+	for _, r := range rows {
+		url := r.URLOverride
+		if url == "" {
+			url = r.Path
+		}
+		key := strings.ToLower(r.TargetValue + "|" + url)
+		idx[key] = true
+	}
+	return idx
+}
+
+func (s *serviceMonitor) buildAssetIndex(db *gorm.DB) map[string]string {
+	type assetRow struct {
+		ID      string
+		Domain  string
+		IPv4    string
+		Address string
+	}
+	var rows []assetRow
+	db.Model(&model.Asset{}).Select("id, domain, ipv4, address").Find(&rows)
+
+	idx := make(map[string]string, len(rows)*2)
+	conflicts := make(map[string]bool)
+
+	addKey := func(key, id string) {
+		key = strings.ToLower(strings.TrimSpace(key))
+		if key == "" || len(key) < 4 {
+			return
+		}
+		if existing, ok := idx[key]; ok {
+			if existing != id {
+				conflicts[key] = true
+			}
+			return
+		}
+		idx[key] = id
+	}
+
+	for _, r := range rows {
+		if r.Domain != "" {
+			addKey(r.Domain, r.ID)
+		}
+		if r.IPv4 != "" {
+			addKey(r.IPv4, r.ID)
+		}
+		if r.Address != "" {
+			addr := strings.TrimSpace(r.Address)
+			if u, err := url.Parse(addr); err == nil && u.Hostname() != "" {
+				addKey(u.Hostname(), r.ID)
+			}
+		}
+	}
+
+	for key := range conflicts {
+		delete(idx, key)
+	}
+	return idx
 }
 
 func mergeWithSeeds(defaults map[string]map[string]any) map[string]map[string]any {

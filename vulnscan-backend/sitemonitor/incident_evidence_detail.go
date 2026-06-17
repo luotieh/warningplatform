@@ -350,10 +350,21 @@ func appendMapSection(b *strings.Builder, title string, v any) {
 	}
 	b.WriteString("\n" + title + "：\n")
 	for k, val := range m {
-		if val == nil || fmt.Sprint(val) == "" {
+		if val == nil {
 			continue
 		}
-		b.WriteString(fmt.Sprintf("  %s：%v\n", k, val))
+		switch tv := val.(type) {
+		case map[string]any, []any:
+			js, err := json.Marshal(tv)
+			if err == nil && len(js) > 0 && string(js) != "null" {
+				b.WriteString(fmt.Sprintf("  %s：%s\n", k, js))
+			}
+		default:
+			s := fmt.Sprint(val)
+			if s != "" {
+				b.WriteString(fmt.Sprintf("  %s：%s\n", k, s))
+			}
+		}
 	}
 }
 

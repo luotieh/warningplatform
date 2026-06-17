@@ -44,13 +44,15 @@ var defaultClientConfig = ClientConfig{
 }
 
 type ScanHTTPClient struct {
-	client      *http.Client
-	config      ClientConfig
-	retryAfter  map[string]time.Time
-	retryMu     sync.RWMutex
-	authHeaders map[string]string
-	authCookies []*http.Cookie
-	rateLimiter *TokenBucket
+	client          *http.Client
+	config          ClientConfig
+	retryAfter      map[string]time.Time
+	retryMu         sync.RWMutex
+	authHeaders     map[string]string
+	authCookies     []*http.Cookie
+	rateLimiter     *TokenBucket
+	hostRateLimiter *HostRateLimiter
+	responseCache   *ResponseCache
 }
 
 func NewScanHTTPClient(opts ...ClientOption) *ScanHTTPClient {
@@ -59,23 +61,28 @@ func NewScanHTTPClient(opts ...ClientOption) *ScanHTTPClient {
 		opt(&cfg)
 	}
 
+	dialer := &net.Dialer{
+		Timeout:   cfg.DialTimeout,
+		KeepAlive: 30 * time.Second,
+	}
+	dnsCache := GetGlobalDNSCache()
+
 	transport := &http.Transport{
 		TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
 		MaxIdleConns:        cfg.MaxIdleConns,
 		MaxIdleConnsPerHost: cfg.MaxIdleConnsPerHost,
 		IdleConnTimeout:     30 * time.Second,
-		DialContext: (&net.Dialer{
-			Timeout:   cfg.DialTimeout,
-			KeepAlive: 30 * time.Second,
-		}).DialContext,
+		DialContext:         dnsCache.CachedDialContext(dialer),
 	}
 
 	sc := &ScanHTTPClient{
-		config:      cfg,
-		retryAfter:  make(map[string]time.Time),
-		authHeaders: cfg.AuthHeaders,
-		authCookies: cfg.AuthCookies,
-		rateLimiter: GetGlobalBucket(),
+		config:          cfg,
+		retryAfter:      make(map[string]time.Time),
+		authHeaders:     cfg.AuthHeaders,
+		authCookies:     cfg.AuthCookies,
+		rateLimiter:     GetGlobalBucket(),
+		hostRateLimiter: GetGlobalHostRateLimiter(),
+		responseCache:   GetGlobalResponseCache(),
 	}
 
 	var redirectFn func(req *http.Request, via []*http.Request) error
@@ -154,6 +161,12 @@ func (sc *ScanHTTPClient) Do(req *http.Request) (*http.Response, error) {
 
 	host := req.URL.Hostname()
 
+	if sc.hostRateLimiter != nil && host != "" {
+		if err := sc.hostRateLimiter.Wait(req.Context(), host); err != nil {
+			return nil, err
+		}
+	}
+
 	sc.retryMu.RLock()
 	until, throttled := sc.retryAfter[host]
 	sc.retryMu.RUnlock()
@@ -212,6 +225,12 @@ func (sc *ScanHTTPClient) handleRetryAfter(host string, resp *http.Response) {
 }
 
 func (sc *ScanHTTPClient) Fetch(req *http.Request) (string, int, error) {
+	if sc.responseCache != nil {
+		if cached := sc.responseCache.Get(req); cached != nil {
+			return string(cached.body), cached.statusCode, nil
+		}
+	}
+
 	resp, err := sc.Do(req)
 	if err != nil {
 		return "", 0, err
@@ -222,10 +241,26 @@ func (sc *ScanHTTPClient) Fetch(req *http.Request) (string, int, error) {
 	if err != nil {
 		return "", resp.StatusCode, err
 	}
+
+	if sc.responseCache != nil {
+		sc.responseCache.Put(req, resp.StatusCode, resp.Header, body)
+	}
+
 	return string(body), resp.StatusCode, nil
 }
 
 func (sc *ScanHTTPClient) FetchFull(req *http.Request) (*http.Response, string, error) {
+	if sc.responseCache != nil {
+		if cached := sc.responseCache.Get(req); cached != nil {
+			syntheticResp := &http.Response{
+				StatusCode: cached.statusCode,
+				Header:     cached.headers.Clone(),
+				Status:     http.StatusText(cached.statusCode),
+			}
+			return syntheticResp, string(cached.body), nil
+		}
+	}
+
 	resp, err := sc.Do(req)
 	if err != nil {
 		return nil, "", err
@@ -236,6 +271,11 @@ func (sc *ScanHTTPClient) FetchFull(req *http.Request) (*http.Response, string, 
 	if err != nil {
 		return resp, "", err
 	}
+
+	if sc.responseCache != nil {
+		sc.responseCache.Put(req, resp.StatusCode, resp.Header, body)
+	}
+
 	return resp, string(body), nil
 }
 

@@ -20,7 +20,6 @@ type ThemeMode = (typeof THEME_MODES)[number];
 
 const SHELL_THEME = {
   builtinType: 'default',
-  mode: 'light',
   semiDarkHeader: false,
   semiDarkSidebar: false,
 } as const;
@@ -73,7 +72,7 @@ function persistTheme(payload: IamThemePayload) {
 }
 
 function applyTheme(payload: IamThemePayload) {
-  const theme: Record<string, unknown> = { ...SHELL_THEME };
+  const theme: Record<string, unknown> = {};
 
   if (payload.mode) {
     theme.mode = payload.mode;
@@ -98,7 +97,7 @@ export function enforceAppShellTheme() {
     theme: {
       ...SHELL_THEME,
       colorPrimary: currentTheme.colorPrimary,
-      mode: currentTheme.mode || SHELL_THEME.mode,
+      mode: currentTheme.mode,
       radius: currentTheme.radius,
     },
   });

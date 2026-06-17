@@ -16,6 +16,7 @@ import (
 	"code.yt-security.com/public/scanengine/core"
 	"vulnscan-backend/model"
 	"vulnscan-backend/scan/orchestrate"
+	"vulnscan-backend/scan/scanhttp"
 	"vulnscan-backend/template/engine"
 )
 
@@ -94,7 +95,11 @@ type Runner struct {
 	templateInstance *engine.TemplateInstance
 	planResolver     *PlanResolver
 
-	findingFilter *FindingFilter
+	ctx              context.Context
+	findingFilter    *FindingFilter
+	scopeFilter      *ScopeFilter
+	qualityCollector *QualityCollector
+	authSession      *scanhttp.AuthSession
 
 	enginePolicy          EnginePolicy
 	persistedFindingCount atomic.Int32
@@ -236,17 +241,33 @@ func (r *Runner) GetTargetHealth(host string) *TargetHealth {
 }
 
 func (r *Runner) Execute(ctx context.Context) {
+	r.ctx = ctx
 	defer func() {
 		close(r.logCh)
 		<-r.logDone
 	}()
 	defer r.tryMergeParentScanTask(context.Background())
 	defer r.finalizeAfterRun(context.Background())
+	defer func() {
+		if r.authSession != nil {
+			r.authSession.Stop()
+		}
+	}()
 
 	r.loadFilters()
+	r.scopeFilter = NewScopeFilter(r.task.Targets)
+	r.qualityCollector = NewQualityCollector()
 
 	r.enginePolicy = ParseEnginePolicy(mergeTaskConfigSource(r.task))
 	r.persistedFindingCount.Store(0)
+
+	if r.enginePolicy.HostRateLimitRPS > 0 {
+		burst := r.enginePolicy.HostRateLimitBurst
+		if burst <= 0 {
+			burst = r.enginePolicy.HostRateLimitRPS * 2
+		}
+		scanhttp.SetGlobalHostRateLimit(float64(r.enginePolicy.HostRateLimitRPS), float64(burst))
+	}
 	if p := r.enginePolicy; p.CircuitFailThreshold > 0 && p.CircuitResetSeconds > 0 {
 		r.circuit = orchestrate.NewCircuitBreaker(p.CircuitFailThreshold, time.Duration(p.CircuitResetSeconds)*time.Second)
 	}
@@ -257,10 +278,24 @@ func (r *Runner) Execute(ctx context.Context) {
 		r.resultCache = NewResultCache(p.CacheMaxEntries, time.Duration(p.CacheTTLSeconds)*time.Second)
 	}
 
+	if authCfg := scanhttp.ParseAuthConfig(r.task.Parameters); authCfg != nil {
+		session, err := scanhttp.NewAuthSession(*authCfg)
+		if err != nil {
+			r.writeLog("warn", "认证登录失败，将以匿名模式扫描: "+err.Error(), "", "auth")
+		} else {
+			r.authSession = session
+			r.writeLog("info", fmt.Sprintf("认证扫描模式已启用 (类型: %s)", authCfg.Type), "", "auth")
+		}
+	}
+
 	slog.Info("[Runner] 开始执行任务", "task_id", r.task.ID, "targets", len(r.task.Targets))
 
 	targets := buildTargets(r.task)
 	config := buildConfig(r.task)
+
+	if r.authSession != nil && r.authSession.IsAuthenticated() {
+		config["auth_enabled"] = true
+	}
 
 	stages, err := r.planResolver.Resolve(r.templateInstance)
 	if err != nil {
@@ -290,6 +325,7 @@ func (r *Runner) Execute(ctx context.Context) {
 		OnModuleStart: func(stage, moduleID string) {
 			if moduleID != "" {
 				r.progress.BeginModule(moduleID)
+				r.qualityCollector.RecordModuleStart(moduleID)
 			}
 			r.progress.SyncToDB(stage)
 			r.publishEvent(NewProgressEvent(r.task.ID, *r.progress.Get()))
@@ -350,6 +386,43 @@ func (r *Runner) Execute(ctx context.Context) {
 		r.publishEvent(NewDoneEvent(r.task.ID, model.TaskStatusCompleted, ""))
 	}
 
+	allFindings := r.progress.GetFindings()
+	if len(allFindings) >= 2 {
+		analyzer := NewContextAnalyzer(allFindings)
+		chains := analyzer.Analyze()
+		if len(chains) > 0 {
+			targets := buildTargets(r.task)
+			chainFindings := GenerateCorrelationFindings(chains, targets)
+			if len(chainFindings) > 0 {
+				r.progress.AppendFindings(chainFindings)
+				r.writeLog("info",
+					fmt.Sprintf("[关联分析] 发现 %d 条攻击链", len(chains)),
+					"", "context_analysis")
+				for _, ch := range chains {
+					r.writeLog("warn",
+						fmt.Sprintf("[攻击链] %s (风险评分: %.1f, 严重程度: %s)", ch.Title, ch.RiskScore, ch.Severity),
+						"", "context_analysis")
+				}
+			}
+		}
+	}
+
+	if r.qualityCollector != nil {
+		if qr, err := GenerateQualityReport(r.db, r.task.ID, r.qualityCollector); err == nil {
+			r.writeLog("info",
+				fmt.Sprintf("[质量报告] 评分: %d/100 | 目标可达: %d/%d | 模块完成: %d/%d | 发现: %d (漏洞: %d) | HTTP缓存命中率: %.0f%%",
+					qr.Score,
+					qr.Targets.Reachable, qr.Targets.Total,
+					qr.Modules.Completed, qr.Modules.Total,
+					qr.Coverage.TotalFindings, qr.Coverage.VulnFindings,
+					qr.Performance.HTTPCacheHitRate*100),
+				"", "quality_report")
+			for _, w := range qr.Warnings {
+				r.writeLog("warn", "[质量警告] "+w, "", "quality_report")
+			}
+		}
+	}
+
 	slog.Info("[Runner] 任务执行完成",
 		"task_id", r.task.ID,
 		"findings", r.progress.Get().FindingCount,
@@ -360,6 +433,13 @@ func (r *Runner) Execute(ctx context.Context) {
 func (r *Runner) persistAndPublish(findings []*core.Finding, stage, moduleID string) {
 	if len(findings) == 0 {
 		return
+	}
+
+	if r.scopeFilter != nil {
+		findings = r.scopeFilter.FilterFindings(findings)
+		if len(findings) == 0 {
+			return
+		}
 	}
 
 	if r.findingFilter != nil {

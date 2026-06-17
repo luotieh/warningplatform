@@ -32,6 +32,7 @@ import MonitorCapabilities from '#/views/site-monitor/capabilities.vue';
 
 import { message } from '#/adapter/naive';
 import {
+  fixAssetLinks,
   getAlertConfig,
   getCleanupConfig,
   getDefaultConfigList,
@@ -200,6 +201,26 @@ async function handleRunCleanup() {
     message.error(e?.msg || '执行清理失败');
   } finally {
     cleanupRunning.value = false;
+  }
+}
+
+const fixingLinks = ref(false);
+
+async function handleFixAssetLinks() {
+  fixingLinks.value = true;
+  try {
+    const res = await fixAssetLinks();
+    const data = (res as any)?.data ?? res;
+    const fixed = data?.fixed ?? 0;
+    message.success(
+      fixed > 0
+        ? `修复完成，清除了 ${fixed} 个错误的资产关联`
+        : '检查完成，没有发现错误的资产关联',
+    );
+  } catch (e: any) {
+    message.error(e?.msg || '修复失败');
+  } finally {
+    fixingLinks.value = false;
   }
 }
 
@@ -679,6 +700,20 @@ onMounted(() => {
                     @click="handleRunCleanup"
                   >
                     立即执行清理
+                  </NButton>
+                </NSpace>
+              </NFormItem>
+              <NDivider />
+              <NFormItem label="资产关联修复">
+                <NSpace vertical :size="8">
+                  <span style="font-size: 13px; color: var(--n-text-color-3)">
+                    检查并清除监测目标中错误的资产关联（target_value 与关联资产的域名/IP 不匹配时自动清除）
+                  </span>
+                  <NButton
+                    :loading="fixingLinks"
+                    @click="handleFixAssetLinks"
+                  >
+                    修复资产关联
                   </NButton>
                 </NSpace>
               </NFormItem>

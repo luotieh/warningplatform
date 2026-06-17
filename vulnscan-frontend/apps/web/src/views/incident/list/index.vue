@@ -5,12 +5,13 @@ import type { DataTableRowKey } from 'naive-ui';
 import {
   NButton, NCard, NDataTable, NDropdown, NInput, NSelect, NSpace, NTag, NPopconfirm,
   NModal, NForm, NFormItem, NDatePicker, NInputNumber, NTabs, NTabPane,
-  useMessage,
+  NRadio, NRadioGroup,
+  useMessage, useDialog,
 } from 'naive-ui';
 import { useRouter } from 'vue-router';
 import {
   getIncidentList, deleteIncident, aiPreAudit, createIncident,
-  transferToCircular,
+  transferToCircular, manualAudit,
   type SecurityIncident, type CreateIncidentReq,
 } from '#/api/incident';
 import {
@@ -18,7 +19,7 @@ import {
   downloadOneIncidentExport,
   type IncidentExportFormat,
 } from '../incident-export';
-import IncidentPreviewDrawer from '../components/IncidentPreviewDrawer.vue';
+import IncidentReportPreview from '../components/IncidentReportPreview.vue';
 import { useNaiveTablePagination } from '#/composables/useNaiveTablePagination';
 import CreateDispatchDrawer from '#/views/dispatch/CreateDispatchDrawer.vue';
 import { useRoutePerm } from '#/composables/use-route-perm';
@@ -29,6 +30,7 @@ const { perm } = useRoutePerm('/incident/list');
 
 const router = useRouter();
 const message = useMessage();
+const dialog = useDialog();
 const loading = ref(false);
 const data = ref<SecurityIncident[]>([]);
 const total = ref(0);
@@ -175,41 +177,67 @@ async function handleBatchTransfer() {
   await fetchData();
 }
 
+const showReviewModal = ref(false);
+const reviewTargetId = ref('');
+const reviewForm = ref({ passed: true, opinion: '' });
+
+function openReview(row: SecurityIncident) {
+  reviewTargetId.value = row.id;
+  reviewForm.value = { passed: true, opinion: '' };
+  showReviewModal.value = true;
+}
+
+async function handleManualReview() {
+  try {
+    await manualAudit(reviewTargetId.value, reviewForm.value);
+    message.success(reviewForm.value.passed ? '复核通过' : '复核完成');
+    showReviewModal.value = false;
+    await fetchData();
+  } catch (e: any) {
+    message.error(e?.message || '复核失败');
+  }
+}
+
 const columns = computed(() => [
   { type: 'selection' as const },
-  { title: '事件编号', key: 'incident_no', width: 160, ellipsis: { tooltip: true } },
-  { title: '事件名称', key: 'name', minWidth: 200, render: (row: SecurityIncident) => h('a', { style: 'color:#2080f0;cursor:pointer', onClick: () => router.push(`/incident/list/${row.id}`) }, row.name) },
+  { title: '事件编号', key: 'incident_no', width: 160, ellipsis: { tooltip: true }, align: 'center' as const },
+  { title: '事件名称', key: 'name', minWidth: 200, align: 'center' as const, render: (row: SecurityIncident) => h('a', { style: 'color:#2080f0;cursor:pointer', onClick: () => router.push(`/incident/list/${row.id}`) }, row.name) },
   { title: '级别', key: 'level', width: 80, align: 'center' as const, render: (row: SecurityIncident) => h('span', { style: `padding:2px 8px;border-radius:4px;font-size:12px;font-weight:600;color:#fff;background:${levelColors[row.level] ?? '#999'}` }, levelLabels[row.level] ?? '-') },
-  { title: '状态', key: 'status', width: 110, render: (row: SecurityIncident) => h(NTag, { size: 'small', type: (statusTypes[row.status] || 'default') as any, bordered: false }, () => statusLabels[row.status] ?? '-') },
-  { title: 'AI预审', key: 'ai_pre_status', width: 90, render: (row: SecurityIncident) => h(NTag, { size: 'small', type: row.ai_pre_status === 1 ? 'success' : 'default', bordered: false }, () => row.ai_pre_status === 1 ? '已预审' : '未预审') },
-  { title: '处置截止时间', key: 'sla_deadline', width: 170, render: (row: SecurityIncident) => { if (!row.sla_deadline) return '-'; const d = new Date(row.sla_deadline); const overdue = d < new Date(); const fmt = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; return h('span', { style: overdue ? 'color:#d03050;font-weight:600' : '' }, fmt); } },
-  { title: '创建时间', key: 'created_at', width: 170, render: (row: SecurityIncident) => { if (!row.created_at) return '-'; const d = new Date(row.created_at); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; } },
-  { title: '操作', key: 'actions', width: 200, fixed: 'right' as const, render: (row: SecurityIncident) => {
+  { title: '状态', key: 'status', width: 110, align: 'center' as const, render: (row: SecurityIncident) => h(NTag, { size: 'small', type: (statusTypes[row.status] || 'default') as any, bordered: false }, () => statusLabels[row.status] ?? '-') },
+  { title: 'AI预审', key: 'ai_pre_status', width: 90, align: 'center' as const, render: (row: SecurityIncident) => h(NTag, { size: 'small', type: row.ai_pre_status === 1 ? 'success' : 'default', bordered: false }, () => row.ai_pre_status === 1 ? '已预审' : '未预审') },
+  { title: '处置截止时间', key: 'sla_deadline', width: 170, align: 'center' as const, render: (row: SecurityIncident) => { if (!row.sla_deadline) return '-'; const d = new Date(row.sla_deadline); const overdue = d < new Date(); const fmt = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; return h('span', { style: overdue ? 'color:#d03050;font-weight:600' : '' }, fmt); } },
+  { title: '创建时间', key: 'created_at', width: 170, align: 'center' as const, render: (row: SecurityIncident) => { if (!row.created_at) return '-'; const d = new Date(row.created_at); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; } },
+  { title: '操作', key: 'actions', width: 350, align: 'center' as const, fixed: 'right' as const, render: (row: SecurityIncident) => {
     const moreOpts: any[] = [
-      { label: '派发处置', key: 'dispatch' },
-      { label: '转通报', key: 'transfer' },
       { label: '导出 Word', key: 'docx' },
       { label: '导出 PDF', key: 'pdf' },
     ];
     if (row.status === 1 || row.status === 3) {
+      moreOpts.push({ type: 'divider', key: 'd0' });
       moreOpts.push({ label: 'AI预审', key: 'ai-audit' });
     }
     moreOpts.push({ type: 'divider', key: 'd1' });
     moreOpts.push({ label: '删除', key: 'delete', props: { style: 'color: #d03050' } });
     function handleMoreSelect(key: string) {
-      if (key === 'dispatch') openDispatch(row);
-      else if (key === 'transfer') handleTransferToCircular(row);
-      else if (key === 'docx' || key === 'pdf') handleRowExport(row, key as IncidentExportFormat);
+      if (key === 'docx' || key === 'pdf') handleRowExport(row, key as IncidentExportFormat);
       else if (key === 'ai-audit') handleAiAudit(row.id);
       else if (key === 'delete') handleDelete(row.id);
     }
-    return h(NSpace, { size: 4 }, () => [
+    const buttons = [
       h(NButton, { size: 'tiny', text: true, onClick: () => openPreview(row) }, () => '预览'),
       h(NButton, { size: 'tiny', type: 'info', text: true, onClick: () => router.push(`/incident/list/${row.id}`) }, () => '详情'),
+    ];
+    if (row.status === 1) {
+      buttons.push(h(NButton, { size: 'tiny', type: 'primary', text: true, onClick: () => openReview(row) }, () => '复核'));
+    }
+    buttons.push(
+      h(NButton, { size: 'tiny', type: 'warning', text: true, onClick: () => openDispatch(row) }, () => '派发'),
+      h(NButton, { size: 'tiny', type: 'success', text: true, onClick: () => handleTransferToCircular(row) }, () => '转通报'),
       h(NDropdown, { trigger: 'click', options: moreOpts, onSelect: handleMoreSelect }, {
-        default: () => h(NButton, { size: 'tiny', text: true, quaternary: true }, () => '更多'),
+        default: () => h(NButton, { size: 'tiny', text: true }, () => '更多'),
       }),
-    ]);
+    );
+    return h(NSpace, { size: 10, justify: 'center' }, () => buttons);
   } },
 ]);
 
@@ -226,9 +254,17 @@ const { pagination } = useNaiveTablePagination({ page, pageSize, total, onFetch:
 async function handleAiAudit(id: string) {
   try { await aiPreAudit(id); message.success('AI预审已完成'); await fetchData(); } catch (e: any) { message.error(e?.message || 'AI预审失败'); }
 }
-async function handleDelete(id: string) {
-  if (!window.confirm('确认删除该安全事件？此操作不可恢复。')) return;
-  try { await deleteIncident(id); message.success('已删除'); await fetchData(); } catch (e: any) { message.error(e?.message || '删除失败'); }
+function handleDelete(id: string) {
+  dialog.error({
+    title: '确认删除',
+    content: '确认删除该安全事件？此操作不可恢复。',
+    positiveText: '确认删除',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try { await deleteIncident(id); message.success('已删除'); await fetchData(); }
+      catch (e: any) { message.error(e?.message || '删除失败'); }
+    },
+  });
 }
 
 async function handleBatchDelete() {
@@ -316,9 +352,9 @@ onMounted(fetchData);
         :pagination="pagination" />
     </NCard>
 
-    <IncidentPreviewDrawer
+    <IncidentReportPreview
       v-model:show="showPreview"
-      :incident-id="previewId"
+      :incident-id="previewId ?? ''"
     />
 
     <NModal v-model:show="showCreate" preset="card" title="新建安全事件" style="width:720px;max-width:90vw" :segmented="{ content: true }">
@@ -439,5 +475,25 @@ onMounted(fetchData);
       default-type="security_fix"
       :source-detail="dispatchIncident ? { severity: levelLabels[dispatchIncident.level], status: statusLabels[dispatchIncident.status] } : undefined"
     />
+
+    <NModal v-model:show="showReviewModal" preset="card" title="人工复核" style="width:500px;max-width:90vw" :segmented="{ content: true }">
+      <NForm label-placement="left" label-width="80" style="padding-top:12px">
+        <NFormItem label="复核结果">
+          <NRadioGroup v-model:value="reviewForm.passed">
+            <NRadio :value="true">通过</NRadio>
+            <NRadio :value="false">不通过</NRadio>
+          </NRadioGroup>
+        </NFormItem>
+        <NFormItem label="复核意见">
+          <NInput v-model:value="reviewForm.opinion" type="textarea" :rows="3" placeholder="请输入复核意见（可选）" />
+        </NFormItem>
+      </NForm>
+      <template #footer>
+        <NSpace justify="end">
+          <NButton @click="showReviewModal = false">取消</NButton>
+          <NButton type="primary" @click="handleManualReview">提交复核</NButton>
+        </NSpace>
+      </template>
+    </NModal>
   </div>
 </template>

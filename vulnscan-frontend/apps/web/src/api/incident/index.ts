@@ -287,6 +287,10 @@ export function manualAudit(id: string, data: { passed: boolean; opinion?: strin
   return requestClient.post(`/incident/incidents/${id}/manual-audit`, data);
 }
 
+export function resubmitForReview(id: string, data?: { reason?: string }) {
+  return requestClient.post(`/incident/incidents/${id}/resubmit`, data);
+}
+
 export function aiClassify(id: string) {
   return requestClient.post(`/incident/incidents/${id}/ai-classify`);
 }

@@ -3,17 +3,17 @@ import { computed, onMounted, ref } from 'vue';
 import {
   NButton, NCard, NDescriptions, NDescriptionsItem, NSpace, NSteps, NStep,
   NTag, NTabPane, NTabs, NTimeline, NTimelineItem, NEmpty, NSpin, NProgress,
-  NModal, NForm, NFormItem, NInput, NRadioGroup, NRadio, NAlert,
+  NModal, NForm, NFormItem, NInput, NRadioGroup, NRadio, NAlert, NSelect,
   NGrid, NGridItem,
   useMessage,
 } from 'naive-ui';
 import { useRoute, useRouter } from 'vue-router';
 import {
-  getIncidentDetail, getOplogList, getCommentList, createComment,
-  deleteComment, manualAudit, aiPreAudit, submitRemediation,
+  getIncidentDetail, getOplogList,
+  manualAudit, aiPreAudit, submitRemediation,
   verifyRemediation, closeIncident, getKnowledgeRecommend,
-  transferToCircular,
-  type SecurityIncident, type IncidentComment, type OpLog,
+  transferToCircular, resubmitForReview, updateIncident,
+  type SecurityIncident, type OpLog,
 } from '#/api/incident';
 import { getTransferStatus } from '#/api/circular';
 import { getVulnList, type Vulnerability } from '#/api/vuln';
@@ -40,10 +40,8 @@ const message = useMessage();
 const loading = ref(true);
 const incident = ref<SecurityIncident | null>(null);
 const oplogs = ref<OpLog[]>([]);
-const comments = ref<IncidentComment[]>([]);
 const knowledgeRecs = ref<any[]>([]);
 const relatedVulns = ref<Vulnerability[]>([]);
-const newComment = ref('');
 
 const levelLabels: Record<number, string> = { 1: '低危', 2: '中危', 3: '高危', 4: '紧急' };
 const levelColors: Record<number, string> = { 1: '#18a058', 2: '#2080f0', 3: '#f0a020', 4: '#d03050' };
@@ -194,11 +192,6 @@ async function fetchData() {
     } catch { oplogs.value = []; }
 
     try {
-      const r = await getCommentList({ incident_id: id });
-      comments.value = (r as any).items ?? [];
-    } catch { comments.value = []; }
-
-    try {
       knowledgeRecs.value = await getKnowledgeRecommend({ incident_id: id }) as any[];
     } catch { knowledgeRecs.value = []; }
 
@@ -253,10 +246,84 @@ const transferredCircularCode = ref<string | null>(null);
 
 const canAiPreAudit = computed(() => incident.value?.status === 1 || incident.value?.status === 3);
 const canManualAudit = computed(() => incident.value?.status === 1);
+const canResubmit = computed(() => incident.value?.status === 3);
+const canEditIncident = computed(() => {
+  const s = incident.value?.status;
+  return s === 1 || s === 3;
+});
 const canTransferToCircular = computed(() => {
   const s = incident.value?.status;
   return s === 2 && !transferredCircularCode.value;
 });
+
+const showResubmitModal = ref(false);
+const resubmitReason = ref('');
+const showEditModal = ref(false);
+const editForm = ref<Record<string, any>>({});
+
+async function handleResubmit() {
+  try {
+    await resubmitForReview(route.params.id as string, { reason: resubmitReason.value });
+    message.success('已重新提交复核');
+    showResubmitModal.value = false;
+    resubmitReason.value = '';
+    await fetchData();
+  } catch (e: any) { message.error(e?.message || '重新提交失败'); }
+}
+
+function openEditModal() {
+  if (!incident.value) return;
+  editForm.value = {
+    name: incident.value.name,
+    level: incident.value.level,
+  };
+  showEditModal.value = true;
+}
+
+async function handleEditSave() {
+  try {
+    await updateIncident(route.params.id as string, editForm.value);
+    message.success('事件已更新');
+    showEditModal.value = false;
+    await fetchData();
+  } catch (e: any) { message.error(e?.message || '更新失败'); }
+}
+
+const oplogDetailLabels: Record<string, string> = {
+  audit_result: '审核结果',
+  opinion: '审核意见',
+  ai_category: 'AI分类',
+  confidence: '置信度',
+  risk_score: '风险评分',
+  llm_used: 'LLM分析',
+  close_reason: '关闭原因',
+  reason: '原因',
+  circular_code: '通报编号',
+  target_system: '目标系统',
+  level: '事件等级',
+  name: '事件名称',
+};
+const oplogValueLabels: Record<string, Record<string, string>> = {
+  audit_result: { success: '通过', fail: '不通过' },
+  llm_used: { true: '是', false: '否' },
+};
+
+function formatOplogDetail(detail: string): Array<{ label: string; value: string }> {
+  try {
+    const obj = JSON.parse(detail);
+    if (typeof obj !== 'object' || obj === null) return [{ label: '详情', value: detail }];
+    return Object.entries(obj)
+      .filter(([, v]) => v !== '' && v !== null && v !== undefined)
+      .map(([k, v]) => {
+        const label = oplogDetailLabels[k] || k;
+        const strVal = String(v);
+        const mapped = oplogValueLabels[k]?.[strVal];
+        return { label, value: mapped ?? strVal };
+      });
+  } catch {
+    return [{ label: '详情', value: detail }];
+  }
+}
 
 async function refreshTransferStatus() {
   const no = incident.value?.incident_no;
@@ -340,16 +407,6 @@ async function handleTransferToCircular() {
   }
 }
 
-async function handleAddComment() {
-  if (!newComment.value.trim()) return;
-  try { await createComment({ incident_id: route.params.id as string, content: newComment.value }); newComment.value = ''; message.success('评论已添加'); await fetchData(); }
-  catch (e: any) { message.error(e?.message || '添加失败'); }
-}
-
-async function handleDeleteComment(id: string) {
-  try { await deleteComment(id); message.success('已删除'); await fetchData(); }
-  catch (e: any) { message.error(e?.message || '删除失败'); }
-}
 
 function formatTime(t?: string) {
   if (!t) return '-';
@@ -392,18 +449,19 @@ onMounted(fetchData);
             </NSpace>
           </template>
           <template #header-extra>
-            <NSpace :size="8">
-              <NButton size="small" @click="showReportPreview = true">报告预览</NButton>
+            <NSpace :size="10">
+              <NButton size="small" secondary @click="showReportPreview = true">报告预览</NButton>
               <NButton
                 v-perm.disable="perm('export')"
                 size="small"
+                secondary
                 :loading="exportingReport"
                 @click="handleExportReport('docx')"
               >导出 Word</NButton>
               <NButton
                 v-perm.disable="perm('export')"
                 size="small"
-                type="primary"
+                secondary
                 :loading="exportingReport"
                 @click="handleExportReport('pdf')"
               >导出 PDF</NButton>
@@ -412,6 +470,7 @@ onMounted(fetchData);
                 v-perm.disable="perm('ai-audit')"
                 size="small"
                 type="info"
+                secondary
                 @click="handleAiAudit"
               >智能预审</NButton>
               <NButton
@@ -421,6 +480,18 @@ onMounted(fetchData);
                 type="primary"
                 @click="showAuditModal=true"
               >人工复核</NButton>
+              <NButton
+                v-if="canResubmit"
+                size="small"
+                type="warning"
+                @click="showResubmitModal=true"
+              >重新提交复核</NButton>
+              <NButton
+                v-if="canEditIncident"
+                size="small"
+                secondary
+                @click="openEditModal"
+              >编辑事件</NButton>
               <NButton
                 v-if="incident.status===2||incident.status===4"
                 v-perm.disable="perm('remediate')"
@@ -439,20 +510,21 @@ onMounted(fetchData);
                 v-if="incident.status>=2&&incident.status<=6"
                 v-perm.disable="perm('close')"
                 size="small"
+                secondary
                 @click="handleClose"
               >关闭事件</NButton>
               <NButton
                 v-if="canTransferToCircular"
                 v-perm.disable="perm('transfer')"
                 size="small"
-                type="error"
+                type="warning"
                 :loading="transferring"
                 @click="handleTransferToCircular"
               >转为通报</NButton>
               <NButton
                 v-else-if="transferredCircularCode"
                 size="small"
-                type="error"
+                type="info"
                 @click="router.push(`/circular/input/${transferredCircularCode}`)"
               >查看通报</NButton>
             </NSpace>
@@ -803,35 +875,6 @@ onMounted(fetchData);
             </NCard>
           </NTabPane>
 
-          <!-- 评论 -->
-          <NTabPane name="comments" tab="评论">
-            <NSpace vertical :size="12">
-              <NSpace :size="8">
-                <NInput
-                  v-model:value="newComment"
-                  placeholder="输入评论..."
-                  style="width:400px"
-                  @keyup.enter="handleAddComment"
-                />
-                <NButton type="primary" size="small" @click="handleAddComment">发送</NButton>
-              </NSpace>
-              <div
-                v-for="c in comments"
-                :key="c.id"
-                style="padding:8px 12px;background:#f8f8fa;border-radius:6px"
-              >
-                <div style="font-size:12px;color:#999;margin-bottom:4px">
-                  {{ c.author_name || c.author || '-' }} · {{ formatTime(c.created_at) }}
-                </div>
-                <div style="font-size:13px;white-space:pre-wrap">{{ c.content }}</div>
-                <NButton text type="error" size="tiny" @click="handleDeleteComment(c.id)" style="margin-top:4px">
-                  删除
-                </NButton>
-              </div>
-              <NEmpty v-if="!comments.length" description="暂无评论" />
-            </NSpace>
-          </NTabPane>
-
           <!-- 操作日志 -->
           <NTabPane name="oplogs" tab="操作日志">
             <NTimeline v-if="oplogs.length">
@@ -848,10 +891,16 @@ onMounted(fetchData);
                 <div v-if="log.result" style="font-size:12px;color:#666;margin-top:2px">
                   结果: {{ log.result }}
                 </div>
-                <div
-                  v-if="log.detail"
-                  style="font-size:12px;color:#999;margin-top:2px;white-space:pre-wrap"
-                >{{ log.detail }}</div>
+                <div v-if="log.detail" style="margin-top:4px">
+                  <div
+                    v-for="(item, idx) in formatOplogDetail(log.detail)"
+                    :key="idx"
+                    style="font-size:12px;color:#888;line-height:1.6"
+                  >
+                    <span style="color:#666;font-weight:500">{{ item.label }}：</span>
+                    <span>{{ item.value }}</span>
+                  </div>
+                </div>
               </NTimelineItem>
             </NTimeline>
             <NEmpty v-else description="暂无操作记录" />
@@ -894,6 +943,51 @@ onMounted(fetchData);
             </NFormItem>
             <NFormItem label="整改结果">
               <NInput v-model:value="remForm.result" type="textarea" :rows="3" />
+            </NFormItem>
+          </NForm>
+        </NModal>
+
+        <NModal
+          v-model:show="showResubmitModal"
+          preset="dialog"
+          title="重新提交复核"
+          positive-text="确认提交"
+          negative-text="取消"
+          @positive-click="handleResubmit"
+        >
+          <NAlert type="info" style="margin-bottom: 12px">
+            事件将重新进入"待人工复核"状态，您可以先编辑事件信息后再提交。
+          </NAlert>
+          <NForm label-placement="left" label-width="80">
+            <NFormItem label="重提原因">
+              <NInput v-model:value="resubmitReason" type="textarea" :rows="3" placeholder="请说明重新提交的原因" />
+            </NFormItem>
+          </NForm>
+        </NModal>
+
+        <NModal
+          v-model:show="showEditModal"
+          preset="dialog"
+          title="编辑事件"
+          positive-text="保存"
+          negative-text="取消"
+          style="width: 600px"
+          @positive-click="handleEditSave"
+        >
+          <NForm label-placement="left" label-width="80">
+            <NFormItem label="事件名称">
+              <NInput v-model:value="editForm.name" />
+            </NFormItem>
+            <NFormItem label="事件等级">
+              <NSelect
+                v-model:value="editForm.level"
+                :options="[
+                  { label: '低危', value: 1 },
+                  { label: '中危', value: 2 },
+                  { label: '高危', value: 3 },
+                  { label: '紧急', value: 4 },
+                ]"
+              />
             </NFormItem>
           </NForm>
         </NModal>

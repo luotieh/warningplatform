@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import {
   NButton,
   NDrawer,
@@ -30,6 +30,60 @@ function dash(v?: string) {
   return v?.trim() ? v : '-';
 }
 
+interface EvidenceGroup {
+  title: string;
+  items: Array<{ key: string; value: string }>;
+}
+
+function parseEvidenceText(text: string): EvidenceGroup[] | null {
+  if (!text?.trim()) return null;
+  const lines = text.split('\n');
+  const groups: EvidenceGroup[] = [];
+  let current: EvidenceGroup | null = null;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    const sectionMatch = trimmed.match(/^(.+?)：$/);
+    if (sectionMatch && !trimmed.includes('  ')) {
+      current = { title: sectionMatch[1]!, items: [] };
+      groups.push(current);
+      continue;
+    }
+
+    const kvMatch = trimmed.match(/^\s*(.+?)[:：]\s*(.+)$/);
+    if (kvMatch) {
+      let val = kvMatch[2]!.trim();
+      try {
+        const parsed = JSON.parse(val);
+        if (typeof parsed === 'object' && parsed !== null) {
+          val = JSON.stringify(parsed, null, 2);
+        }
+      } catch { /* not JSON, keep as-is */ }
+      const item = { key: kvMatch[1]!.trim(), value: val };
+      if (current) {
+        current.items.push(item);
+      } else {
+        current = { title: '基本信息', items: [item] };
+        groups.push(current);
+      }
+      continue;
+    }
+
+    if (current) {
+      current.items.push({ key: '', value: trimmed });
+    }
+  }
+  return groups.length > 0 ? groups : null;
+}
+
+const detailGroups = computed(() => {
+  const detail = report.value?.description_sections?.detail;
+  if (!detail?.trim()) return null;
+  return parseEvidenceText(detail);
+});
+
 async function loadPreview() {
   if (!props.incidentId) return;
   loading.value = true;
@@ -51,6 +105,7 @@ async function handleDownload(format: 'word' | 'docx' | 'pdf') {
       props.incidentId,
       format,
       report.value?.incident_no,
+      report.value,
     );
     message.success('报告已下载');
   } catch (e: any) {
@@ -79,7 +134,7 @@ watch(
       <template #header-extra>
         <NSpace>
           <NButton size="small" :loading="exporting" @click="handleDownload('docx')">
-            导出 Word (.docx)
+            导出 Word
           </NButton>
           <NButton size="small" type="primary" :loading="exporting" @click="handleDownload('pdf')">
             导出 PDF
@@ -165,7 +220,30 @@ watch(
                         class="desc-section"
                       >
                         <div class="desc-section__title">三、详细证据</div>
-                        <pre>{{ report.description_sections.detail }}</pre>
+                        <template v-if="detailGroups">
+                          <div
+                            v-for="(group, gi) in detailGroups"
+                            :key="gi"
+                            class="evidence-group"
+                          >
+                            <div class="evidence-group__title">{{ group.title }}</div>
+                            <table class="evidence-kv-table">
+                              <tbody>
+                                <tr
+                                  v-for="(item, ii) in group.items"
+                                  :key="ii"
+                                >
+                                  <td v-if="item.key" class="evidence-kv-key">{{ item.key }}</td>
+                                  <td :colspan="item.key ? 1 : 2" class="evidence-kv-val">
+                                    <pre v-if="item.value.includes('\n')" class="evidence-json">{{ item.value }}</pre>
+                                    <span v-else>{{ item.value }}</span>
+                                  </td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                        </template>
+                        <pre v-else>{{ report.description_sections.detail }}</pre>
                       </div>
                       <div
                         v-if="report.description_sections.trace"
@@ -281,5 +359,50 @@ watch(
 }
 .break-all {
   word-break: break-all;
+}
+.evidence-group {
+  margin-bottom: 12px;
+}
+.evidence-group__title {
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 4px;
+  padding: 4px 8px;
+  background: #f0f5ff;
+  border-left: 3px solid #2080f0;
+}
+.evidence-kv-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+.evidence-kv-table td {
+  padding: 4px 8px;
+  border-bottom: 1px solid #f0f0f0;
+  vertical-align: top;
+}
+.evidence-kv-key {
+  width: 30%;
+  color: #666;
+  font-weight: 500;
+  word-break: break-all;
+}
+.evidence-kv-val {
+  color: #333;
+  word-break: break-all;
+}
+.evidence-json {
+  margin: 0;
+  padding: 6px 8px;
+  background: #f9f9f9;
+  border: 1px solid #eee;
+  border-radius: 4px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 200px;
+  overflow-y: auto;
 }
 </style>

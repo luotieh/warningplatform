@@ -67,6 +67,12 @@ func (h *HandlerMonitor) GetTarget(c *gin.Context) {
 	web.Succeed(c).Data(t).Send()
 }
 
+type targetWithAsset struct {
+	model.MonitorTarget
+	AssetName string `json:"asset_name,omitempty"`
+	AssetOrg  string `json:"asset_org,omitempty"`
+}
+
 func (h *HandlerMonitor) ListTargets(c *gin.Context) {
 	req, ok := web.BindQuery[contract.TargetListReq](c)
 	if !ok {
@@ -78,7 +84,67 @@ func (h *HandlerMonitor) ListTargets(c *gin.Context) {
 		web.Fail(c).Err(err).Send()
 		return
 	}
-	web.Succeed(c).List(total, list).Send()
+	enriched := h.enrichTargetsWithAssetInfo(list)
+	web.Succeed(c).List(total, enriched).Send()
+}
+
+func (h *HandlerMonitor) enrichTargetsWithAssetInfo(targets []model.MonitorTarget) []targetWithAsset {
+	result := make([]targetWithAsset, len(targets))
+	var assetIDs []string
+	for i, t := range targets {
+		result[i] = targetWithAsset{MonitorTarget: t}
+		if t.AssetID != "" {
+			assetIDs = append(assetIDs, t.AssetID)
+		}
+	}
+	if len(assetIDs) == 0 {
+		return result
+	}
+
+	session, err := h.db.GetDBSession()
+	if err != nil {
+		return result
+	}
+	type assetInfo struct {
+		ID                string
+		Name              string
+		ConstructionOrgID string
+	}
+	var assets []assetInfo
+	session.Model(&model.Asset{}).Select("id, name, construction_org_id").Where("id IN ?", assetIDs).Find(&assets)
+	assetMap := make(map[string]*assetInfo, len(assets))
+	for i := range assets {
+		assetMap[assets[i].ID] = &assets[i]
+	}
+
+	var orgIDs []string
+	for _, a := range assets {
+		if a.ConstructionOrgID != "" {
+			orgIDs = append(orgIDs, a.ConstructionOrgID)
+		}
+	}
+	orgMap := make(map[string]string)
+	if len(orgIDs) > 0 {
+		type orgInfo struct {
+			ID   string
+			Name string
+		}
+		var orgs []orgInfo
+		session.Model(&model.Organize{}).Select("id, name").Where("id IN ?", orgIDs).Find(&orgs)
+		for _, o := range orgs {
+			orgMap[o.ID] = o.Name
+		}
+	}
+
+	for i := range result {
+		if a, ok := assetMap[result[i].AssetID]; ok {
+			result[i].AssetName = a.Name
+			if orgName, ok := orgMap[a.ConstructionOrgID]; ok {
+				result[i].AssetOrg = orgName
+			}
+		}
+	}
+	return result
 }
 
 func (h *HandlerMonitor) RunTarget(c *gin.Context) {

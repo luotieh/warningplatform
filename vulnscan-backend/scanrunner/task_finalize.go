@@ -4,10 +4,13 @@ import (
 	"context"
 	"log/slog"
 
+	"vulnscan-backend/knowledge/nuclei"
 	"vulnscan-backend/model"
 )
 
 func (r *Runner) finalizeAfterRun(ctx context.Context) {
+	nuclei.GetGlobalTemplateDedup().CleanupTask(r.task.ID)
+
 	status := r.progress.Get().Status
 	if status == "" {
 		var row model.ScanTask

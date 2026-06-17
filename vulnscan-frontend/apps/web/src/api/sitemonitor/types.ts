@@ -123,6 +123,8 @@ export interface MonitorTarget {
   virtual_host: string;
   expected_ips: string;
   asset_id?: string;
+  asset_name?: string;
+  asset_org?: string;
   enabled: boolean;
   notes: string;
   schedule_enabled: boolean;

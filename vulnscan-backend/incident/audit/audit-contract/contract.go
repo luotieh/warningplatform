@@ -7,6 +7,7 @@ import (
 type ServiceAudit interface {
 	AIPreAudit(ctx context.Context, id string) (*AIPreAuditResp, error)
 	ManualAudit(ctx context.Context, req ManualAuditReq) error
+	ResubmitForReview(ctx context.Context, id string, reason string) error
 	AIClassify(ctx context.Context, id string) (*ClassifyResult, error)
 }
 

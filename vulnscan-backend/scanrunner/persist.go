@@ -22,6 +22,53 @@ func (r *Runner) persistFindings() {
 		return
 	}
 
+	if r.scopeFilter != nil {
+		before := len(findings)
+		findings = r.scopeFilter.FilterFindings(findings)
+		if filtered := before - len(findings); filtered > 0 {
+			slog.Info("[Persist] 域名范围过滤命中",
+				"task_id", r.task.ID,
+				"filtered", filtered,
+				"remaining", len(findings),
+			)
+		}
+		if len(findings) == 0 {
+			return
+		}
+	}
+
+	if r.enginePolicy.RejectPrincipleScan || r.enginePolicy.RequireVerified {
+		before := len(findings)
+		verifier := NewVulnVerifier(nil)
+		findings = verifier.VerifyFindings(r.ctx, findings, r.enginePolicy.RejectPrincipleScan)
+		if filtered := before - len(findings); filtered > 0 {
+			slog.Info("[Persist] 原理性扫描过滤",
+				"task_id", r.task.ID,
+				"filtered", filtered,
+				"remaining", len(findings),
+			)
+		}
+		if len(findings) == 0 {
+			return
+		}
+	}
+
+	{
+		fpSuppressor := NewFPSuppressor(r.db)
+		before := len(findings)
+		findings = fpSuppressor.SuppressFindings(findings)
+		if filtered := before - len(findings); filtered > 0 {
+			slog.Info("[Persist] 误报抑制过滤",
+				"task_id", r.task.ID,
+				"filtered", filtered,
+				"remaining", len(findings),
+			)
+		}
+		if len(findings) == 0 {
+			return
+		}
+	}
+
 	if r.findingFilter != nil {
 		before := len(findings)
 		findings = r.findingFilter.FilterFindings(findings)

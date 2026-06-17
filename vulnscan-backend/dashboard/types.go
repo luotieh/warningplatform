@@ -59,10 +59,14 @@ type SecurityPosture struct {
 }
 
 type MonitorStats struct {
-	TotalTasks   int `json:"total_tasks"`
-	EnabledTasks int `json:"enabled_tasks"`
-	TotalAlerts  int `json:"total_alerts"`
-	OpenAlerts   int `json:"open_alerts"`
+	TotalTasks       int `json:"total_tasks"`
+	EnabledTasks     int `json:"enabled_tasks"`
+	TotalTargets     int `json:"total_targets"`
+	EnabledTargets   int `json:"enabled_targets"`
+	TotalPathTasks   int `json:"total_path_tasks"`
+	EnabledPathTasks int `json:"enabled_path_tasks"`
+	TotalAlerts      int `json:"total_alerts"`
+	OpenAlerts       int `json:"open_alerts"`
 }
 
 type TopRiskAsset struct {

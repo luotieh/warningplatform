@@ -7,6 +7,8 @@ import (
 	"sync"
 	"time"
 
+	"strings"
+
 	"code.yt-security.com/public/scanengine/core"
 	"vulnscan-backend/scan/orchestrate"
 )
@@ -94,6 +96,9 @@ func ExecuteStageWithOpts(
 	}
 
 	mods := stage.modules
+
+	mods = applyModulePresetFilter(mods, config)
+
 	if opts.Strategy != nil {
 		stack := opts.Strategy.DetectTechStack(nil, targets)
 		mods = opts.Strategy.FilterModules(mods, stack)
@@ -598,4 +603,66 @@ func drainRemaining(
 			return
 		}
 	}
+}
+
+// applyModulePresetFilter filters modules based on skip_modules / focus_modules
+// parameters from engine presets or task config.
+func applyModulePresetFilter(mods []core.ScanModule, config map[string]interface{}) []core.ScanModule {
+	if config == nil {
+		return mods
+	}
+
+	focusStr, hasFocus := config["focus_modules"].(string)
+	skipStr, hasSkip := config["skip_modules"].(string)
+
+	if !hasFocus && !hasSkip {
+		return mods
+	}
+
+	if hasFocus && focusStr != "" {
+		focusSet := parseModuleSet(focusStr)
+		// Always include infrastructure modules (port_scan, service_probe, icmp_ping)
+		infraModules := map[string]bool{
+			"icmp_ping": true, "port_scan": true, "syn_scan": true, "service_probe": true,
+		}
+		var filtered []core.ScanModule
+		for _, m := range mods {
+			if focusSet[m.ID()] || infraModules[m.ID()] {
+				filtered = append(filtered, m)
+			}
+		}
+		if len(filtered) > 0 {
+			slog.Info("[Executor] focus_modules 过滤",
+				"before", len(mods), "after", len(filtered), "focus", focusStr)
+			return filtered
+		}
+	}
+
+	if hasSkip && skipStr != "" {
+		skipSet := parseModuleSet(skipStr)
+		var filtered []core.ScanModule
+		for _, m := range mods {
+			if !skipSet[m.ID()] {
+				filtered = append(filtered, m)
+			}
+		}
+		if skipped := len(mods) - len(filtered); skipped > 0 {
+			slog.Info("[Executor] skip_modules 过滤",
+				"before", len(mods), "after", len(filtered), "skip", skipStr)
+		}
+		return filtered
+	}
+
+	return mods
+}
+
+func parseModuleSet(csv string) map[string]bool {
+	set := make(map[string]bool)
+	for _, id := range strings.Split(csv, ",") {
+		id = strings.TrimSpace(id)
+		if id != "" {
+			set[id] = true
+		}
+	}
+	return set
 }

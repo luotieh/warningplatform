@@ -131,11 +131,16 @@ export function buildBlacklinkEvidenceDetail(result: any): string {
 export function buildAvailabilityEvidenceDetail(result: any): string {
   if (!result) return '';
   const lines: string[] = [];
+  const formatValue = (v: unknown): string => {
+    if (v == null) return '';
+    if (typeof v === 'object') return JSON.stringify(v);
+    return String(v);
+  };
   const appendObj = (title: string, obj: Record<string, any> | undefined) => {
     if (!obj || !Object.keys(obj).length) return;
     lines.push(`\n${title}：`);
     for (const [k, v] of Object.entries(obj)) {
-      if (v != null && v !== '') lines.push(`  ${k}：${v}`);
+      if (v != null && v !== '') lines.push(`  ${k}：${formatValue(v)}`);
     }
   };
   appendObj('耗时分解 (ms)', result.timing);

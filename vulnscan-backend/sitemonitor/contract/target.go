@@ -9,6 +9,7 @@ type TargetUpdateReq struct {
 	DefaultScheme       string         `json:"default_scheme"`
 	VirtualHost         string         `json:"virtual_host"`
 	ExpectedIPs         string         `json:"expected_ips"`
+	AssetID             *string        `json:"asset_id"`
 	ScheduleEnabled     *bool          `json:"schedule_enabled"`
 	ScheduleCron        string         `json:"schedule_cron"`
 	ConfigDomainHijack  map[string]any `json:"config_domain_hijack"`
@@ -20,6 +21,7 @@ type TargetListReq struct {
 	TargetType  string `form:"target_type"`
 	TargetValue string `form:"target_value"`
 	Enabled     string `form:"enabled"`
+	AssetID     string `form:"asset_id"`
 	PageReq
 }
 

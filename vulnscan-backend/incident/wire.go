@@ -2,7 +2,6 @@ package incident
 
 import (
 	"vulnscan-backend/incident/audit"
-	"vulnscan-backend/incident/comment"
 	"vulnscan-backend/incident/core"
 	"vulnscan-backend/incident/knowledge"
 	"vulnscan-backend/incident/remediation"
@@ -17,7 +16,6 @@ var WireSet = wire.NewSet(
 	audit.WireSet,
 	remediation.WireSet,
 	sla.WireSet,
-	comment.WireSet,
 	knowledge.WireSet,
 	stats.WireSet,
 	NewIncident,
