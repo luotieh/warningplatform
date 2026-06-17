@@ -1,8 +1,10 @@
 package health
 
 import (
+	"log/slog"
 	"net/http"
 	"runtime"
+	"strings"
 	"time"
 
 	"code.yt-security.com/public/core/db"
@@ -13,17 +15,24 @@ import (
 var startTime = time.Now()
 
 type Handler struct {
-	db *db.DB
+	db       *db.DB
+	logLevel *slog.LevelVar
 }
 
 func NewHandler(db *db.DB) *Handler {
 	return &Handler{db: db}
 }
 
+func (h *Handler) SetLogLevel(lv *slog.LevelVar) {
+	h.logLevel = lv
+}
+
 func (h *Handler) RegisterRoutes(engine *gin.Engine) {
 	engine.GET("/health", h.Health)
 	engine.GET("/health/ready", h.Ready)
 	engine.GET("/health/system", h.System)
+	engine.GET("/health/log-level", h.GetLogLevel)
+	engine.PUT("/health/log-level", h.SetLogLevelAPI)
 }
 
 func (h *Handler) Health(c *gin.Context) {
@@ -94,5 +103,54 @@ func (h *Handler) System(c *gin.Context) {
 			"gc_pause_total_ms": memStats.PauseTotalNs / 1e6,
 		},
 		"database": dbStats,
+	}).Send()
+}
+
+func (h *Handler) GetLogLevel(c *gin.Context) {
+	level := "info"
+	if h.logLevel != nil {
+		level = h.logLevel.Level().String()
+	}
+	web.Succeed(c).Data(gin.H{"level": level}).Send()
+}
+
+func (h *Handler) SetLogLevelAPI(c *gin.Context) {
+	if h.logLevel == nil {
+		web.R(c).Code(web.InternalError).HTTP(http.StatusInternalServerError).
+			Data(gin.H{"error": "日志级别不可调整"}).Send()
+		return
+	}
+
+	var req struct {
+		Level string `json:"level"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		web.R(c).Code(web.BadRequest).HTTP(http.StatusBadRequest).
+			Data(gin.H{"error": "参数错误"}).Send()
+		return
+	}
+
+	var newLevel slog.Level
+	switch strings.ToLower(strings.TrimSpace(req.Level)) {
+	case "debug":
+		newLevel = slog.LevelDebug
+	case "info":
+		newLevel = slog.LevelInfo
+	case "warn", "warning":
+		newLevel = slog.LevelWarn
+	case "error":
+		newLevel = slog.LevelError
+	default:
+		web.R(c).Code(web.BadRequest).HTTP(http.StatusBadRequest).
+			Data(gin.H{"error": "无效的日志级别，可选: debug, info, warn, error"}).Send()
+		return
+	}
+
+	old := h.logLevel.Level().String()
+	h.logLevel.Set(newLevel)
+	slog.Warn("log level changed", "from", old, "to", newLevel.String())
+	web.Succeed(c).Data(gin.H{
+		"previous": old,
+		"current":  newLevel.String(),
 	}).Send()
 }

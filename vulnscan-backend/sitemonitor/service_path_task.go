@@ -3,7 +3,6 @@ package sitemonitor
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"strings"
 	"time"
 
@@ -217,9 +216,6 @@ func (s *serviceMonitor) runPathTaskDimension(ctx context.Context, target *model
 	}
 	exec.ID = execID
 	session := s.session().WithContext(ctx)
-	if _, err := ExpireStaleExecutionsForScope(session, target.ID, pt.ID, dimension); err != nil {
-		slog.Warn("expire stale execution", "path_task_id", pt.ID, "dimension", dimension, "error", err)
-	}
 	if txErr := session.Transaction(func(tx *gorm.DB) error {
 		var active int64
 		tx.Model(&model.MonitorExecution{}).

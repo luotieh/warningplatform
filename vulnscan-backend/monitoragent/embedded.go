@@ -209,7 +209,8 @@ func resolveEmbeddedAgentPlainSecret(nodeUUID string) (string, error) {
 func (e *EmbeddedAgent) runDirectLoop(ctx context.Context, session *gorm.DB) {
 	defer e.wg.Done()
 
-	ticker := time.NewTicker(2 * time.Second)
+	pollInterval := 3 * time.Second
+	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 
 	heartbeatTicker := time.NewTicker(15 * time.Second)
@@ -223,21 +224,24 @@ func (e *EmbeddedAgent) runDirectLoop(ctx context.Context, session *gorm.DB) {
 			return
 		case <-heartbeatTicker.C:
 			e.executor.RefreshRules(ctx)
+			now := time.Now()
+			running := e.scheduler.RunningCount()
+			queued := e.scheduler.QueuedCount()
 			session.Model(&model.MonitorAgent{}).
 				Where("uuid = ?", e.agentUUID).
 				Updates(map[string]any{
 					"status":         "online",
-					"last_heartbeat": time.Now(),
-					"running_tasks":  e.scheduler.RunningCount(),
-					"queued_tasks":   e.scheduler.QueuedCount(),
+					"last_heartbeat": now,
+					"running_tasks":  running,
+					"queued_tasks":   queued,
 				})
 			session.Model(&model.Node{}).
 				Where("uuid = ?", e.agentUUID).
 				Updates(map[string]any{
 					"status":         model.NodeStatusOnline,
-					"last_heartbeat": time.Now(),
-					"running_tasks":  e.scheduler.RunningCount(),
-					"queued_tasks":   e.scheduler.QueuedCount(),
+					"last_heartbeat": now,
+					"running_tasks":  running,
+					"queued_tasks":   queued,
 				})
 		case <-ticker.C:
 			maxConc := e.scheduler.MaxConcurrent()
@@ -272,8 +276,9 @@ func (e *EmbeddedAgent) runDirectLoop(ctx context.Context, session *gorm.DB) {
 			res := session.Model(&model.MonitorExecution{}).
 				Where("id IN ? AND (agent_id IS NULL OR agent_id = '')", ids).
 				Updates(map[string]any{
-					"agent_id": e.agentUUID,
-					"status":   "running",
+					"agent_id":   e.agentUUID,
+					"status":     "running",
+					"started_at": time.Now(),
 				})
 			if res.RowsAffected == 0 {
 				continue
@@ -293,10 +298,6 @@ func (e *EmbeddedAgent) runDirectLoop(ctx context.Context, session *gorm.DB) {
 					e.failClaimedExecution(session, exec.ID, "序列化监测载荷失败: "+err.Error())
 					continue
 				}
-
-				now := time.Now()
-				session.Model(&model.MonitorExecution{}).Where("id = ?", exec.ID).
-					Update("started_at", now)
 
 				e.scheduler.Submit(&agent.TaskEnvelope{
 					ID:      exec.ID,

@@ -23,7 +23,7 @@ func NewAgentHealthChecker(database *db.DB) *AgentHealthChecker {
 	return &AgentHealthChecker{
 		db:              database,
 		offlineTimeout:  90 * time.Second,
-		checkInterval:   30 * time.Second,
+		checkInterval:   60 * time.Second,
 		reassignTimeout: 5 * time.Minute,
 	}
 }
@@ -89,32 +89,56 @@ func (h *AgentHealthChecker) reassignStuckTasks() {
 	var stuckExecs []model.MonitorExecution
 	h.session().
 		Where("status = ? AND created_at < ?", "running", cutoff).
+		Select("id, agent_id").
 		Find(&stuckExecs)
 
 	if len(stuckExecs) == 0 {
 		return
 	}
 
+	// batch-load online agent IDs to avoid per-row queries
+	agentIDs := make([]string, 0)
 	for _, exec := range stuckExecs {
-		var agent model.MonitorAgent
 		if exec.AgentID != "" {
-			if err := h.session().Where("uuid = ?", exec.AgentID).First(&agent).Error; err == nil {
-				if agent.Status == "online" {
-					continue
-				}
-			}
+			agentIDs = append(agentIDs, exec.AgentID)
 		}
+	}
+	onlineAgents := make(map[string]bool)
+	if len(agentIDs) > 0 {
+		var agents []model.MonitorAgent
+		h.session().Where("uuid IN ? AND status = ?", agentIDs, "online").
+			Select("uuid").Find(&agents)
+		for _, a := range agents {
+			onlineAgents[a.UUID] = true
+		}
+	}
 
+	reassignIDs := make([]string, 0)
+	for _, exec := range stuckExecs {
+		if exec.AgentID != "" && onlineAgents[exec.AgentID] {
+			continue
+		}
+		reassignIDs = append(reassignIDs, exec.ID)
+	}
+
+	if len(reassignIDs) == 0 {
+		return
+	}
+
+	const batchSize = 500
+	for i := 0; i < len(reassignIDs); i += batchSize {
+		end := i + batchSize
+		if end > len(reassignIDs) {
+			end = len(reassignIDs)
+		}
 		h.session().Model(&model.MonitorExecution{}).
-			Where("id = ?", exec.ID).
+			Where("id IN ?", reassignIDs[i:end]).
 			Updates(map[string]any{
 				"status":   "pending",
 				"agent_id": "",
 				"error":    "任务因Agent离线被重新分配",
 			})
-
-		slog.Info("[AgentHealth] task reassigned",
-			"execution_id", exec.ID,
-			"old_agent", exec.AgentID)
 	}
+
+	slog.Info("[AgentHealth] tasks reassigned", "count", len(reassignIDs))
 }

@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"os"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -22,47 +23,29 @@ import (
 
 type schedulerProfile struct {
 	maxConcurrency int
-	minJitter      int
 	taskTimeout    time.Duration
 }
 
 func detectSchedulerProfile() schedulerProfile {
 	cpus := runtime.NumCPU()
 
-	var m runtime.MemStats
-	runtime.ReadMemStats(&m)
-	sysMemMB := int(m.Sys / 1024 / 1024)
-
-	// 监测任务是 I/O 密集型（网络请求等待），并发数可远超 CPU 核心数
-	// 基础并发 = CPU 逻辑核心数 * 倍率，按内存调整上限
-	multiplier := 200 // I/O 密集型任务每核可承载高并发
-	base := cpus * multiplier
-	if base < 500 {
-		base = 500
-	}
-
 	profile := schedulerProfile{
-		maxConcurrency: base,
-		minJitter:      3,
+		maxConcurrency: cpus * 10,
 		taskTimeout:    120 * time.Second,
+	}
+	if profile.maxConcurrency < 20 {
+		profile.maxConcurrency = 20
+	}
+	if profile.maxConcurrency > 100 {
+		profile.maxConcurrency = 100
 	}
 
 	if cpus >= 16 {
-		profile.minJitter = 1
 		profile.taskTimeout = 180 * time.Second
 	} else if cpus >= 8 {
-		profile.minJitter = 2
 		profile.taskTimeout = 150 * time.Second
 	}
 
-	// 按可用内存设上限：每个 goroutine 约占 8KB 栈空间 + 连接资源
-	memCapConcurrency := sysMemMB * 2 // 1GB 内存约可支撑 2000 并发
-	if memCapConcurrency < 200 {
-		memCapConcurrency = 200
-	}
-	profile.maxConcurrency = min(profile.maxConcurrency, memCapConcurrency)
-
-	// 环境变量覆盖
 	if v := os.Getenv("MONITOR_MAX_CONCURRENCY"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			profile.maxConcurrency = n
@@ -74,23 +57,30 @@ func detectSchedulerProfile() schedulerProfile {
 		}
 	}
 
-	slog.Info("[CronScheduler] auto-detected profile",
+	slog.Info("[Scheduler] auto-detected profile",
 		"cpus", cpus,
-		"sys_mem_mb", sysMemMB,
 		"max_concurrency", profile.maxConcurrency,
-		"min_jitter_sec", profile.minJitter,
 		"task_timeout", profile.taskTimeout,
 	)
 	return profile
 }
 
+// scheduleEntry 内存中的调度条目，不再依赖 robfig/cron 的 entry。
+type scheduleEntry struct {
+	scope     string // "target" or "path"
+	entityID  string
+	dimension string
+	cronExpr  string
+	nextRun   time.Time
+	schedule  cron.Schedule // 用于计算 nextRun
+}
+
 type CronScheduler struct {
 	db      *db.DB
 	svc     *serviceMonitor
-	cron    *cron.Cron
 	mu      sync.RWMutex
-	entries map[string]cron.EntryID // scopeKey -> entryID
-	sem     chan struct{}           // 并发限制信号量
+	entries map[string]*scheduleEntry // key -> entry
+	sem     chan struct{}
 	profile schedulerProfile
 	cancel  context.CancelFunc
 }
@@ -100,8 +90,7 @@ func NewCronScheduler(database *db.DB, svc *serviceMonitor) *CronScheduler {
 	return &CronScheduler{
 		db:      database,
 		svc:     svc,
-		cron:    cron.New(cron.WithSeconds(), cron.WithChain(cron.Recover(cron.DefaultLogger))),
-		entries: make(map[string]cron.EntryID),
+		entries: make(map[string]*scheduleEntry),
 		sem:     make(chan struct{}, p.maxConcurrency),
 		profile: p,
 	}
@@ -124,59 +113,172 @@ func parseScheduleKey(key string) (scope, id, dimension string) {
 	return "", "", ""
 }
 
+// parseCronExpr 解析 6 段 cron 表达式
+var cronParser = cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
+
+func parseCronExpr(expr string) (cron.Schedule, error) {
+	return cronParser.Parse(expr)
+}
+
 func (cs *CronScheduler) Start(ctx context.Context) {
 	ctx, cs.cancel = context.WithCancel(ctx)
 	cs.loadAllSchedules()
-	cs.cron.Start()
-	go cs.updateNextRunTimes(ctx)
-	slog.Info("[CronScheduler] started", "entries", len(cs.entries))
+	go cs.dispatchLoop(ctx)
+	go cs.syncNextRunTimesLoop(ctx)
+	go cs.logSchedulerStats(ctx)
+	slog.Info("[Scheduler] started", "entries", len(cs.entries))
 }
 
 func (cs *CronScheduler) Stop() {
 	if cs.cancel != nil {
 		cs.cancel()
 	}
-	stopCtx := cs.cron.Stop()
-	<-stopCtx.Done()
-	slog.Info("[CronScheduler] stopped")
+	slog.Info("[Scheduler] stopped")
+}
+
+func (cs *CronScheduler) logSchedulerStats(ctx context.Context) {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			active := cs.ActiveCount()
+			semLen := len(cs.sem)
+			semCap := cap(cs.sem)
+			var m runtime.MemStats
+			runtime.ReadMemStats(&m)
+			slog.Info("[Scheduler] stats",
+				"entries", active,
+				"concurrency", fmt.Sprintf("%d/%d", semLen, semCap),
+				"goroutines", runtime.NumGoroutine(),
+				"heap_mb", m.HeapAlloc/1024/1024,
+			)
+		}
+	}
+}
+
+// dispatchLoop 核心调度循环：每 30 秒扫描到期条目，批量分发。
+func (cs *CronScheduler) dispatchLoop(ctx context.Context) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	// 启动后等一会让系统稳定
+	select {
+	case <-ctx.Done():
+		return
+	case <-time.After(5 * time.Second):
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			cs.dispatchDueEntries(ctx)
+		}
+	}
+}
+
+// dispatchDueEntries 找出所有 nextRun <= now 的条目，限流分发。
+func (cs *CronScheduler) dispatchDueEntries(ctx context.Context) {
+	now := time.Now()
+
+	cs.mu.Lock()
+	var due []*scheduleEntry
+	for _, entry := range cs.entries {
+		if !entry.nextRun.IsZero() && !entry.nextRun.After(now) {
+			due = append(due, entry)
+			entry.nextRun = entry.schedule.Next(now)
+		}
+	}
+	cs.mu.Unlock()
+
+	if len(due) == 0 {
+		return
+	}
+
+	// 随机打乱顺序，避免总是同一批先执行
+	rand.Shuffle(len(due), func(i, j int) { due[i], due[j] = due[j], due[i] })
+
+	slog.Info("[Scheduler] dispatching due entries", "count", len(due))
+
+	var wg sync.WaitGroup
+	for _, entry := range due {
+		select {
+		case <-ctx.Done():
+			return
+		case cs.sem <- struct{}{}:
+		}
+
+		wg.Add(1)
+		go func(e *scheduleEntry) {
+			defer func() {
+				<-cs.sem
+				wg.Done()
+			}()
+
+			dispatchCtx, cancel := context.WithTimeout(ctx, cs.profile.taskTimeout)
+			defer cancel()
+
+			var outcome *contract.RunTaskOutcome
+			var err error
+			switch e.scope {
+			case "target":
+				outcome, err = cs.svc.RunTarget(dispatchCtx, e.entityID, []string{e.dimension})
+			case "path":
+				outcome, err = cs.svc.RunPathTask(dispatchCtx, e.entityID, []string{e.dimension})
+			}
+
+			if err != nil {
+				if !isBusyErr(err) {
+					slog.Warn("[Scheduler] dispatch failed",
+						"scope", e.scope, "id", e.entityID, "dim", e.dimension, "error", err)
+				}
+				return
+			}
+			if outcome != nil && len(outcome.ExecutionIDs) > 0 {
+				slog.Info("[Scheduler] dispatched",
+					"scope", e.scope, "id", e.entityID, "dim", e.dimension,
+					"executions", len(outcome.ExecutionIDs))
+			}
+		}(entry)
+	}
+
+	wg.Wait()
 }
 
 func (cs *CronScheduler) loadAllSchedules() {
 	var targets []model.MonitorTarget
-	cs.session().Where("enabled = ?", true).Find(&targets)
+	cs.session().Where("enabled = ? AND schedule_enabled = ?", true, true).Find(&targets)
+	slog.Info("[Scheduler] loading targets", "count", len(targets))
 	for _, t := range targets {
 		cs.addTarget(t)
 	}
+
 	var paths []model.MonitorPathTask
-	cs.session().Where("enabled = ?", true).Find(&paths)
+	cs.session().Where("enabled = ? AND schedule_enabled = ?", true, true).Find(&paths)
+	slog.Info("[Scheduler] loading path tasks", "count", len(paths))
 	for _, p := range paths {
 		cs.addPathTask(p)
 	}
+	slog.Info("[Scheduler] all schedules loaded", "total_entries", len(cs.entries))
 }
 
 func (cs *CronScheduler) registerDimensions(
 	scope, entityID, defaultCron string,
-	jitter int,
+	_ int, // jitter param kept for API compat, no longer used
 	dimensions []string,
 	getCfg func(string) model.JSONMap,
-	run func(context.Context, string) (*contract.RunTaskOutcome, error),
+	_ func(context.Context, string) (*contract.RunTaskOutcome, error), // run param kept for API compat
 ) {
 	if defaultCron == "" {
 		defaultCron = "0 */30 * * * *"
 	}
-	if jitter < 0 {
-		jitter = 0
-	}
-	if jitter < cs.profile.minJitter {
-		jitter = cs.profile.minJitter
-	}
-	entryCount := len(cs.entries)
-	if entryCount > 20000 && jitter < 30 {
-		jitter = 30
-	} else if entryCount > 10000 && jitter < 15 {
-		jitter = 15
-	}
+	now := time.Now()
 	registered := 0
+
 	for _, dim := range dimensions {
 		cfg := getCfg(dim)
 		if cfg == nil || !configEnabled(cfg) {
@@ -186,42 +288,28 @@ func (cs *CronScheduler) registerDimensions(
 		if dimCron == "" {
 			dimCron = defaultCron
 		}
-		key := scheduleKey(scope, entityID, dim)
-		dimension := dim
-		entryID, err := cs.cron.AddFunc(dimCron, func() {
-			// 随机 jitter 分散瞬时并发
-			time.Sleep(time.Duration(rand.Intn(jitter)) * time.Second)
 
-			// 并发限制：防止同时执行过多任务
-			cs.sem <- struct{}{}
-			defer func() { <-cs.sem }()
-
-			ctx, cancel := context.WithTimeout(context.Background(), cs.profile.taskTimeout)
-			defer cancel()
-			outcome, err := run(ctx, dimension)
-			if err != nil {
-				if isBusyErr(err) {
-					slog.Debug("[CronScheduler] skipped (already running)",
-						"scope", scope, "id", entityID, "dimension", dimension)
-				} else {
-					slog.Warn("[CronScheduler] scheduled run failed",
-						"scope", scope, "id", entityID, "dimension", dimension, "error", err)
-				}
-				return
-			}
-			slog.Info("[CronScheduler] scheduled run dispatched",
-				"scope", scope, "id", entityID, "dimension", dimension, "executions", len(outcome.ExecutionIDs))
-		})
+		sched, err := parseCronExpr(dimCron)
 		if err != nil {
-			slog.Error("[CronScheduler] failed to add job",
-				"scope", scope, "id", entityID, "dimension", dimension, "cron", dimCron, "error", err)
+			slog.Error("[Scheduler] invalid cron expr",
+				"scope", scope, "id", entityID, "dim", dim, "cron", dimCron, "error", err)
 			continue
 		}
-		cs.entries[key] = entryID
+
+		key := scheduleKey(scope, entityID, dim)
+		cs.entries[key] = &scheduleEntry{
+			scope:     scope,
+			entityID:  entityID,
+			dimension: dim,
+			cronExpr:  dimCron,
+			schedule:  sched,
+			nextRun:   sched.Next(now),
+		}
 		registered++
 	}
+
 	if registered > 0 {
-		slog.Info("[CronScheduler] entity registered",
+		slog.Debug("[Scheduler] entity registered",
 			"scope", scope, "id", entityID, "dimensions", registered)
 	}
 }
@@ -240,13 +328,8 @@ func (cs *CronScheduler) addTarget(target model.MonitorTarget) {
 	if !target.ScheduleEnabled {
 		return
 	}
-	t := target
-	cs.registerDimensions("target", t.ID, t.ScheduleCron, t.ScheduleJitter, model.MonitorTargetDimensions,
-		t.GetDimensionConfig,
-		func(ctx context.Context, dim string) (*contract.RunTaskOutcome, error) {
-			return cs.svc.RunTarget(ctx, t.ID, []string{dim})
-		},
-	)
+	cs.registerDimensions("target", target.ID, target.ScheduleCron, target.ScheduleJitter, model.MonitorTargetDimensions,
+		target.GetDimensionConfig, nil)
 }
 
 func (cs *CronScheduler) addPathTask(pt model.MonitorPathTask) {
@@ -263,20 +346,14 @@ func (cs *CronScheduler) addPathTask(pt model.MonitorPathTask) {
 	if !pt.ScheduleEnabled {
 		return
 	}
-	p := pt
-	cs.registerDimensions("path", p.ID, p.ScheduleCron, p.ScheduleJitter, model.MonitorPathDimensions,
-		p.GetDimensionConfig,
-		func(ctx context.Context, dim string) (*contract.RunTaskOutcome, error) {
-			return cs.svc.RunPathTask(ctx, p.ID, []string{dim})
-		},
-	)
+	cs.registerDimensions("path", pt.ID, pt.ScheduleCron, pt.ScheduleJitter, model.MonitorPathDimensions,
+		pt.GetDimensionConfig, nil)
 }
 
 func (cs *CronScheduler) removeScopeEntriesLocked(scope, id string) {
 	prefix := scope + ":" + id + ":"
-	for key, entryID := range cs.entries {
+	for key := range cs.entries {
 		if strings.HasPrefix(key, prefix) {
-			cs.cron.Remove(entryID)
 			delete(cs.entries, key)
 		}
 	}
@@ -318,50 +395,94 @@ func (cs *CronScheduler) RemoveTask(id string)     { cs.RemovePathTask(id) }
 
 func (cs *CronScheduler) ReloadAll() {
 	cs.mu.Lock()
-	for key, entryID := range cs.entries {
-		cs.cron.Remove(entryID)
-		delete(cs.entries, key)
-	}
+	cs.entries = make(map[string]*scheduleEntry)
 	cs.mu.Unlock()
 	cs.loadAllSchedules()
 }
 
-func (cs *CronScheduler) updateNextRunTimes(ctx context.Context) {
-	ticker := time.NewTicker(60 * time.Second)
+// syncNextRunTimesLoop 定期将内存中的 nextRun 批量写入 DB。
+func (cs *CronScheduler) syncNextRunTimesLoop(ctx context.Context) {
+	entryCount := cs.ActiveCount()
+	interval := 2 * time.Minute
+	if entryCount > 20000 {
+		interval = 5 * time.Minute
+	} else if entryCount > 10000 {
+		interval = 3 * time.Minute
+	}
+	slog.Info("[Scheduler] syncNextRunTimes interval", "entries", entryCount, "interval", interval)
+
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			cs.mu.RLock()
-			targetNext := map[string]time.Time{}
-			pathNext := map[string]time.Time{}
-			for key, entryID := range cs.entries {
-				entry := cs.cron.Entry(entryID)
-				if entry.Next.IsZero() {
-					continue
-				}
-				scope, id, _ := parseScheduleKey(key)
-				switch scope {
-				case "target":
-					if cur, ok := targetNext[id]; !ok || entry.Next.Before(cur) {
-						targetNext[id] = entry.Next
-					}
-				case "path":
-					if cur, ok := pathNext[id]; !ok || entry.Next.Before(cur) {
-						pathNext[id] = entry.Next
-					}
-				}
+			cs.batchUpdateNextRunTimes()
+		}
+	}
+}
+
+func (cs *CronScheduler) batchUpdateNextRunTimes() {
+	cs.mu.RLock()
+	targetNext := map[string]time.Time{}
+	pathNext := map[string]time.Time{}
+	for _, entry := range cs.entries {
+		if entry.nextRun.IsZero() {
+			continue
+		}
+		switch entry.scope {
+		case "target":
+			if cur, ok := targetNext[entry.entityID]; !ok || entry.nextRun.Before(cur) {
+				targetNext[entry.entityID] = entry.nextRun
 			}
-			cs.mu.RUnlock()
-			for id, next := range targetNext {
-				cs.session().Model(&model.MonitorTarget{}).Where("id = ?", id).Update("next_run_at", next)
-			}
-			for id, next := range pathNext {
-				cs.session().Model(&model.MonitorPathTask{}).Where("id = ?", id).Update("next_run_at", next)
+		case "path":
+			if cur, ok := pathNext[entry.entityID]; !ok || entry.nextRun.Before(cur) {
+				pathNext[entry.entityID] = entry.nextRun
 			}
 		}
+	}
+	cs.mu.RUnlock()
+
+	batchUpdateNextRun(cs.session(), &model.MonitorTarget{}, targetNext)
+	batchUpdateNextRun(cs.session(), &model.MonitorPathTask{}, pathNext)
+}
+
+// batchUpdateNextRun 使用 CASE-WHEN 批量更新 next_run_at。
+func batchUpdateNextRun(session *gorm.DB, tableModel any, nextMap map[string]time.Time) {
+	if len(nextMap) == 0 {
+		return
+	}
+
+	const batchSize = 500
+	ids := make([]string, 0, len(nextMap))
+	for id := range nextMap {
+		ids = append(ids, id)
+	}
+
+	for i := 0; i < len(ids); i += batchSize {
+		end := i + batchSize
+		if end > len(ids) {
+			end = len(ids)
+		}
+		batch := ids[i:end]
+
+		var caseBuilder strings.Builder
+		caseBuilder.WriteString("CASE id ")
+		args := make([]any, 0, len(batch)*2+len(batch))
+		for _, id := range batch {
+			caseBuilder.WriteString("WHEN ? THEN ? ")
+			args = append(args, id, nextMap[id])
+		}
+		caseBuilder.WriteString("END")
+
+		batchIDs := make([]string, len(batch))
+		copy(batchIDs, batch)
+		args = append(args, batchIDs)
+
+		session.Model(tableModel).
+			Where("id IN ?", args[len(args)-1]).
+			Update("next_run_at", gorm.Expr(caseBuilder.String(), args[:len(args)-1]...))
 	}
 }
 
@@ -369,17 +490,20 @@ func (cs *CronScheduler) GetScheduleInfo() []map[string]any {
 	cs.mu.RLock()
 	defer cs.mu.RUnlock()
 	var result []map[string]any
-	for key, entryID := range cs.entries {
-		entry := cs.cron.Entry(entryID)
-		scope, id, dimension := parseScheduleKey(key)
+	for _, entry := range cs.entries {
 		result = append(result, map[string]any{
-			"scope":     scope,
-			"id":        id,
-			"dimension": dimension,
-			"next_run":  entry.Next,
-			"prev_run":  entry.Prev,
+			"scope":     entry.scope,
+			"id":        entry.entityID,
+			"dimension": entry.dimension,
+			"cron":      entry.cronExpr,
+			"next_run":  entry.nextRun,
 		})
 	}
+	sort.Slice(result, func(i, j int) bool {
+		ti := result[i]["next_run"].(time.Time)
+		tj := result[j]["next_run"].(time.Time)
+		return ti.Before(tj)
+	})
 	return result
 }
 

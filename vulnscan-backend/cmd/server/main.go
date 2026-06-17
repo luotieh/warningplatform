@@ -18,6 +18,7 @@ func main() {
 	setupLogger()
 
 	handlers := di.InitializeHandlers()
+	handlers.SetLogLevel(LogLevel)
 	handlers.RouteLoad()
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -62,6 +63,9 @@ func main() {
 	}
 }
 
+// LogLevel 运行时可调整的日志级别，可通过 /api/system/log-level 接口修改。
+var LogLevel = new(slog.LevelVar)
+
 func setupLogger() {
 	level := slog.LevelInfo
 	if raw := os.Getenv("LOG_LEVEL"); raw != "" {
@@ -69,9 +73,16 @@ func setupLogger() {
 			level = l
 		}
 	}
+	LogLevel.Set(level)
+
+	if strings.EqualFold(os.Getenv("LOG_QUIET"), "true") || strings.EqualFold(os.Getenv("LOG_QUIET"), "1") {
+		LogLevel.Set(slog.LevelError)
+	}
+
 	if strings.EqualFold(os.Getenv("LOG_FORMAT"), "json") {
-		slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level})))
+		slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: LogLevel})))
 		return
 	}
-	agent.SetupCLILogger(level, os.Stdout)
+	slog.SetDefault(slog.New(agent.NewCLIHandler(os.Stdout, &slog.HandlerOptions{Level: LogLevel})))
+	slog.Info("log level", "level", LogLevel.Level().String())
 }

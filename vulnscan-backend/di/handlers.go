@@ -84,6 +84,11 @@ type Handlers struct {
 	Settings      *setting.Handler
 	payloadLoader *payload.Loader
 	Knowledge     *scanrunner.KnowledgeRegistry
+	logLevel      *slog.LevelVar
+}
+
+func (h *Handlers) SetLogLevel(lv *slog.LevelVar) {
+	h.logLevel = lv
 }
 
 func (h *Handlers) RouteLoad() {
@@ -178,6 +183,7 @@ func (h *Handlers) RouteLoad() {
 	h.initFederation()
 
 	healthHandler := health.NewHandler(h.DB)
+	healthHandler.SetLogLevel(h.logLevel)
 	healthHandler.RegisterRoutes(engine.Engine)
 
 	if metricsRouteEnabled() {

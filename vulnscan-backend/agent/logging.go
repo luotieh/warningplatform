@@ -20,21 +20,21 @@ func SetupCLILogger(level slog.Level, w io.Writer) {
 
 // CLIHandler 将日志格式化为：时间 [级别] 消息 key=value …
 type CLIHandler struct {
-	level slog.Level
-	w     io.Writer
-	mu    sync.Mutex
+	leveler slog.Leveler
+	w       io.Writer
+	mu      sync.Mutex
 }
 
 func NewCLIHandler(w io.Writer, opts *slog.HandlerOptions) *CLIHandler {
-	min := slog.LevelInfo
+	var leveler slog.Leveler = slog.LevelInfo
 	if opts != nil && opts.Level != nil {
-		min = opts.Level.Level()
+		leveler = opts.Level
 	}
-	return &CLIHandler{level: min, w: w}
+	return &CLIHandler{leveler: leveler, w: w}
 }
 
 func (h *CLIHandler) Enabled(_ context.Context, level slog.Level) bool {
-	return level >= h.level
+	return level >= h.leveler.Level()
 }
 
 func (h *CLIHandler) Handle(_ context.Context, r slog.Record) error {

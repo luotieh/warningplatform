@@ -33,19 +33,61 @@ func ExpireStaleExecutionsForScope(db *gorm.DB, targetID, pathTaskID, dimension 
 }
 
 // ExpireAllStaleExecutions 供健康检查循环调用。
+// 使用单条查询批量标记所有维度的过期 execution。
 func ExpireAllStaleExecutions(db *gorm.DB) (int64, error) {
 	if db == nil {
 		return 0, nil
 	}
+
+	now := time.Now()
 	var total int64
-	for _, dim := range model.MonitorAllDimensions {
-		cutoff := time.Now().Add(-StaleTimeoutForDimension(dim))
-		n, err := expireStaleExecutions(db, "", "", dim, cutoff)
-		if err != nil {
-			return total, err
-		}
-		total += n
+
+	// 按维度分组的超时cutoff，使用最短的超时来先找候选记录
+	shortestTimeout := 3 * time.Minute
+	cutoff := now.Add(-shortestTimeout)
+
+	var candidates []model.MonitorExecution
+	if err := db.Model(&model.MonitorExecution{}).
+		Where("status IN ? AND created_at < ?", []string{"pending", "running"}, cutoff).
+		Select("id, dimension, created_at, started_at").
+		Find(&candidates).Error; err != nil {
+		return 0, err
 	}
+
+	if len(candidates) == 0 {
+		return 0, nil
+	}
+
+	expiredIDs := make([]string, 0)
+	for _, exec := range candidates {
+		timeout := StaleTimeoutForDimension(exec.Dimension)
+		if now.Sub(exec.CreatedAt) >= timeout {
+			expiredIDs = append(expiredIDs, exec.ID)
+		}
+	}
+
+	if len(expiredIDs) == 0 {
+		return 0, nil
+	}
+
+	const batchSize = 500
+	for i := 0; i < len(expiredIDs); i += batchSize {
+		end := i + batchSize
+		if end > len(expiredIDs) {
+			end = len(expiredIDs)
+		}
+		batch := expiredIDs[i:end]
+		result := db.Model(&model.MonitorExecution{}).
+			Where("id IN ?", batch).
+			Updates(map[string]any{
+				"status":      "failed",
+				"error":       "执行超时，已自动结束",
+				"finished_at": now,
+				"reaped_at":   now,
+			})
+		total += result.RowsAffected
+	}
+
 	return total, nil
 }
 
@@ -59,32 +101,15 @@ func expireStaleExecutions(db *gorm.DB, targetID, pathTaskID, dimension string, 
 		q = q.Where("target_id = ? AND (path_task_id IS NULL OR path_task_id = '')", targetID)
 	}
 
-	var stale []model.MonitorExecution
-	if err := q.Find(&stale).Error; err != nil {
-		return 0, err
-	}
-	if len(stale) == 0 {
-		return 0, nil
-	}
-
 	now := time.Now()
-	reaped := now
 	msg := fmt.Sprintf("执行超时（超过 %s 未完成），已自动结束", StaleTimeoutForDimension(dimension))
 
-	for _, exec := range stale {
-		updates := map[string]any{
-			"status":      "failed",
-			"error":       msg,
-			"finished_at": now,
-			"reaped_at":   reaped,
-		}
-		if exec.StartedAt == nil {
-			updates["started_at"] = exec.CreatedAt
-		}
-		if err := db.Model(&model.MonitorExecution{}).Where("id = ?", exec.ID).Updates(updates).Error; err != nil {
-			return 0, err
-		}
-	}
+	result := q.Updates(map[string]any{
+		"status":      "failed",
+		"error":       msg,
+		"finished_at": now,
+		"reaped_at":   now,
+	})
 
-	return int64(len(stale)), nil
+	return result.RowsAffected, result.Error
 }

@@ -225,9 +225,6 @@ func (s *serviceMonitor) runTargetDimension(ctx context.Context, target *model.M
 	}
 	exec.ID = execID
 	session := s.session().WithContext(ctx)
-	if _, err := ExpireStaleExecutionsForScope(session, target.ID, "", dimension); err != nil {
-		slog.Warn("expire stale execution", "target_id", target.ID, "dimension", dimension, "error", err)
-	}
 	if txErr := session.Transaction(func(tx *gorm.DB) error {
 		var active int64
 		tx.Model(&model.MonitorExecution{}).
