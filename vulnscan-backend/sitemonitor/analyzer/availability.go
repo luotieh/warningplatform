@@ -55,8 +55,7 @@ func (a *AvailabilityAnalyzer) Analyze(ctx context.Context, input *Input) (*Outp
 	contentIssues := a.checkContentAnomalies(snap)
 	issues = append(issues, contentIssues...)
 
-	headerIssues := a.checkSecurityHeaders(snap.Headers)
-	issues = append(issues, headerIssues...)
+	// 安全响应头检查已移至安全类维度，可用性维度不再检查
 
 	sslIssues := a.checkSSLIssues(snap)
 	issues = append(issues, sslIssues...)
@@ -127,29 +126,6 @@ func (a *AvailabilityAnalyzer) checkTimingAnomalies(snap *snapshotData) []map[st
 	return issues
 }
 
-func (a *AvailabilityAnalyzer) checkSecurityHeaders(headers map[string]string) []map[string]any {
-	issues := make([]map[string]any, 0)
-
-	normalized := make(map[string]string, len(headers))
-	for k, v := range headers {
-		normalized[strings.ToLower(k)] = v
-	}
-
-	headerChecks := a.loadHeaderChecks()
-	for _, hc := range headerChecks {
-		if _, ok := normalized[strings.ToLower(hc.Name)]; !ok {
-			issues = append(issues, map[string]any{
-				"type":     "missing_security_header",
-				"name":     hc.Name,
-				"severity": hc.Severity,
-				"detail":   hc.Description,
-			})
-		}
-	}
-
-	return issues
-}
-
 func (a *AvailabilityAnalyzer) checkSSLIssues(snap *snapshotData) []map[string]any {
 	issues := make([]map[string]any, 0)
 
@@ -179,12 +155,6 @@ func (a *AvailabilityAnalyzer) checkSSLIssues(snap *snapshotData) []map[string]a
 	}
 
 	return issues
-}
-
-type availRuleEntry struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Severity    string `json:"severity"`
 }
 
 func (a *AvailabilityAnalyzer) checkAliveKeywords(snap *snapshotData, config map[string]any) []map[string]any {
@@ -263,7 +233,7 @@ func (a *AvailabilityAnalyzer) checkContentAnomalies(snap *snapshotData) []map[s
 		if snap.FinalURL != "" && snap.URL != "" {
 			origDomain := extractHost(snap.URL)
 			finalDomain := extractHost(snap.FinalURL)
-			if origDomain != "" && finalDomain != "" && origDomain != finalDomain {
+			if origDomain != "" && finalDomain != "" && !sameRootDomain(origDomain, finalDomain) {
 				issues = append(issues, map[string]any{
 					"type":         "cross_domain_redirect",
 					"severity":     "high",
@@ -277,7 +247,7 @@ func (a *AvailabilityAnalyzer) checkContentAnomalies(snap *snapshotData) []map[s
 		if snap.MetaRedirect != nil {
 			metaDomain := extractHost(snap.MetaRedirect.URL)
 			pageDomain := extractHost(snap.URL)
-			if metaDomain != "" && pageDomain != "" && metaDomain != pageDomain {
+			if metaDomain != "" && pageDomain != "" && !sameRootDomain(metaDomain, pageDomain) {
 				issues = append(issues, map[string]any{
 					"type":     "meta_redirect_external",
 					"severity": "high",
@@ -290,21 +260,4 @@ func (a *AvailabilityAnalyzer) checkContentAnomalies(snap *snapshotData) []map[s
 	}
 
 	return issues
-}
-
-func (a *AvailabilityAnalyzer) loadHeaderChecks() []availRuleEntry {
-	if a.rules == nil {
-		return nil
-	}
-	data, err := a.rules.GetModuleRules("availability")
-	if err != nil || len(data) == 0 {
-		return nil
-	}
-	var cfg struct {
-		HTTPHeadersCheck []availRuleEntry `json:"http_headers_check"`
-	}
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		return nil
-	}
-	return cfg.HTTPHeadersCheck
 }

@@ -141,6 +141,20 @@ type TaskDimStat struct {
 	ValidCount   int64 `json:"valid_count"`
 }
 
+type TargetSummary struct {
+	TotalIssues  int64                      `json:"total_issues"`
+	PendingCount int64                      `json:"pending_count"`
+	Dimensions   map[string]*TargetDimBrief `json:"dimensions"`
+}
+
+type TargetDimBrief struct {
+	Total        int64  `json:"total"`
+	IssueCount   int64  `json:"issue_count"`
+	Pending      int64  `json:"pending"`
+	LastStatus   string `json:"last_status"`
+	LastHasIssue bool   `json:"last_has_issue"`
+}
+
 type DashboardStats struct {
 	TotalTargets     int64 `json:"total_targets"`
 	EnabledTargets   int64 `json:"enabled_targets"`
@@ -325,6 +339,7 @@ type ServiceMonitor interface {
 	BatchUpdateDisposition(ctx context.Context, ids []string, disposition, remark, username string) error
 	GetDashboardStats(ctx context.Context) (*DashboardStats, error)
 	GetTaskExecutionStats(ctx context.Context) (map[string]map[string]*TaskDimStat, error)
+	GetTargetStats(ctx context.Context) (map[string]*TargetSummary, error)
 	GetTaskTrend(ctx context.Context, taskID string, q TaskTrendQuery) (*TaskTrendResp, error)
 
 	ListAgents(ctx context.Context, scopes ...func(*gorm.DB) *gorm.DB) ([]model.MonitorAgent, error)

@@ -224,7 +224,7 @@ func (a *TamperAnalyzer) checkInjectedElements(snap *snapshotData) []map[string]
 		if script.IsExternal && script.Src != "" {
 			domain := extractHost(script.Src)
 			pageDomain := extractHost(snap.URL)
-			if domain != "" && pageDomain != "" && domain != pageDomain &&
+			if domain != "" && pageDomain != "" && !sameRootDomain(domain, pageDomain) &&
 				!matchTrustedDomain(domain, trustedCDNs) {
 				findings = append(findings, map[string]any{
 					"type":   "external_script",

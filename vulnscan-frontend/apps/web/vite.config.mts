@@ -59,6 +59,18 @@ export default defineConfig(async () => {
             target: 'http://127.0.0.1:8090',
             ws: true,
           },
+          '/callback': {
+            changeOrigin: true,
+            target: 'http://127.0.0.1:8090',
+          },
+          '/sso': {
+            changeOrigin: true,
+            target: 'http://127.0.0.1:8090',
+          },
+          '/health': {
+            changeOrigin: true,
+            target: 'http://127.0.0.1:8090',
+          },
         },
       },
     },

@@ -115,6 +115,51 @@ func extractHost(rawURL string) string {
 	return rawURL
 }
 
+// sameRootDomain 判断两个域名是否属于同一注册域名。
+// 例如 bing.com / www.bing.com / cn.bing.com 都属于 bing.com。
+// 对于国家码二级后缀（如 .com.cn, .co.uk, .net.cn 等），会比较最后三段。
+func sameRootDomain(a, b string) bool {
+	a = strings.ToLower(strings.TrimSpace(a))
+	b = strings.ToLower(strings.TrimSpace(b))
+	if a == b {
+		return true
+	}
+	return registeredDomain(a) == registeredDomain(b)
+}
+
+// twoPartTLDs 国家码二级后缀集合（如 .com.cn, .co.uk）
+var twoPartTLDs = map[string]bool{
+	"com.cn": true, "net.cn": true, "org.cn": true, "gov.cn": true,
+	"co.uk": true, "org.uk": true, "ac.uk": true, "gov.uk": true,
+	"co.jp": true, "or.jp": true, "ne.jp": true, "ac.jp": true,
+	"com.au": true, "net.au": true, "org.au": true,
+	"co.kr": true, "or.kr": true,
+	"com.tw": true, "org.tw": true, "net.tw": true,
+	"com.hk": true, "org.hk": true, "net.hk": true,
+	"com.sg": true, "org.sg": true,
+	"com.br": true, "org.br": true,
+	"co.in": true, "org.in": true, "net.in": true,
+	"com.ru": true, "org.ru": true,
+	"co.nz": true, "org.nz": true,
+	"com.mx": true, "org.mx": true,
+}
+
+func registeredDomain(host string) string {
+	parts := strings.Split(host, ".")
+	n := len(parts)
+	if n <= 2 {
+		return host
+	}
+	// 检查是否是二级 TLD（如 com.cn, co.uk）
+	if n >= 3 {
+		lastTwo := parts[n-2] + "." + parts[n-1]
+		if twoPartTLDs[lastTwo] {
+			return strings.Join(parts[n-3:], ".")
+		}
+	}
+	return strings.Join(parts[n-2:], ".")
+}
+
 func absInt(x int) int {
 	return int(math.Abs(float64(x)))
 }

@@ -3,6 +3,7 @@
  */
 import type {
   AlertConfig,
+  CleanupConfig,
   CrawlResult,
   DashboardStats,
   DimensionConfig,
@@ -20,6 +21,7 @@ import type {
   PageParams,
   PathTaskUpdateDTO,
   RunTaskOutcome,
+  TargetSummary,
   TargetUpdateDTO,
   TaskExecutionStat,
   TaskTrendResp,
@@ -384,6 +386,9 @@ export const getPathTaskExecutionStats = () =>
     base('/execution-stats'),
   );
 
+export const getTargetStats = () =>
+  requestClient.get<Record<string, TargetSummary>>(base('/target-stats'));
+
 /** @deprecated */
 export const getTaskExecutionStats = getPathTaskExecutionStats;
 
@@ -588,6 +593,19 @@ export const deleteTask = deletePathTask;
 
 /** @deprecated */
 export const batchDeleteTasks = batchDeletePathTasks;
+
+// ════════════════════════════════════════
+// 数据清理配置
+// ════════════════════════════════════════
+
+export const getCleanupConfig = () =>
+  requestClient.get<CleanupConfig>(base('/cleanup-config'));
+
+export const updateCleanupConfig = (config: CleanupConfig) =>
+  requestClient.put<CleanupConfig>(base('/cleanup-config'), config);
+
+export const runCleanup = () =>
+  requestClient.post<{ deleted: number }>(base('/cleanup/run'));
 
 export type { CrawlResult };
 

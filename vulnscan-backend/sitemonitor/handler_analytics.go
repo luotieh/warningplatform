@@ -54,6 +54,15 @@ func (h *HandlerMonitor) GetTaskExecutionStats(c *gin.Context) {
 	web.Succeed(c).Data(stats).Send()
 }
 
+func (h *HandlerMonitor) GetTargetStats(c *gin.Context) {
+	stats, err := h.svc.GetTargetStats(c.Request.Context())
+	if err != nil {
+		web.Fail(c).Err(err).Send()
+		return
+	}
+	web.Succeed(c).Data(stats).Send()
+}
+
 func (h *HandlerMonitor) GenerateReport(c *gin.Context) {
 	var req struct {
 		StartDate string   `json:"start_date"`

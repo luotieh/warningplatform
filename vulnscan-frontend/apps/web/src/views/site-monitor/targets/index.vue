@@ -41,11 +41,15 @@ import {
   getImportResult,
   getPathTaskList,
   getTargetList,
+  getTargetStats,
   importTargets,
   runTarget,
   updateTarget,
 } from '#/api/sitemonitor';
+import type { TargetSummary } from '#/api/sitemonitor/types';
 import type { ImportResult, ImportRowResult } from '#/api/sitemonitor/types';
+
+import RecordDrawer from './RecordDrawer.vue';
 
 defineOptions({ name: 'MonitorTargets' });
 
@@ -55,6 +59,10 @@ const { handleError } = useErrorHandler();
 const loading = ref(false);
 const dataList = ref<MonitorTarget[]>([]);
 const checkedKeys = ref<DataTableRowKey[]>([]);
+const targetStatsMap = ref<Record<string, TargetSummary>>({});
+const recordDrawerVisible = ref(false);
+const recordDrawerTargetId = ref('');
+const recordDrawerTargetName = ref('');
 const form = reactive({
   enabled: '',
   name: '',
@@ -201,6 +209,75 @@ const columns = computed<DataTableColumns<MonitorTarget>>(() => [
       ]),
   },
   {
+    key: 'stats',
+    title: '检测概况',
+    minWidth: 200,
+    render: (row) => {
+      const stats = targetStatsMap.value[row.id];
+      if (!stats || !stats.dimensions || Object.keys(stats.dimensions).length === 0) {
+        return h('span', { class: 'text-xs text-gray-300' }, '暂无数据');
+      }
+      const allDims = ['availability', 'tamper', 'sensitive_word', 'blacklink', 'domain_hijack', 'sensitive_file'];
+      const dimLabelsShort: Record<string, string> = {
+        availability: '可用',
+        tamper: '篡改',
+        sensitive_word: '敏感词',
+        blacklink: '暗链',
+        domain_hijack: '劫持',
+        sensitive_file: '敏文',
+      };
+      const dimTags = allDims
+        .filter((d) => stats.dimensions[d])
+        .map((d) => {
+          const dim = stats.dimensions[d]!;
+          const hasIssue = dim.last_has_issue;
+          const isFailed = dim.last_status === 'failed';
+          let type: 'success' | 'error' | 'warning' | 'default' = 'success';
+          if (isFailed) type = 'warning';
+          else if (hasIssue) type = 'error';
+          return h(
+            NTooltip,
+            {},
+            {
+              trigger: () =>
+                h(
+                  NTag,
+                  {
+                    size: 'tiny',
+                    round: true,
+                    bordered: false,
+                    type,
+                  },
+                  { default: () => dimLabelsShort[d] || d },
+                ),
+              default: () =>
+                `${dimLabelsShort[d]}：执行 ${dim.total} 次，问题 ${dim.issue_count}，待处理 ${dim.pending}`,
+            },
+          );
+        });
+
+      const summaryParts: ReturnType<typeof h>[] = [];
+      if (stats.total_issues > 0) {
+        summaryParts.push(
+          h('span', { class: 'text-xs font-medium text-red-500' }, `${stats.total_issues} 问题`),
+        );
+      }
+      if (stats.pending_count > 0) {
+        summaryParts.push(
+          h('span', { class: 'text-xs text-orange-500' }, `${stats.pending_count} 待处理`),
+        );
+      }
+      if (stats.total_issues === 0) {
+        summaryParts.push(h('span', { class: 'text-xs text-green-500' }, '正常'));
+      }
+
+      return h('div', { class: 'flex flex-col gap-1' }, [
+        h('div', { class: 'flex flex-wrap gap-1' }, dimTags),
+        h('div', { class: 'flex gap-2' }, summaryParts),
+      ]);
+    },
+  },
+  {
     key: 'enabled',
     title: '状态',
     width: 72,
@@ -216,7 +293,7 @@ const columns = computed<DataTableColumns<MonitorTarget>>(() => [
   {
     key: 'op',
     title: '操作',
-    width: 190,
+    width: 230,
     fixed: 'right',
     align: 'center',
     render: (row) =>
@@ -231,6 +308,20 @@ const columns = computed<DataTableColumns<MonitorTarget>>(() => [
               router.push({ name: 'MonitorTargetDetail', params: { id: row.id } }),
           },
           { default: () => '管理' },
+        ),
+        h(
+          NButton,
+          {
+            text: true,
+            type: 'info',
+            size: 'tiny',
+            onClick: () => {
+              recordDrawerTargetId.value = row.id;
+              recordDrawerTargetName.value = row.name;
+              recordDrawerVisible.value = true;
+            },
+          },
+          { default: () => '记录' },
         ),
         h(
           NPopconfirm,
@@ -279,17 +370,29 @@ const columns = computed<DataTableColumns<MonitorTarget>>(() => [
   },
 ]);
 
+async function loadTargetStats() {
+  try {
+    const res = await getTargetStats();
+    targetStatsMap.value = (res as any)?.data ?? res ?? {};
+  } catch {
+    targetStatsMap.value = {};
+  }
+}
+
 async function onSearch() {
   loading.value = true;
   try {
-    const res = await getTargetList({
-      enabled: form.enabled,
-      page: pagination.page,
-      name: form.name,
-      target_type: form.target_type,
-      target_value: form.target_value,
-      page_size: pagination.pageSize,
-    });
+    const [res] = await Promise.all([
+      getTargetList({
+        enabled: form.enabled,
+        page: pagination.page,
+        name: form.name,
+        target_type: form.target_type,
+        target_value: form.target_value,
+        page_size: pagination.pageSize,
+      }),
+      loadTargetStats(),
+    ]);
     dataList.value = res.data || [];
     pagination.itemCount = (res as any).count || 0;
   } catch (e) {
@@ -1056,5 +1159,10 @@ onMounted(onSearch);
         </NUpload>
       </template>
     </NModal>
+    <RecordDrawer
+      v-model:show="recordDrawerVisible"
+      :target-id="recordDrawerTargetId"
+      :target-name="recordDrawerTargetName"
+    />
   </Page>
 </template>

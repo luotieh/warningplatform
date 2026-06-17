@@ -19,6 +19,12 @@ func NewDomainHijackAnalyzer(rules RuleAccessor) *DomainHijackAnalyzer {
 
 func (a *DomainHijackAnalyzer) Dimension() string { return "domain_hijack" }
 
+type dnsResult struct {
+	name  string
+	ips   []string
+	cname string
+}
+
 func (a *DomainHijackAnalyzer) Analyze(ctx context.Context, input *Input) (*Output, error) {
 	snap, err := parseSnapshot(input.SnapshotJSON)
 	if err != nil {
@@ -35,12 +41,6 @@ func (a *DomainHijackAnalyzer) Analyze(ctx context.Context, input *Input) (*Outp
 	resolvers := a.loadDNSResolvers()
 	if len(resolvers) == 0 {
 		return output, nil
-	}
-
-	type dnsResult struct {
-		name  string
-		ips   []string
-		cname string
 	}
 
 	var mu sync.Mutex
@@ -156,7 +156,30 @@ func (a *DomainHijackAnalyzer) Analyze(ctx context.Context, input *Input) (*Outp
 		}
 	}
 
+	allIPs := collectUniqueIPs(dnsResults)
+	if len(allIPs) > 0 {
+		detailJSON, _ := json.Marshal(map[string]any{
+			"hijacked":     false,
+			"resolved_ips": allIPs,
+		})
+		output.DetailsJSON = string(detailJSON)
+	}
+
 	return output, nil
+}
+
+func collectUniqueIPs(results []dnsResult) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, r := range results {
+		for _, ip := range r.ips {
+			if !seen[ip] {
+				seen[ip] = true
+				out = append(out, ip)
+			}
+		}
+	}
+	return out
 }
 
 func hasOverlap(a, b []string) bool {

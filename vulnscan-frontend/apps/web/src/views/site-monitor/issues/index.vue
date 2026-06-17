@@ -48,6 +48,7 @@ const form = reactive({
   has_issue: 'true',
   status: '',
   path_task_id: '',
+  target_id: '',
   dateRange: null as null | [number, number],
 });
 
@@ -98,6 +99,7 @@ function applyRouteQuery() {
   if (q.disposition !== undefined) form.disposition = String(q.disposition);
   if (q.hasIssue !== undefined) form.has_issue = String(q.hasIssue);
   if (q.path_task_id) form.path_task_id = String(q.path_task_id);
+  if (q.target_id) form.target_id = String(q.target_id);
 }
 
 async function onSearch() {
@@ -111,6 +113,7 @@ async function onSearch() {
       has_issue: form.has_issue || undefined,
       status: form.status || undefined,
       path_task_id: form.path_task_id || undefined,
+      target_id: form.target_id || undefined,
     };
     if (form.dateRange) {
       params.time_start = dayjs(form.dateRange[0]).toISOString();
@@ -133,6 +136,7 @@ function resetForm() {
   form.has_issue = 'true';
   form.status = '';
   form.path_task_id = '';
+  form.target_id = '';
   form.dateRange = null;
   pagination.page = 1;
   onSearch();

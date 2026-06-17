@@ -33,7 +33,9 @@ import RecordDetailContent from '../records/RecordDetailContent.vue';
 
 const props = defineProps<{
   show: boolean;
-  pathTaskId: string;
+  pathTaskId?: string;
+  targetId?: string;
+  targetName?: string;
 }>();
 const emit = defineEmits<{
   (e: 'update:show', val: boolean): void;
@@ -79,7 +81,13 @@ const issueOpts = [
 const filterStatus = ref<string | null>(null);
 const filterHasIssue = ref<string | null>(null);
 
+const isTargetMode = computed(() => !props.pathTaskId && !!props.targetId);
+
 async function loadTaskInfo() {
+  if (isTargetMode.value) {
+    pathTask.value = null;
+    return;
+  }
   if (!props.pathTaskId) return;
   try {
     const res = await getPathTaskDetail(props.pathTaskId);
@@ -90,14 +98,18 @@ async function loadTaskInfo() {
 }
 
 async function loadData() {
-  if (!props.pathTaskId) return;
+  if (!props.pathTaskId && !props.targetId) return;
   loading.value = true;
   try {
     const params: Record<string, any> = {
-      path_task_id: props.pathTaskId,
       page: pagination.page,
       page_size: pagination.pageSize,
     };
+    if (props.pathTaskId) {
+      params.path_task_id = props.pathTaskId;
+    } else if (props.targetId) {
+      params.target_id = props.targetId;
+    }
     if (activeDim.value !== 'all') params.dimension = activeDim.value;
     if (filterStatus.value) params.status = filterStatus.value;
     if (filterHasIssue.value) params.has_issue = filterHasIssue.value;
@@ -219,9 +231,9 @@ function resetFilter() {
 }
 
 watch(
-  () => props.pathTaskId,
-  (id) => {
-    if (id) {
+  () => [props.pathTaskId, props.targetId],
+  () => {
+    if (props.pathTaskId || props.targetId) {
       activeDim.value = 'all';
       pagination.page = 1;
       loadTaskInfo();
@@ -233,7 +245,7 @@ watch(
 watch(
   () => props.show,
   (show) => {
-    if (show && props.pathTaskId) {
+    if (show && (props.pathTaskId || props.targetId)) {
       loadTaskInfo();
       loadData();
     }
@@ -244,7 +256,7 @@ watch(
 <template>
   <NDrawer v-model:show="drawerShow" :width="920" placement="right">
     <NDrawerContent
-      :title="`监测记录${pathTask?.name ? ` — ${pathTask.name}` : ''}`"
+      :title="`监测记录${pathTask?.name ? ` — ${pathTask.name}` : (targetName ? ` — ${targetName}` : '')}`"
       closable
       :body-content-style="{ padding: '0' }"
     >
@@ -270,7 +282,7 @@ watch(
         </NTabs>
 
         <DimensionTrendPanel
-          v-if="pathTaskId"
+          v-if="pathTaskId && !isTargetMode"
           :path-task-id="pathTaskId"
           :dimension="activeDim"
           :dim-label="dimensions.find(d => d.key === activeDim)?.label || ''"

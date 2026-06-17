@@ -103,32 +103,49 @@ func (s *serviceMonitor) syncTargetScheduleFromDimensions(ctx context.Context, i
 }
 
 func (s *serviceMonitor) DeleteTarget(ctx context.Context, id string) error {
-	return s.session().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var pathIDs []string
-		tx.Model(&model.MonitorPathTask{}).Where("target_id = ?", id).Pluck("id", &pathIDs)
-		if len(pathIDs) > 0 {
-			tx.Where("path_task_id IN ? OR target_id = ?", pathIDs, id).Delete(&model.MonitorExecution{})
-			tx.Where("id IN ?", pathIDs).Delete(&model.MonitorPathTask{})
-		} else {
-			tx.Where("target_id = ?", id).Delete(&model.MonitorExecution{})
+	session := s.session().WithContext(ctx)
+
+	var pathIDs []string
+	session.Model(&model.MonitorPathTask{}).Where("target_id = ?", id).Pluck("id", &pathIDs)
+
+	const batch = 500
+	if len(pathIDs) > 0 {
+		for i := 0; i < len(pathIDs); i += batch {
+			end := i + batch
+			if end > len(pathIDs) {
+				end = len(pathIDs)
+			}
+			session.Where("path_task_id IN ?", pathIDs[i:end]).Delete(&model.MonitorExecution{})
 		}
-		tx.Where("target_id = ?", id).Delete(&model.MonitorCrawlJob{})
-		return tx.Where("id = ?", id).Delete(&model.MonitorTarget{}).Error
-	})
+	}
+	session.Where("target_id = ?", id).Delete(&model.MonitorExecution{})
+
+	if len(pathIDs) > 0 {
+		session.Where("id IN ?", pathIDs).Delete(&model.MonitorPathTask{})
+	}
+	session.Where("target_id = ?", id).Delete(&model.MonitorCrawlJob{})
+	return session.Where("id = ?", id).Delete(&model.MonitorTarget{}).Error
 }
 
 func (s *serviceMonitor) BatchDeleteTargets(ctx context.Context, ids []string) error {
-	return s.session().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var pathIDs []string
-		tx.Model(&model.MonitorPathTask{}).Where("target_id IN ?", ids).Pluck("id", &pathIDs)
-		if len(pathIDs) > 0 {
-			tx.Where("path_task_id IN ?", pathIDs).Delete(&model.MonitorExecution{})
-			tx.Where("id IN ?", pathIDs).Delete(&model.MonitorPathTask{})
+	session := s.session().WithContext(ctx)
+	var pathIDs []string
+	session.Model(&model.MonitorPathTask{}).Where("target_id IN ?", ids).Pluck("id", &pathIDs)
+
+	const batch = 500
+	if len(pathIDs) > 0 {
+		for i := 0; i < len(pathIDs); i += batch {
+			end := i + batch
+			if end > len(pathIDs) {
+				end = len(pathIDs)
+			}
+			session.Where("path_task_id IN ?", pathIDs[i:end]).Delete(&model.MonitorExecution{})
 		}
-		tx.Where("target_id IN ?", ids).Delete(&model.MonitorExecution{})
-		tx.Where("target_id IN ?", ids).Delete(&model.MonitorCrawlJob{})
-		return tx.Where("id IN ?", ids).Delete(&model.MonitorTarget{}).Error
-	})
+		session.Where("id IN ?", pathIDs).Delete(&model.MonitorPathTask{})
+	}
+	session.Where("target_id IN ?", ids).Delete(&model.MonitorExecution{})
+	session.Where("target_id IN ?", ids).Delete(&model.MonitorCrawlJob{})
+	return session.Where("id IN ?", ids).Delete(&model.MonitorTarget{}).Error
 }
 
 func (s *serviceMonitor) GetTarget(ctx context.Context, id string) (*model.MonitorTarget, error) {

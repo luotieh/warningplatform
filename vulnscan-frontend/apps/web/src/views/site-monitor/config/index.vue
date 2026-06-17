@@ -1,6 +1,7 @@
 <script lang="ts" setup>
 import type {
   AlertConfig,
+  CleanupConfig,
   DimensionConfig,
   FileLibrary,
   MonitorDefaultConfig,
@@ -32,9 +33,12 @@ import MonitorCapabilities from '#/views/site-monitor/capabilities.vue';
 import { message } from '#/adapter/naive';
 import {
   getAlertConfig,
+  getCleanupConfig,
   getDefaultConfigList,
   getFileLibraryList,
+  runCleanup,
   updateAlertConfig,
+  updateCleanupConfig,
   updateDefaultConfig,
 } from '#/api/sitemonitor';
 
@@ -59,6 +63,13 @@ const alertConfig = reactive<AlertConfig>({
   wechat_enabled: false,
   wechat_webhook: '',
 });
+
+const cleanupConfig = reactive<CleanupConfig>({
+  enabled: true,
+  retain_days: 30,
+  retain_per_task: 100,
+});
+const cleanupRunning = ref(false);
 
 const dimensionMeta: Record<string, string> = {
   availability: '可用性监测',
@@ -156,6 +167,42 @@ async function handleSaveAlertConfig() {
   }
 }
 
+async function loadCleanupConfig() {
+  try {
+    const res = await getCleanupConfig();
+    const cfg = (res as any)?.data ?? res;
+    if (cfg) Object.assign(cleanupConfig, cfg);
+  } catch {
+    /* ignore */
+  }
+}
+
+async function handleSaveCleanupConfig() {
+  saving.value = true;
+  try {
+    await updateCleanupConfig({ ...cleanupConfig });
+    message.success('清理配置已保存');
+  } catch (e: any) {
+    message.error(e?.msg || '保存清理配置失败');
+  } finally {
+    saving.value = false;
+  }
+}
+
+async function handleRunCleanup() {
+  cleanupRunning.value = true;
+  try {
+    const res = await runCleanup();
+    const data = (res as any)?.data ?? res;
+    const deleted = data?.deleted ?? 0;
+    message.success(`清理完成，共删除 ${deleted} 条记录`);
+  } catch (e: any) {
+    message.error(e?.msg || '执行清理失败');
+  } finally {
+    cleanupRunning.value = false;
+  }
+}
+
 function getField<T = any>(dim: string, field: string, fallback: T): T {
   return ((configs[dim]?.[field] as T) ?? fallback) as T;
 }
@@ -169,6 +216,7 @@ onMounted(() => {
   loadConfigs();
   loadLibraries();
   loadAlertConfig();
+  loadCleanupConfig();
 });
 </script>
 
@@ -565,6 +613,74 @@ onMounted(() => {
                 >
                   保存告警配置
                 </NButton>
+              </NFormItem>
+            </NForm>
+          </NTabPane>
+
+          <!-- 数据清理 Tab -->
+          <NTabPane name="cleanup" tab="数据清理">
+            <NForm
+              label-placement="left"
+              :label-width="160"
+              style="max-width: 700px"
+            >
+              <div class="text-muted-foreground mb-4 text-sm">
+                自动清理无问题的执行记录（has_issue=false），有问题的记录永远不会被清理。
+                清理每小时自动执行一次，也可手动触发。
+              </div>
+
+              <NFormItem label="启用自动清理">
+                <NSwitch v-model:value="cleanupConfig.enabled" />
+              </NFormItem>
+
+              <NFormItem label="保留天数">
+                <NSpace align="center">
+                  <NInputNumber
+                    v-model:value="cleanupConfig.retain_days"
+                    :min="1"
+                    :max="365"
+                    :disabled="!cleanupConfig.enabled"
+                  />
+                  <span class="text-muted-foreground text-xs">
+                    仅清理超过该天数的无问题记录
+                  </span>
+                </NSpace>
+              </NFormItem>
+
+              <NFormItem label="每任务/维度保留条数">
+                <NSpace align="center">
+                  <NInputNumber
+                    v-model:value="cleanupConfig.retain_per_task"
+                    :min="10"
+                    :max="10000"
+                    :disabled="!cleanupConfig.enabled"
+                  />
+                  <span class="text-muted-foreground text-xs">
+                    每个任务+维度组合最多保留的无问题记录数
+                  </span>
+                </NSpace>
+              </NFormItem>
+
+              <div class="text-muted-foreground mb-4 text-xs">
+                只有同时满足两个条件的记录才会被清理：创建时间超过保留天数，且该任务/维度的无问题记录总数超过保留条数。
+              </div>
+
+              <NFormItem class="mt-4">
+                <NSpace>
+                  <NButton
+                    type="primary"
+                    :loading="saving"
+                    @click="handleSaveCleanupConfig"
+                  >
+                    保存清理配置
+                  </NButton>
+                  <NButton
+                    :loading="cleanupRunning"
+                    @click="handleRunCleanup"
+                  >
+                    立即执行清理
+                  </NButton>
+                </NSpace>
               </NFormItem>
             </NForm>
           </NTabPane>

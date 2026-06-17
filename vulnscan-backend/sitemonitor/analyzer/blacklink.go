@@ -41,7 +41,7 @@ func (a *BlacklinkAnalyzer) Analyze(ctx context.Context, input *Input) (*Output,
 		}
 
 		linkDomain := extractHost(link.URL)
-		if linkDomain == pageDomain {
+		if sameRootDomain(linkDomain, pageDomain) {
 			continue
 		}
 
@@ -153,7 +153,7 @@ func detectHiddenIframes(snap *snapshotData, pageDomain string) []map[string]any
 			continue
 		}
 		iframeDomain := extractHost(iframe.Src)
-		if iframeDomain == pageDomain {
+		if sameRootDomain(iframeDomain, pageDomain) {
 			continue
 		}
 		if iframe.IsHidden {
@@ -175,7 +175,7 @@ func detectJSRedirectsFromSnap(snap *snapshotData, pageDomain string) []map[stri
 
 	for _, redir := range snap.JSRedirects {
 		targetDomain := extractHost(redir.Target)
-		if targetDomain != "" && targetDomain != pageDomain {
+		if targetDomain != "" && !sameRootDomain(targetDomain, pageDomain) {
 			severity := "medium"
 			if redir.Delay > 0 {
 				severity = "high"
@@ -196,7 +196,7 @@ func detectJSRedirectsFromSnap(snap *snapshotData, pageDomain string) []map[stri
 
 	if snap.MetaRedirect != nil {
 		targetDomain := extractHost(snap.MetaRedirect.URL)
-		if targetDomain != "" && targetDomain != pageDomain {
+		if targetDomain != "" && !sameRootDomain(targetDomain, pageDomain) {
 			findings = append(findings, map[string]any{
 				"type":     "meta_refresh",
 				"target":   snap.MetaRedirect.URL,
@@ -210,7 +210,7 @@ func detectJSRedirectsFromSnap(snap *snapshotData, pageDomain string) []map[stri
 	if snap.FinalURL != "" && snap.URL != "" {
 		origDomain := extractHost(snap.URL)
 		finalDomain := extractHost(snap.FinalURL)
-		if origDomain != "" && finalDomain != "" && origDomain != finalDomain {
+		if origDomain != "" && finalDomain != "" && !sameRootDomain(origDomain, finalDomain) {
 			findings = append(findings, map[string]any{
 				"type":     "server_redirect",
 				"target":   snap.FinalURL,
@@ -228,7 +228,7 @@ func detectMetaRedirect(snap *snapshotData, pageDomain string) []map[string]any 
 		return nil
 	}
 	targetDomain := extractHost(snap.MetaRedirect.URL)
-	if targetDomain == "" || targetDomain == pageDomain {
+	if targetDomain == "" || sameRootDomain(targetDomain, pageDomain) {
 		return nil
 	}
 	return []map[string]any{{

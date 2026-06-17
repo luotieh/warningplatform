@@ -17,6 +17,8 @@ type AgentHealthChecker struct {
 	checkInterval   time.Duration
 	reassignTimeout time.Duration
 	cancel          context.CancelFunc
+	cleanupCfg      CleanupConfig
+	lastCleanup     time.Time
 }
 
 func NewAgentHealthChecker(database *db.DB) *AgentHealthChecker {
@@ -25,7 +27,16 @@ func NewAgentHealthChecker(database *db.DB) *AgentHealthChecker {
 		offlineTimeout:  90 * time.Second,
 		checkInterval:   60 * time.Second,
 		reassignTimeout: 5 * time.Minute,
+		cleanupCfg:      DefaultCleanupConfig(),
 	}
+}
+
+func (h *AgentHealthChecker) SetCleanupConfig(cfg CleanupConfig) {
+	h.cleanupCfg = cfg
+}
+
+func (h *AgentHealthChecker) GetCleanupConfig() CleanupConfig {
+	return h.cleanupCfg
 }
 
 func (h *AgentHealthChecker) session() *gorm.DB {
@@ -63,6 +74,14 @@ func (h *AgentHealthChecker) runLoop(ctx context.Context) {
 				slog.Warn("[AgentHealth] expire stale executions failed", "error", err)
 			} else if n > 0 {
 				slog.Warn("[AgentHealth] expired stale monitor executions", "count", n)
+			}
+			if time.Since(h.lastCleanup) >= time.Hour {
+				h.lastCleanup = time.Now()
+				if n, err := CleanupOldExecutions(h.session(), h.cleanupCfg); err != nil {
+					slog.Warn("[AgentHealth] cleanup old executions failed", "error", err)
+				} else if n > 0 {
+					slog.Info("[AgentHealth] cleaned up old executions", "count", n)
+				}
 			}
 		}
 	}

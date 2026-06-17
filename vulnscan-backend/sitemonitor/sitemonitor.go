@@ -111,6 +111,7 @@ func (m *Monitor) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
 			// Dashboard
 			{Name: "仪表盘统计", Path: "dashboard/stats", Method: "GET", Handler: m.handler.GetDashboardStats, Enabled: true},
 			{Name: "执行统计", Path: "execution-stats", Method: "GET", Handler: m.handler.GetTaskExecutionStats, Enabled: true},
+			{Name: "目标汇总统计", Path: "target-stats", Method: "GET", Handler: m.handler.GetTargetStats, Enabled: true},
 			// 监测目标
 			{Name: "目标列表", Path: "targets", Method: "GET", Handler: m.handler.ListTargets, Enabled: true},
 			{Name: "创建目标", Path: "targets", Method: "POST", Handler: m.handleCreateTarget, Enabled: true},
@@ -164,6 +165,10 @@ func (m *Monitor) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
 			{Name: "告警配置详情", Path: "alert-config", Method: "GET", Handler: m.handler.GetAlertConfig, Enabled: true},
 			{Name: "更新告警配置", Path: "alert-config", Method: "PUT", Handler: m.handler.UpdateAlertConfig, Enabled: true},
 			{Name: "调度概览", Path: "schedule/overview", Method: "GET", Handler: m.handleScheduleOverview, Enabled: true},
+			// 数据清理
+			{Name: "清理配置详情", Path: "cleanup-config", Method: "GET", Handler: m.handleGetCleanupConfig, Enabled: true},
+			{Name: "更新清理配置", Path: "cleanup-config", Method: "PUT", Handler: m.handleUpdateCleanupConfig, Enabled: true},
+			{Name: "手动清理", Path: "cleanup/run", Method: "POST", Handler: m.handleRunCleanup, Enabled: true},
 			// 报告
 			{Name: "生成报告", Path: "reports/generate", Method: "POST", Handler: m.handleGenerateReport, Enabled: true},
 		}},
@@ -334,6 +339,34 @@ func (m *Monitor) handleScheduleOverview(c *gin.Context) {
 		"active_entries": m.scheduler.ActiveCount(),
 		"entries":        info,
 	}).Send()
+}
+
+func (m *Monitor) handleGetCleanupConfig(c *gin.Context) {
+	web.Succeed(c).Data(m.healthChecker.GetCleanupConfig()).Send()
+}
+
+func (m *Monitor) handleUpdateCleanupConfig(c *gin.Context) {
+	var cfg CleanupConfig
+	if err := c.ShouldBindJSON(&cfg); err != nil {
+		web.Err(c, web.ParamsMissingRequired).Send()
+		return
+	}
+	m.healthChecker.SetCleanupConfig(cfg)
+	web.Succeed(c).Data(cfg).Send()
+}
+
+func (m *Monitor) handleRunCleanup(c *gin.Context) {
+	session, err := m.db.GetDBSession()
+	if err != nil {
+		web.Fail(c).Err(err).Send()
+		return
+	}
+	n, err := CleanupOldExecutions(session, m.healthChecker.GetCleanupConfig())
+	if err != nil {
+		web.Fail(c).Err(err).Send()
+		return
+	}
+	web.Succeed(c).Data(gin.H{"deleted": n}).Send()
 }
 
 func (m *Monitor) GetNatsService() *NatsServiceImpl {

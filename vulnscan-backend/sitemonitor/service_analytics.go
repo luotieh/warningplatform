@@ -18,8 +18,9 @@ func (s *serviceMonitor) GetDashboardStats(ctx context.Context) (*contract.Dashb
 	db.Model(&model.MonitorTarget{}).Where("enabled = ?", true).Count(&stats.EnabledTargets)
 	db.Model(&model.MonitorPathTask{}).Count(&stats.TotalPathTasks)
 	db.Model(&model.MonitorPathTask{}).Where("enabled = ?", true).Count(&stats.EnabledPathTasks)
-	db.Model(&model.MonitorExecution{}).Count(&stats.TotalExecutions)
-	db.Model(&model.MonitorExecution{}).Where("has_issue = ?", true).Count(&stats.IssueExecutions)
+	since := time.Now().AddDate(0, 0, -30)
+	db.Model(&model.MonitorExecution{}).Where("created_at >= ?", since).Count(&stats.TotalExecutions)
+	db.Model(&model.MonitorExecution{}).Where("has_issue = ? AND created_at >= ?", true, since).Count(&stats.IssueExecutions)
 	db.Model(&model.MonitorAgent{}).Where("status = ?", "online").Count(&stats.OnlineAgents)
 	db.Model(&model.MonitorAgent{}).Count(&stats.TotalAgents)
 	return stats, nil
@@ -34,17 +35,18 @@ func (s *serviceMonitor) GetTaskExecutionStats(ctx context.Context) (map[string]
 		PendingCnt int64
 		ValidCnt   int64
 	}
+	since := time.Now().AddDate(0, 0, -30)
 	var rows []row
 	err := s.session().WithContext(ctx).Raw(`
 		SELECT path_task_id, dimension,
 			COUNT(*) as total,
-			SUM(CASE WHEN has_issue = 1 THEN 1 ELSE 0 END) as issue_count,
+			SUM(has_issue) as issue_count,
 			SUM(CASE WHEN has_issue = 1 AND disposition = 'pending' THEN 1 ELSE 0 END) as pending_cnt,
 			SUM(CASE WHEN has_issue = 1 AND disposition = 'valid' THEN 1 ELSE 0 END) as valid_cnt
 		FROM monitor_executions
-		WHERE path_task_id IS NOT NULL AND path_task_id != ''
+		WHERE path_task_id != '' AND created_at >= ?
 		GROUP BY path_task_id, dimension
-	`).Scan(&rows).Error
+	`, since).Scan(&rows).Error
 	if err != nil {
 		return nil, err
 	}
@@ -59,6 +61,81 @@ func (s *serviceMonitor) GetTaskExecutionStats(ctx context.Context) (map[string]
 			PendingCount: r.PendingCnt,
 			ValidCount:   r.ValidCnt,
 		}
+	}
+	return result, nil
+}
+
+func (s *serviceMonitor) GetTargetStats(ctx context.Context) (map[string]*contract.TargetSummary, error) {
+	type aggRow struct {
+		TargetID   string
+		Dimension  string
+		Total      int64
+		IssueCount int64
+		PendingCnt int64
+	}
+	since := time.Now().AddDate(0, 0, -30)
+	var rows []aggRow
+	err := s.session().WithContext(ctx).Raw(`
+		SELECT pt.target_id, e.dimension,
+			COUNT(*) as total,
+			SUM(e.has_issue) as issue_count,
+			SUM(CASE WHEN e.has_issue = 1 AND e.disposition = 'pending' THEN 1 ELSE 0 END) as pending_cnt
+		FROM monitor_executions e
+		INNER JOIN monitor_path_tasks pt ON pt.id = e.path_task_id
+		WHERE e.created_at >= ?
+		GROUP BY pt.target_id, e.dimension
+	`, since).Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+
+	type lastRow struct {
+		TargetID  string
+		Dimension string
+		Status    string
+		HasIssue  bool
+	}
+	var lasts []lastRow
+	_ = s.session().WithContext(ctx).Raw(`
+		SELECT sub.target_id, sub.dimension, sub.status, sub.has_issue
+		FROM (
+			SELECT pt.target_id, e.dimension, e.status, e.has_issue,
+				ROW_NUMBER() OVER (PARTITION BY pt.target_id, e.dimension ORDER BY e.created_at DESC) as rn
+			FROM monitor_executions e
+			INNER JOIN monitor_path_tasks pt ON pt.id = e.path_task_id
+			WHERE e.created_at >= ?
+		) sub WHERE sub.rn = 1
+	`, since).Scan(&lasts)
+
+	lastMap := map[string]map[string]*lastRow{}
+	for i := range lasts {
+		r := &lasts[i]
+		if lastMap[r.TargetID] == nil {
+			lastMap[r.TargetID] = map[string]*lastRow{}
+		}
+		lastMap[r.TargetID][r.Dimension] = r
+	}
+
+	result := map[string]*contract.TargetSummary{}
+	for _, r := range rows {
+		ts := result[r.TargetID]
+		if ts == nil {
+			ts = &contract.TargetSummary{Dimensions: map[string]*contract.TargetDimBrief{}}
+			result[r.TargetID] = ts
+		}
+		ts.TotalIssues += r.IssueCount
+		ts.PendingCount += r.PendingCnt
+
+		brief := &contract.TargetDimBrief{
+			Total:      r.Total,
+			IssueCount: r.IssueCount,
+			Pending:    r.PendingCnt,
+		}
+		if lr, ok := lastMap[r.TargetID][r.Dimension]; ok {
+			brief.LastStatus = lr.Status
+			brief.LastHasIssue = lr.HasIssue
+		}
+		ts.Dimensions[r.Dimension] = brief
 	}
 	return result, nil
 }
@@ -277,14 +354,41 @@ func summarizeExecution(sum *contract.TaskTrendSummary, e model.MonitorExecution
 }
 
 func appendDimensionBriefs(db *gorm.DB, pathTaskID string, resp *contract.TaskTrendResp) {
+	type briefRow struct {
+		Dimension    string
+		Total        int64
+		SuccessCount int64
+		FailedCount  int64
+		IssueCount   int64
+	}
+	var rows []briefRow
+	db.Model(&model.MonitorExecution{}).
+		Select(`dimension,
+			COUNT(*) as total,
+			SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success_count,
+			SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_count,
+			SUM(has_issue) as issue_count`).
+		Where("path_task_id = ?", pathTaskID).
+		Group("dimension").
+		Scan(&rows)
+
+	briefMap := map[string]*briefRow{}
+	for i := range rows {
+		briefMap[rows[i].Dimension] = &rows[i]
+	}
+
 	for _, dim := range model.MonitorPathDimensions {
 		brief := contract.TaskDimBrief{Dimension: dim}
-		db.Model(&model.MonitorExecution{}).Where("path_task_id = ? AND dimension = ?", pathTaskID, dim).Count(&brief.Total)
-		db.Model(&model.MonitorExecution{}).Where("path_task_id = ? AND dimension = ? AND status = ?", pathTaskID, dim, "success").Count(&brief.SuccessCount)
-		db.Model(&model.MonitorExecution{}).Where("path_task_id = ? AND dimension = ? AND status = ?", pathTaskID, dim, "failed").Count(&brief.FailedCount)
-		db.Model(&model.MonitorExecution{}).Where("path_task_id = ? AND dimension = ? AND has_issue = ?", pathTaskID, dim, true).Count(&brief.IssueCount)
+		if r, ok := briefMap[dim]; ok {
+			brief.Total = r.Total
+			brief.SuccessCount = r.SuccessCount
+			brief.FailedCount = r.FailedCount
+			brief.IssueCount = r.IssueCount
+		}
 		var last model.MonitorExecution
-		if db.Where("path_task_id = ? AND dimension = ?", pathTaskID, dim).Order("created_at DESC").First(&last).Error == nil {
+		if db.Where("path_task_id = ? AND dimension = ?", pathTaskID, dim).
+			Select("status, created_at").
+			Order("created_at DESC").First(&last).Error == nil {
 			brief.LastStatus = last.Status
 			brief.LastTime = last.CreatedAt.Format("2006-01-02 15:04:05")
 		}

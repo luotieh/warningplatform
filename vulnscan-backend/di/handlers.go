@@ -39,6 +39,7 @@ import (
 	"vulnscan-backend/vuln"
 
 	iamsdk "code.yt-security.com/public/access"
+	authRemote "code.yt-security.com/public/access/auth/remote"
 	"code.yt-security.com/public/access/authorize"
 	"code.yt-security.com/public/access/proxy"
 	"code.yt-security.com/public/access/storage"
@@ -92,12 +93,14 @@ func (h *Handlers) SetLogLevel(lv *slog.LevelVar) {
 }
 
 func (h *Handlers) RouteLoad() {
+	h.tuneDBPool()
 	h.autoMigrate()
 	h.initSettings()
 	h.wireIncidentReportExporter()
 
 	engine := h.Web
 	engine.Use(web.MiddlewareRequestResponse())
+	engine.Use(errorLoggingMiddleware())
 
 	apiGroup := engine.Group("/api")
 
@@ -109,6 +112,8 @@ func (h *Handlers) RouteLoad() {
 			Copyright: h.Product.GetName(),
 		},
 	})
+
+	h.registerSSORoutes(engine.Engine)
 
 	apiAuthenticated := apiGroup.Group("/", h.IAM.Middleware().Authentication())
 	h.registerPrivilegedFrontendSync(apiAuthenticated)
@@ -326,6 +331,74 @@ func (h *Handlers) Shutdown() {
 		nats.Close()
 	}
 	h.IAM.Close()
+}
+
+func (h *Handlers) registerSSORoutes(engine *gin.Engine) {
+	if h.IAM.SSO == nil {
+		slog.Warn("[SSO] SSO service not available, skipping SSO routes")
+		return
+	}
+
+	callbackURI := h.Config.SSO.CallbackURI
+	if callbackURI == "" {
+		callbackURI = h.Config.SSO.TokenRelayCallbackURI
+	}
+	if callbackURI == "" {
+		slog.Warn("[SSO] no callback_uri configured, skipping SSO routes")
+		return
+	}
+
+	successRedirect := h.Config.SSO.SuccessRedirect
+	if successRedirect == "" {
+		successRedirect = "/auth/sso-callback"
+	}
+
+	callbackOpts := authRemote.SSOCallbackOptions{
+		RedirectURI:     callbackURI,
+		SuccessRedirect: successRedirect,
+		TokenDelivery:   authRemote.TokenDeliveryQuery,
+		FetchUserInfo:   false,
+	}
+
+	engine.GET("/sso/login", h.IAM.SSO.LoginRedirect(callbackOpts, authRemote.LoginHandlerOptions{}))
+	engine.GET("/callback", h.IAM.SSO.TokenRelayHandler(authRemote.TokenRelayOptions{
+		RedirectURI:   callbackURI,
+		FrontendURL:   successRedirect,
+		TokenDelivery: authRemote.TokenDeliveryQuery,
+		FetchUserInfo: false,
+	}))
+
+	slog.Info("[+] SSO routes registered", "callback", callbackURI, "success_redirect", successRedirect)
+}
+
+func (h *Handlers) tuneDBPool() {
+	session, err := h.DB.GetDBSession()
+	if err != nil {
+		return
+	}
+	sqlDB, err := session.DB()
+	if err != nil {
+		return
+	}
+	sqlDB.SetConnMaxIdleTime(5 * time.Minute)
+	slog.Info("[+] DB 连接池已调优", "conn_max_idle_time", "5m")
+}
+
+func errorLoggingMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Next()
+		if c.Writer.Status() >= 500 {
+			if e, exists := c.Get("api_error"); exists && e != nil {
+				slog.Error("[API 500]",
+					"method", c.Request.Method,
+					"path", c.Request.URL.Path,
+					"query", c.Request.URL.RawQuery,
+					"status", c.Writer.Status(),
+					"error", e,
+				)
+			}
+		}
+	}
 }
 
 func metricsRouteEnabled() bool {

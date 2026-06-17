@@ -492,3 +492,23 @@ export interface TaskTrendResp {
     last_time: string;
   }>;
 }
+
+export interface CleanupConfig {
+  enabled: boolean;
+  retain_days: number;
+  retain_per_task: number;
+}
+
+export interface TargetDimBrief {
+  total: number;
+  issue_count: number;
+  pending: number;
+  last_status: string;
+  last_has_issue: boolean;
+}
+
+export interface TargetSummary {
+  total_issues: number;
+  pending_count: number;
+  dimensions: Record<string, TargetDimBrief>;
+}

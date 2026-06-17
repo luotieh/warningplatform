@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"vulnscan-backend/model"
@@ -193,6 +194,9 @@ func applyResultSemantics(tx *gorm.DB, exec *model.MonitorExecution, ar *model.M
 		exec.HasIssue = !jsonBool(ar.Result, "available")
 	case "domain_hijack":
 		exec.HasIssue = jsonBool(ar.Result, "hijacked")
+		if tx != nil && exec.TargetID != "" {
+			autoFillExpectedIPs(tx, exec.TargetID, ar.Result)
+		}
 	default:
 		// 未知维度：若结果体含 has_hit/has_issue 则尽量识别
 		if jsonBool(ar.Result, "has_hit") || jsonBool(ar.Result, "has_issue") ||
@@ -224,4 +228,27 @@ func FinalizeFromTaskResult(ctx context.Context, db *gorm.DB, executionID, agent
 		FinishedAt:  finishedAt,
 	}
 	return FinalizeMonitorResult(ctx, db, ar)
+}
+
+func autoFillExpectedIPs(db *gorm.DB, targetID, resultJSON string) {
+	var target model.MonitorTarget
+	if err := db.Where("id = ?", targetID).Select("id, expected_ips").First(&target).Error; err != nil {
+		return
+	}
+	if target.ExpectedIPs != "" {
+		return
+	}
+	var parsed struct {
+		ResolvedIPs []string `json:"resolved_ips"`
+	}
+	if err := json.Unmarshal([]byte(resultJSON), &parsed); err != nil || len(parsed.ResolvedIPs) == 0 {
+		return
+	}
+	ips := strings.Join(parsed.ResolvedIPs, ",")
+	if err := db.Model(&model.MonitorTarget{}).Where("id = ? AND (expected_ips = '' OR expected_ips IS NULL)", targetID).
+		Update("expected_ips", ips).Error; err != nil {
+		slog.Warn("[Monitor] auto-fill expected_ips failed", "target_id", targetID, "err", err)
+		return
+	}
+	slog.Info("[Monitor] auto-filled expected_ips from DNS", "target_id", targetID, "ips", ips)
 }

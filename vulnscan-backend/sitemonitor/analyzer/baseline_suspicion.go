@@ -75,7 +75,7 @@ func checkSuspiciousScripts(snap *snapshotData, trustedCDNs []string) []Suspicio
 			continue
 		}
 		domain := extractHost(script.Src)
-		if domain == "" || domain == pageDomain {
+		if domain == "" || sameRootDomain(domain, pageDomain) {
 			continue
 		}
 		if !matchTrustedDomain(domain, trustedCDNs) {
