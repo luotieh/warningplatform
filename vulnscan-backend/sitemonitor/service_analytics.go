@@ -76,14 +76,13 @@ func (s *serviceMonitor) GetTargetStats(ctx context.Context) (map[string]*contra
 	since := time.Now().AddDate(0, 0, -30)
 	var rows []aggRow
 	err := s.session().WithContext(ctx).Raw(`
-		SELECT pt.target_id, e.dimension,
+		SELECT e.target_id, e.dimension,
 			COUNT(*) as total,
 			SUM(e.has_issue) as issue_count,
 			SUM(CASE WHEN e.has_issue = 1 AND e.disposition = 'pending' THEN 1 ELSE 0 END) as pending_cnt
 		FROM monitor_executions e
-		INNER JOIN monitor_path_tasks pt ON pt.id = e.path_task_id
-		WHERE e.created_at >= ?
-		GROUP BY pt.target_id, e.dimension
+		WHERE e.created_at >= ? AND e.target_id != ''
+		GROUP BY e.target_id, e.dimension
 	`, since).Scan(&rows).Error
 	if err != nil {
 		return nil, err
@@ -97,14 +96,15 @@ func (s *serviceMonitor) GetTargetStats(ctx context.Context) (map[string]*contra
 	}
 	var lasts []lastRow
 	_ = s.session().WithContext(ctx).Raw(`
-		SELECT sub.target_id, sub.dimension, sub.status, sub.has_issue
-		FROM (
-			SELECT pt.target_id, e.dimension, e.status, e.has_issue,
-				ROW_NUMBER() OVER (PARTITION BY pt.target_id, e.dimension ORDER BY e.created_at DESC) as rn
-			FROM monitor_executions e
-			INNER JOIN monitor_path_tasks pt ON pt.id = e.path_task_id
-			WHERE e.created_at >= ?
-		) sub WHERE sub.rn = 1
+		SELECT e.target_id, e.dimension, e.status, e.has_issue
+		FROM monitor_executions e
+		INNER JOIN (
+			SELECT target_id, dimension, MAX(created_at) as max_created
+			FROM monitor_executions
+			WHERE created_at >= ? AND target_id != ''
+			GROUP BY target_id, dimension
+		) latest ON e.target_id = latest.target_id AND e.dimension = latest.dimension AND e.created_at = latest.max_created
+		WHERE e.target_id != ''
 	`, since).Scan(&lasts)
 
 	lastMap := map[string]map[string]*lastRow{}

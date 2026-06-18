@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"strings"
 	"time"
 
 	"vulnscan-backend/agent"
@@ -170,27 +171,57 @@ func (e *DBExecutor) captureBlacklinkTargets(ctx context.Context, output *analyz
 		BlacklinkMatches []struct {
 			URL string `json:"url"`
 		} `json:"blacklink_matches"`
+		HiddenIframes []struct {
+			Src string `json:"src"`
+		} `json:"hidden_iframes"`
+		JSRedirects []struct {
+			Target string `json:"target"`
+			Type   string `json:"type"`
+		} `json:"js_redirects"`
+		MetaRedirects []struct {
+			URL string `json:"url"`
+		} `json:"meta_redirects"`
 	}
 	if json.Unmarshal([]byte(output.DetailsJSON), &details) != nil {
 		return nil
 	}
 
-	const maxTargets = 5
+	const maxTargets = 8
+	seen := make(map[string]bool)
 	var screenshots []agent.ExtraScreenshot
-	for i, m := range details.BlacklinkMatches {
-		if i >= maxTargets || m.URL == "" {
-			break
+
+	captureOne := func(label, targetURL string) {
+		if targetURL == "" || seen[targetURL] || len(screenshots) >= maxTargets {
+			return
 		}
-		data := e.pageService.CaptureSimpleScreenshot(ctx, m.URL)
+		if !strings.HasPrefix(targetURL, "http://") && !strings.HasPrefix(targetURL, "https://") {
+			return
+		}
+		seen[targetURL] = true
+		data := e.pageService.CaptureSimpleScreenshot(ctx, targetURL)
 		if len(data) > 0 {
 			screenshots = append(screenshots, agent.ExtraScreenshot{
-				Label: "暗链目标",
-				URL:   m.URL,
+				Label: label,
+				URL:   targetURL,
 				Data:  data,
 			})
-			slog.Info("[Monitor] 暗链目标截图已生成", "target_url", m.URL)
+			slog.Info("[Monitor] 暗链目标截图已生成", "label", label, "target_url", targetURL)
 		}
 	}
+
+	for _, m := range details.BlacklinkMatches {
+		captureOne("暗链目标", m.URL)
+	}
+	for _, r := range details.JSRedirects {
+		captureOne("JS重定向目标", r.Target)
+	}
+	for _, iframe := range details.HiddenIframes {
+		captureOne("隐藏iframe", iframe.Src)
+	}
+	for _, mr := range details.MetaRedirects {
+		captureOne("Meta重定向目标", mr.URL)
+	}
+
 	return screenshots
 }
 

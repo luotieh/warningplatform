@@ -793,12 +793,14 @@ async function handleImportFile({ file }: { file: UploadFileInfo }) {
 
 async function pollImportProgress(importId: string) {
   const maxAttempts = 600;
+  let consecutiveErrors = 0;
   for (let i = 0; i < maxAttempts; i++) {
     await new Promise((r) => setTimeout(r, 1500));
     try {
       const res = await getImportResult(importId);
       const data = (res as any)?.data ?? res;
       importResult.value = data;
+      consecutiveErrors = 0;
       if (data.status === 'completed' || data.status === 'failed') {
         if (data.status === 'completed') {
           message.success(`导入完成：成功 ${data.success}，失败 ${data.failed}`);
@@ -809,7 +811,11 @@ async function pollImportProgress(importId: string) {
         return;
       }
     } catch {
-      // 轮询失败不中断
+      consecutiveErrors++;
+      if (consecutiveErrors >= 10) {
+        message.error('导入查询连续失败，可能服务已重启，请重新操作');
+        return;
+      }
     }
   }
   message.warning('导入轮询超时，请稍后查看结果');

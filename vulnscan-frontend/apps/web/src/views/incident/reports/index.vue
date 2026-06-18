@@ -184,10 +184,10 @@ async function loadAll() {
       getAIAnalysis(),
     ]);
 
-    remediation.value = remediationResult;
-    overdueItems.value = overdueResult.items;
-    trendData.value = trendResult;
-    aiData.value = aiResult;
+    remediation.value = remediationResult ?? null;
+    overdueItems.value = overdueResult?.items ?? [];
+    trendData.value = trendResult ?? null;
+    aiData.value = aiResult ?? null;
 
     await loadDimension();
     await nextTick();
@@ -201,7 +201,7 @@ async function loadAll() {
 
 async function loadDimension() {
   try {
-    dimensionData.value = await getMultiDimAnalysis({ dimension: dimension.value });
+    dimensionData.value = (await getMultiDimAnalysis({ dimension: dimension.value })) ?? [];
     await nextTick();
     renderDimensionOnly();
     renderHotCategoryOnly();
@@ -237,7 +237,8 @@ function chartColors() {
 }
 
 function renderDimensionOnly() {
-  const items = dimensionData.value;
+  const items = dimensionData.value ?? [];
+  if (items.length === 0) return;
   const barColors = items.map((item, idx) =>
     dimensionColorMap[item.value] ?? defaultBarColors[idx % defaultBarColors.length],
   );
@@ -336,6 +337,7 @@ function renderTrendOnly() {
 
 function renderHotCategoryOnly() {
   const hotCategories = aiData.value?.hot_categories ?? [];
+  if (hotCategories.length === 0) return;
   const cc = chartColors();
   const hotBarGradient = {
     type: 'linear' as const, x: 0, y: 0, x2: 1, y2: 0,

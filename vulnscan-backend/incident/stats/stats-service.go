@@ -117,7 +117,7 @@ func (s *serviceStats) GetOverdueList(ctx context.Context, req statsContract.Ove
 func (s *serviceStats) GetMultiDimAnalysis(ctx context.Context, dimension string) ([]statsContract.MultiDimItem, error) {
 	sess := s.session().WithContext(ctx)
 
-	var results []statsContract.MultiDimItem
+	results := make([]statsContract.MultiDimItem, 0)
 
 	switch dimension {
 	case "level":

@@ -389,7 +389,16 @@ func (s *serviceMonitor) GetDefaultConfig(ctx context.Context, dimension string)
 }
 
 func (s *serviceMonitor) UpdateDefaultConfig(ctx context.Context, dimension string, configJSON map[string]any) error {
-	return s.session().WithContext(ctx).Model(&model.MonitorDefaultConfig{}).
-		Where("dimension = ?", dimension).
-		Update("config_json", configJSON).Error
+	var existing model.MonitorDefaultConfig
+	session := s.session().WithContext(ctx)
+	err := session.Where("dimension = ?", dimension).First(&existing).Error
+	if err != nil {
+		cfg := model.MonitorDefaultConfig{
+			ID:         ulid.GenerateID(),
+			Dimension:  dimension,
+			ConfigJSON: model.JSONMap(configJSON),
+		}
+		return session.Create(&cfg).Error
+	}
+	return session.Model(&existing).Update("config_json", model.JSONMap(configJSON)).Error
 }

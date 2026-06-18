@@ -233,6 +233,7 @@ var MonitorDefaultConfigSeeds = map[string]map[string]any{
 	"blacklink": {
 		"enabled": true, "alert_enabled": true, "cycle_minutes": 1,
 		"incident_auto_enabled": false, "incident_min_blacklink_count": 1,
+		"trusted_domains": []any{},
 	},
 	"screenshot": {
 		"width": 1920, "height": 1080, "quality": 80,
@@ -250,10 +251,10 @@ const (
 
 type MonitorExecution struct {
 	ID                string     `gorm:"primarykey;type:varchar(36)" json:"id"`
-	TargetID          string     `json:"target_id" gorm:"type:varchar(36);index:idx_exec_target_dim_status;index"`
+	TargetID          string     `json:"target_id" gorm:"type:varchar(36);index:idx_exec_target_dim_status;index;index:idx_exec_target_dim_created"`
 	PathTaskID        string     `json:"path_task_id" gorm:"type:varchar(36);index:idx_exec_path_dim_status;index"`
 	AgentID           string     `json:"agent_id" gorm:"type:varchar(80);index:idx_exec_status_agent;index"`
-	Dimension         string     `json:"dimension" gorm:"type:varchar(50);not null;index:idx_exec_target_dim_status;index:idx_exec_path_dim_status;index:idx_exec_dim_status_created;index"`
+	Dimension         string     `json:"dimension" gorm:"type:varchar(50);not null;index:idx_exec_target_dim_status;index:idx_exec_path_dim_status;index:idx_exec_dim_status_created;index;index:idx_exec_target_dim_created"`
 	URL               string     `json:"url" gorm:"type:varchar(500)"`
 	Status            string     `json:"status" gorm:"type:varchar(20);default:pending;index:idx_exec_target_dim_status;index:idx_exec_path_dim_status;index:idx_exec_dim_status_created;index:idx_exec_status_agent;index"`
 	HasIssue          bool       `json:"has_issue" gorm:"default:false"`
@@ -266,7 +267,7 @@ type MonitorExecution struct {
 	StartedAt         *time.Time `json:"started_at"`
 	FinishedAt        *time.Time `json:"finished_at"`
 	ReapedAt          *time.Time `json:"reaped_at"`
-	CreatedAt         time.Time  `json:"created_at" gorm:"index:idx_exec_dim_status_created"`
+	CreatedAt         time.Time  `json:"created_at" gorm:"index:idx_exec_dim_status_created;index:idx_exec_target_dim_created"`
 	// 问题去重字段：同一 URL + 维度 + 任务的重复问题合并到一条记录
 	IssueKey        string     `json:"issue_key" gorm:"type:varchar(64);index"`
 	FirstSeenAt     *time.Time `json:"first_seen_at"`

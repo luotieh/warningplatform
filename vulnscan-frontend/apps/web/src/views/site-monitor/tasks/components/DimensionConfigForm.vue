@@ -2,6 +2,7 @@
 import type { DimensionConfig, FileLibrary } from '#/api/sitemonitor';
 
 import {
+  NDynamicTags,
   NInputNumber,
   NSelect,
   NSwitch,
@@ -184,6 +185,20 @@ const cycleTypeOptions = [
           </span>
         </div>
 
+        <!-- 暗链 - 信任域名白名单 -->
+        <div v-if="dim.key === 'blacklink'" class="dim-row">
+          <label class="dim-block-label">
+            <span class="dim-inline__label">信任域名</span>
+            <span class="dim-hint">
+              自有域名或合作方域名，不会被判定为暗链（支持通配符如 *.example.cn）
+            </span>
+          </label>
+          <NDynamicTags
+            :value="(getField(dim.key, 'trusted_domains', []) as string[])"
+            @update:value="(v: string[]) => setField(dim.key, 'trusted_domains', v)"
+          />
+        </div>
+
         <!-- 敏感文件（目标级） -->
         <template v-if="dim.key === 'sensitive_file'">
           <div class="dim-row">
@@ -339,5 +354,12 @@ const cycleTypeOptions = [
 .dim-hint {
   font-size: 12px;
   color: var(--n-text-color-3);
+}
+
+.dim-block-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
 }
 </style>

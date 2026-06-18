@@ -711,6 +711,13 @@ func (ps *PageService) DetectCloaking(ctx context.Context, rawURL, normalHash, n
 			continue
 		}
 
+		// 4xx/5xx responses to bot UA are normal anti-crawl behavior, not cloaking
+		if botSnap.StatusCode >= 400 {
+			slog.Debug("[Monitor] Cloaking跳过：爬虫收到拒绝响应",
+				"bot", bot.Name, "status", botSnap.StatusCode, "url", rawURL)
+			continue
+		}
+
 		botText := botSnap.VisibleText
 		if botText == "" {
 			botText = botSnap.RenderedHTML

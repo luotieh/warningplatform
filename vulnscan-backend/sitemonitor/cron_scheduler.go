@@ -233,8 +233,17 @@ func (cs *CronScheduler) dispatchDueEntries(ctx context.Context) {
 
 			if err != nil {
 				if !isBusyErr(err) {
-					slog.Warn("[Scheduler] dispatch failed",
-						"scope", e.scope, "id", e.entityID, "dim", e.dimension, "error", err)
+					errMsg := err.Error()
+					if strings.Contains(errMsg, "不存在") {
+						slog.Info("[Scheduler] removing stale entry",
+							"scope", e.scope, "id", e.entityID, "dim", e.dimension)
+						cs.mu.Lock()
+						delete(cs.entries, scheduleKey(e.scope, e.entityID, e.dimension))
+						cs.mu.Unlock()
+					} else {
+						slog.Warn("[Scheduler] dispatch failed",
+							"scope", e.scope, "id", e.entityID, "dim", e.dimension, "error", err)
+					}
 				}
 				return
 			}

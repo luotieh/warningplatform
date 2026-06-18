@@ -32,6 +32,7 @@ func (a *BlacklinkAnalyzer) Analyze(ctx context.Context, input *Input) (*Output,
 	pageDomain := extractHost(input.URL)
 	blackRules := a.loadBlackRules()
 	backdoorPaths := a.loadBackdoorPaths()
+	trustedDomains := loadTrustedDomains(input.Config)
 
 	blacklinks := make([]map[string]any, 0)
 
@@ -42,6 +43,9 @@ func (a *BlacklinkAnalyzer) Analyze(ctx context.Context, input *Input) (*Output,
 
 		linkDomain := extractHost(link.URL)
 		if sameRootDomain(linkDomain, pageDomain) {
+			continue
+		}
+		if isDomainTrusted(linkDomain, trustedDomains) {
 			continue
 		}
 
@@ -91,15 +95,20 @@ func (a *BlacklinkAnalyzer) Analyze(ctx context.Context, input *Input) (*Output,
 		}
 	}
 
-	hiddenIframes := detectHiddenIframes(snap, pageDomain)
-	jsRedirects := detectJSRedirectsFromSnap(snap, pageDomain)
+	hiddenIframes := detectHiddenIframes(snap, pageDomain, trustedDomains)
+	jsRedirects := detectJSRedirectsFromSnap(snap, pageDomain, trustedDomains)
 	maliciousJS := detectMaliciousJSPatterns(snap)
-	metaRedirect := detectMetaRedirect(snap, pageDomain)
+	metaRedirect := detectMetaRedirect(snap, pageDomain, trustedDomains)
 
 	var cloakingFindings []map[string]any
 	if snap.Cloaking != nil && snap.Cloaking.Detected {
 		for _, bot := range snap.Cloaking.BotResults {
 			if bot.TitleMatch {
+				continue
+			}
+			lowerTitle := strings.ToLower(bot.BotTitle)
+			if strings.Contains(lowerTitle, "403") || strings.Contains(lowerTitle, "forbidden") ||
+				strings.Contains(lowerTitle, "401") || strings.Contains(lowerTitle, "access denied") {
 				continue
 			}
 			if bot.Similarity < 0.50 {
@@ -127,6 +136,7 @@ func (a *BlacklinkAnalyzer) Analyze(ctx context.Context, input *Input) (*Output,
 		}
 		detailMap := map[string]any{
 			"has_black":         true,
+			"url":               input.URL,
 			"blacklink_matches": blacklinks,
 			"backdoor_findings": backdoorFindings,
 			"hidden_iframes":    hiddenIframes,
@@ -146,7 +156,7 @@ func (a *BlacklinkAnalyzer) Analyze(ctx context.Context, input *Input) (*Output,
 	return output, nil
 }
 
-func detectHiddenIframes(snap *snapshotData, pageDomain string) []map[string]any {
+func detectHiddenIframes(snap *snapshotData, pageDomain string, trustedDomains []string) []map[string]any {
 	var findings []map[string]any
 	for _, iframe := range snap.Iframes {
 		if !iframe.IsExternal {
@@ -154,6 +164,9 @@ func detectHiddenIframes(snap *snapshotData, pageDomain string) []map[string]any
 		}
 		iframeDomain := extractHost(iframe.Src)
 		if sameRootDomain(iframeDomain, pageDomain) {
+			continue
+		}
+		if isDomainTrusted(iframeDomain, trustedDomains) {
 			continue
 		}
 		if iframe.IsHidden {
@@ -170,12 +183,15 @@ func detectHiddenIframes(snap *snapshotData, pageDomain string) []map[string]any
 	return findings
 }
 
-func detectJSRedirectsFromSnap(snap *snapshotData, pageDomain string) []map[string]any {
+func detectJSRedirectsFromSnap(snap *snapshotData, pageDomain string, trustedDomains []string) []map[string]any {
 	var findings []map[string]any
 
 	for _, redir := range snap.JSRedirects {
+		if isRelativeOrLocalPath(redir.Target) {
+			continue
+		}
 		targetDomain := extractHost(redir.Target)
-		if targetDomain != "" && !sameRootDomain(targetDomain, pageDomain) {
+		if targetDomain != "" && isValidDomain(targetDomain) && !sameRootDomain(targetDomain, pageDomain) && !isDomainTrusted(targetDomain, trustedDomains) {
 			severity := "medium"
 			if redir.Delay > 0 {
 				severity = "high"
@@ -196,7 +212,7 @@ func detectJSRedirectsFromSnap(snap *snapshotData, pageDomain string) []map[stri
 
 	if snap.MetaRedirect != nil {
 		targetDomain := extractHost(snap.MetaRedirect.URL)
-		if targetDomain != "" && !sameRootDomain(targetDomain, pageDomain) {
+		if targetDomain != "" && !sameRootDomain(targetDomain, pageDomain) && !isDomainTrusted(targetDomain, trustedDomains) {
 			findings = append(findings, map[string]any{
 				"type":     "meta_refresh",
 				"target":   snap.MetaRedirect.URL,
@@ -210,7 +226,7 @@ func detectJSRedirectsFromSnap(snap *snapshotData, pageDomain string) []map[stri
 	if snap.FinalURL != "" && snap.URL != "" {
 		origDomain := extractHost(snap.URL)
 		finalDomain := extractHost(snap.FinalURL)
-		if origDomain != "" && finalDomain != "" && !sameRootDomain(origDomain, finalDomain) {
+		if origDomain != "" && finalDomain != "" && !sameRootDomain(origDomain, finalDomain) && !isDomainTrusted(finalDomain, trustedDomains) {
 			findings = append(findings, map[string]any{
 				"type":     "server_redirect",
 				"target":   snap.FinalURL,
@@ -223,12 +239,12 @@ func detectJSRedirectsFromSnap(snap *snapshotData, pageDomain string) []map[stri
 	return findings
 }
 
-func detectMetaRedirect(snap *snapshotData, pageDomain string) []map[string]any {
+func detectMetaRedirect(snap *snapshotData, pageDomain string, trustedDomains []string) []map[string]any {
 	if snap.MetaRedirect == nil {
 		return nil
 	}
 	targetDomain := extractHost(snap.MetaRedirect.URL)
-	if targetDomain == "" || sameRootDomain(targetDomain, pageDomain) {
+	if targetDomain == "" || sameRootDomain(targetDomain, pageDomain) || isDomainTrusted(targetDomain, trustedDomains) {
 		return nil
 	}
 	return []map[string]any{{
@@ -267,20 +283,37 @@ func detectMaliciousJSPatterns(snap *snapshotData) []map[string]any {
 			if seen[p.category] {
 				continue
 			}
-			if m := p.re.FindString(code); m != "" {
-				seen[p.category] = true
-				snippet := m
-				if len(snippet) > 200 {
-					snippet = snippet[:200]
-				}
-				findings = append(findings, map[string]any{
-					"category": p.category,
-					"severity": p.severity,
-					"desc":     p.desc,
-					"snippet":  snippet,
-					"src":      script.Src,
-				})
+			loc := p.re.FindStringIndex(code)
+			if loc == nil {
+				continue
 			}
+			seen[p.category] = true
+			start := loc[0] - 80
+			if start < 0 {
+				start = 0
+			}
+			end := loc[1] + 120
+			if end > len(code) {
+				end = len(code)
+			}
+			snippet := code[start:end]
+			if start > 0 {
+				snippet = "..." + snippet
+			}
+			if end < len(code) {
+				snippet = snippet + "..."
+			}
+			if utf8.RuneCountInString(snippet) > 400 {
+				runes := []rune(snippet)
+				snippet = string(runes[:400]) + "..."
+			}
+			findings = append(findings, map[string]any{
+				"category": p.category,
+				"severity": p.severity,
+				"desc":     p.desc,
+				"snippet":  snippet,
+				"src":      script.Src,
+			})
 		}
 	}
 
@@ -402,6 +435,48 @@ func (a *BlacklinkAnalyzer) loadBackdoorPaths() []string {
 	return paths
 }
 
+// isRelativeOrLocalPath 判断 URL 是否为站内相对路径。
+func isRelativeOrLocalPath(target string) bool {
+	target = strings.TrimSpace(target)
+	if target == "" {
+		return true
+	}
+	if strings.HasPrefix(target, "./") || strings.HasPrefix(target, "../") {
+		return true
+	}
+	if strings.HasPrefix(target, "/") && !strings.HasPrefix(target, "//") {
+		return true
+	}
+	if strings.HasPrefix(target, "#") || strings.HasPrefix(target, "?") {
+		return true
+	}
+	if !strings.Contains(target, "://") && !strings.HasPrefix(target, "//") {
+		if !strings.Contains(target, ".") || strings.HasSuffix(strings.Split(target, "?")[0], ".html") ||
+			strings.HasSuffix(strings.Split(target, "?")[0], ".htm") ||
+			strings.HasSuffix(strings.Split(target, "?")[0], ".php") ||
+			strings.HasSuffix(strings.Split(target, "?")[0], ".jsp") ||
+			strings.HasSuffix(strings.Split(target, "?")[0], ".asp") ||
+			strings.HasSuffix(strings.Split(target, "?")[0], ".aspx") {
+			return true
+		}
+	}
+	return false
+}
+
+// isValidDomain 判断提取的域名是否有效（至少包含一个点号且不是纯文件名）。
+func isValidDomain(domain string) bool {
+	if domain == "" || domain == "." || domain == ".." {
+		return false
+	}
+	if !strings.Contains(domain, ".") {
+		return false
+	}
+	if strings.HasPrefix(domain, ".") {
+		return false
+	}
+	return true
+}
+
 func countExternalLinks(links []linkInfo) int {
 	c := 0
 	for _, l := range links {
@@ -410,4 +485,61 @@ func countExternalLinks(links []linkInfo) int {
 		}
 	}
 	return c
+}
+
+// loadTrustedDomains 从配置中读取信任域名白名单（trusted_domains）。
+// 支持格式：["example.com", "*.example.cn"] 或逗号分隔字符串。
+func loadTrustedDomains(cfg map[string]any) []string {
+	if cfg == nil {
+		return nil
+	}
+	raw, ok := cfg["trusted_domains"]
+	if !ok || raw == nil {
+		return nil
+	}
+	switch v := raw.(type) {
+	case []any:
+		domains := make([]string, 0, len(v))
+		for _, item := range v {
+			if s, ok := item.(string); ok && strings.TrimSpace(s) != "" {
+				domains = append(domains, strings.ToLower(strings.TrimSpace(s)))
+			}
+		}
+		return domains
+	case string:
+		parts := strings.Split(v, ",")
+		domains := make([]string, 0, len(parts))
+		for _, p := range parts {
+			p = strings.ToLower(strings.TrimSpace(p))
+			if p != "" {
+				domains = append(domains, p)
+			}
+		}
+		return domains
+	}
+	return nil
+}
+
+// isDomainTrusted 检查域名是否在信任白名单中。
+// 支持精确匹配和通配符匹配（*.example.com 匹配 sub.example.com）。
+func isDomainTrusted(domain string, trustedDomains []string) bool {
+	if len(trustedDomains) == 0 {
+		return false
+	}
+	domain = strings.ToLower(domain)
+	for _, td := range trustedDomains {
+		if td == domain {
+			return true
+		}
+		if strings.HasPrefix(td, "*.") {
+			suffix := td[1:] // ".example.com"
+			if strings.HasSuffix(domain, suffix) || domain == td[2:] {
+				return true
+			}
+		}
+		if sameRootDomain(domain, td) {
+			return true
+		}
+	}
+	return false
 }

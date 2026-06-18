@@ -15,6 +15,7 @@ import {
   NButton,
   NCard,
   NDivider,
+  NDynamicTags,
   NForm,
   NFormItem,
   NInput,
@@ -397,6 +398,19 @@ onMounted(() => {
                       使用搜索引擎UA访问，监测SEO劫持
                     </span>
                   </NSpace>
+                </NFormItem>
+              </template>
+
+              <!-- 暗链专属 -->
+              <template v-if="dim === 'blacklink'">
+                <NFormItem label="信任域名">
+                  <NDynamicTags
+                    :value="(getField(dim, 'trusted_domains', []) as string[])"
+                    @update:value="(v: string[]) => setField(dim, 'trusted_domains', v)"
+                  />
+                  <div class="text-muted-foreground mt-1 text-xs">
+                    自有域名或合作方域名，不会被判定为暗链（支持通配符如 *.example.cn）
+                  </div>
                 </NFormItem>
               </template>
 

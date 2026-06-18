@@ -212,6 +212,15 @@ type parsedImportRow struct {
 }
 
 func (s *serviceMonitor) runImportAsync(result *contract.ImportResult, dataRows []importDataRow, useSchemeColumn bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("[Import] panic recovered", "importId", result.ID, "panic", r)
+			s.importMu.Lock()
+			result.Status = contract.ImportStatusFailed
+			s.importMu.Unlock()
+		}
+	}()
+
 	ctx := context.Background()
 	startTime := time.Now()
 
