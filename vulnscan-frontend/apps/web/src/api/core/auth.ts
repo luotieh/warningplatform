@@ -128,9 +128,11 @@ export async function loginApi(data: AuthApi.LoginParams) {
 
 export async function refreshTokenApi(): Promise<AuthApi.RefreshTokenResult> {
   const refreshToken = localStorage.getItem('iam_refresh_token') || '';
-  const res = await baseRequestClient.post<{ code: number; data: AuthApi.RefreshTokenResult }>('/iam/auth/refresh', {
-    refresh_token: refreshToken,
-  });
+  const res = await baseRequestClient.post<{ code: number; data: AuthApi.RefreshTokenResult }>(
+    '/iam/auth/refresh',
+    { refresh_token: refreshToken },
+    { headers: { Authorization: '' } },
+  );
   const envelope = (res as Record<string, unknown>).data as Record<string, unknown> | undefined;
   return (envelope?.data ?? envelope) as AuthApi.RefreshTokenResult;
 }
