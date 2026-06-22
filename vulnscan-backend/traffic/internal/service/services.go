@@ -20,8 +20,11 @@ type Services struct {
 	Store      store.Store
 	DeepSOC    client.DeepSOCClient
 	FlowShadow client.FlowShadowClient
-	LLM        client.LLMClient
-	Queue      mq.Queue
+	// LLM 为指针：Services 以值语义被复制进各子服务（EventService/InternalService/
+	// SystemService 等），共享同一个 LLM 客户端，使配置页保存(SetLLMConfig)的 base_url/
+	// api_key/model 能即时对“分析引擎”(RunAgentWorkflow)生效，无需重启。
+	LLM   *client.LLMClient
+	Queue mq.Queue
 }
 
 func (s Services) ProcessLyEvent(ctx context.Context, ly map[string]any) (map[string]any, error) {

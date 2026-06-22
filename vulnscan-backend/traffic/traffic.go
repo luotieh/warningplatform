@@ -77,7 +77,7 @@ func NewTraffic(moduleCfg Config) *Traffic {
 			APIKey:  cfg.FlowShadowAPIKey,
 			HTTP:    httpClient,
 		},
-		LLM: client.LLMClient{
+		LLM: &client.LLMClient{
 			BaseURL: cfg.LLMBaseURL,
 			APIKey:  cfg.LLMAPIKey,
 			Model:   cfg.LLMModel,
