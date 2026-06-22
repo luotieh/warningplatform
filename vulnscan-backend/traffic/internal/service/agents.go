@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 
@@ -95,23 +97,179 @@ func autoAnalysisPrompt(event domain.Event) string {
 1. 使用中文 Markdown。
 2. 保持原版 DeepSOC 自动驾驶分析风格，覆盖 Captain 研判、Manager 动作拆解、Operator 命令建议、Executor 应由外部剧本验证的证据项、Expert 总结。
 3. 明确区分“已知事实”“待验证证据”“建议执行动作”，不要把未执行的剧本结果写成已完成。
-4. 如果信息不足，必须写清缺口和下一步需要查询的数据。
+4. 充分结合下方「辅助研判信息」中的应用层证据（HTTP 方法/URL/User-Agent/请求头/请求体、DNS 查询与应答、payload 样本）、流量方向、流统计与威胁情报命中元数据，进行：威胁真假研判（是否误报）、攻击手法定性、影响面与横向风险评估、以及有针对性的处置/取证建议。
+5. 如果信息不足，必须写清缺口和下一步需要查询的数据。
 
 事件ID：%s
 事件名称：%s
 严重级别：%s
 来源：%s
 描述：%s
-上下文：%s
-可观察对象：%s`,
+可观察对象：%s
+
+辅助研判信息（融合采集节点 ta_node 解析的应用层与情报上下文）：
+%s
+
+原始上下文(JSON)：%s`,
 		event.EventID,
 		firstNonEmpty(event.EventName, event.Title, "未命名事件"),
 		firstNonEmpty(event.Severity, "unknown"),
 		firstNonEmpty(event.Source, "unknown"),
 		firstNonEmpty(event.Message, "无"),
-		firstNonEmpty(event.Context, "无"),
 		formatObservables(event.Observables),
+		formatAuxContext(event.Context),
+		firstNonEmpty(event.Context, "无"),
 	)
+}
+
+// formatAuxContext 将事件 context(JSON) 中来自 ta_node 的辅助信息抽取为
+// 可读的中文 Markdown 列表，突出应用层证据/流量方向/情报元数据，便于模型详细研判。
+// 当无附加信息时返回 "无"。
+func formatAuxContext(raw string) string {
+	if strings.TrimSpace(raw) == "" {
+		return "无"
+	}
+	var ctx map[string]any
+	if err := json.Unmarshal([]byte(raw), &ctx); err != nil {
+		return "无"
+	}
+
+	var b strings.Builder
+	emit := func(indent, label string, v any) {
+		s := scalarString(v)
+		if s == "" {
+			return
+		}
+		fmt.Fprintf(&b, "%s- %s：%s\n", indent, label, s)
+	}
+
+	// 流量方向（含语义说明，帮助模型判断外联/横向风险）
+	switch asString(ctx["direction"]) {
+	case "inbound":
+		emit("", "流量方向", "inbound（外部→内网，入站攻击）")
+	case "outbound":
+		emit("", "流量方向", "outbound（内网→外部，出站，警惕外联/数据外传）")
+	case "lateral":
+		emit("", "流量方向", "lateral（内网→内网，警惕横向移动）")
+	case "external":
+		emit("", "流量方向", "external（外部→外部）")
+	default:
+		emit("", "流量方向", ctx["direction"])
+	}
+
+	// 流统计
+	if fs, ok := ctx["flow_stats"].(map[string]any); ok && len(fs) > 0 {
+		emit("", "流持续时长(ms)", fs["duration_ms"])
+		emit("", "流首次时间(epoch)", fs["first_time"])
+		if line := joinKV(fs, []string{"flows", "packets", "bytes"}, " "); line != "" {
+			emit("", "流/包/字节", line)
+		}
+	}
+
+	// 应用层证据
+	if app, ok := ctx["app"].(map[string]any); ok && len(app) > 0 {
+		b.WriteString("- 应用层证据(app)：\n")
+		emit("  ", "HTTP 方法", app["http_method"])
+		emit("  ", "HTTP Host", app["http_host"])
+		emit("  ", "HTTP URL", app["http_url"])
+		emit("  ", "User-Agent", app["user_agent"])
+		if h, ok := app["http_headers"].(map[string]any); ok && len(h) > 0 {
+			emit("  ", "请求头", kvJoin(h))
+		}
+		emit("  ", "请求体样本", app["http_body_sample"])
+		emit("  ", "DNS 查询", app["dns_query"])
+		emit("  ", "DNS 类型", app["dns_qtype"])
+		emit("  ", "DNS 应答", listJoin(app["dns_answers"]))
+		emit("  ", "Payload 样本", app["payload_sample"])
+		emit("  ", "ICMP 序列号", app["icmp_seq"])
+	}
+
+	// 威胁情报命中元数据
+	if ioc, ok := ctx["ioc"].(map[string]any); ok && len(ioc) > 0 {
+		b.WriteString("- 威胁情报命中(ioc)：\n")
+		emit("  ", "类型", ioc["ioc_type"])
+		emit("  ", "命中值", ioc["ioc_value"])
+		emit("  ", "类别", ioc["ioc_category"])
+		emit("  ", "情报源", ioc["ioc_source"])
+		emit("  ", "标签", listJoin(ioc["ioc_tags"]))
+		emit("  ", "描述", ioc["ioc_description"])
+		emit("  ", "过期时间(epoch)", ioc["ioc_expire_at"])
+	}
+
+	// 其它元数据
+	emit("", "威胁指数", ctx["threat_index"])
+	emit("", "检测模型", ctx["detection_model"])
+	emit("", "证据文件", ctx["evidence_file"])
+	emit("", "Schema 版本", ctx["schema_version"])
+	emit("", "传感器版本", ctx["sensor_version"])
+
+	if b.Len() == 0 {
+		return "无"
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// scalarString 把任意标量渲染为字符串；空值/空容器返回 ""。
+func scalarString(v any) string {
+	if v == nil {
+		return ""
+	}
+	switch t := v.(type) {
+	case string:
+		return strings.TrimSpace(t)
+	case float64:
+		// JSON 数字统一为 float64；整数去掉小数点。
+		if t == float64(int64(t)) {
+			return fmt.Sprintf("%d", int64(t))
+		}
+		return fmt.Sprintf("%g", t)
+	case bool:
+		return fmt.Sprintf("%v", t)
+	default:
+		return ""
+	}
+}
+
+// joinKV 按给定键序把 m 中存在的数值/标量拼成 "k=v" 串。
+func joinKV(m map[string]any, keys []string, sep string) string {
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		if s := scalarString(m[k]); s != "" {
+			parts = append(parts, k+"="+s)
+		}
+	}
+	return strings.Join(parts, sep)
+}
+
+// kvJoin 把 map（如请求头）渲染为按键排序的 "k=v" 串。
+func kvJoin(m map[string]any) string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		if s := scalarString(m[k]); s != "" {
+			parts = append(parts, k+"="+s)
+		}
+	}
+	return strings.Join(parts, "; ")
+}
+
+// listJoin 把数组（dns_answers / ioc_tags 等）渲染为逗号分隔串。
+func listJoin(v any) string {
+	arr, ok := v.([]any)
+	if !ok || len(arr) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(arr))
+	for _, item := range arr {
+		if s := scalarString(item); s != "" {
+			parts = append(parts, s)
+		}
+	}
+	return strings.Join(parts, ", ")
 }
 
 func formatObservables(items []domain.IOC) string {

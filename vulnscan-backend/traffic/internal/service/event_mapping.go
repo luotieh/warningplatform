@@ -95,6 +95,29 @@ func LyEventToDeepSOC(ly map[string]any) domain.Event {
 		"occurrences":      occurrences,
 		"last_seen_at":     time.Now().UTC().Format(time.RFC3339),
 	}
+
+	// === ta_node schema v1.1 新增辅助信息 ===
+	// 透传融合采集节点解析出的应用层证据与派生/情报元数据，供 AI 详细研判使用。
+	// 所有字段在 ta_node 侧为 omitempty，缺省即不存在，这里只在存在时写入，避免 context 膨胀。
+	putIfPresent(context, "direction", ly["direction"])
+	putIfPresent(context, "threat_index", ly["threat_index"])
+	putIfPresent(context, "detection_model", ly["model"])
+	putIfPresent(context, "evidence_file", ly["evidence_file"])
+	putIfPresent(context, "packet_time_usec", ly["packet_time_usec"])
+	putIfPresent(context, "schema_version", ly["schema_version"])
+	putIfPresent(context, "sensor_version", ly["sensor_version"])
+	// 应用层上下文（HTTP/DNS/payload/icmp），ta_node 以嵌套对象 app 下发，整体透传。
+	putIfPresent(context, "app", ly["app"])
+	// 流统计：流首次时间、持续时长、流/包/字节数（派生字段，零成本）。
+	if flowStats := collectPresent(ly, "first_time", "duration_ms", "flows", "packets", "bytes"); len(flowStats) > 0 {
+		context["flow_stats"] = flowStats
+	}
+	// 威胁情报命中元数据：类别、来源、标签、描述、过期时间等。
+	if ioc := collectPresent(ly, "ioc_type", "ioc_value", "ioc_category", "ioc_id",
+		"ioc_source", "ioc_tags", "ioc_description", "ioc_expire_at"); len(ioc) > 0 {
+		context["ioc"] = ioc
+	}
+
 	ctx, _ := json.Marshal(context)
 	level := severityMap[asString(firstNonEmpty(asString(ly["event_level"]), asString(ly["severity"])))]
 	if level == "" {
@@ -104,6 +127,18 @@ func LyEventToDeepSOC(ly map[string]any) domain.Event {
 	title := firstNonEmpty(ruleDesc, eventType)
 	message := fmt.Sprintf("SIEM告警：检测到 %s 对 %s 发起 %s 攻击，检测方式：%s",
 		src, dst, ruleDesc, method)
+	observables := []domain.IOC{
+		{Type: "ip", Value: src, Role: "source"},
+		{Type: "ip", Value: dst, Role: "destination"},
+	}
+	// 威胁情报命中值（如恶意域名/IP/URL）作为可观察对象补充，供 AI 关联研判。
+	if iocVal := asString(ly["ioc_value"]); iocVal != "" {
+		observables = append(observables, domain.IOC{
+			Type:  firstNonEmpty(asString(ly["ioc_type"]), "indicator"),
+			Value: iocVal,
+			Role:  "threat_intel",
+		})
+	}
 	return domain.Event{
 		EventID:     asString(ly["event_id"]),
 		EventName:   title,
@@ -114,9 +149,27 @@ func LyEventToDeepSOC(ly map[string]any) domain.Event {
 		Category:    "Network Threat",
 		Context:     string(ctx),
 		EventStatus: "pending",
-		Observables: []domain.IOC{
-			{Type: "ip", Value: src, Role: "source"},
-			{Type: "ip", Value: dst, Role: "destination"},
-		},
+		Observables: observables,
 	}
+}
+
+// putIfPresent 仅在 v 非空（非 nil、非空字符串）时写入 dst[key]，
+// 用于透传 ta_node omitempty 字段，避免在 context 中写入大量 null。
+func putIfPresent(dst map[string]any, key string, v any) {
+	if v == nil {
+		return
+	}
+	if s, ok := v.(string); ok && strings.TrimSpace(s) == "" {
+		return
+	}
+	dst[key] = v
+}
+
+// collectPresent 从 src 中挑出存在且非空的若干键，组成新 map（保持原键名）。
+func collectPresent(src map[string]any, keys ...string) map[string]any {
+	out := map[string]any{}
+	for _, k := range keys {
+		putIfPresent(out, k, src[k])
+	}
+	return out
 }
