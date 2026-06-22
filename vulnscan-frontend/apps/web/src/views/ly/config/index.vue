@@ -1,0 +1,65 @@
+<script lang="ts" setup>
+import { ref, watch } from 'vue';
+
+import { NTabPane, NTabs } from 'naive-ui';
+import { useRoute } from 'vue-router';
+
+import ModelView from './model/index.vue';
+import NodeView from './node/index.vue';
+import RulesView from './rules/index.vue';
+
+defineOptions({ name: 'LyConfig' });
+
+const route = useRoute();
+
+const tabDefs = [
+  { key: 'rules', label: '规则查看' },
+  { key: 'node', label: '节点配置' },
+  { key: 'model', label: '模型配置' },
+];
+const tabKeys = tabDefs.map((t) => t.key);
+
+function normalizeTab(value: unknown) {
+  return tabKeys.includes(value as string) ? (value as string) : 'rules';
+}
+
+const activeTab = ref(normalizeTab(route.query.tab));
+
+// 仅在组件内切换页签，不修改 URL —— 避免触发路由变化导致整页重新挂载（刷新）
+function onTabChange(tab: string) {
+  activeTab.value = tab;
+}
+
+watch(
+  () => route.query.tab,
+  (value) => {
+    const next = normalizeTab(value);
+    if (next !== activeTab.value) {
+      activeTab.value = next;
+    }
+  },
+);
+</script>
+
+<template>
+  <div class="ly-workstation">
+    <NTabs
+      :value="activeTab"
+      type="line"
+      animated
+      class="ly-workstation-tabs"
+      @update:value="onTabChange"
+    >
+      <NTabPane v-for="tab in tabDefs" :key="tab.key" :name="tab.key" :tab="tab.label" />
+    </NTabs>
+    <RulesView v-if="activeTab === 'rules'" />
+    <NodeView v-else-if="activeTab === 'node'" />
+    <ModelView v-else-if="activeTab === 'model'" />
+  </div>
+</template>
+
+<style scoped>
+.ly-workstation-tabs {
+  padding: 8px 16px 0;
+}
+</style>
