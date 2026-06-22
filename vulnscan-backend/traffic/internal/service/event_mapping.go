@@ -109,13 +109,23 @@ func LyEventToDeepSOC(ly map[string]any) domain.Event {
 	// 应用层上下文（HTTP/DNS/payload/icmp），ta_node 以嵌套对象 app 下发，整体透传。
 	putIfPresent(context, "app", ly["app"])
 	// 流统计：流首次时间、持续时长、流/包/字节数（派生字段，零成本）。
-	if flowStats := collectPresent(ly, "first_time", "duration_ms", "flows", "packets", "bytes"); len(flowStats) > 0 {
+	// v1.2 新增通联数据量：wire_bytes 为在线字节(含 L2-L4 头)，与 payload 字节(bytes)并存；
+	// volume_role 标识本单向流相对命中 IOC 的方向（to_ioc=数据外传 / from_ioc=载荷下载）。
+	if flowStats := collectPresent(ly, "first_time", "duration_ms", "flows", "packets", "bytes",
+		"wire_bytes", "volume_role"); len(flowStats) > 0 {
 		context["flow_stats"] = flowStats
 	}
 	// 威胁情报命中元数据：类别、来源、标签、描述、过期时间等。
 	if ioc := collectPresent(ly, "ioc_type", "ioc_value", "ioc_category", "ioc_id",
 		"ioc_source", "ioc_tags", "ioc_description", "ioc_expire_at"); len(ioc) > 0 {
 		context["ioc"] = ioc
+	}
+	// v1.2 节点侧局部突发计数：同一威胁键(IOC/规则)在该节点窗口内的命中次数，
+	// 属于近似分诊提示(local_scope=node)，非全局权威频次——全局频次以管理侧聚合的
+	// occurrence_count 为准，两者语义不同，AI 研判时勿混淆或重复计数。
+	if burst := collectPresent(ly, "local_hit_count", "local_window_sec",
+		"local_first_seen", "local_scope"); len(burst) > 0 {
+		context["local_burst"] = burst
 	}
 
 	ctx, _ := json.Marshal(context)

@@ -98,7 +98,8 @@ func autoAnalysisPrompt(event domain.Event) string {
 2. 保持原版 DeepSOC 自动驾驶分析风格，覆盖 Captain 研判、Manager 动作拆解、Operator 命令建议、Executor 应由外部剧本验证的证据项、Expert 总结。
 3. 明确区分“已知事实”“待验证证据”“建议执行动作”，不要把未执行的剧本结果写成已完成。
 4. 充分结合下方「辅助研判信息」中的应用层证据（HTTP 方法/URL/User-Agent/请求头/请求体、DNS 查询与应答、payload 样本）、流量方向、流统计与威胁情报命中元数据，进行：威胁真假研判（是否误报）、攻击手法定性、影响面与横向风险评估、以及有针对性的处置/取证建议。
-5. 如果信息不足，必须写清缺口和下一步需要查询的数据。
+5. 重点利用通联数据量与方向：wire_bytes(在线字节)/bytes(载荷字节) 结合「通联方向」（to_ioc=数据外传、from_ioc=载荷下载）判断数据外传/载荷下载/beacon 节律；并参考「节点侧局部突发」评估爆发强度——注意 local_hit_count 仅为该节点近似分诊提示，权威全局频次以发生次数(occurrence_count)为准，切勿与之重复计数或混淆。
+6. 如果信息不足，必须写清缺口和下一步需要查询的数据。
 
 事件ID：%s
 事件名称：%s
@@ -157,12 +158,20 @@ func formatAuxContext(raw string) string {
 		emit("", "流量方向", ctx["direction"])
 	}
 
-	// 流统计
+	// 流统计 / 通联数据量
 	if fs, ok := ctx["flow_stats"].(map[string]any); ok && len(fs) > 0 {
 		emit("", "流持续时长(ms)", fs["duration_ms"])
 		emit("", "流首次时间(epoch)", fs["first_time"])
-		if line := joinKV(fs, []string{"flows", "packets", "bytes"}, " "); line != "" {
-			emit("", "流/包/字节", line)
+		if line := joinKV(fs, []string{"flows", "packets", "bytes", "wire_bytes"}, " "); line != "" {
+			emit("", "流量体量", line+"（bytes=载荷字节, wire_bytes=在线字节含L2-L4头）")
+		}
+		switch asString(fs["volume_role"]) {
+		case "to_ioc":
+			emit("", "通联方向", "to_ioc（数据流向 IOC，疑似数据外传/上传）")
+		case "from_ioc":
+			emit("", "通联方向", "from_ioc（数据来自 IOC，疑似载荷下载）")
+		default:
+			emit("", "通联方向", fs["volume_role"])
 		}
 	}
 
@@ -194,6 +203,15 @@ func formatAuxContext(raw string) string {
 		emit("  ", "标签", listJoin(ioc["ioc_tags"]))
 		emit("  ", "描述", ioc["ioc_description"])
 		emit("  ", "过期时间(epoch)", ioc["ioc_expire_at"])
+	}
+
+	// 节点侧局部突发计数（近似分诊提示，非全局权威频次：全局频次见上方/原始上下文的 occurrence_count）
+	if lb, ok := ctx["local_burst"].(map[string]any); ok && len(lb) > 0 {
+		b.WriteString("- 节点侧局部突发(local_burst，近似分诊提示，非全局频次)：\n")
+		emit("  ", "本节点窗口内命中次数", lb["local_hit_count"])
+		emit("  ", "统计窗口(秒)", lb["local_window_sec"])
+		emit("  ", "首次命中(epoch)", lb["local_first_seen"])
+		emit("  ", "计数范围", lb["local_scope"])
 	}
 
 	// 其它元数据
