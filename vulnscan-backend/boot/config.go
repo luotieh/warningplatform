@@ -6,6 +6,8 @@ import (
 	"code.yt-security.com/public/core/config"
 	"code.yt-security.com/public/core/db"
 	"code.yt-security.com/public/core/web"
+
+	"vulnscan-backend/traffic"
 )
 
 type IAMConfig struct {
@@ -77,6 +79,7 @@ type Config struct {
 	SSO     SSOConfig          `json:"sso" toml:"sso"`
 	Nats    NatsConfig         `json:"nats" toml:"nats"`
 	Cluster ClusterConfig      `json:"cluster" toml:"cluster"`
+	Traffic traffic.Config     `json:"traffic" toml:"traffic"`
 }
 
 func LoadConfig() *Config {

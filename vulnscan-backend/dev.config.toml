@@ -29,3 +29,23 @@
   success_redirect = "http://warning-platform.dev.yt-security.com:32000/auth/sso-callback"
   cookie_secret = "pp8v7vWsPgaeviINPd4Dio9fb$StZxML"
   token_relay_callback_uri = "http://warning-platform.dev.yt-security.com:32000/callback"
+
+# 流量分析（trafficAnalysis）业务子系统配置
+[traffic]
+  # 存储后端：memory（默认，内存）或 postgres
+  store_backend = "memory"
+  # postgres 连接串（store_backend=postgres 时必填），示例：
+  # database_url = "postgres://user:pass@127.0.0.1:5432/traffic?sslmode=disable"
+  database_url = ""
+  auto_migrate = false
+  # internal 接口鉴权 key（前端 X-API-Key 默认 change-me-internal-key）
+  internal_api_key = "change-me-internal-key"
+  # LLM（OpenAI 兼容）配置
+  llm_base_url = ""
+  llm_api_key = ""
+  llm_model = ""
+  llm_timeout_seconds = 60
+  # 消息队列：noop（默认）或 rabbitmq
+  mq_backend = "noop"
+  rabbitmq_url = ""
+  rabbitmq_consumer_enabled = false

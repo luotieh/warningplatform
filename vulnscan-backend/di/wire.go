@@ -20,6 +20,7 @@ import (
 	sitemon "vulnscan-backend/sitemonitor"
 	"vulnscan-backend/tagging"
 	"vulnscan-backend/task"
+	"vulnscan-backend/traffic"
 	"vulnscan-backend/vuln"
 
 	iamsdk "code.yt-security.com/public/access"
@@ -60,9 +61,12 @@ func InitializeHandlers() *Handlers {
 		exclusion.WireSet,
 		fprule.WireSet,
 
+		wire.FieldsOf(new(*boot.Config), "Traffic"),
+		traffic.WireSet,
+
 		wire.Struct(new(Handlers), "Config", "Web", "DB", "Cache", "Product", "IAM",
 			"Asset", "Task", "Vuln", "Cluster", "Tagging", "Organize", "AssetMgr", "SiteMonitor", "Circular", "Dispatch", "Incident",
-			"Dashboard", "Notify", "Compliance", "Report", "Exclusion", "FPRule"),
+			"Dashboard", "Notify", "Compliance", "Report", "Exclusion", "FPRule", "Traffic"),
 	)
 	return nil
 }

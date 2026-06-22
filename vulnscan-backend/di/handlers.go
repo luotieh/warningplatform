@@ -36,6 +36,7 @@ import (
 	"vulnscan-backend/systemdict"
 	"vulnscan-backend/tagging"
 	"vulnscan-backend/task"
+	"vulnscan-backend/traffic"
 	"vulnscan-backend/vuln"
 
 	iamsdk "code.yt-security.com/public/access"
@@ -76,6 +77,7 @@ type Handlers struct {
 	Report      *report.Report
 	Exclusion   *exclusion.Exclusion
 	FPRule      *fprule.FPRule
+	Traffic     *traffic.Traffic
 
 	embeddedAgent *monitoragent.EmbeddedAgent
 	fedClient     *fedClient.Client
@@ -183,6 +185,15 @@ func (h *Handlers) RouteLoad() {
 
 	backends = append(backends, h.initUnifiedNodes(apiAuthorized)...)
 	backends = append(backends, h.initFederationManageAPI(apiAuthorized)...)
+
+	// 流量分析（trafficAnalysis）业务子系统：挂载在 /api/traffic 下，且不经过 IAM
+	// Authorization 中间件——该模块沿用自身 DeepSOC/internal 兼容鉴权语义，
+	// 若挂在 apiAuthorized 下会在其自身校验前被 IAM 401 拦截。
+	if h.Traffic != nil {
+		trafficGroup := engine.Group("/api/traffic")
+		backends = append(backends, h.Traffic.RoutesWithGroup(trafficGroup)...)
+		h.Traffic.PublicRoutes(trafficGroup)
+	}
 
 	h.syncBackends(backends)
 	h.initFederation()
@@ -325,6 +336,9 @@ func (h *Handlers) Shutdown() {
 	}
 	if h.embeddedAgent != nil {
 		h.embeddedAgent.Stop()
+	}
+	if h.Traffic != nil {
+		h.Traffic.Shutdown()
 	}
 	h.SiteMonitor.StopScheduler()
 	if nats := h.SiteMonitor.GetNatsService(); nats != nil {

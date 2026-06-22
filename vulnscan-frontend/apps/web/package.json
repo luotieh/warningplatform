@@ -44,10 +44,12 @@
     "file-saver": "^2.0.5",
     "html2canvas-pro": "^2.0.4",
     "jspdf": "^4.2.1",
+    "marked": "catalog:",
     "monaco-editor": "^0.55.1",
     "naive-ui": "catalog:",
     "pinia": "catalog:",
     "qrcode": "catalog:",
+    "socket.io-client": "catalog:",
     "vue": "catalog:",
     "vue-echarts": "^8.0.1",
     "vue-router": "catalog:"

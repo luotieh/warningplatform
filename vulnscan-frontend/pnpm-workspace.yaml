@@ -121,6 +121,7 @@ catalog:
   lefthook: ^2.1.0
   lodash.clonedeep: ^4.5.0
   lucide-vue-next: ^0.553.0
+  marked: ^17.0.6
   medium-zoom: ^1.1.0
   naive-ui: ^2.43.2
   nitropack: ^2.13.1
@@ -148,6 +149,7 @@ catalog:
   rollup-plugin-visualizer: ^5.14.0
   sass: ^1.97.3
   secure-ls: ^2.0.0
+  socket.io-client: ^4.8.3
   sortablejs: ^1.15.6
   stylelint: ^16.26.1
   stylelint-config-recess-order: ^7.6.0
