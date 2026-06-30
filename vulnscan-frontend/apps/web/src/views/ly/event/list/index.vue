@@ -12,7 +12,7 @@ import {
   NTag,
 } from 'naive-ui';
 
-import { lyEventPushToAi } from '#/api/ly';
+import { lyEventPushToAi, lyEventReview } from '#/api/ly';
 import { message } from '#/adapter/naive';
 import { useLyStore } from '#/store/ly';
 import { countByKey, paginate } from '#/utils/ly';
@@ -152,6 +152,38 @@ async function openAiDetail(row: Record<string, any>) {
   reportVisible.value = true;
 }
 
+function reviewStatusMeta(row: Record<string, any>): { text: string; type: string } {
+  const map: Record<string, { text: string; type: string }> = {
+    approved: { text: '已通过', type: 'success' },
+    rejected: { text: '已驳回', type: 'error' },
+    pending_review: { text: '待审核', type: 'warning' },
+  };
+  if (row.review_status && map[row.review_status]) return map[row.review_status]!;
+  // round_finished 但未审核 → 待审核
+  if (row.analysisStatus === 'completed') return map.pending_review!;
+  return { text: '—', type: 'default' };
+}
+
+async function reviewEvent(row: Record<string, any>, action: 'approve' | 'reject') {
+  const eventId = String(row.event_id || row.deepsoc_event_id || row.id || '');
+  if (!eventId) {
+    message.error('事件尚未生成分析，无法审核');
+    return;
+  }
+  if (row.analysisStatus !== 'completed') {
+    message.error('仅 AI 分析完成的事件可审核');
+    return;
+  }
+  try {
+    const res = await lyEventReview({ eventId, action });
+    row.review_status = res?.review_status || (action === 'approve' ? 'approved' : 'rejected');
+    if (res?.circular_code) row.circular_code = res.circular_code;
+    message.success(action === 'approve' ? `已推送通报处置${res?.circular_code ? '：' + res.circular_code : ''}` : '已驳回');
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '审核失败');
+  }
+}
+
 const columns = [
   { title: '事件类型', key: 'typeText', minWidth: 120 },
   { title: '威胁来源', key: 'attackDevice', minWidth: 160 },
@@ -203,6 +235,19 @@ const columns = [
     },
   },
   {
+    title: '审核状态',
+    key: 'review_status',
+    width: 140,
+    render: (row: Record<string, any>) => {
+      const meta = reviewStatusMeta(row);
+      const tags = [h(NTag, { size: 'small', type: meta.type as any }, { default: () => meta.text })];
+      if (row.circular_code) {
+        tags.push(h(NTag, { size: 'small', type: 'info', style: 'margin-left:4px' }, { default: () => row.circular_code }));
+      }
+      return h('div', { style: 'display:flex;flex-wrap:wrap;gap:4px' }, tags);
+    },
+  },
+  {
     title: '发生时间',
     key: 'startTimeText',
     minWidth: 180,
@@ -217,13 +262,28 @@ const columns = [
   {
     title: '操作',
     key: 'actions',
-    width: 120,
-    render: (row: Record<string, any>) => h(NButton, {
-      text: true,
-      type: 'success',
-      loading: state.analyzingIds.has(String(row.id)),
-      onClick: () => openAiDetail(row),
-    }, { default: () => '查看报告' }),
+    width: 220,
+    render: (row: Record<string, any>) => {
+      const canReview = row.analysisStatus === 'completed';
+      const reviewed = row.review_status === 'approved';
+      return h(NSpace, { size: 4 }, {
+        default: () => [
+          h(NButton, {
+            text: true, type: 'success',
+            loading: state.analyzingIds.has(String(row.id)),
+            onClick: () => openAiDetail(row),
+          }, { default: () => '查看报告' }),
+          h(NButton, {
+            text: true, type: 'primary', disabled: !canReview || reviewed,
+            onClick: () => reviewEvent(row, 'approve'),
+          }, { default: () => '审核通过' }),
+          h(NButton, {
+            text: true, type: 'error', disabled: !canReview || reviewed,
+            onClick: () => reviewEvent(row, 'reject'),
+          }, { default: () => '驳回' }),
+        ],
+      });
+    },
   },
 ];
 

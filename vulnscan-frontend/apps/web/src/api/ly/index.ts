@@ -132,6 +132,19 @@ export function lyEventPushToAi(data: Record<string, any>) {
   return postInternal('/event/push', data);
 }
 
+export function lyEventReview(params: {
+  eventId: number | string;
+  action: 'approve' | 'reject';
+  comment?: string;
+}) {
+  const { eventId, action, comment } = params;
+  return post(
+    `/events/detail/${eventId}/review`,
+    { action, comment: comment ?? '' },
+    '/api/traffic',
+  );
+}
+
 export function lyEventSearch(params?: Record<string, any>) {
   return lyEventGet(params);
 }
