@@ -186,14 +186,14 @@ func (s *PostgresStore) CreateEvent(e domain.Event) (domain.Event, error) {
 	row := s.db.QueryRowContext(context.Background(), `
 INSERT INTO events (event_id, event_name, title, message, context, source, severity, category, event_status, current_round, observables, created_at, updated_at)
 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,$13)
-RETURNING id, event_id, event_name, title, message, context, source, severity, category, event_status, current_round, observables, created_at, updated_at`,
+RETURNING id, event_id, event_name, title, message, context, source, severity, category, event_status, current_round, observables, created_at, updated_at, review_status, review_comment, reviewed_by, reviewed_at, circular_code`,
 		e.EventID, e.EventName, e.Title, e.Message, e.Context, e.Source, e.Severity, e.Category, e.EventStatus, e.CurrentRound, string(toJSON(e.Observables)), e.CreatedAt, e.UpdatedAt)
 	return scanEvent(row)
 }
 
 func (s *PostgresStore) GetEvent(eventID string) (domain.Event, bool) {
 	row := s.db.QueryRowContext(context.Background(), `
-SELECT id, event_id, event_name, title, message, context, source, severity, category, event_status, current_round, observables, created_at, updated_at
+SELECT id, event_id, event_name, title, message, context, source, severity, category, event_status, current_round, observables, created_at, updated_at, review_status, review_comment, reviewed_by, reviewed_at, circular_code
 FROM events WHERE event_id=$1`, eventID)
 	e, err := scanEvent(row)
 	return e, err == nil
@@ -201,7 +201,7 @@ FROM events WHERE event_id=$1`, eventID)
 
 func (s *PostgresStore) ListEvents() []domain.Event {
 	rows, err := s.db.QueryContext(context.Background(), `
-SELECT id, event_id, event_name, title, message, context, source, severity, category, event_status, current_round, observables, created_at, updated_at
+SELECT id, event_id, event_name, title, message, context, source, severity, category, event_status, current_round, observables, created_at, updated_at, review_status, review_comment, reviewed_by, reviewed_at, circular_code
 FROM events ORDER BY created_at DESC, id DESC`)
 	if err != nil {
 		return nil
@@ -238,13 +238,31 @@ func (s *PostgresStore) UpdateEvent(eventID string, patch map[string]any) (domai
 	if v, ok := stringPatch(patch, "event_status"); ok {
 		e.EventStatus = v
 	}
+	if v, ok := stringPatch(patch, "review_status"); ok {
+		e.ReviewStatus = v
+	}
+	if v, ok := stringPatch(patch, "review_comment"); ok {
+		e.ReviewComment = v
+	}
+	if v, ok := stringPatch(patch, "reviewed_by"); ok {
+		e.ReviewedBy = v
+	}
+	if v, ok := stringPatch(patch, "circular_code"); ok {
+		e.CircularCode = v
+	}
+	if v, ok := stringPatch(patch, "reviewed_at"); ok {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			tu := t.UTC()
+			e.ReviewedAt = &tu
+		}
+	}
 	e.UpdatedAt = time.Now().UTC()
 	row := s.db.QueryRowContext(context.Background(), `
 UPDATE events
-SET event_name=$2, title=$3, message=$4, context=$5, source=$6, severity=$7, category=$8, event_status=$9, current_round=$10, observables=$11::jsonb, updated_at=$12
+SET event_name=$2, title=$3, message=$4, context=$5, source=$6, severity=$7, category=$8, event_status=$9, current_round=$10, observables=$11::jsonb, updated_at=$12, review_status=$13, review_comment=$14, reviewed_by=$15, reviewed_at=$16, circular_code=$17
 WHERE event_id=$1
-RETURNING id, event_id, event_name, title, message, context, source, severity, category, event_status, current_round, observables, created_at, updated_at`,
-		eventID, e.EventName, e.Title, e.Message, e.Context, e.Source, e.Severity, e.Category, e.EventStatus, e.CurrentRound, string(toJSON(e.Observables)), e.UpdatedAt)
+RETURNING id, event_id, event_name, title, message, context, source, severity, category, event_status, current_round, observables, created_at, updated_at, review_status, review_comment, reviewed_by, reviewed_at, circular_code`,
+		eventID, e.EventName, e.Title, e.Message, e.Context, e.Source, e.Severity, e.Category, e.EventStatus, e.CurrentRound, string(toJSON(e.Observables)), e.UpdatedAt, e.ReviewStatus, e.ReviewComment, e.ReviewedBy, e.ReviewedAt, e.CircularCode)
 	updated, err := scanEvent(row)
 	return updated, err == nil
 }
@@ -649,7 +667,7 @@ func scanUser(row scanner) (domain.User, error) {
 func scanEvent(row scanner) (domain.Event, error) {
 	var e domain.Event
 	var obs []byte
-	err := row.Scan(&e.ID, &e.EventID, &e.EventName, &e.Title, &e.Message, &e.Context, &e.Source, &e.Severity, &e.Category, &e.EventStatus, &e.CurrentRound, &obs, &e.CreatedAt, &e.UpdatedAt)
+	err := row.Scan(&e.ID, &e.EventID, &e.EventName, &e.Title, &e.Message, &e.Context, &e.Source, &e.Severity, &e.Category, &e.EventStatus, &e.CurrentRound, &obs, &e.CreatedAt, &e.UpdatedAt, &e.ReviewStatus, &e.ReviewComment, &e.ReviewedBy, &e.ReviewedAt, &e.CircularCode)
 	if len(obs) > 0 {
 		_ = json.Unmarshal(obs, &e.Observables)
 	}

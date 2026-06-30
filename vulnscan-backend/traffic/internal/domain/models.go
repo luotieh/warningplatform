@@ -27,20 +27,25 @@ type User struct {
 }
 
 type Event struct {
-	ID           int64     `json:"id"`
-	EventID      string    `json:"event_id"`
-	EventName    string    `json:"event_name,omitempty"`
-	Title        string    `json:"title,omitempty"`
-	Message      string    `json:"message"`
-	Context      string    `json:"context,omitempty"`
-	Source       string    `json:"source,omitempty"`
-	Severity     string    `json:"severity"`
-	Category     string    `json:"category,omitempty"`
-	EventStatus  string    `json:"event_status"`
-	CurrentRound int       `json:"current_round"`
-	Observables  []IOC     `json:"observables,omitempty"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID            int64      `json:"id"`
+	EventID       string     `json:"event_id"`
+	EventName     string     `json:"event_name,omitempty"`
+	Title         string     `json:"title,omitempty"`
+	Message       string     `json:"message"`
+	Context       string     `json:"context,omitempty"`
+	Source        string     `json:"source,omitempty"`
+	Severity      string     `json:"severity"`
+	Category      string     `json:"category,omitempty"`
+	EventStatus   string     `json:"event_status"`
+	CurrentRound  int        `json:"current_round"`
+	Observables   []IOC      `json:"observables,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+	ReviewStatus  string     `json:"review_status"`
+	ReviewComment string     `json:"review_comment,omitempty"`
+	ReviewedBy    string     `json:"reviewed_by,omitempty"`
+	ReviewedAt    *time.Time `json:"reviewed_at,omitempty"`
+	CircularCode  string     `json:"circular_code,omitempty"`
 }
 
 type IOC struct {

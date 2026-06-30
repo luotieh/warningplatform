@@ -242,6 +242,24 @@ func (s *MemoryStore) UpdateEvent(eventID string, patch map[string]any) (domain.
 	if v, ok := stringPatch(patch, "event_status"); ok {
 		e.EventStatus = v
 	}
+	if v, ok := stringPatch(patch, "review_status"); ok {
+		e.ReviewStatus = v
+	}
+	if v, ok := stringPatch(patch, "review_comment"); ok {
+		e.ReviewComment = v
+	}
+	if v, ok := stringPatch(patch, "reviewed_by"); ok {
+		e.ReviewedBy = v
+	}
+	if v, ok := stringPatch(patch, "circular_code"); ok {
+		e.CircularCode = v
+	}
+	if v, ok := stringPatch(patch, "reviewed_at"); ok {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			tu := t.UTC()
+			e.ReviewedAt = &tu
+		}
+	}
 	e.UpdatedAt = time.Now().UTC()
 	s.events[eventID] = e
 	return e, true
