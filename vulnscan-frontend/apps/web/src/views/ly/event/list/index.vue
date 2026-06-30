@@ -6,6 +6,7 @@ import {
   NButton,
   NCard,
   NDataTable,
+  NModal,
   NPagination,
   NSelect,
   NSpace,
@@ -17,7 +18,7 @@ import { useUserStore } from '@vben/stores';
 import { lyEventPushToAi, lyEventReview } from '#/api/ly';
 import { message } from '#/adapter/naive';
 import { useLyStore } from '#/store/ly';
-import { countByKey, paginate } from '#/utils/ly';
+import { countByKey, formatBytes, formatTimestamp, paginate } from '#/utils/ly';
 
 import ReportModal from '../detail/components/ReportModal.vue';
 
@@ -38,6 +39,33 @@ const state = reactive({
   proc_status: '',
   is_alive: '' as '' | 'false' | 'true',
 });
+
+const occVisible = ref(false);
+const occRows = ref<Array<{ idx: number; time: string; size: string; packets: string }>>([]);
+
+function buildOccRows(occ: any[]) {
+  return (occ || []).map((o, i) => {
+    const item = typeof o === 'string' ? { time: o } : (o ?? {});
+    return {
+      idx: i + 1,
+      time: formatTimestamp(item.time) || '-',
+      size: item.wire_bytes == null ? '-' : formatBytes(item.wire_bytes),
+      packets: item.packets == null ? '-' : String(item.packets),
+    };
+  });
+}
+
+function openOccurrences(row: Record<string, any>) {
+  occRows.value = buildOccRows(row.occurrences || []);
+  occVisible.value = true;
+}
+
+const occColumns = [
+  { title: '序号', key: 'idx', width: 70 },
+  { title: '命中时间', key: 'time', minWidth: 180 },
+  { title: '数据包大小', key: 'size', width: 120 },
+  { title: '包数', key: 'packets', width: 90 },
+];
 
 const filteredRows = computed(() => {
   return (lyStore.events || []).filter((item) => {
@@ -200,7 +228,7 @@ const columns = [
   {
     title: '命中频次',
     key: 'hitFrequencyText',
-    width: 200,
+    width: 240,
     render: (row: Record<string, any>) => {
       const tags = [
         h(
@@ -213,16 +241,21 @@ const columns = [
         tags.push(
           h(
             NTag,
-            {
-              size: 'small',
-              type: row.isFinal ? 'success' : 'info',
-              style: 'margin-left:4px',
-            },
+            { size: 'small', type: row.isFinal ? 'success' : 'info', style: 'margin-left:4px' },
             { default: () => row.aggregationStatusText },
           ),
         );
       }
-      return h('div', { style: 'display:flex;flex-wrap:wrap;gap:4px' }, tags);
+      if (Array.isArray(row.occurrences) && row.occurrences.length > 0) {
+        tags.push(
+          h(
+            NButton,
+            { text: true, size: 'small', type: 'primary', style: 'margin-left:8px', onClick: () => openOccurrences(row) },
+            { default: () => '明细' },
+          ),
+        );
+      }
+      return h('div', { style: 'display:flex;flex-wrap:wrap;align-items:center;gap:4px' }, tags);
     },
   },
   {
@@ -351,6 +384,21 @@ onMounted(async () => {
       :event-id="reportEventId"
       :context="reportContext"
     />
+
+    <NModal
+      v-model:show="occVisible"
+      preset="card"
+      title="命中明细"
+      style="width: 640px; max-width: 90vw"
+    >
+      <NDataTable
+        :columns="occColumns"
+        :data="occRows"
+        size="small"
+        :max-height="420"
+        :bordered="false"
+      />
+    </NModal>
   </div>
 </template>
 
