@@ -135,7 +135,7 @@ func (s Services) mergeOccurrence(eventID string, ly map[string]any) int {
 			ctx["last_time"] = occ
 		}
 		occs, _ := ctx["occurrences"].([]any)
-		occs = append(occs, occ)
+		occs = append(occs, buildOccurrence(ly))
 		if len(occs) > maxOccurrences {
 			occs = occs[len(occs)-maxOccurrences:]
 		}
@@ -328,4 +328,21 @@ func firstNonEmpty(values ...string) string {
 
 func newID(prefix string) string {
 	return fmt.Sprintf("%s-%d", prefix, time.Now().UTC().UnixNano())
+}
+
+// buildOccurrence 从一条 ly 事件构造单次命中记录：时间 + 数据包大小(wire_bytes) + 包数(packets)。
+// wire_bytes/packets 缺失时省略对应键，便于前端区分"无数据"。
+func buildOccurrence(ly map[string]any) map[string]any {
+	occ := map[string]any{}
+	t := firstNonEmpty(asString(ly["occurrence_time"]), asString(ly["time"]))
+	if t != "" {
+		occ["time"] = t
+	}
+	if v, ok := ly["wire_bytes"]; ok && v != nil {
+		occ["wire_bytes"] = toInt(v)
+	}
+	if v, ok := ly["packets"]; ok && v != nil {
+		occ["packets"] = toInt(v)
+	}
+	return occ
 }

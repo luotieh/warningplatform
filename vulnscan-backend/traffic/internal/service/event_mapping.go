@@ -65,7 +65,7 @@ func LyEventToDeepSOC(ly map[string]any) domain.Event {
 	occ := firstNonEmpty(asString(ly["occurrence_time"]), asString(ly["time"]))
 	occurrences := []any{}
 	if occ != "" {
-		occurrences = append(occurrences, occ)
+		occurrences = append(occurrences, buildOccurrence(ly))
 	}
 	context := map[string]any{
 		"ly_id":             ly["id"],
