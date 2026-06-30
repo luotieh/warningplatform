@@ -247,7 +247,7 @@ func unixLike(v any) (int64, bool) {
 
 // Review 处理人工审核；approve 时把事件推送到通报处置并记录 circular_code。
 // 仅 event_status == "round_finished" 的事件可审核。bearer/fallbackBase 透传给 CircularClient。
-func (s *EventService) Review(ctx context.Context, eventID, action, comment, bearer, fallbackBase string) (map[string]any, error) {
+func (s *EventService) Review(ctx context.Context, eventID, action, comment, reviewedBy, bearer, fallbackBase string) (map[string]any, error) {
 	event, ok := s.core.Store.GetEvent(eventID)
 	if !ok {
 		return nil, errors.New("事件不存在")
@@ -262,6 +262,7 @@ func (s *EventService) Review(ctx context.Context, eventID, action, comment, bea
 		s.core.Store.UpdateEvent(eventID, map[string]any{
 			"review_status":  "rejected",
 			"review_comment": comment,
+			"reviewed_by":    reviewedBy,
 			"reviewed_at":    now,
 		})
 		return map[string]any{"review_status": "rejected"}, nil
@@ -279,6 +280,7 @@ func (s *EventService) Review(ctx context.Context, eventID, action, comment, bea
 		s.core.Store.UpdateEvent(eventID, map[string]any{
 			"review_status":  "approved",
 			"review_comment": comment,
+			"reviewed_by":    reviewedBy,
 			"reviewed_at":    now,
 			"circular_code":  code,
 		})

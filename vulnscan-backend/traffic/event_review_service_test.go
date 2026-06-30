@@ -34,7 +34,7 @@ func TestReviewApprovePushesAndStoresCode(t *testing.T) {
 	es, st := newTestEventService(t, srv.URL)
 	_, _ = st.CreateEvent(domain.Event{EventID: "evt-1", EventStatus: "round_finished", Severity: "high", Title: "x"})
 
-	res, err := es.Review(context.Background(), "evt-1", "approve", "ok", "Bearer tok", srv.URL)
+	res, err := es.Review(context.Background(), "evt-1", "approve", "ok", "alice", "Bearer tok", srv.URL)
 	if err != nil {
 		t.Fatalf("review approve: %v", err)
 	}
@@ -45,9 +45,12 @@ func TestReviewApprovePushesAndStoresCode(t *testing.T) {
 	if got.CircularCode != "XF-1" || got.ReviewStatus != "approved" {
 		t.Fatalf("event not updated: %+v", got)
 	}
+	if got.ReviewedBy != "alice" {
+		t.Fatalf("reviewed_by not stored: got %q, want %q", got.ReviewedBy, "alice")
+	}
 
 	// 幂等：再次 approve 不应再次调用 circular
-	_, err = es.Review(context.Background(), "evt-1", "approve", "", "Bearer tok", srv.URL)
+	_, err = es.Review(context.Background(), "evt-1", "approve", "", "", "Bearer tok", srv.URL)
 	if err != nil {
 		t.Fatalf("second approve: %v", err)
 	}
@@ -59,7 +62,7 @@ func TestReviewApprovePushesAndStoresCode(t *testing.T) {
 func TestReviewRejectDoesNotPush(t *testing.T) {
 	es, st := newTestEventService(t, "")
 	_, _ = st.CreateEvent(domain.Event{EventID: "evt-2", EventStatus: "round_finished", Severity: "low"})
-	res, err := es.Review(context.Background(), "evt-2", "reject", "误报", "", "")
+	res, err := es.Review(context.Background(), "evt-2", "reject", "误报", "", "", "")
 	if err != nil {
 		t.Fatalf("review reject: %v", err)
 	}
@@ -75,7 +78,7 @@ func TestReviewRejectDoesNotPush(t *testing.T) {
 func TestReviewRejectsNonFinished(t *testing.T) {
 	es, st := newTestEventService(t, "")
 	_, _ = st.CreateEvent(domain.Event{EventID: "evt-3", EventStatus: "processing"})
-	_, err := es.Review(context.Background(), "evt-3", "approve", "", "Bearer tok", "http://x")
+	_, err := es.Review(context.Background(), "evt-3", "approve", "", "", "Bearer tok", "http://x")
 	if err == nil {
 		t.Fatal("expected guard error for non round_finished event")
 	}

@@ -12,6 +12,8 @@ import {
   NTag,
 } from 'naive-ui';
 
+import { useUserStore } from '@vben/stores';
+
 import { lyEventPushToAi, lyEventReview } from '#/api/ly';
 import { message } from '#/adapter/naive';
 import { useLyStore } from '#/store/ly';
@@ -23,6 +25,7 @@ defineOptions({ name: 'LyEventList' });
 
 const router = useRouter();
 const lyStore = useLyStore();
+const userStore = useUserStore();
 
 // 查看报告弹窗（替代原来的整页跳转）
 const reportVisible = ref(false);
@@ -175,7 +178,7 @@ async function reviewEvent(row: Record<string, any>, action: 'approve' | 'reject
     return;
   }
   try {
-    const res = await lyEventReview({ eventId, action });
+    const res = await lyEventReview({ eventId, action, reviewedBy: userStore.userInfo?.realName || userStore.userInfo?.username || '' });
     row.review_status = res?.review_status || (action === 'approve' ? 'approved' : 'rejected');
     if (res?.circular_code) row.circular_code = res.circular_code;
     message.success(action === 'approve' ? `已推送通报处置${res?.circular_code ? '：' + res.circular_code : ''}` : '已驳回');

@@ -203,8 +203,9 @@ func (h *Handler) ReviewEvent(c *gin.Context) {
 	}
 	action := strings.ToLower(strings.TrimSpace(firstString(body, "action")))
 	comment := firstString(body, "comment", "review_comment")
+	reviewedBy := firstString(body, "reviewed_by")
 	bearer := c.GetHeader("Authorization")
-	result, err := h.events.Review(c.Request.Context(), c.Param("eventID"), action, comment, bearer, requestBaseURL(c))
+	result, err := h.events.Review(c.Request.Context(), c.Param("eventID"), action, comment, reviewedBy, bearer, requestBaseURL(c))
 	if err != nil {
 		fail(c, 400, err.Error())
 		return

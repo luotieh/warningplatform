@@ -136,11 +136,12 @@ export function lyEventReview(params: {
   eventId: number | string;
   action: 'approve' | 'reject';
   comment?: string;
+  reviewedBy?: string;
 }) {
-  const { eventId, action, comment } = params;
+  const { eventId, action, comment, reviewedBy } = params;
   return post(
     `/events/detail/${eventId}/review`,
-    { action, comment: comment ?? '' },
+    { action, comment: comment ?? '', reviewed_by: reviewedBy ?? '' },
     '/api/traffic',
   );
 }
