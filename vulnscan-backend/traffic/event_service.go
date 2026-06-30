@@ -180,6 +180,8 @@ func lyCompatibleEvent(event domain.Event) map[string]any {
 		// 收敛状态：active=进行中(可能继续)，closed=已收敛(occurrence_count 即最终频次)
 		"aggregation_status": aggregationStatus,
 		"is_final":           isFinal,
+		// 每次命中明细：时间 + 数据包大小(wire_bytes) + 包数(packets)，供前端命中频次弹窗
+		"occurrences": context["occurrences"],
 		// 审核状态：供事件列表展示「待审核/已通过/已驳回」与通报编号
 		"review_status": event.ReviewStatus,
 		"circular_code": event.CircularCode,
