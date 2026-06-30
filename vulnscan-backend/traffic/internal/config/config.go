@@ -23,6 +23,7 @@ type Config struct {
 	DeepSOCUsername         string
 	DeepSOCPassword         string
 	DeepSOCAPIKey           string
+	CircularBaseURL         string
 	LLMBaseURL              string
 	LLMAPIKey               string
 	LLMModel                string
@@ -61,6 +62,7 @@ func Load() Config {
 		DeepSOCUsername:         get("DEEPSOC_USERNAME", "admin"),
 		DeepSOCPassword:         get("DEEPSOC_PASSWORD", "admin"),
 		DeepSOCAPIKey:           get("DEEPSOC_API_KEY", ""),
+		CircularBaseURL:         get("CIRCULAR_BASE_URL", ""),
 		LLMBaseURL:              get("LLM_BASE_URL", ""),
 		LLMAPIKey:               get("LLM_API_KEY", ""),
 		LLMModel:                get("LLM_MODEL", "deepseek-chat"),
