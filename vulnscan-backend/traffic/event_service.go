@@ -241,3 +241,47 @@ func unixLike(v any) (int64, bool) {
 	}
 	return 0, false
 }
+
+// Review 处理人工审核；approve 时把事件推送到通报处置并记录 circular_code。
+// 仅 event_status == "round_finished" 的事件可审核。bearer/fallbackBase 透传给 CircularClient。
+func (s *EventService) Review(ctx context.Context, eventID, action, comment, bearer, fallbackBase string) (map[string]any, error) {
+	event, ok := s.core.Store.GetEvent(eventID)
+	if !ok {
+		return nil, errors.New("事件不存在")
+	}
+	if event.EventStatus != "round_finished" {
+		return nil, errors.New("仅 AI 分析完成的事件可审核")
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+
+	switch action {
+	case "reject":
+		s.core.Store.UpdateEvent(eventID, map[string]any{
+			"review_status":  "rejected",
+			"review_comment": comment,
+			"reviewed_at":    now,
+		})
+		return map[string]any{"review_status": "rejected"}, nil
+
+	case "approve":
+		// 幂等：已推送过则直接返回既有编号
+		if event.CircularCode != "" {
+			return map[string]any{"review_status": "approved", "circular_code": event.CircularCode}, nil
+		}
+		req := buildTransferIncidentReq(event, s.core.Store.ListSummaries(eventID))
+		code, err := s.core.Circular.ReceiveIncident(ctx, req, bearer, fallbackBase)
+		if err != nil {
+			return nil, err
+		}
+		s.core.Store.UpdateEvent(eventID, map[string]any{
+			"review_status":  "approved",
+			"review_comment": comment,
+			"reviewed_at":    now,
+			"circular_code":  code,
+		})
+		return map[string]any{"review_status": "approved", "circular_code": code}, nil
+
+	default:
+		return nil, errors.New("无效的审核动作")
+	}
+}

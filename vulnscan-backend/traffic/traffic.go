@@ -40,6 +40,7 @@ type Config struct {
 	DeepSOCUsername         string `json:"deepsoc_username" toml:"deepsoc_username"`
 	DeepSOCPassword         string `json:"deepsoc_password" toml:"deepsoc_password"`
 	DeepSOCAPIKey           string `json:"deepsoc_api_key" toml:"deepsoc_api_key"`
+	CircularBaseURL         string `json:"circular_base_url" toml:"circular_base_url"`
 	LLMBaseURL              string `json:"llm_base_url" toml:"llm_base_url"`
 	LLMAPIKey               string `json:"llm_api_key" toml:"llm_api_key"`
 	LLMModel                string `json:"llm_model" toml:"llm_model"`
@@ -75,6 +76,10 @@ func NewTraffic(moduleCfg Config) *Traffic {
 		FlowShadow: client.FlowShadowClient{
 			BaseURL: cfg.FlowShadowBaseURL,
 			APIKey:  cfg.FlowShadowAPIKey,
+			HTTP:    httpClient,
+		},
+		Circular: client.CircularClient{
+			BaseURL: cfg.CircularBaseURL,
 			HTTP:    httpClient,
 		},
 		LLM: &client.LLMClient{
@@ -144,6 +149,9 @@ func (c Config) toInternal() config.Config {
 	}
 	if c.DeepSOCAPIKey != "" {
 		cfg.DeepSOCAPIKey = c.DeepSOCAPIKey
+	}
+	if c.CircularBaseURL != "" {
+		cfg.CircularBaseURL = c.CircularBaseURL
 	}
 	if c.LLMBaseURL != "" {
 		cfg.LLMBaseURL = c.LLMBaseURL
@@ -252,6 +260,7 @@ func (m *Traffic) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
 				{Name: "执行记录", Path: "detail/:eventID/executions", Method: "GET", Handler: m.api.EventExecutions, Enabled: true},
 				{Name: "完成执行", Path: "detail/:eventID/executions/:executionID/complete", Method: "POST", Handler: m.api.CompleteExecution, Enabled: true},
 				{Name: "事件层级", Path: "detail/:eventID/hierarchy", Method: "GET", Handler: m.api.EventHierarchy, Enabled: true},
+				{Name: "事件审核", Path: "detail/:eventID/review", Method: "POST", Handler: m.api.ReviewEvent, Enabled: true},
 			},
 		},
 	})...)

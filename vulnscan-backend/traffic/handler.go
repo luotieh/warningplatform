@@ -196,6 +196,34 @@ func (h *Handler) EventHierarchy(c *gin.Context) {
 	ok(c, h.events.Hierarchy(c.Request.Context(), c.Param("eventID")))
 }
 
+func (h *Handler) ReviewEvent(c *gin.Context) {
+	body, valid := readBody(c)
+	if !valid {
+		return
+	}
+	action := strings.ToLower(strings.TrimSpace(firstString(body, "action")))
+	comment := firstString(body, "comment", "review_comment")
+	bearer := c.GetHeader("Authorization")
+	result, err := h.events.Review(c.Request.Context(), c.Param("eventID"), action, comment, bearer, requestBaseURL(c))
+	if err != nil {
+		fail(c, 400, err.Error())
+		return
+	}
+	ok(c, result)
+}
+
+// requestBaseURL 由入站请求推导同机 base（CircularClient.BaseURL 为空时使用）。
+func requestBaseURL(c *gin.Context) string {
+	scheme := "http"
+	if c.Request.TLS != nil {
+		scheme = "https"
+	}
+	if proto := c.GetHeader("X-Forwarded-Proto"); proto != "" {
+		scheme = proto
+	}
+	return scheme + "://" + c.Request.Host
+}
+
 func (h *Handler) Users(c *gin.Context) {
 	ok(c, h.account.ListUsers())
 }
