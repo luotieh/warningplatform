@@ -266,6 +266,21 @@ func (m *Traffic) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
 		},
 	})...)
 
+	all = append(all, authorize.RegisterRoutes(e.Group("/assets"), []authorize.Route{
+		{
+			Name:    "流量资产管理",
+			Enabled: true,
+			Children: []authorize.Route{
+				{Name: "资产列表", Path: "list", Method: "GET", Handler: m.api.ListAssets, Enabled: true},
+				{Name: "创建资产", Method: "POST", Handler: m.api.CreateAsset, Enabled: true},
+				{Name: "更新资产", Path: ":id", Method: "PUT", Handler: m.api.UpdateAsset, Enabled: true},
+				{Name: "删除资产", Path: ":id", Method: "DELETE", Handler: m.api.DeleteAsset, Enabled: true},
+				{Name: "导入资产", Path: "import", Method: "POST", Handler: m.api.ImportAssets, Enabled: true},
+				{Name: "导入模板", Path: "import/template", Method: "GET", Handler: m.api.AssetImportTemplate, Enabled: true},
+			},
+		},
+	})...)
+
 	all = append(all, authorize.RegisterRoutes(e.Group("/users"), []authorize.Route{
 		{
 			Name:    "DeepSOC用户管理",

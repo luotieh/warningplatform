@@ -1,9 +1,11 @@
 package traffic
 
 import (
+	"io"
 	"net/http"
 	"strings"
 
+	"vulnscan-backend/traffic/internal/domain"
 	"vulnscan-backend/traffic/internal/lyserver"
 	"vulnscan-backend/traffic/internal/socketio"
 
@@ -482,4 +484,115 @@ func internalAPIKey(c *gin.Context) string {
 
 func (h *Handler) SocketIO(c *gin.Context) {
 	h.socket.ServeHTTP(c.Writer, c.Request)
+}
+
+func (h *Handler) ListAssets(c *gin.Context) {
+	keyword := strings.ToLower(strings.TrimSpace(c.Query("keyword")))
+	typ := strings.TrimSpace(c.Query("type"))
+	statusQ := strings.TrimSpace(c.Query("status"))
+	out := []any{}
+	for _, a := range h.assets.List() {
+		if typ != "" && a.AssetType != typ {
+			continue
+		}
+		if statusQ != "" && stringValue(a.Status) != statusQ {
+			continue
+		}
+		if keyword != "" &&
+			!strings.Contains(strings.ToLower(a.Name), keyword) &&
+			!strings.Contains(strings.ToLower(a.Address), keyword) {
+			continue
+		}
+		out = append(out, a)
+	}
+	ok(c, out)
+}
+
+func (h *Handler) CreateAsset(c *gin.Context) {
+	body, valid := readBody(c)
+	if !valid {
+		return
+	}
+	created, err := h.assets.Create(domain.Asset{
+		Name:      firstString(body, "name"),
+		AssetType: firstString(body, "asset_type", "type"),
+		Address:   firstString(body, "address"),
+		Unit:      firstString(body, "unit"),
+		Owner:     firstString(body, "owner"),
+		Remark:    firstString(body, "remark"),
+		Status:    intFromBody(body["status"]),
+	})
+	if err != nil {
+		fail(c, 400, err.Error())
+		return
+	}
+	okMessage(c, "资产已创建", created)
+}
+
+func (h *Handler) UpdateAsset(c *gin.Context) {
+	body, valid := readBody(c)
+	if !valid {
+		return
+	}
+	patch := map[string]any{}
+	for _, k := range []string{"name", "address", "unit", "owner", "remark"} {
+		if v, ok := body[k]; ok {
+			patch[k] = stringValue(v)
+		}
+	}
+	if v, ok := body["asset_type"]; ok {
+		patch["asset_type"] = stringValue(v)
+	} else if v, ok := body["type"]; ok {
+		patch["asset_type"] = stringValue(v)
+	}
+	if v, ok := body["status"]; ok {
+		patch["status"] = intFromBody(v)
+	}
+	updated, found, err := h.assets.Update(c.Param("id"), patch)
+	if err != nil {
+		fail(c, 400, err.Error())
+		return
+	}
+	if !found {
+		fail(c, 404, "资产不存在")
+		return
+	}
+	okMessage(c, "资产已更新", updated)
+}
+
+func (h *Handler) DeleteAsset(c *gin.Context) {
+	if !h.assets.Delete(c.Param("id")) {
+		fail(c, 404, "资产不存在")
+		return
+	}
+	okMessage(c, "资产已删除", nil)
+}
+
+func (h *Handler) ImportAssets(c *gin.Context) {
+	fh, err := c.FormFile("file")
+	if err != nil {
+		fail(c, 400, "文件上传失败")
+		return
+	}
+	f, err := fh.Open()
+	if err != nil {
+		fail(c, 400, "文件打开失败")
+		return
+	}
+	defer f.Close()
+	data, err := io.ReadAll(f)
+	if err != nil {
+		fail(c, 400, "文件读取失败")
+		return
+	}
+	imported, errs := h.assets.Import(fh.Filename, data)
+	ok(c, map[string]any{"imported": imported, "errors": errs})
+}
+
+func (h *Handler) AssetImportTemplate(c *gin.Context) {
+	c.Header("Content-Type", "text/csv; charset=utf-8")
+	c.Header("Content-Disposition", "attachment; filename=asset_import_template.csv")
+	// 加 UTF-8 BOM，Excel 打开中文不乱码
+	c.Writer.Write([]byte{0xEF, 0xBB, 0xBF})
+	c.Writer.Write(AssetImportTemplateCSV())
 }
