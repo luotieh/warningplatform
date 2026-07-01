@@ -12,6 +12,7 @@ import (
 
 type Handler struct {
 	events  *EventService
+	assets  *AssetService
 	account *AccountService
 	chat    *ChatService
 	system  *SystemService
@@ -20,8 +21,8 @@ type Handler struct {
 	socket  *socketio.Hub
 }
 
-func NewHandler(events *EventService, account *AccountService, chat *ChatService, system *SystemService, inner *InternalService, ly *lyserver.Service, socket *socketio.Hub) *Handler {
-	return &Handler{events: events, account: account, chat: chat, system: system, inner: inner, ly: ly, socket: socket}
+func NewHandler(events *EventService, assets *AssetService, account *AccountService, chat *ChatService, system *SystemService, inner *InternalService, ly *lyserver.Service, socket *socketio.Hub) *Handler {
+	return &Handler{events: events, assets: assets, account: account, chat: chat, system: system, inner: inner, ly: ly, socket: socket}
 }
 
 func (h *Handler) Health(c *gin.Context) {

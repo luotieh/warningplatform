@@ -95,6 +95,7 @@ func NewTraffic(moduleCfg Config) *Traffic {
 	return &Traffic{
 		api: NewHandler(
 			NewEventService(services),
+			NewAssetService(st),
 			NewAccountService(services),
 			NewChatService(services),
 			NewSystemService(cfg, services),
