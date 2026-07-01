@@ -1,10 +1,11 @@
 <script lang="ts" setup>
 import { h, onMounted, reactive, ref, computed, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 
 import {
   NButton,
   NCard,
+  NCheckbox,
   NDataTable,
   NModal,
   NPagination,
@@ -12,6 +13,9 @@ import {
   NSpace,
   NTag,
 } from 'naive-ui';
+
+import { lyAssetList, type LyAsset } from '#/api/ly/assets';
+import { assetMatchesEvent, eventMatchesAnyAsset } from '#/utils/ly-asset';
 
 import { useUserStore } from '@vben/stores';
 
@@ -24,6 +28,7 @@ import ReportModal from '../detail/components/ReportModal.vue';
 
 defineOptions({ name: 'LyEventList' });
 
+const route = useRoute();
 const router = useRouter();
 const lyStore = useLyStore();
 const userStore = useUserStore();
@@ -39,6 +44,22 @@ const state = reactive({
   proc_status: '',
   is_alive: '' as '' | 'false' | 'true',
 });
+
+const assets = ref<LyAsset[]>([]);
+const selectedAsset = ref<string>((route.query.asset as string) || '');
+const onlyAssetRelated = ref(false);
+
+const assetOptions = computed(() =>
+  assets.value.map((a) => ({ label: `${a.name}（${a.address}）`, value: a.address })),
+);
+
+async function loadAssets() {
+  try {
+    assets.value = (await lyAssetList()) || [];
+  } catch {
+    assets.value = [];
+  }
+}
 
 const occVisible = ref(false);
 const occRows = ref<Array<{ idx: number; time: string; size: string; packets: string }>>([]);
@@ -73,6 +94,11 @@ const filteredRows = computed(() => {
     if (state.is_alive) {
       const alive = String(item.is_alive) === state.is_alive;
       if (!alive) return false;
+    }
+    if (selectedAsset.value) {
+      if (!assetMatchesEvent({ address: selectedAsset.value }, item)) return false;
+    } else if (onlyAssetRelated.value) {
+      if (!eventMatchesAnyAsset(item, assets.value)) return false;
     }
     return true;
   });
@@ -327,6 +353,7 @@ onMounted(async () => {
   if (!lyStore.events.length) {
     await lyStore.loadEvents();
   }
+  void loadAssets();
   void analyzeHistorySequentially();
 });
 </script>
@@ -367,6 +394,17 @@ onMounted(async () => {
         <NSpace>
           <NSelect v-model:value="state.proc_status" clearable placeholder="处理状态" :options="[{ label: '未处理', value: 'unprocessed' }, { label: '已处理', value: 'processed' }, { label: '已确认', value: 'assigned' }]" style="width: 160px" />
           <NSelect v-model:value="state.is_alive" clearable placeholder="活跃状态" :options="[{ label: '活跃', value: 'true' }, { label: '不活跃', value: 'false' }]" style="width: 160px" />
+          <NSelect
+            v-model:value="selectedAsset"
+            clearable
+            filterable
+            placeholder="按资产筛选"
+            :options="assetOptions"
+            style="width: 240px"
+          />
+          <NCheckbox v-model:checked="onlyAssetRelated" :disabled="!!selectedAsset">
+            仅看已登记资产相关事件
+          </NCheckbox>
           <NButton type="primary" @click="lyStore.loadEvents()">刷新</NButton>
         </NSpace>
       </NCard>
