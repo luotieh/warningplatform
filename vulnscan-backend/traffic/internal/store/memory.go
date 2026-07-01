@@ -37,6 +37,7 @@ type MemoryStore struct {
 	pushed           map[string]domain.PushedEvent
 	audits           []domain.AuditLog
 	auditSeq         int64
+	assets           map[string]domain.Asset
 }
 
 func NewMemoryStore() *MemoryStore {
@@ -53,6 +54,7 @@ func NewMemoryStore() *MemoryStore {
 		eventMaps:        map[string]domain.EventMap{},
 		cursors:          map[string]domain.SyncCursor{},
 		pushed:           map[string]domain.PushedEvent{},
+		assets:           map[string]domain.Asset{},
 	}
 	now := time.Now().UTC()
 	admin := domain.User{
@@ -596,4 +598,86 @@ func (s *MemoryStore) AddAuditLog(a domain.AuditLog) domain.AuditLog {
 	}
 	s.audits = append(s.audits, a)
 	return a
+}
+
+func (s *MemoryStore) CreateAsset(a domain.Asset) (domain.Asset, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if a.ID == "" {
+		a.ID = newID("asset")
+	}
+	if a.Status == 0 {
+		a.Status = 1
+	}
+	for _, ex := range s.assets {
+		if ex.Address == a.Address {
+			return domain.Asset{}, errors.New("asset address already exists")
+		}
+	}
+	now := time.Now().UTC()
+	a.CreatedAt = now
+	a.UpdatedAt = now
+	s.assets[a.ID] = a
+	return a, nil
+}
+
+func (s *MemoryStore) GetAsset(id string) (domain.Asset, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	a, ok := s.assets[id]
+	return a, ok
+}
+
+func (s *MemoryStore) ListAssets() []domain.Asset {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]domain.Asset, 0, len(s.assets))
+	for _, a := range s.assets {
+		out = append(out, a)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
+	return out
+}
+
+func (s *MemoryStore) UpdateAsset(id string, patch map[string]any) (domain.Asset, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	a, ok := s.assets[id]
+	if !ok {
+		return domain.Asset{}, false
+	}
+	if v, ok := stringPatch(patch, "name"); ok {
+		a.Name = v
+	}
+	if v, ok := stringPatch(patch, "asset_type"); ok {
+		a.AssetType = v
+	}
+	if v, ok := stringPatch(patch, "address"); ok {
+		a.Address = v
+	}
+	if v, ok := stringPatch(patch, "unit"); ok {
+		a.Unit = v
+	}
+	if v, ok := stringPatch(patch, "owner"); ok {
+		a.Owner = v
+	}
+	if v, ok := stringPatch(patch, "remark"); ok {
+		a.Remark = v
+	}
+	if v, ok := intPatch(patch, "status"); ok {
+		a.Status = v
+	}
+	a.UpdatedAt = time.Now().UTC()
+	s.assets[id] = a
+	return a, true
+}
+
+func (s *MemoryStore) DeleteAsset(id string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.assets[id]; !ok {
+		return false
+	}
+	delete(s.assets, id)
+	return true
 }

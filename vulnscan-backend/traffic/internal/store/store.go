@@ -43,4 +43,10 @@ type Store interface {
 	SavePushedEvent(pe domain.PushedEvent)
 
 	AddAuditLog(a domain.AuditLog) domain.AuditLog
+
+	CreateAsset(a domain.Asset) (domain.Asset, error)
+	GetAsset(id string) (domain.Asset, bool)
+	ListAssets() []domain.Asset
+	UpdateAsset(id string, patch map[string]any) (domain.Asset, bool)
+	DeleteAsset(id string) bool
 }

@@ -703,3 +703,100 @@ func scanMessage(row scanner) (domain.Message, error) {
 	err := row.Scan(&m.ID, &m.MessageID, &m.EventID, &m.UserID, &m.UserNickname, &m.MessageFrom, &m.MessageType, &m.MessageCategory, &m.SenderType, &m.ChatSessionID, &m.MessageContent, &m.RoundID, &m.CreatedAt)
 	return domain.NormalizeMessage(m), err
 }
+
+func (s *PostgresStore) CreateAsset(a domain.Asset) (domain.Asset, error) {
+	if a.ID == "" {
+		a.ID = newID("asset")
+	}
+	if a.Status == 0 {
+		a.Status = 1
+	}
+	now := time.Now().UTC()
+	a.CreatedAt = now
+	a.UpdatedAt = now
+	_, err := s.db.ExecContext(context.Background(), `
+INSERT INTO traffic_assets (id, name, asset_type, address, unit, owner, status, remark, created_at, updated_at)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+		a.ID, a.Name, a.AssetType, a.Address, a.Unit, a.Owner, a.Status, a.Remark, a.CreatedAt, a.UpdatedAt)
+	if err != nil {
+		return domain.Asset{}, err
+	}
+	return a, nil
+}
+
+func scanAsset(row scanner) (domain.Asset, error) {
+	var a domain.Asset
+	err := row.Scan(&a.ID, &a.Name, &a.AssetType, &a.Address, &a.Unit, &a.Owner, &a.Status, &a.Remark, &a.CreatedAt, &a.UpdatedAt)
+	return a, err
+}
+
+func (s *PostgresStore) GetAsset(id string) (domain.Asset, bool) {
+	row := s.db.QueryRowContext(context.Background(), `
+SELECT id, name, asset_type, address, unit, owner, status, remark, created_at, updated_at
+FROM traffic_assets WHERE id=$1`, id)
+	a, err := scanAsset(row)
+	return a, err == nil
+}
+
+func (s *PostgresStore) ListAssets() []domain.Asset {
+	rows, err := s.db.QueryContext(context.Background(), `
+SELECT id, name, asset_type, address, unit, owner, status, remark, created_at, updated_at
+FROM traffic_assets ORDER BY created_at DESC`)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	out := []domain.Asset{}
+	for rows.Next() {
+		if a, err := scanAsset(rows); err == nil {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+func (s *PostgresStore) UpdateAsset(id string, patch map[string]any) (domain.Asset, bool) {
+	a, ok := s.GetAsset(id)
+	if !ok {
+		return domain.Asset{}, false
+	}
+	if v, ok := stringPatch(patch, "name"); ok {
+		a.Name = v
+	}
+	if v, ok := stringPatch(patch, "asset_type"); ok {
+		a.AssetType = v
+	}
+	if v, ok := stringPatch(patch, "address"); ok {
+		a.Address = v
+	}
+	if v, ok := stringPatch(patch, "unit"); ok {
+		a.Unit = v
+	}
+	if v, ok := stringPatch(patch, "owner"); ok {
+		a.Owner = v
+	}
+	if v, ok := stringPatch(patch, "remark"); ok {
+		a.Remark = v
+	}
+	if v, ok := intPatch(patch, "status"); ok {
+		a.Status = v
+	}
+	a.UpdatedAt = time.Now().UTC()
+	_, err := s.db.ExecContext(context.Background(), `
+UPDATE traffic_assets SET name=$2, asset_type=$3, address=$4, unit=$5, owner=$6, status=$7, remark=$8, updated_at=$9
+WHERE id=$1`,
+		id, a.Name, a.AssetType, a.Address, a.Unit, a.Owner, a.Status, a.Remark, a.UpdatedAt)
+	if err != nil {
+		return domain.Asset{}, false
+	}
+	return a, true
+}
+
+func (s *PostgresStore) DeleteAsset(id string) bool {
+	res, err := s.db.ExecContext(context.Background(), `DELETE FROM traffic_assets WHERE id=$1`, id)
+	if err != nil {
+		return false
+	}
+	n, _ := res.RowsAffected()
+	return n > 0
+}

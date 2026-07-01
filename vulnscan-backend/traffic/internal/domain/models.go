@@ -251,3 +251,16 @@ type AuditLog struct {
 	Meta      string    `json:"meta,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 }
+
+type Asset struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	AssetType string    `json:"asset_type"`
+	Address   string    `json:"address"`
+	Unit      string    `json:"unit,omitempty"`
+	Owner     string    `json:"owner,omitempty"`
+	Status    int       `json:"status"`
+	Remark    string    `json:"remark,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}

@@ -46,6 +46,23 @@ func timePatch(p map[string]any, key string) (*time.Time, bool) {
 	return nil, false
 }
 
+func intPatch(p map[string]any, key string) (int, bool) {
+	v, ok := p[key]
+	if !ok || v == nil {
+		return 0, false
+	}
+	switch x := v.(type) {
+	case int:
+		return x, true
+	case int64:
+		return int(x), true
+	case float64:
+		return int(x), true
+	default:
+		return 0, false
+	}
+}
+
 func newID(prefix string) string {
 	b := make([]byte, 8)
 	if _, err := rand.Read(b); err == nil {
