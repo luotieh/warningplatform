@@ -42,6 +42,16 @@ const routes: RouteRecordRaw[] = [
         },
       },
       {
+        name: 'LyAssets',
+        path: '/ly/assets',
+        component: () => import('#/views/ly/assets/index.vue'),
+        meta: {
+          icon: 'lucide:database',
+          order: 25,
+          title: '资产管理',
+        },
+      },
+      {
         name: 'LyConfig',
         path: '/ly/config',
         component: () => import('#/views/ly/config/index.vue'),
