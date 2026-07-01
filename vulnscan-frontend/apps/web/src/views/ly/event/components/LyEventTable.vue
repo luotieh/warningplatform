@@ -38,11 +38,11 @@ const state = reactive({
 
 const pagedRows = computed(() => paginate(props.rows, state.page, state.pageSize));
 
+// 行集变化（筛选切换/新检索/刷新）时回到第 1 页，等价旧事件列表点排行即重置分页的行为。
 watch(
-  () => props.rows.length,
+  () => props.rows,
   () => {
-    const max = Math.max(1, Math.ceil(props.rows.length / state.pageSize));
-    if (state.page > max) state.page = max;
+    state.page = 1;
   },
 );
 
