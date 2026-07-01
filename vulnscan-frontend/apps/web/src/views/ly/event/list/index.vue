@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import { h, onMounted, reactive, ref, computed, watch } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { useRoute } from 'vue-router';
 
 import {
   NButton,
@@ -29,7 +29,6 @@ import ReportModal from '../detail/components/ReportModal.vue';
 defineOptions({ name: 'LyEventList' });
 
 const route = useRoute();
-const router = useRouter();
 const lyStore = useLyStore();
 const userStore = useUserStore();
 
@@ -43,6 +42,8 @@ const state = reactive({
   pageSize: 10,
   proc_status: '',
   is_alive: '' as '' | 'false' | 'true',
+  rankKey: '' as '' | 'attackDevice' | 'victimDevice' | 'typeText',
+  rankValue: '',
 });
 
 const assets = ref<LyAsset[]>([]);
@@ -88,7 +89,9 @@ const occColumns = [
   { title: '包数', key: 'packets', width: 90 },
 ];
 
-const filteredRows = computed(() => {
+// 基础筛选（处理状态/活跃/资产）——排行标签基于此计算，
+// 保证选中某排行值后其它标签依然可见、可再切换。
+const baseRows = computed(() => {
   return (lyStore.events || []).filter((item) => {
     if (state.proc_status && item.proc_status !== state.proc_status) return false;
     if (state.is_alive) {
@@ -103,23 +106,50 @@ const filteredRows = computed(() => {
     return true;
   });
 });
+// 叠加“事件排行筛选”后的最终列表（表格与分页用）。
+const filteredRows = computed(() => {
+  if (!state.rankKey || !state.rankValue) return baseRows.value;
+  return baseRows.value.filter(
+    (item) => String(item[state.rankKey] ?? '') === state.rankValue,
+  );
+});
 const pagedRows = computed(() => paginate(filteredRows.value, state.page, state.pageSize));
-const attackRank = computed(() => countByKey(filteredRows.value, 'attackDevice').slice(0, 8));
-const victimRank = computed(() => countByKey(filteredRows.value, 'victimDevice').slice(0, 8));
-const typeRank = computed(() => countByKey(filteredRows.value, 'typeText').slice(0, 8));
+const attackRank = computed(() => countByKey(baseRows.value, 'attackDevice').slice(0, 8));
+const victimRank = computed(() => countByKey(baseRows.value, 'victimDevice').slice(0, 8));
+const typeRank = computed(() => countByKey(baseRows.value, 'typeText').slice(0, 8));
 
 watch(filteredRows, () => {
   const max = Math.max(1, Math.ceil(filteredRows.value.length / state.pageSize));
   if (state.page > max) state.page = max;
 });
 
-function rankFilter(key: string, value: string) {
-  if (key === 'typeText') {
-    const row = (lyStore.events || []).find((item) => item.typeText === value);
-    if (row) router.push({ path: '/ly/search', query: { keyword: row.type } });
+const RANK_LABELS: Record<string, string> = {
+  attackDevice: '威胁来源',
+  victimDevice: '受害目标',
+  typeText: '事件类型',
+};
+
+type RankKey = 'attackDevice' | 'victimDevice' | 'typeText';
+
+function isRankActive(key: RankKey, value: string) {
+  return state.rankKey === key && state.rankValue === value;
+}
+
+// 点击排行标签：在当前列表内筛选（不跳转）；再次点同一标签则取消。
+function rankFilter(key: RankKey, value: string) {
+  if (isRankActive(key, value)) {
+    clearRankFilter();
     return;
   }
-  router.push({ path: '/ly/search', query: { keyword: value } });
+  state.rankKey = key;
+  state.rankValue = value;
+  state.page = 1;
+}
+
+function clearRankFilter() {
+  state.rankKey = '';
+  state.rankValue = '';
+  state.page = 1;
 }
 
 function buildAnalysisPayload(row: Record<string, any>) {
@@ -366,7 +396,7 @@ onMounted(async () => {
           <div>
             <div class="rank-title">威胁来源</div>
             <NSpace>
-              <NTag v-for="item in attackRank" :key="item.name" size="small" @click="rankFilter('attackDevice', item.name)">
+              <NTag v-for="item in attackRank" :key="item.name" size="small" class="rank-tag" :class="{ 'rank-tag--active': isRankActive('attackDevice', item.name) }" @click="rankFilter('attackDevice', item.name)">
                 {{ item.name }} ({{ item.value }})
               </NTag>
             </NSpace>
@@ -374,7 +404,7 @@ onMounted(async () => {
           <div>
             <div class="rank-title">受害目标</div>
             <NSpace>
-              <NTag v-for="item in victimRank" :key="item.name" size="small" type="success" @click="rankFilter('victimDevice', item.name)">
+              <NTag v-for="item in victimRank" :key="item.name" size="small" type="success" class="rank-tag" :class="{ 'rank-tag--active': isRankActive('victimDevice', item.name) }" @click="rankFilter('victimDevice', item.name)">
                 {{ item.name }} ({{ item.value }})
               </NTag>
             </NSpace>
@@ -382,7 +412,7 @@ onMounted(async () => {
           <div>
             <div class="rank-title">事件类型</div>
             <NSpace>
-              <NTag v-for="item in typeRank" :key="item.name" size="small" type="warning" @click="rankFilter('typeText', item.name)">
+              <NTag v-for="item in typeRank" :key="item.name" size="small" type="warning" class="rank-tag" :class="{ 'rank-tag--active': isRankActive('typeText', item.name) }" @click="rankFilter('typeText', item.name)">
                 {{ item.name }} ({{ item.value }})
               </NTag>
             </NSpace>
@@ -406,6 +436,9 @@ onMounted(async () => {
             仅看已登记资产相关事件
           </NCheckbox>
           <NButton type="primary" @click="lyStore.loadEvents()">刷新</NButton>
+          <NTag v-if="state.rankKey" size="small" type="info" closable @close="clearRankFilter">
+            {{ RANK_LABELS[state.rankKey] }}：{{ state.rankValue }}
+          </NTag>
         </NSpace>
       </NCard>
 
@@ -444,5 +477,7 @@ onMounted(async () => {
 .ly-page { padding: 12px; }
 .rank-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .rank-title { margin-bottom: 8px; font-weight: 600; }
+.rank-tag { cursor: pointer; }
+.rank-tag--active { outline: 2px solid var(--n-color-target, #2080f0); outline-offset: 1px; font-weight: 600; }
 .pager-wrap { display: flex; justify-content: flex-end; margin-top: 12px; }
 </style>
