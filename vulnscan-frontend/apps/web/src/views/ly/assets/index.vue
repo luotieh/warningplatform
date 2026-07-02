@@ -17,7 +17,7 @@ import {
   NUpload,
 } from 'naive-ui';
 
-import { message } from '#/adapter/naive';
+import { dialog, message } from '#/adapter/naive';
 import {
   lyAssetCreate,
   lyAssetDelete,
@@ -111,14 +111,22 @@ async function submit() {
     message.error(error instanceof Error ? error.message : '保存失败');
   }
 }
-async function remove(row: LyAsset) {
-  try {
-    await lyAssetDelete(String(row.id));
-    message.success('已删除');
-    await load();
-  } catch (error) {
-    message.error(error instanceof Error ? error.message : '删除失败');
-  }
+function remove(row: LyAsset) {
+  dialog.warning({
+    title: '删除资产',
+    content: `确认删除资产「${row.name}（${row.address}）」？`,
+    positiveText: '删除',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        await lyAssetDelete(String(row.id));
+        message.success('已删除');
+        await load();
+      } catch (error) {
+        message.error(error instanceof Error ? error.message : '删除失败');
+      }
+    },
+  });
 }
 
 // 导入

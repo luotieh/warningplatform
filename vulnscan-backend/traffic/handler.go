@@ -513,6 +513,11 @@ func (h *Handler) CreateAsset(c *gin.Context) {
 	if !valid {
 		return
 	}
+	// 未显式提供 status 时默认启用(1)；显式传入(含 0=停用)则尊重之。
+	status := 1
+	if _, ok := body["status"]; ok {
+		status = intFromBody(body["status"])
+	}
 	created, err := h.assets.Create(domain.Asset{
 		Name:      firstString(body, "name"),
 		AssetType: firstString(body, "asset_type", "type"),
@@ -520,7 +525,7 @@ func (h *Handler) CreateAsset(c *gin.Context) {
 		Unit:      firstString(body, "unit"),
 		Owner:     firstString(body, "owner"),
 		Remark:    firstString(body, "remark"),
-		Status:    intFromBody(body["status"]),
+		Status:    status,
 	})
 	if err != nil {
 		fail(c, 400, err.Error())

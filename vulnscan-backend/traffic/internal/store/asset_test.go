@@ -8,12 +8,12 @@ import (
 
 func TestMemoryAssetCRUD(t *testing.T) {
 	s := NewMemoryStore()
-	a, err := s.CreateAsset(domain.Asset{Name: "web-1", AssetType: "ip", Address: "10.0.0.9"})
+	a, err := s.CreateAsset(domain.Asset{Name: "web-1", AssetType: "ip", Address: "10.0.0.9", Status: 1})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
 	if a.ID == "" || a.Status != 1 {
-		t.Fatalf("defaults not applied: %+v", a)
+		t.Fatalf("id/status not persisted: %+v", a)
 	}
 	// 重复 address 冲突
 	if _, err := s.CreateAsset(domain.Asset{Name: "web-dup", AssetType: "ip", Address: "10.0.0.9"}); err == nil {
@@ -36,5 +36,13 @@ func TestMemoryAssetCRUD(t *testing.T) {
 	// delete
 	if !s.DeleteAsset(a.ID) || len(s.ListAssets()) != 0 {
 		t.Fatal("delete failed")
+	}
+	// store 不强制默认：显式 status=0（停用）应原样保留
+	z, err := s.CreateAsset(domain.Asset{Name: "z", AssetType: "ip", Address: "10.0.0.10", Status: 0})
+	if err != nil {
+		t.Fatalf("create z: %v", err)
+	}
+	if z.Status != 0 {
+		t.Fatalf("store must not coerce status: %+v", z)
 	}
 }

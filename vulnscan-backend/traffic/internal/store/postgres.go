@@ -708,9 +708,6 @@ func (s *PostgresStore) CreateAsset(a domain.Asset) (domain.Asset, error) {
 	if a.ID == "" {
 		a.ID = newID("asset")
 	}
-	if a.Status == 0 {
-		a.Status = 1
-	}
 	now := time.Now().UTC()
 	a.CreatedAt = now
 	a.UpdatedAt = now

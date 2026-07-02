@@ -72,17 +72,11 @@ func (s *AssetService) Update(id string, patch map[string]any) (domain.Asset, bo
 func (s *AssetService) Delete(id string) bool { return s.store.DeleteAsset(id) }
 
 func normalizeAssetType(raw string) string {
+	// ToLower 对中文无副作用，"IP资产"→"ip资产"、"域名网站" 均在此命中。
 	switch strings.TrimSpace(strings.ToLower(raw)) {
 	case "ip", "ip资产":
 		return "ip"
 	case "domain_site", "域名网站", "domain", "website", "site":
-		return "domain_site"
-	}
-	// 中文别名大小写无关比较
-	switch strings.TrimSpace(raw) {
-	case "IP资产":
-		return "ip"
-	case "域名网站":
 		return "domain_site"
 	}
 	return strings.TrimSpace(strings.ToLower(raw))
@@ -143,6 +137,7 @@ func (s *AssetService) Import(filename string, data []byte) (int, []AssetImportE
 			Unit:      field(r, 3),
 			Owner:     field(r, 4),
 			Remark:    field(r, 5),
+			Status:    1, // 导入资产默认启用
 		}
 		if _, err := s.Create(a); err != nil {
 			errs = append(errs, AssetImportError{Row: rowNum, Message: err.Error()})

@@ -606,9 +606,6 @@ func (s *MemoryStore) CreateAsset(a domain.Asset) (domain.Asset, error) {
 	if a.ID == "" {
 		a.ID = newID("asset")
 	}
-	if a.Status == 0 {
-		a.Status = 1
-	}
 	for _, ex := range s.assets {
 		if ex.Address == a.Address {
 			return domain.Asset{}, errors.New("asset address already exists")
