@@ -331,7 +331,6 @@ function formatTime(value: any) {
 }
 
 const columns = [
-  { title: 'ID', key: 'id', width: 80 },
   { title: '类型', key: 'typeText', width: 120 },
   { title: '名称', key: 'name', minWidth: 160 },
   { title: 'IP', key: 'ip', minWidth: 150 },
