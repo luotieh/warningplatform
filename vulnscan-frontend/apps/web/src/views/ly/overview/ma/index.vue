@@ -56,7 +56,6 @@ watch([() => deviceRows.value.length, eventSummary], () => {
 });
 
 const deviceColumns = [
-  { title: 'ID', key: 'id', width: 80 },
   { title: '名称', key: 'name', minWidth: 180 },
   { title: '地址', key: 'address', minWidth: 220 },
   { title: '端口', key: 'port', width: 90 },
