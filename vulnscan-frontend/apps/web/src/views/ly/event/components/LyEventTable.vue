@@ -3,6 +3,7 @@ import { computed, h, onMounted, reactive, ref, watch } from 'vue';
 
 import { NButton, NDataTable, NModal, NPagination, NSpace, NTag } from 'naive-ui';
 
+import { IconifyIcon } from '@vben/icons';
 import { useUserStore } from '@vben/stores';
 
 import { lyEventPushToAi, lyEventReview } from '#/api/ly';
@@ -183,57 +184,120 @@ async function reviewEvent(row: Record<string, any>, action: 'approve' | 'reject
   }
 }
 
+function severityMeta(levelText?: string): { color: string; key: string } {
+  switch (levelText) {
+    case '极高': return { color: '#d03050', key: 'critical' };
+    case '高': return { color: '#f0a020', key: 'high' };
+    case '中': return { color: '#2080f0', key: 'medium' };
+    default: return { color: '#909399', key: 'low' };
+  }
+}
+
+const TYPE_ICONS: Record<string, string> = {
+  scan: 'lucide:radar', port_scan: 'lucide:radar', ip_scan: 'lucide:radar', mo: 'lucide:radar',
+  dns: 'lucide:globe', dns_tun: 'lucide:globe',
+  frn_trip: 'lucide:arrow-up-right',
+  mining: 'lucide:pickaxe',
+  black: 'lucide:ban', ti: 'lucide:crosshair', dga: 'lucide:shuffle',
+  icmp_tun: 'lucide:waves', cap: 'lucide:package-search',
+  sus: 'lucide:triangle-alert', srv: 'lucide:server',
+};
+function typeIcon(type?: string): string {
+  return TYPE_ICONS[String(type ?? '')] ?? 'lucide:shield-alert';
+}
+
+function rowClass(row: Record<string, any>): string {
+  return `sev-${severityMeta(row.levelText).key}`;
+}
+
 const columns = computed(() => [
-  { title: '事件类型', key: 'typeText', minWidth: 120 },
+  {
+    title: '事件类型',
+    key: 'typeText',
+    minWidth: 150,
+    render: (row: Record<string, any>) =>
+      h('div', { style: 'display:flex;align-items:center;gap:6px' }, [
+        h(IconifyIcon, { icon: typeIcon(row.type), style: 'font-size:16px;color:#909399;flex:none' }),
+        h('span', row.typeText || '-'),
+      ]),
+  },
   ...(props.showDesc
     ? [{ title: '描述', key: 'desc', minWidth: 200, ellipsis: { tooltip: true } }]
     : []),
-  { title: '威胁来源', key: 'attackDevice', minWidth: 160 },
-  { title: '受害目标', key: 'victimDevice', minWidth: 160 },
+  {
+    title: '来源 → 目标',
+    key: 'flow',
+    minWidth: 260,
+    render: (row: Record<string, any>) =>
+      h('div', { style: 'display:flex;align-items:center;gap:8px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace' }, [
+        h('span', { style: 'color:#d03050' }, row.attackDevice || '-'),
+        h(IconifyIcon, { icon: 'lucide:move-right', style: 'font-size:15px;color:#909399;flex:none' }),
+        h('span', { style: 'color:#2080f0' }, row.victimDevice || '-'),
+      ]),
+  },
   {
     title: '严重程度',
     key: 'levelText',
-    width: 100,
-    render: (row: Record<string, any>) => h(NTag, { size: 'small', type: row.levelText === '极高' ? 'error' : row.levelText === '高' ? 'warning' : 'default' }, { default: () => row.levelText }),
+    width: 110,
+    render: (row: Record<string, any>) => {
+      const m = severityMeta(row.levelText);
+      return h('div', { style: 'display:flex;align-items:center;gap:6px' }, [
+        h('span', { class: 'ly-dot', style: `background:${m.color}` }),
+        h('span', row.levelText || '-'),
+      ]);
+    },
   },
   {
     title: '命中频次',
     key: 'hitFrequencyText',
     width: 240,
     render: (row: Record<string, any>) => {
-      const tags = [
-        h(NTag, { size: 'small', type: row.hitFrequencyLevel || 'default' }, { default: () => row.hitFrequencyText || '单次' }),
+      const high = row.hitFrequencyLevel === 'error' || row.hitFrequencyLevel === 'warning';
+      const children: any[] = [
+        h(NTag, { size: 'small', round: true, type: row.hitFrequencyLevel || 'default' }, {
+          default: () =>
+            high
+              ? h('span', { style: 'display:inline-flex;align-items:center;gap:2px' }, [
+                  h(IconifyIcon, { icon: 'lucide:zap' }),
+                  row.hitFrequencyText || '单次',
+                ])
+              : (row.hitFrequencyText || '单次'),
+        }),
       ];
       if (row.aggregationStatusText) {
-        tags.push(h(NTag, { size: 'small', type: row.isFinal ? 'success' : 'info', style: 'margin-left:4px' }, { default: () => row.aggregationStatusText }));
+        children.push(
+          h(NTag, { size: 'small', round: true, type: row.isFinal ? 'success' : 'info', style: 'margin-left:4px' }, { default: () => row.aggregationStatusText }),
+        );
       }
       if (Array.isArray(row.occurrences) && row.occurrences.length > 0) {
-        tags.push(h(NButton, { text: true, size: 'small', type: 'primary', style: 'margin-left:8px', onClick: () => openOccurrences(row) }, { default: () => '明细' }));
+        children.push(
+          h(NButton, { text: true, size: 'small', type: 'primary', style: 'margin-left:8px', onClick: () => openOccurrences(row) }, { default: () => '明细' }),
+        );
       }
-      return h('div', { style: 'display:flex;flex-wrap:wrap;align-items:center;gap:4px' }, tags);
+      return h('div', { style: 'display:flex;flex-wrap:wrap;align-items:center;gap:4px' }, children);
     },
   },
   {
     title: '分析状态',
     key: 'analysisStatusText',
-    width: 120,
+    width: 130,
     render: (row: Record<string, any>) => {
       const analyzing = state.analyzingIds.has(String(row.id));
       const status = analyzing ? 'processing' : row.analysisStatus;
       const type = status === 'completed' ? 'success' : status === 'failed' || status === 'llm_config_required' ? 'error' : status === 'processing' ? 'warning' : 'default';
       const text = analyzing ? '分析中' : row.analysisStatusText || '待分析';
-      return h(NTag, { size: 'small', type }, { default: () => text });
+      return h(NTag, { size: 'small', round: true, bordered: true, type }, { default: () => text });
     },
   },
   {
     title: '审核状态',
     key: 'review_status',
-    width: 140,
+    width: 150,
     render: (row: Record<string, any>) => {
       const meta = reviewStatusMeta(row);
-      const tags = [h(NTag, { size: 'small', type: meta.type as any }, { default: () => meta.text })];
+      const tags = [h(NTag, { size: 'small', round: true, bordered: true, type: meta.type as any }, { default: () => meta.text })];
       if (row.circular_code) {
-        tags.push(h(NTag, { size: 'small', type: 'info', style: 'margin-left:4px' }, { default: () => row.circular_code }));
+        tags.push(h(NTag, { size: 'small', round: true, type: 'info', style: 'margin-left:4px' }, { default: () => row.circular_code }));
       }
       return h('div', { style: 'display:flex;flex-wrap:wrap;gap:4px' }, tags);
     },
@@ -275,7 +339,7 @@ onMounted(() => {
 
 <template>
   <div>
-    <NDataTable :columns="columns" :data="pagedRows" :loading="props.loading" :bordered="false" size="small" />
+    <NDataTable :columns="columns" :data="pagedRows" :loading="props.loading" :bordered="false" size="small" :row-class-name="rowClass" />
     <div class="pager-wrap">
       <NPagination v-model:page="state.page" v-model:page-size="state.pageSize" :item-count="props.rows.length" show-size-picker :page-sizes="[10, 20, 50, 100]" />
     </div>
@@ -290,4 +354,11 @@ onMounted(() => {
 
 <style scoped>
 .pager-wrap { display: flex; justify-content: flex-end; margin-top: 12px; }
+.ly-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex: none; }
+:deep(.n-data-table-tr.sev-critical .n-data-table-td:first-child) { box-shadow: inset 3px 0 0 #d03050; }
+:deep(.n-data-table-tr.sev-high .n-data-table-td:first-child) { box-shadow: inset 3px 0 0 #f0a020; }
+:deep(.n-data-table-tr.sev-medium .n-data-table-td:first-child) { box-shadow: inset 3px 0 0 #2080f0; }
+:deep(.n-data-table-tr.sev-low .n-data-table-td:first-child) { box-shadow: inset 3px 0 0 #909399; }
+:deep(.n-data-table-td) { padding-top: 10px; padding-bottom: 10px; }
+:deep(.n-data-table-th) { font-weight: 600; }
 </style>
