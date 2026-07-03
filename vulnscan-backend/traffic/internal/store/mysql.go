@@ -4,62 +4,24 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"time"
-
-	_ "github.com/lib/pq"
 
 	"vulnscan-backend/traffic/internal/domain"
 )
 
-type PostgresStore struct {
+type MySQLStore struct {
 	db *sql.DB
 }
 
-func NewPostgresStore(ctx context.Context, databaseURL string, autoMigrate bool) (*PostgresStore, error) {
-	if databaseURL == "" {
-		return nil, errors.New("DATABASE_URL is empty")
-	}
-	db, err := sql.Open("postgres", databaseURL)
-	if err != nil {
-		return nil, err
-	}
-	db.SetMaxOpenConns(20)
-	db.SetMaxIdleConns(5)
-	db.SetConnMaxLifetime(30 * time.Minute)
+var _ Store = (*MySQLStore)(nil)
 
-	if err := db.PingContext(ctx); err != nil {
-		_ = db.Close()
-		return nil, err
-	}
-	s := &PostgresStore{db: db}
-	if autoMigrate {
-		if err := s.Migrate(ctx); err != nil {
-			_ = db.Close()
-			return nil, err
-		}
-		if err := s.Seed(ctx); err != nil {
-			_ = db.Close()
-			return nil, err
-		}
-	}
-	return s, nil
+// NewMySQLStore wraps an already-opened *sql.DB. Connection setup,
+// migration and seeding are the caller's responsibility.
+func NewMySQLStore(db *sql.DB) *MySQLStore {
+	return &MySQLStore{db: db}
 }
 
-func (s *PostgresStore) Migrate(ctx context.Context) error {
-	_, err := s.db.ExecContext(ctx, PostgresSchema)
-	return err
-}
-
-func (s *PostgresStore) Seed(ctx context.Context) error {
-	_, err := s.db.ExecContext(ctx, `
-INSERT INTO users (user_id, username, nickname, email, password_hash, role, is_active)
-VALUES ('admin', 'admin', '管理员', 'admin@example.local', 'admin', 'admin', true)
-ON CONFLICT (username) DO NOTHING`)
-	return err
-}
-
-func (s *PostgresStore) CreateUser(u domain.User) (domain.User, error) {
+func (s *MySQLStore) CreateUser(u domain.User) (domain.User, error) {
 	if u.UserID == "" {
 		u.UserID = newID("u")
 	}
@@ -73,31 +35,38 @@ func (s *PostgresStore) CreateUser(u domain.User) (domain.User, error) {
 		u.CreatedAt = time.Now().UTC()
 	}
 	u.UpdatedAt = time.Now().UTC()
-	row := s.db.QueryRowContext(context.Background(), `
+	u.IsActive = true
+	u.LastLoginAt = nil
+	res, err := s.db.ExecContext(context.Background(), `
 INSERT INTO users (user_id, username, nickname, email, phone, password_hash, role, is_active, created_at, updated_at)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-RETURNING id, user_id, username, nickname, email, phone, password_hash, role, last_login_at, is_active, created_at, updated_at`,
+VALUES (?,?,?,?,?,?,?,?,?,?)`,
 		u.UserID, u.Username, u.Nickname, u.Email, u.Phone, u.Password, u.Role, true, u.CreatedAt, u.UpdatedAt)
-	return scanUser(row)
+	if err != nil {
+		return domain.User{}, err
+	}
+	if id, err := res.LastInsertId(); err == nil {
+		u.ID = id
+	}
+	return u, nil
 }
 
-func (s *PostgresStore) GetUserByUsername(username string) (domain.User, bool) {
+func (s *MySQLStore) GetUserByUsername(username string) (domain.User, bool) {
 	row := s.db.QueryRowContext(context.Background(), `
 SELECT id, user_id, username, nickname, email, phone, password_hash, role, last_login_at, is_active, created_at, updated_at
-FROM users WHERE username=$1`, username)
+FROM users WHERE username=?`, username)
 	u, err := scanUser(row)
 	return u, err == nil
 }
 
-func (s *PostgresStore) GetUser(userID string) (domain.User, bool) {
+func (s *MySQLStore) GetUser(userID string) (domain.User, bool) {
 	row := s.db.QueryRowContext(context.Background(), `
 SELECT id, user_id, username, nickname, email, phone, password_hash, role, last_login_at, is_active, created_at, updated_at
-FROM users WHERE user_id=$1`, userID)
+FROM users WHERE user_id=?`, userID)
 	u, err := scanUser(row)
 	return u, err == nil
 }
 
-func (s *PostgresStore) ListUsers() []domain.User {
+func (s *MySQLStore) ListUsers() []domain.User {
 	rows, err := s.db.QueryContext(context.Background(), `
 SELECT id, user_id, username, nickname, email, phone, password_hash, role, last_login_at, is_active, created_at, updated_at
 FROM users ORDER BY id`)
@@ -116,7 +85,7 @@ FROM users ORDER BY id`)
 	return out
 }
 
-func (s *PostgresStore) UpdateUser(userID string, patch map[string]any) (domain.User, bool) {
+func (s *MySQLStore) UpdateUser(userID string, patch map[string]any) (domain.User, bool) {
 	u, ok := s.GetUser(userID)
 	if !ok {
 		return domain.User{}, false
@@ -143,18 +112,19 @@ func (s *PostgresStore) UpdateUser(userID string, patch map[string]any) (domain.
 		u.LastLoginAt = t
 	}
 	u.UpdatedAt = time.Now().UTC()
-	row := s.db.QueryRowContext(context.Background(), `
+	_, err := s.db.ExecContext(context.Background(), `
 UPDATE users
-SET nickname=$2, email=$3, phone=$4, password_hash=$5, role=$6, last_login_at=$7, is_active=$8, updated_at=$9
-WHERE user_id=$1
-RETURNING id, user_id, username, nickname, email, phone, password_hash, role, last_login_at, is_active, created_at, updated_at`,
-		userID, u.Nickname, u.Email, u.Phone, u.Password, u.Role, u.LastLoginAt, u.IsActive, u.UpdatedAt)
-	updated, err := scanUser(row)
-	return updated, err == nil
+SET nickname=?, email=?, phone=?, password_hash=?, role=?, last_login_at=?, is_active=?, updated_at=?
+WHERE user_id=?`,
+		u.Nickname, u.Email, u.Phone, u.Password, u.Role, u.LastLoginAt, u.IsActive, u.UpdatedAt, userID)
+	if err != nil {
+		return domain.User{}, false
+	}
+	return s.GetUser(userID)
 }
 
-func (s *PostgresStore) DeleteUser(userID string) bool {
-	res, err := s.db.ExecContext(context.Background(), `DELETE FROM users WHERE user_id=$1`, userID)
+func (s *MySQLStore) DeleteUser(userID string) bool {
+	res, err := s.db.ExecContext(context.Background(), `DELETE FROM users WHERE user_id=?`, userID)
 	if err != nil {
 		return false
 	}
@@ -162,7 +132,7 @@ func (s *PostgresStore) DeleteUser(userID string) bool {
 	return n > 0
 }
 
-func (s *PostgresStore) CreateEvent(e domain.Event) (domain.Event, error) {
+func (s *MySQLStore) CreateEvent(e domain.Event) (domain.Event, error) {
 	if e.EventID == "" {
 		e.EventID = newID("evt")
 	}
@@ -183,23 +153,35 @@ func (s *PostgresStore) CreateEvent(e domain.Event) (domain.Event, error) {
 		e.CreatedAt = now
 	}
 	e.UpdatedAt = now
-	row := s.db.QueryRowContext(context.Background(), `
-INSERT INTO events (event_id, event_name, title, message, context, source, severity, category, event_status, current_round, observables, created_at, updated_at)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,$13)
-RETURNING id, event_id, event_name, title, message, context, source, severity, category, event_status, current_round, observables, created_at, updated_at, review_status, review_comment, reviewed_by, reviewed_at, circular_code`,
-		e.EventID, e.EventName, e.Title, e.Message, e.Context, e.Source, e.Severity, e.Category, e.EventStatus, e.CurrentRound, string(toJSON(e.Observables)), e.CreatedAt, e.UpdatedAt)
-	return scanEvent(row)
+	// Review fields start at their zero values on insert; mirror that in the
+	// returned struct so it matches the row actually stored.
+	e.ReviewStatus = ""
+	e.ReviewComment = ""
+	e.ReviewedBy = ""
+	e.ReviewedAt = nil
+	e.CircularCode = ""
+	res, err := s.db.ExecContext(context.Background(), `
+INSERT INTO events (event_id, event_name, title, message, context, source, severity, category, event_status, current_round, observables, created_at, updated_at, review_status, review_comment, reviewed_by, circular_code)
+VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		e.EventID, e.EventName, e.Title, e.Message, e.Context, e.Source, e.Severity, e.Category, e.EventStatus, e.CurrentRound, string(toJSON(e.Observables)), e.CreatedAt, e.UpdatedAt, e.ReviewStatus, e.ReviewComment, e.ReviewedBy, e.CircularCode)
+	if err != nil {
+		return domain.Event{}, err
+	}
+	if id, err := res.LastInsertId(); err == nil {
+		e.ID = id
+	}
+	return e, nil
 }
 
-func (s *PostgresStore) GetEvent(eventID string) (domain.Event, bool) {
+func (s *MySQLStore) GetEvent(eventID string) (domain.Event, bool) {
 	row := s.db.QueryRowContext(context.Background(), `
 SELECT id, event_id, event_name, title, message, context, source, severity, category, event_status, current_round, observables, created_at, updated_at, review_status, review_comment, reviewed_by, reviewed_at, circular_code
-FROM events WHERE event_id=$1`, eventID)
+FROM events WHERE event_id=?`, eventID)
 	e, err := scanEvent(row)
 	return e, err == nil
 }
 
-func (s *PostgresStore) ListEvents() []domain.Event {
+func (s *MySQLStore) ListEvents() []domain.Event {
 	rows, err := s.db.QueryContext(context.Background(), `
 SELECT id, event_id, event_name, title, message, context, source, severity, category, event_status, current_round, observables, created_at, updated_at, review_status, review_comment, reviewed_by, reviewed_at, circular_code
 FROM events ORDER BY created_at DESC, id DESC`)
@@ -218,7 +200,7 @@ FROM events ORDER BY created_at DESC, id DESC`)
 	return out
 }
 
-func (s *PostgresStore) UpdateEvent(eventID string, patch map[string]any) (domain.Event, bool) {
+func (s *MySQLStore) UpdateEvent(eventID string, patch map[string]any) (domain.Event, bool) {
 	e, ok := s.GetEvent(eventID)
 	if !ok {
 		return domain.Event{}, false
@@ -257,17 +239,18 @@ func (s *PostgresStore) UpdateEvent(eventID string, patch map[string]any) (domai
 		}
 	}
 	e.UpdatedAt = time.Now().UTC()
-	row := s.db.QueryRowContext(context.Background(), `
+	_, err := s.db.ExecContext(context.Background(), `
 UPDATE events
-SET event_name=$2, title=$3, message=$4, context=$5, source=$6, severity=$7, category=$8, event_status=$9, current_round=$10, observables=$11::jsonb, updated_at=$12, review_status=$13, review_comment=$14, reviewed_by=$15, reviewed_at=$16, circular_code=$17
-WHERE event_id=$1
-RETURNING id, event_id, event_name, title, message, context, source, severity, category, event_status, current_round, observables, created_at, updated_at, review_status, review_comment, reviewed_by, reviewed_at, circular_code`,
-		eventID, e.EventName, e.Title, e.Message, e.Context, e.Source, e.Severity, e.Category, e.EventStatus, e.CurrentRound, string(toJSON(e.Observables)), e.UpdatedAt, e.ReviewStatus, e.ReviewComment, e.ReviewedBy, e.ReviewedAt, e.CircularCode)
-	updated, err := scanEvent(row)
-	return updated, err == nil
+SET event_name=?, title=?, message=?, context=?, source=?, severity=?, category=?, event_status=?, current_round=?, observables=?, updated_at=?, review_status=?, review_comment=?, reviewed_by=?, reviewed_at=?, circular_code=?
+WHERE event_id=?`,
+		e.EventName, e.Title, e.Message, e.Context, e.Source, e.Severity, e.Category, e.EventStatus, e.CurrentRound, string(toJSON(e.Observables)), e.UpdatedAt, e.ReviewStatus, e.ReviewComment, e.ReviewedBy, e.ReviewedAt, e.CircularCode, eventID)
+	if err != nil {
+		return domain.Event{}, false
+	}
+	return s.GetEvent(eventID)
 }
 
-func (s *PostgresStore) AddMessage(m domain.Message) (domain.Message, error) {
+func (s *MySQLStore) AddMessage(m domain.Message) (domain.Message, error) {
 	m = domain.NormalizeMessage(m)
 	if m.MessageID == "" {
 		m.MessageID = newID("msg")
@@ -284,18 +267,23 @@ func (s *PostgresStore) AddMessage(m domain.Message) (domain.Message, error) {
 	if m.CreatedAt.IsZero() {
 		m.CreatedAt = time.Now().UTC()
 	}
-	row := s.db.QueryRowContext(context.Background(), `
+	res, err := s.db.ExecContext(context.Background(), `
 INSERT INTO messages (message_id, event_id, user_id, user_nickname, message_from, message_type, message_category, sender_type, chat_session_id, message_content, round_id, created_at)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-RETURNING id, message_id, event_id, user_id, user_nickname, message_from, message_type, message_category, sender_type, chat_session_id, message_content, round_id, created_at`,
+VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
 		m.MessageID, m.EventID, m.UserID, m.UserNickname, m.MessageFrom, m.MessageType, m.MessageCategory, m.SenderType, m.ChatSessionID, m.MessageContent, m.RoundID, m.CreatedAt)
-	return scanMessage(row)
+	if err != nil {
+		return domain.Message{}, err
+	}
+	if id, err := res.LastInsertId(); err == nil {
+		m.ID = id
+	}
+	return m, nil
 }
 
-func (s *PostgresStore) ListMessages(eventID string) []domain.Message {
+func (s *MySQLStore) ListMessages(eventID string) []domain.Message {
 	rows, err := s.db.QueryContext(context.Background(), `
 SELECT id, message_id, event_id, user_id, user_nickname, message_from, message_type, message_category, sender_type, chat_session_id, message_content, round_id, created_at
-FROM messages WHERE event_id=$1 ORDER BY id`, eventID)
+FROM messages WHERE event_id=? ORDER BY id`, eventID)
 	if err != nil {
 		return nil
 	}
@@ -311,7 +299,7 @@ FROM messages WHERE event_id=$1 ORDER BY id`, eventID)
 	return out
 }
 
-func (s *PostgresStore) AddTask(t domain.Task) (domain.Task, error) {
+func (s *MySQLStore) AddTask(t domain.Task) (domain.Task, error) {
 	if t.TaskID == "" {
 		t.TaskID = newID("task")
 	}
@@ -332,34 +320,46 @@ func (s *PostgresStore) AddTask(t domain.Task) (domain.Task, error) {
 		t.CreatedAt = now
 	}
 	t.UpdatedAt = now
-	row := s.db.QueryRowContext(context.Background(), `
+	res, err := s.db.ExecContext(context.Background(), `
 INSERT INTO tasks (task_id, event_id, task_name, task_type, task_description, task_status, task_priority, assigned_to, task_assignee, round_id, created_at, updated_at)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-RETURNING id, task_id, event_id, task_name, task_type, task_description, task_status, task_priority, assigned_to, task_assignee, round_id, created_at, updated_at`,
+VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
 		t.TaskID, t.EventID, t.TaskName, t.TaskType, t.TaskDescription, t.TaskStatus, t.TaskPriority, t.AssignedTo, t.TaskAssignee, t.RoundID, t.CreatedAt, t.UpdatedAt)
-	return scanTask(row)
+	if err != nil {
+		return domain.Task{}, err
+	}
+	if id, err := res.LastInsertId(); err == nil {
+		t.ID = id
+	}
+	return t, nil
 }
 
-func (s *PostgresStore) UpdateTask(taskID string, patch map[string]any) (domain.Task, bool) {
+func (s *MySQLStore) UpdateTask(taskID string, patch map[string]any) (domain.Task, bool) {
 	status, _ := stringPatch(patch, "task_status")
 	assigned, _ := stringPatch(patch, "assigned_to")
-	row := s.db.QueryRowContext(context.Background(), `
+	// The same value patches both assigned_to and task_assignee, so the
+	// placeholder is passed twice (MySQL consumes ? positionally).
+	_, err := s.db.ExecContext(context.Background(), `
 UPDATE tasks SET
-task_status=COALESCE(NULLIF($2,''), task_status),
-assigned_to=COALESCE(NULLIF($3,''), assigned_to),
-task_assignee=COALESCE(NULLIF($3,''), task_assignee),
-updated_at=now()
-WHERE task_id=$1
-RETURNING id, task_id, event_id, task_name, task_type, task_description, task_status, task_priority, assigned_to, task_assignee, round_id, created_at, updated_at`,
-		taskID, status, assigned)
+task_status=COALESCE(NULLIF(?,''), task_status),
+assigned_to=COALESCE(NULLIF(?,''), assigned_to),
+task_assignee=COALESCE(NULLIF(?,''), task_assignee),
+updated_at=NOW(6)
+WHERE task_id=?`,
+		status, assigned, assigned, taskID)
+	if err != nil {
+		return domain.Task{}, false
+	}
+	row := s.db.QueryRowContext(context.Background(), `
+SELECT id, task_id, event_id, task_name, task_type, task_description, task_status, task_priority, assigned_to, task_assignee, round_id, created_at, updated_at
+FROM tasks WHERE task_id=?`, taskID)
 	t, err := scanTask(row)
 	return t, err == nil
 }
 
-func (s *PostgresStore) ListTasks(eventID string) []domain.Task {
+func (s *MySQLStore) ListTasks(eventID string) []domain.Task {
 	rows, err := s.db.QueryContext(context.Background(), `
 SELECT id, task_id, event_id, task_name, task_type, task_description, task_status, task_priority, assigned_to, task_assignee, round_id, created_at, updated_at
-FROM tasks WHERE event_id=$1 ORDER BY id`, eventID)
+FROM tasks WHERE event_id=? ORDER BY id`, eventID)
 	if err != nil {
 		return nil
 	}
@@ -375,7 +375,7 @@ FROM tasks WHERE event_id=$1 ORDER BY id`, eventID)
 	return out
 }
 
-func (s *PostgresStore) AddAction(a domain.Action) (domain.Action, error) {
+func (s *MySQLStore) AddAction(a domain.Action) (domain.Action, error) {
 	if a.ActionID == "" {
 		a.ActionID = newID("act")
 	}
@@ -390,33 +390,43 @@ func (s *PostgresStore) AddAction(a domain.Action) (domain.Action, error) {
 		a.CreatedAt = now
 	}
 	a.UpdatedAt = now
-	row := s.db.QueryRowContext(context.Background(), `
+	res, err := s.db.ExecContext(context.Background(), `
 INSERT INTO actions (action_id, task_id, event_id, round_id, action_name, action_type, action_assignee, action_status, action_result, created_at, updated_at)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-RETURNING id, action_id, task_id, event_id, round_id, action_name, action_type, action_assignee, action_status, action_result, created_at, updated_at`,
+VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
 		a.ActionID, a.TaskID, a.EventID, a.RoundID, a.ActionName, a.ActionType, a.ActionAssignee, a.ActionStatus, a.ActionResult, a.CreatedAt, a.UpdatedAt)
-	return scanAction(row)
+	if err != nil {
+		return domain.Action{}, err
+	}
+	if id, err := res.LastInsertId(); err == nil {
+		a.ID = id
+	}
+	return a, nil
 }
 
-func (s *PostgresStore) UpdateAction(actionID string, patch map[string]any) (domain.Action, bool) {
+func (s *MySQLStore) UpdateAction(actionID string, patch map[string]any) (domain.Action, bool) {
 	status, _ := stringPatch(patch, "action_status")
 	result, _ := stringPatch(patch, "action_result")
-	row := s.db.QueryRowContext(context.Background(), `
+	_, err := s.db.ExecContext(context.Background(), `
 UPDATE actions SET
-action_status=COALESCE(NULLIF($2,''), action_status),
-action_result=COALESCE(NULLIF($3,''), action_result),
-updated_at=now()
-WHERE action_id=$1
-RETURNING id, action_id, task_id, event_id, round_id, action_name, action_type, action_assignee, action_status, action_result, created_at, updated_at`,
-		actionID, status, result)
+action_status=COALESCE(NULLIF(?,''), action_status),
+action_result=COALESCE(NULLIF(?,''), action_result),
+updated_at=NOW(6)
+WHERE action_id=?`,
+		status, result, actionID)
+	if err != nil {
+		return domain.Action{}, false
+	}
+	row := s.db.QueryRowContext(context.Background(), `
+SELECT id, action_id, task_id, event_id, round_id, action_name, action_type, action_assignee, action_status, action_result, created_at, updated_at
+FROM actions WHERE action_id=?`, actionID)
 	a, err := scanAction(row)
 	return a, err == nil
 }
 
-func (s *PostgresStore) ListActions(eventID string) []domain.Action {
+func (s *MySQLStore) ListActions(eventID string) []domain.Action {
 	rows, err := s.db.QueryContext(context.Background(), `
 SELECT id, action_id, task_id, event_id, round_id, action_name, action_type, action_assignee, action_status, action_result, created_at, updated_at
-FROM actions WHERE event_id=$1 ORDER BY id`, eventID)
+FROM actions WHERE event_id=? ORDER BY id`, eventID)
 	if err != nil {
 		return nil
 	}
@@ -431,7 +441,7 @@ FROM actions WHERE event_id=$1 ORDER BY id`, eventID)
 	return out
 }
 
-func (s *PostgresStore) AddCommand(c domain.Command) (domain.Command, error) {
+func (s *MySQLStore) AddCommand(c domain.Command) (domain.Command, error) {
 	if c.CommandID == "" {
 		c.CommandID = newID("cmd")
 	}
@@ -446,33 +456,43 @@ func (s *PostgresStore) AddCommand(c domain.Command) (domain.Command, error) {
 		c.CreatedAt = now
 	}
 	c.UpdatedAt = now
-	row := s.db.QueryRowContext(context.Background(), `
+	res, err := s.db.ExecContext(context.Background(), `
 INSERT INTO commands (command_id, action_id, task_id, event_id, round_id, command_name, command_type, command_assignee, command_entity, command_params, command_status, command_result, created_at, updated_at)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
-RETURNING id, command_id, action_id, task_id, event_id, round_id, command_name, command_type, command_assignee, command_entity, command_params, command_status, command_result, created_at, updated_at`,
+VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		c.CommandID, c.ActionID, c.TaskID, c.EventID, c.RoundID, c.CommandName, c.CommandType, c.CommandAssignee, c.CommandEntity, c.CommandParams, c.CommandStatus, c.CommandResult, c.CreatedAt, c.UpdatedAt)
-	return scanCommand(row)
+	if err != nil {
+		return domain.Command{}, err
+	}
+	if id, err := res.LastInsertId(); err == nil {
+		c.ID = id
+	}
+	return c, nil
 }
 
-func (s *PostgresStore) UpdateCommand(commandID string, patch map[string]any) (domain.Command, bool) {
+func (s *MySQLStore) UpdateCommand(commandID string, patch map[string]any) (domain.Command, bool) {
 	status, _ := stringPatch(patch, "command_status")
 	result, _ := stringPatch(patch, "command_result")
-	row := s.db.QueryRowContext(context.Background(), `
+	_, err := s.db.ExecContext(context.Background(), `
 UPDATE commands SET
-command_status=COALESCE(NULLIF($2,''), command_status),
-command_result=COALESCE(NULLIF($3,''), command_result),
-updated_at=now()
-WHERE command_id=$1
-RETURNING id, command_id, action_id, task_id, event_id, round_id, command_name, command_type, command_assignee, command_entity, command_params, command_status, command_result, created_at, updated_at`,
-		commandID, status, result)
+command_status=COALESCE(NULLIF(?,''), command_status),
+command_result=COALESCE(NULLIF(?,''), command_result),
+updated_at=NOW(6)
+WHERE command_id=?`,
+		status, result, commandID)
+	if err != nil {
+		return domain.Command{}, false
+	}
+	row := s.db.QueryRowContext(context.Background(), `
+SELECT id, command_id, action_id, task_id, event_id, round_id, command_name, command_type, command_assignee, command_entity, command_params, command_status, command_result, created_at, updated_at
+FROM commands WHERE command_id=?`, commandID)
 	c, err := scanCommand(row)
 	return c, err == nil
 }
 
-func (s *PostgresStore) ListCommands(eventID string) []domain.Command {
+func (s *MySQLStore) ListCommands(eventID string) []domain.Command {
 	rows, err := s.db.QueryContext(context.Background(), `
 SELECT id, command_id, action_id, task_id, event_id, round_id, command_name, command_type, command_assignee, command_entity, command_params, command_status, command_result, created_at, updated_at
-FROM commands WHERE event_id=$1 ORDER BY id`, eventID)
+FROM commands WHERE event_id=? ORDER BY id`, eventID)
 	if err != nil {
 		return nil
 	}
@@ -487,7 +507,7 @@ FROM commands WHERE event_id=$1 ORDER BY id`, eventID)
 	return out
 }
 
-func (s *PostgresStore) AddExecution(e domain.Execution) (domain.Execution, error) {
+func (s *MySQLStore) AddExecution(e domain.Execution) (domain.Execution, error) {
 	if e.ExecutionID == "" {
 		e.ExecutionID = newID("exec")
 	}
@@ -502,18 +522,23 @@ func (s *PostgresStore) AddExecution(e domain.Execution) (domain.Execution, erro
 		e.CreatedAt = now
 	}
 	e.UpdatedAt = now
-	row := s.db.QueryRowContext(context.Background(), `
+	res, err := s.db.ExecContext(context.Background(), `
 INSERT INTO executions (execution_id, event_id, task_id, action_id, round_id, command_id, execution_status, execution_result, execution_summary, ai_summary, command_name, command_type, command_entity, command_params, created_at, updated_at)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
-RETURNING id, execution_id, event_id, task_id, action_id, round_id, command_id, execution_status, execution_result, execution_summary, ai_summary, command_name, command_type, command_entity, command_params, created_at, updated_at`,
+VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		e.ExecutionID, e.EventID, e.TaskID, e.ActionID, e.RoundID, e.CommandID, e.ExecutionStatus, e.ExecutionResult, e.ExecutionSummary, e.AISummary, e.CommandName, e.CommandType, e.CommandEntity, e.CommandParams, e.CreatedAt, e.UpdatedAt)
-	return scanExecution(row)
+	if err != nil {
+		return domain.Execution{}, err
+	}
+	if id, err := res.LastInsertId(); err == nil {
+		e.ID = id
+	}
+	return e, nil
 }
 
-func (s *PostgresStore) ListExecutions(eventID string) []domain.Execution {
+func (s *MySQLStore) ListExecutions(eventID string) []domain.Execution {
 	rows, err := s.db.QueryContext(context.Background(), `
 SELECT id, execution_id, event_id, task_id, action_id, round_id, command_id, execution_status, execution_result, execution_summary, ai_summary, command_name, command_type, command_entity, command_params, created_at, updated_at
-FROM executions WHERE event_id=$1 ORDER BY id`, eventID)
+FROM executions WHERE event_id=? ORDER BY id`, eventID)
 	if err != nil {
 		return nil
 	}
@@ -529,7 +554,7 @@ FROM executions WHERE event_id=$1 ORDER BY id`, eventID)
 	return out
 }
 
-func (s *PostgresStore) AddSummary(sm domain.Summary) (domain.Summary, error) {
+func (s *MySQLStore) AddSummary(sm domain.Summary) (domain.Summary, error) {
 	if sm.RoundID == 0 {
 		sm.RoundID = 1
 	}
@@ -538,20 +563,23 @@ func (s *PostgresStore) AddSummary(sm domain.Summary) (domain.Summary, error) {
 		sm.CreatedAt = now
 	}
 	sm.UpdatedAt = now
-	row := s.db.QueryRowContext(context.Background(), `
+	res, err := s.db.ExecContext(context.Background(), `
 INSERT INTO summaries (event_id, round_id, event_summary, created_at, updated_at)
-VALUES ($1,$2,$3,$4,$5)
-RETURNING id, event_id, round_id, event_summary, created_at, updated_at`,
+VALUES (?,?,?,?,?)`,
 		sm.EventID, sm.RoundID, sm.EventSummary, sm.CreatedAt, sm.UpdatedAt)
-	var out domain.Summary
-	err := row.Scan(&out.ID, &out.EventID, &out.RoundID, &out.EventSummary, &out.CreatedAt, &out.UpdatedAt)
-	return out, err
+	if err != nil {
+		return domain.Summary{}, err
+	}
+	if id, err := res.LastInsertId(); err == nil {
+		sm.ID = id
+	}
+	return sm, nil
 }
 
-func (s *PostgresStore) ListSummaries(eventID string) []domain.Summary {
+func (s *MySQLStore) ListSummaries(eventID string) []domain.Summary {
 	rows, err := s.db.QueryContext(context.Background(), `
 SELECT id, event_id, round_id, event_summary, created_at, updated_at
-FROM summaries WHERE event_id=$1 ORDER BY id`, eventID)
+FROM summaries WHERE event_id=? ORDER BY id`, eventID)
 	if err != nil {
 		return nil
 	}
@@ -567,10 +595,9 @@ FROM summaries WHERE event_id=$1 ORDER BY id`, eventID)
 	return out
 }
 
-func (s *PostgresStore) ReserveFingerprint(fp string) bool {
+func (s *MySQLStore) ReserveFingerprint(fp string) bool {
 	res, err := s.db.ExecContext(context.Background(), `
-INSERT INTO event_maps (fingerprint) VALUES ($1)
-ON CONFLICT (fingerprint) DO NOTHING`, fp)
+INSERT IGNORE INTO event_maps (fingerprint) VALUES (?)`, fp)
 	if err != nil {
 		return false
 	}
@@ -578,24 +605,24 @@ ON CONFLICT (fingerprint) DO NOTHING`, fp)
 	return n > 0
 }
 
-func (s *PostgresStore) BindEventMap(fp, lyID, deepSOCID string) {
+func (s *MySQLStore) BindEventMap(fp, lyID, deepSOCID string) {
 	_, _ = s.db.ExecContext(context.Background(), `
-UPDATE event_maps SET ly_event_id=$2, deepsoc_event_id=$3 WHERE fingerprint=$1`,
-		fp, lyID, deepSOCID)
+UPDATE event_maps SET ly_event_id=?, deepsoc_event_id=? WHERE fingerprint=?`,
+		lyID, deepSOCID, fp)
 }
 
-func (s *PostgresStore) GetEventMap(fp string) (domain.EventMap, bool) {
+func (s *MySQLStore) GetEventMap(fp string) (domain.EventMap, bool) {
 	var row domain.EventMap
 	err := s.db.QueryRowContext(context.Background(), `
-SELECT fingerprint, ly_event_id, deepsoc_event_id, created_at FROM event_maps WHERE fingerprint=$1`, fp).
+SELECT fingerprint, ly_event_id, deepsoc_event_id, created_at FROM event_maps WHERE fingerprint=?`, fp).
 		Scan(&row.Fingerprint, &row.LyEventID, &row.DeepSOCEventID, &row.CreatedAt)
 	return row, err == nil
 }
 
-func (s *PostgresStore) GetCursor(name string) domain.SyncCursor {
+func (s *MySQLStore) GetCursor(name string) domain.SyncCursor {
 	var c domain.SyncCursor
 	err := s.db.QueryRowContext(context.Background(), `
-SELECT name, last_ts, updated_at FROM sync_cursors WHERE name=$1`, name).
+SELECT name, last_ts, updated_at FROM sync_cursors WHERE name=?`, name).
 		Scan(&c.Name, &c.LastTS, &c.UpdatedAt)
 	if err != nil {
 		return domain.SyncCursor{Name: name}
@@ -603,24 +630,24 @@ SELECT name, last_ts, updated_at FROM sync_cursors WHERE name=$1`, name).
 	return c
 }
 
-func (s *PostgresStore) SaveCursor(c domain.SyncCursor) {
+func (s *MySQLStore) SaveCursor(c domain.SyncCursor) {
 	if c.UpdatedAt.IsZero() {
 		c.UpdatedAt = time.Now().UTC()
 	}
 	_, _ = s.db.ExecContext(context.Background(), `
 INSERT INTO sync_cursors (name, last_ts, updated_at)
-VALUES ($1,$2,$3)
-ON CONFLICT (name) DO UPDATE SET last_ts=EXCLUDED.last_ts, updated_at=EXCLUDED.updated_at`,
+VALUES (?,?,?)
+ON DUPLICATE KEY UPDATE last_ts=VALUES(last_ts), updated_at=VALUES(updated_at)`,
 		c.Name, c.LastTS, c.UpdatedAt)
 }
 
-func (s *PostgresStore) AlreadyPushed(id string) bool {
+func (s *MySQLStore) AlreadyPushed(id string) bool {
 	var n int
-	err := s.db.QueryRowContext(context.Background(), `SELECT 1 FROM pushed_events WHERE ly_event_id=$1`, id).Scan(&n)
+	err := s.db.QueryRowContext(context.Background(), `SELECT 1 FROM pushed_events WHERE ly_event_id=?`, id).Scan(&n)
 	return err == nil
 }
 
-func (s *PostgresStore) SavePushedEvent(pe domain.PushedEvent) {
+func (s *MySQLStore) SavePushedEvent(pe domain.PushedEvent) {
 	now := time.Now().UTC()
 	if pe.CreatedAt.IsZero() {
 		pe.CreatedAt = now
@@ -628,25 +655,29 @@ func (s *PostgresStore) SavePushedEvent(pe domain.PushedEvent) {
 	pe.UpdatedAt = now
 	_, _ = s.db.ExecContext(context.Background(), `
 INSERT INTO pushed_events (ly_event_id, idempotency_key, deepsoc_event_id, status, attempts, last_error, created_at, updated_at)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-ON CONFLICT (ly_event_id) DO UPDATE SET
-idempotency_key=EXCLUDED.idempotency_key,
-deepsoc_event_id=EXCLUDED.deepsoc_event_id,
-status=EXCLUDED.status,
-attempts=EXCLUDED.attempts,
-last_error=EXCLUDED.last_error,
-updated_at=EXCLUDED.updated_at`,
+VALUES (?,?,?,?,?,?,?,?)
+ON DUPLICATE KEY UPDATE
+idempotency_key=VALUES(idempotency_key),
+deepsoc_event_id=VALUES(deepsoc_event_id),
+status=VALUES(status),
+attempts=VALUES(attempts),
+last_error=VALUES(last_error),
+updated_at=VALUES(updated_at)`,
 		pe.LyEventID, pe.IdempotencyKey, pe.DeepSOCEventID, pe.Status, pe.Attempts, pe.LastError, pe.CreatedAt, pe.UpdatedAt)
 }
 
-func (s *PostgresStore) AddAuditLog(a domain.AuditLog) domain.AuditLog {
+func (s *MySQLStore) AddAuditLog(a domain.AuditLog) domain.AuditLog {
 	if a.CreatedAt.IsZero() {
 		a.CreatedAt = time.Now().UTC()
 	}
-	_ = s.db.QueryRowContext(context.Background(), `
+	res, err := s.db.ExecContext(context.Background(), `
 INSERT INTO audit_logs (actor, action, target, meta, created_at)
-VALUES ($1,$2,$3,$4,$5)
-RETURNING id`, a.Actor, a.Action, a.Target, a.Meta, a.CreatedAt).Scan(&a.ID)
+VALUES (?,?,?,?,?)`, a.Actor, a.Action, a.Target, a.Meta, a.CreatedAt)
+	if err == nil {
+		if id, err := res.LastInsertId(); err == nil {
+			a.ID = id
+		}
+	}
 	return a
 }
 
@@ -704,7 +735,7 @@ func scanMessage(row scanner) (domain.Message, error) {
 	return domain.NormalizeMessage(m), err
 }
 
-func (s *PostgresStore) CreateAsset(a domain.Asset) (domain.Asset, error) {
+func (s *MySQLStore) CreateAsset(a domain.Asset) (domain.Asset, error) {
 	if a.ID == "" {
 		a.ID = newID("asset")
 	}
@@ -713,7 +744,7 @@ func (s *PostgresStore) CreateAsset(a domain.Asset) (domain.Asset, error) {
 	a.UpdatedAt = now
 	_, err := s.db.ExecContext(context.Background(), `
 INSERT INTO traffic_assets (id, name, asset_type, address, unit, owner, status, remark, created_at, updated_at)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+VALUES (?,?,?,?,?,?,?,?,?,?)`,
 		a.ID, a.Name, a.AssetType, a.Address, a.Unit, a.Owner, a.Status, a.Remark, a.CreatedAt, a.UpdatedAt)
 	if err != nil {
 		return domain.Asset{}, err
@@ -727,15 +758,15 @@ func scanAsset(row scanner) (domain.Asset, error) {
 	return a, err
 }
 
-func (s *PostgresStore) GetAsset(id string) (domain.Asset, bool) {
+func (s *MySQLStore) GetAsset(id string) (domain.Asset, bool) {
 	row := s.db.QueryRowContext(context.Background(), `
 SELECT id, name, asset_type, address, unit, owner, status, remark, created_at, updated_at
-FROM traffic_assets WHERE id=$1`, id)
+FROM traffic_assets WHERE id=?`, id)
 	a, err := scanAsset(row)
 	return a, err == nil
 }
 
-func (s *PostgresStore) ListAssets() []domain.Asset {
+func (s *MySQLStore) ListAssets() []domain.Asset {
 	rows, err := s.db.QueryContext(context.Background(), `
 SELECT id, name, asset_type, address, unit, owner, status, remark, created_at, updated_at
 FROM traffic_assets ORDER BY created_at DESC`)
@@ -752,7 +783,7 @@ FROM traffic_assets ORDER BY created_at DESC`)
 	return out
 }
 
-func (s *PostgresStore) UpdateAsset(id string, patch map[string]any) (domain.Asset, bool) {
+func (s *MySQLStore) UpdateAsset(id string, patch map[string]any) (domain.Asset, bool) {
 	a, ok := s.GetAsset(id)
 	if !ok {
 		return domain.Asset{}, false
@@ -780,17 +811,17 @@ func (s *PostgresStore) UpdateAsset(id string, patch map[string]any) (domain.Ass
 	}
 	a.UpdatedAt = time.Now().UTC()
 	_, err := s.db.ExecContext(context.Background(), `
-UPDATE traffic_assets SET name=$2, asset_type=$3, address=$4, unit=$5, owner=$6, status=$7, remark=$8, updated_at=$9
-WHERE id=$1`,
-		id, a.Name, a.AssetType, a.Address, a.Unit, a.Owner, a.Status, a.Remark, a.UpdatedAt)
+UPDATE traffic_assets SET name=?, asset_type=?, address=?, unit=?, owner=?, status=?, remark=?, updated_at=?
+WHERE id=?`,
+		a.Name, a.AssetType, a.Address, a.Unit, a.Owner, a.Status, a.Remark, a.UpdatedAt, id)
 	if err != nil {
 		return domain.Asset{}, false
 	}
 	return a, true
 }
 
-func (s *PostgresStore) DeleteAsset(id string) bool {
-	res, err := s.db.ExecContext(context.Background(), `DELETE FROM traffic_assets WHERE id=$1`, id)
+func (s *MySQLStore) DeleteAsset(id string) bool {
+	res, err := s.db.ExecContext(context.Background(), `DELETE FROM traffic_assets WHERE id=?`, id)
 	if err != nil {
 		return false
 	}

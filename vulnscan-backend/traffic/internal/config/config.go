@@ -16,6 +16,7 @@ type Config struct {
 	StoreBackend            string
 	DatabaseURL             string
 	AutoMigrate             bool
+	DBWaitSeconds           int
 	InternalAPIKey          string
 	FlowShadowBaseURL       string
 	FlowShadowAPIKey        string
@@ -52,9 +53,10 @@ type LLMSettings struct {
 func Load() Config {
 	cfg := Config{
 		Addr:                    get("APP_ADDR", ":9010"),
-		StoreBackend:            strings.ToLower(get("STORE_BACKEND", "memory")),
+		StoreBackend:            strings.ToLower(get("STORE_BACKEND", "mysql")),
 		DatabaseURL:             get("DATABASE_URL", ""),
 		AutoMigrate:             getBool("AUTO_MIGRATE", true),
+		DBWaitSeconds:           getInt("DB_WAIT_SECONDS", 30),
 		InternalAPIKey:          get("INTERNAL_API_KEY", "change-me-internal-key"),
 		FlowShadowBaseURL:       get("FLOWSHADOW_BASE_URL", ""),
 		FlowShadowAPIKey:        get("FLOWSHADOW_API_KEY", ""),

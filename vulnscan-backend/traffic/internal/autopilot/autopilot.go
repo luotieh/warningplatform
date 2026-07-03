@@ -10,34 +10,28 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/lib/pq"
-
 	"vulnscan-backend/traffic/internal/realtime"
 )
 
 const drivingModeKey = "driving_mode"
 
-const schemaSQL = `
-CREATE TABLE IF NOT EXISTS app_states (
-    key VARCHAR(128) PRIMARY KEY,
-    value JSONB NOT NULL DEFAULT '{}'::jsonb,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-`
+const schemaSQL = "CREATE TABLE IF NOT EXISTS app_states (" +
+	"`key` VARCHAR(128) PRIMARY KEY, " +
+	"value JSON NOT NULL, " +
+	"updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)" +
+	") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
 
 // GetDrivingMode returns the persisted DeepSOC driving-mode state.
-func GetDrivingMode(ctx context.Context, databaseURL string) (bool, error) {
-	db, err := open(ctx, databaseURL)
-	if err != nil {
-		return true, err
+func GetDrivingMode(ctx context.Context, db *sql.DB) (bool, error) {
+	if db == nil {
+		return true, fmt.Errorf("db is nil")
 	}
-	defer db.Close()
 	if err := ensureSchema(ctx, db); err != nil {
 		return true, err
 	}
 
 	var raw []byte
-	err = db.QueryRowContext(ctx, `SELECT value FROM app_states WHERE key=$1`, drivingModeKey).Scan(&raw)
+	err := db.QueryRowContext(ctx, "SELECT value FROM app_states WHERE `key`=?", drivingModeKey).Scan(&raw)
 	if err == sql.ErrNoRows {
 		return true, nil
 	}
@@ -54,38 +48,33 @@ func GetDrivingMode(ctx context.Context, databaseURL string) (bool, error) {
 }
 
 // SetDrivingMode persists the DeepSOC driving-mode state.
-func SetDrivingMode(ctx context.Context, databaseURL string, enabled bool) error {
-	db, err := open(ctx, databaseURL)
-	if err != nil {
-		return err
+func SetDrivingMode(ctx context.Context, db *sql.DB, enabled bool) error {
+	if db == nil {
+		return fmt.Errorf("db is nil")
 	}
-	defer db.Close()
 	if err := ensureSchema(ctx, db); err != nil {
 		return err
 	}
 
 	value, _ := json.Marshal(map[string]any{"enabled": true, "mode": "auto"})
-	_, err = db.ExecContext(ctx, `
-INSERT INTO app_states(key, value, updated_at)
-VALUES($1, $2::jsonb, now())
-ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value, updated_at=now()
-`, drivingModeKey, string(value))
+	_, err := db.ExecContext(ctx, "INSERT INTO app_states(`key`, value, updated_at) "+
+		"VALUES(?, ?, NOW(6)) "+
+		"ON DUPLICATE KEY UPDATE value=VALUES(value), updated_at=NOW(6)",
+		drivingModeKey, string(value))
 	return err
 }
 
 // RunForEvent creates the minimum DeepSOC automatic-analysis artifacts for a
 // new event. It intentionally uses defensive, schema-aware inserts so it can
 // work across the current compatibility schema and later schema refinements.
-func RunForEvent(ctx context.Context, databaseURL, eventID, title string) error {
+func RunForEvent(ctx context.Context, db *sql.DB, eventID, title string) error {
 	if strings.TrimSpace(eventID) == "" {
 		return nil
 	}
 
-	db, err := open(ctx, databaseURL)
-	if err != nil {
-		return err
+	if db == nil {
+		return fmt.Errorf("db is nil")
 	}
-	defer db.Close()
 	if err := ensureSchema(ctx, db); err != nil {
 		return err
 	}
@@ -181,12 +170,12 @@ INSERT INTO summaries (
 	created_at,
 	updated_at
 ) VALUES (
-	$1,
+	?,
 	1,
-	$2,
-	$3,
-	$3
-)`, eventID, summaryText, now); err != nil {
+	?,
+	?,
+	?
+)`, eventID, summaryText, now, now); err != nil {
 		log.Printf("autopilot: insert summary failed event_id=%s err=%v", eventID, err)
 	}
 
@@ -199,24 +188,6 @@ INSERT INTO summaries (
 	return nil
 }
 
-func open(ctx context.Context, databaseURL string) (*sql.DB, error) {
-	if strings.TrimSpace(databaseURL) == "" {
-		return nil, fmt.Errorf("DATABASE_URL is empty")
-	}
-	db, err := sql.Open("postgres", databaseURL)
-	if err != nil {
-		return nil, err
-	}
-	db.SetMaxOpenConns(5)
-	db.SetMaxIdleConns(1)
-	db.SetConnMaxLifetime(5 * time.Minute)
-	if err := db.PingContext(ctx); err != nil {
-		_ = db.Close()
-		return nil, err
-	}
-	return db, nil
-}
-
 func ensureSchema(ctx context.Context, db *sql.DB) error {
 	_, err := db.ExecContext(ctx, schemaSQL)
 	return err
@@ -224,8 +195,8 @@ func ensureSchema(ctx context.Context, db *sql.DB) error {
 
 func updateEventProcessing(ctx context.Context, db *sql.DB, eventID string) error {
 	for _, stmt := range []string{
-		`UPDATE events SET event_status='processing', updated_at=now() WHERE event_id=$1`,
-		`UPDATE events SET status='processing', updated_at=now() WHERE event_id=$1`,
+		`UPDATE events SET event_status='processing', updated_at=NOW(6) WHERE event_id=?`,
+		`UPDATE events SET status='processing', updated_at=NOW(6) WHERE event_id=?`,
 	} {
 		if _, err := db.ExecContext(ctx, stmt, eventID); err == nil {
 			return nil
@@ -237,7 +208,6 @@ func updateEventProcessing(ctx context.Context, db *sql.DB, eventID string) erro
 type columnInfo struct {
 	Name       string
 	DataType   string
-	UDTName    string
 	Nullable   bool
 	HasDefault bool
 }
@@ -270,17 +240,19 @@ func insertCompat(ctx context.Context, db *sql.DB, table string, values map[stri
 			}
 			v = defaultValueForColumn(col, values)
 		}
-		insertCols = append(insertCols, pqQuoteIdent(name))
+		insertCols = append(insertCols, quoteIdent(name))
 		args = append(args, v)
-		placeholders = append(placeholders, "$"+strconv.Itoa(len(args)))
+		placeholders = append(placeholders, "?")
 	}
 	if len(insertCols) == 0 {
 		return nil
 	}
 
-	query := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)", pqQuoteIdent(table), strings.Join(insertCols, ", "), strings.Join(placeholders, ", "))
-	if conflictColumn(table) != "" {
-		query += fmt.Sprintf(" ON CONFLICT (%s) DO NOTHING", pqQuoteIdent(conflictColumn(table)))
+	query := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)", quoteIdent(table), strings.Join(insertCols, ", "), strings.Join(placeholders, ", "))
+	if col := conflictColumn(table); col != "" {
+		// Equivalent of the previous "insert, do nothing on duplicate":
+		// a self-assignment turns a duplicate-key error into a no-op.
+		query += fmt.Sprintf(" ON DUPLICATE KEY UPDATE %s=%s", quoteIdent(col), quoteIdent(col))
 	}
 	_, err = db.ExecContext(ctx, query, args...)
 	return err
@@ -288,10 +260,10 @@ func insertCompat(ctx context.Context, db *sql.DB, table string, values map[stri
 
 func tableColumns(ctx context.Context, db *sql.DB, table string) ([]columnInfo, error) {
 	rows, err := db.QueryContext(ctx, `
-SELECT column_name, data_type, udt_name, is_nullable, column_default IS NOT NULL
-FROM information_schema.columns
-WHERE table_schema='public' AND table_name=$1
-ORDER BY ordinal_position
+SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_DEFAULT IS NOT NULL
+FROM information_schema.COLUMNS
+WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?
+ORDER BY ORDINAL_POSITION
 `, table)
 	if err != nil {
 		return nil, err
@@ -301,7 +273,7 @@ ORDER BY ordinal_position
 	for rows.Next() {
 		var c columnInfo
 		var nullable string
-		if err := rows.Scan(&c.Name, &c.DataType, &c.UDTName, &nullable, &c.HasDefault); err != nil {
+		if err := rows.Scan(&c.Name, &c.DataType, &nullable, &c.HasDefault); err != nil {
 			return nil, err
 		}
 		c.Nullable = nullable == "YES"
@@ -318,13 +290,12 @@ func defaultValueForColumn(c columnInfo, values map[string]any) any {
 	if strings.Contains(name, "time") || strings.HasSuffix(name, "_at") {
 		return time.Now().UTC()
 	}
-	if strings.Contains(c.DataType, "json") || c.UDTName == "jsonb" || c.UDTName == "json" {
+	switch strings.ToLower(c.DataType) {
+	case "json":
 		return jsonText(map[string]any{"source": "autopilot"})
-	}
-	if c.DataType == "boolean" || c.UDTName == "bool" {
-		return true
-	}
-	if strings.Contains(c.DataType, "integer") || strings.Contains(c.DataType, "numeric") || c.UDTName == "int4" || c.UDTName == "int8" {
+	case "datetime", "timestamp", "date":
+		return time.Now().UTC()
+	case "bigint", "int", "mediumint", "smallint", "tinyint", "decimal", "double", "float", "bit":
 		if strings.Contains(name, "round") {
 			return 1
 		}
@@ -369,8 +340,8 @@ func conflictColumn(table string) string {
 	}
 }
 
-func pqQuoteIdent(s string) string {
-	return `"` + strings.ReplaceAll(s, `"`, `""`) + `"`
+func quoteIdent(s string) string {
+	return "`" + strings.ReplaceAll(s, "`", "``") + "`"
 }
 
 func jsonText(v any) string {

@@ -38,7 +38,7 @@ func (s *InternalService) SyncRun(ctx context.Context) (map[string]any, error) {
 		return s.core.RunSyncOnce(ctx, s.cfg.SyncBatchSize, s.cfg.SyncLookbackSeconds, s.cfg.SyncMaxRetries)
 	}
 	return map[string]any{
-		"mode":    "local-postgres",
+		"mode":    "local-mysql",
 		"fetched": 0,
 		"pushed":  0,
 		"failed":  0,

@@ -2,6 +2,7 @@ package traffic
 
 import (
 	"context"
+	"database/sql"
 	"log"
 	"net/http"
 	"strings"
@@ -27,12 +28,14 @@ import (
 type Traffic struct {
 	api   *Handler
 	queue mq.Queue
+	db    *sql.DB
 }
 
 type Config struct {
 	StoreBackend            string `json:"store_backend" toml:"store_backend"`
 	DatabaseURL             string `json:"database_url" toml:"database_url"`
 	AutoMigrate             bool   `json:"auto_migrate" toml:"auto_migrate"`
+	DBWaitSeconds           int    `json:"db_wait_seconds" toml:"db_wait_seconds"`
 	InternalAPIKey          string `json:"internal_api_key" toml:"internal_api_key"`
 	FlowShadowBaseURL       string `json:"flowshadow_base_url" toml:"flowshadow_base_url"`
 	FlowShadowAPIKey        string `json:"flowshadow_api_key" toml:"flowshadow_api_key"`
@@ -61,7 +64,7 @@ func NewTraffic(moduleCfg Config) *Traffic {
 	httpClient := &http.Client{Timeout: cfg.HTTPTimeout}
 	llmHTTPClient := &http.Client{Timeout: cfg.LLMTimeout}
 
-	st := loadStore(cfg)
+	db, st := loadStore(cfg)
 	queue := loadQueue(cfg, st)
 
 	services := service.Services{
@@ -100,24 +103,31 @@ func NewTraffic(moduleCfg Config) *Traffic {
 			NewChatService(services),
 			NewSystemService(cfg, services),
 			NewInternalService(cfg, services),
-			lyserver.New(cfg.DatabaseURL),
+			lyserver.New(db),
 			socketHub,
 		),
 		queue: queue,
+		db:    db,
 	}
 }
 
-func loadStore(cfg config.Config) store.Store {
+// loadStore 初始化共享 MySQL 连接池（自动建库/建表/种子，幂等）并返回
+// 连接池与 Store 实现；初始化失败时回退内存存储并返回 nil 连接池
+// （lyserver 依赖注入 nil 时自动降级为未启用）。
+func loadStore(cfg config.Config) (*sql.DB, store.Store) {
 	switch strings.ToLower(cfg.StoreBackend) {
+	case "memory":
+		return nil, store.NewMemoryStore()
 	case "postgres":
-		pg, err := store.NewPostgresStore(context.Background(), cfg.DatabaseURL, cfg.AutoMigrate)
+		log.Printf("traffic: store backend %q is no longer supported, using mysql instead", cfg.StoreBackend)
+		fallthrough
+	default: // mysql（默认）
+		db, err := store.InitMySQL(context.Background(), cfg.DatabaseURL, cfg.AutoMigrate, cfg.DBWaitSeconds)
 		if err != nil {
-			log.Printf("traffic: init postgres store failed, falling back to memory: %v", err)
-			return store.NewMemoryStore()
+			log.Printf("traffic: init mysql store failed, falling back to memory: %v", err)
+			return nil, store.NewMemoryStore()
 		}
-		return pg
-	default:
-		return store.NewMemoryStore()
+		return db, store.NewMySQLStore(db)
 	}
 }
 
@@ -130,6 +140,9 @@ func (c Config) toInternal() config.Config {
 		cfg.DatabaseURL = c.DatabaseURL
 	}
 	cfg.AutoMigrate = c.AutoMigrate
+	if c.DBWaitSeconds > 0 {
+		cfg.DBWaitSeconds = c.DBWaitSeconds
+	}
 	if c.InternalAPIKey != "" {
 		cfg.InternalAPIKey = c.InternalAPIKey
 	}
@@ -365,5 +378,8 @@ func (m *Traffic) PublicRoutes(e *gin.RouterGroup) {
 func (m *Traffic) Shutdown() {
 	if m.queue != nil {
 		_ = m.queue.Close()
+	}
+	if m.db != nil {
+		_ = m.db.Close()
 	}
 }

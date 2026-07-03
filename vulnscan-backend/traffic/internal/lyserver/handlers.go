@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -11,24 +12,23 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/lib/pq"
+	"github.com/go-sql-driver/mysql"
 )
+
+// isDuplicateKeyErr 判断 MySQL 唯一键冲突（错误码 1062）。
+func isDuplicateKeyErr(err error) bool {
+	var me *mysql.MySQLError
+	return errors.As(err, &me) && me.Number == 1062
+}
 
 type Service struct {
 	db *sql.DB
 }
 
-func New(databaseURL string) *Service {
-	if strings.TrimSpace(databaseURL) == "" {
+func New(db *sql.DB) *Service {
+	if db == nil {
 		return &Service{}
 	}
-	db, err := sql.Open("postgres", databaseURL)
-	if err != nil {
-		return &Service{}
-	}
-	db.SetMaxOpenConns(10)
-	db.SetMaxIdleConns(2)
-	db.SetConnMaxLifetime(30 * time.Minute)
 	return &Service{db: db}
 }
 
@@ -51,7 +51,7 @@ func (s *Service) Auth(w http.ResponseWriter, r *http.Request) {
 	}
 	err := s.db.QueryRowContext(r.Context(), `
 SELECT id, username, password, role, nickname
-FROM t_user WHERE username=$1 AND enabled=true`, username).
+FROM t_user WHERE username=? AND enabled=true`, username).
 		Scan(&row.ID, &row.Username, &row.Password, &row.Role, &row.Nickname)
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, "用户名或密码错误")
@@ -63,9 +63,8 @@ FROM t_user WHERE username=$1 AND enabled=true`, username).
 	}
 	token := fmt.Sprintf("ly-%d", time.Now().UTC().UnixNano())
 	_, _ = s.db.ExecContext(r.Context(), `
-INSERT INTO t_user_session (username, token, remote_addr, created_at, expires_at)
-VALUES ($1,$2,$3,now(),now()+interval '12 hours')
-ON CONFLICT (token) DO NOTHING`, row.Username, token, r.RemoteAddr)
+INSERT IGNORE INTO t_user_session (username, token, remote_addr, created_at, expires_at)
+VALUES (?,?,?,NOW(6),DATE_ADD(NOW(6), INTERVAL 12 HOUR))`, row.Username, token, r.RemoteAddr)
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status": "success",
@@ -120,7 +119,7 @@ func (s *Service) GetConfig(w http.ResponseWriter, r *http.Request) {
 		var value []byte
 		var desc string
 		var updated time.Time
-		err := s.db.QueryRowContext(r.Context(), `SELECT value, description, updated_at FROM t_config WHERE key=$1`, key).Scan(&value, &desc, &updated)
+		err := s.db.QueryRowContext(r.Context(), "SELECT value, description, updated_at FROM t_config WHERE `key`=?", key).Scan(&value, &desc, &updated)
 		if err == sql.ErrNoRows {
 			writeJSON(w, http.StatusOK, map[string]any{"status": "success", "result": "ok", "data": map[string]any{}})
 			return
@@ -132,7 +131,7 @@ func (s *Service) GetConfig(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"status": "success", "result": "ok", "data": map[string]any{"key": key, "value": jsonValue(value), "description": desc, "updated_at": updated}})
 		return
 	}
-	rows, err := s.db.QueryContext(r.Context(), `SELECT key, value, description, updated_at FROM t_config ORDER BY key`)
+	rows, err := s.db.QueryContext(r.Context(), "SELECT `key`, value, description, updated_at FROM t_config ORDER BY `key`")
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -178,10 +177,7 @@ func (s *Service) SetConfig(w http.ResponseWriter, r *http.Request) {
 		b, _ := json.Marshal(value)
 		value = string(b)
 	}
-	_, err := s.db.ExecContext(r.Context(), `
-INSERT INTO t_config (key, value, description, updated_at)
-VALUES ($1,$2::jsonb,$3,now())
-ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, description=EXCLUDED.description, updated_at=now()`, key, value, desc)
+	_, err := s.db.ExecContext(r.Context(), "INSERT INTO t_config (`key`, value, description, updated_at) VALUES (?,?,?,NOW(6)) ON DUPLICATE KEY UPDATE value=VALUES(value), description=VALUES(description), updated_at=NOW(6)", key, value, desc)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -200,7 +196,7 @@ func (s *Service) GetMO(w http.ResponseWriter, r *http.Request) {
 	query := `SELECT id, moip, moport, protocol, pip, pport, modesc, tag, mogroupid, filter, devid, direction, meta, created_at, updated_at FROM t_mo`
 	args := []any{}
 	if moip != "" {
-		query += ` WHERE moip=$1`
+		query += ` WHERE moip=?`
 		args = append(args, moip)
 	}
 	query += ` ORDER BY id LIMIT 500`
@@ -253,23 +249,23 @@ func (s *Service) SetMO(w http.ResponseWriter, r *http.Request) {
 	direction := firstNonEmpty(params["direction"], "ALL")
 	meta, _ := json.Marshal(params)
 
-	var id int64
-	err := s.db.QueryRowContext(r.Context(), `
+	res, err := s.db.ExecContext(r.Context(), `
 INSERT INTO t_mo (moip, moport, protocol, modesc, tag, mogroupid, filter, devid, direction, meta, updated_at)
-VALUES ($1,$2,$3,$4,$5,1,$6,$7,$8,$9::jsonb,now())
-ON CONFLICT (moip, moport, protocol) DO UPDATE SET
-  modesc=EXCLUDED.modesc,
-  tag=EXCLUDED.tag,
-  filter=EXCLUDED.filter,
-  devid=EXCLUDED.devid,
-  direction=EXCLUDED.direction,
-  meta=EXCLUDED.meta,
-  updated_at=now()
-RETURNING id`, moip, moport, protocol, desc, tag, filter, devid, direction, string(meta)).Scan(&id)
+VALUES (?,?,?,?,?,1,?,?,?,?,NOW(6))
+ON DUPLICATE KEY UPDATE
+  id=LAST_INSERT_ID(id),
+  modesc=VALUES(modesc),
+  tag=VALUES(tag),
+  filter=VALUES(filter),
+  devid=VALUES(devid),
+  direction=VALUES(direction),
+  meta=VALUES(meta),
+  updated_at=NOW(6)`, moip, moport, protocol, desc, tag, filter, devid, direction, string(meta))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	id, _ := res.LastInsertId()
 	writeJSON(w, http.StatusOK, map[string]any{"status": "success", "result": "ok", "data": map[string]any{"id": id, "moip": moip, "moport": moport, "protocol": protocol, "modesc": desc}})
 }
 
@@ -331,7 +327,7 @@ func (s *Service) SetBWList(w http.ResponseWriter, r *http.Request) {
 	}
 	op := strings.ToLower(firstNonEmpty(params["op"], params["action"], "add"))
 	if op == "del" || op == "delete" || op == "remove" {
-		_, err := s.db.ExecContext(r.Context(), fmt.Sprintf(`DELETE FROM %s WHERE value=$1`, table), value)
+		_, err := s.db.ExecContext(r.Context(), fmt.Sprintf(`DELETE FROM %s WHERE value=?`, table), value)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -343,8 +339,8 @@ func (s *Service) SetBWList(w http.ResponseWriter, r *http.Request) {
 	valueType := firstNonEmpty(params["value_type"], "ip")
 	_, err := s.db.ExecContext(r.Context(), fmt.Sprintf(`
 INSERT INTO %s (value, value_type, description, enabled, updated_at)
-VALUES ($1,$2,$3,true,now())
-ON CONFLICT (value) DO UPDATE SET value_type=EXCLUDED.value_type, description=EXCLUDED.description, enabled=true, updated_at=now()`, table), value, valueType, desc)
+VALUES (?,?,?,true,NOW(6))
+ON DUPLICATE KEY UPDATE value_type=VALUES(value_type), description=VALUES(description), enabled=true, updated_at=NOW(6)`, table), value, valueType, desc)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -357,14 +353,14 @@ func (s *Service) getAgentConfig(w http.ResponseWriter, r *http.Request, params 
 	if target == "device" || target == "collector" {
 		items, err := s.queryRows(r.Context(), `
 SELECT id, name, devid, ip, status,
-       COALESCE(meta->>'port', '') AS port,
-       COALESCE(meta->>'protocol', 'http') AS protocol,
-       COALESCE(meta->>'comment', '') AS comment,
-       COALESCE(meta->>'agentid', '') AS agentid,
-       COALESCE(meta->>'flowtype', '') AS flowtype,
-       COALESCE(meta->>'interface', '') AS interface,
-       COALESCE(meta->>'last_test_at', '') AS last_test_at,
-       COALESCE(meta->>'last_test_message', '') AS last_test_message,
+       COALESCE(meta->>'$.port', '') AS port,
+       COALESCE(meta->>'$.protocol', 'http') AS protocol,
+       COALESCE(meta->>'$.comment', '') AS comment,
+       COALESCE(meta->>'$.agentid', '') AS agentid,
+       COALESCE(meta->>'$.flowtype', '') AS flowtype,
+       COALESCE(meta->>'$.interface', '') AS interface,
+       COALESCE(meta->>'$.last_test_at', '') AS last_test_at,
+       COALESCE(meta->>'$.last_test_message', '') AS last_test_message,
        meta, created_at, updated_at
 FROM t_device ORDER BY id`, []string{"id", "name", "devid", "ip", "status", "port", "protocol", "comment", "agentid", "flowtype", "interface", "last_test_at", "last_test_message", "meta", "created_at", "updated_at"})
 		if err != nil {
@@ -377,10 +373,10 @@ FROM t_device ORDER BY id`, []string{"id", "name", "devid", "ip", "status", "por
 
 	items, err := s.queryRows(r.Context(), `
 SELECT id, name, ip, port, status, version,
-       COALESCE(meta->>'protocol', 'http') AS protocol,
-       COALESCE(meta->>'comment', '') AS comment,
-       COALESCE(meta->>'last_test_at', '') AS last_test_at,
-       COALESCE(meta->>'last_test_message', '') AS last_test_message,
+       COALESCE(meta->>'$.protocol', 'http') AS protocol,
+       COALESCE(meta->>'$.comment', '') AS comment,
+       COALESCE(meta->>'$.last_test_at', '') AS last_test_at,
+       COALESCE(meta->>'$.last_test_message', '') AS last_test_message,
        meta, created_at, updated_at
 FROM t_agent ORDER BY id`, []string{"id", "name", "ip", "port", "status", "version", "protocol", "comment", "last_test_at", "last_test_message", "meta", "created_at", "updated_at"})
 	if err != nil {
@@ -417,9 +413,9 @@ func (s *Service) setProxyConfig(w http.ResponseWriter, r *http.Request, params 
 	ip := endpoint.host
 	if op == "del" || op == "delete" || op == "remove" {
 		if id != "" {
-			_, _ = s.db.ExecContext(r.Context(), `DELETE FROM t_agent WHERE id=$1`, id)
+			_, _ = s.db.ExecContext(r.Context(), `DELETE FROM t_agent WHERE id=?`, id)
 		} else if ip != "" {
-			_, _ = s.db.ExecContext(r.Context(), `DELETE FROM t_agent WHERE ip=$1`, ip)
+			_, _ = s.db.ExecContext(r.Context(), `DELETE FROM t_agent WHERE ip=?`, ip)
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"status": "success", "result": "ok", "deleted": firstNonEmpty(id, ip)})
 		return
@@ -432,16 +428,31 @@ func (s *Service) setProxyConfig(w http.ResponseWriter, r *http.Request, params 
 	var outID int64
 	var err error
 	if id != "" {
-		err = s.db.QueryRowContext(r.Context(), `
-UPDATE t_agent SET name=$1, ip=$2, port=$3, status=$4, version=$5, meta=$6::jsonb, updated_at=now()
-WHERE id=$7 RETURNING id`, name, ip, port, status, version, meta, id).Scan(&outID)
+		_, err = s.db.ExecContext(r.Context(), `
+UPDATE t_agent SET name=?, ip=?, port=?, status=?, version=?, meta=?, updated_at=NOW(6)
+WHERE id=?`, name, ip, port, status, version, meta, id)
+		if err == nil {
+			err = s.db.QueryRowContext(r.Context(), `SELECT id FROM t_agent WHERE id=?`, id).Scan(&outID)
+		}
 	} else {
-		err = s.db.QueryRowContext(r.Context(), `
+		// t_agent(ip) 唯一：同 IP 重复保存按 upsert 刷新既有记录（对齐
+		// t_device 的 devid 语义），LAST_INSERT_ID(id) 让更新路径也返回原 id。
+		var res sql.Result
+		res, err = s.db.ExecContext(r.Context(), `
 INSERT INTO t_agent (name, ip, port, status, version, meta, updated_at)
-VALUES ($1,$2,$3,$4,$5,$6::jsonb,now())
-RETURNING id`, name, ip, port, status, version, meta).Scan(&outID)
+VALUES (?,?,?,?,?,?,NOW(6))
+ON DUPLICATE KEY UPDATE id=LAST_INSERT_ID(id), name=VALUES(name), port=VALUES(port),
+status=VALUES(status), version=VALUES(version), meta=VALUES(meta), updated_at=NOW(6)`,
+			name, ip, port, status, version, meta)
+		if err == nil {
+			outID, _ = res.LastInsertId()
+		}
 	}
 	if err != nil {
+		if isDuplicateKeyErr(err) {
+			writeError(w, http.StatusBadRequest, "IP 已被其他节点占用")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -455,9 +466,9 @@ func (s *Service) setDeviceConfig(w http.ResponseWriter, r *http.Request, params
 	ip := endpoint.host
 	if op == "del" || op == "delete" || op == "remove" {
 		if id != "" {
-			_, _ = s.db.ExecContext(r.Context(), `DELETE FROM t_device WHERE id=$1`, id)
+			_, _ = s.db.ExecContext(r.Context(), `DELETE FROM t_device WHERE id=?`, id)
 		} else {
-			_, _ = s.db.ExecContext(r.Context(), `DELETE FROM t_device WHERE devid=$1`, devid)
+			_, _ = s.db.ExecContext(r.Context(), `DELETE FROM t_device WHERE devid=?`, devid)
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"status": "success", "result": "ok", "deleted": firstNonEmpty(id, devid)})
 		return
@@ -468,15 +479,27 @@ func (s *Service) setDeviceConfig(w http.ResponseWriter, r *http.Request, params
 	var outID int64
 	var err error
 	if id != "" {
-		err = s.db.QueryRowContext(r.Context(), `
-UPDATE t_device SET name=$1, devid=$2, ip=$3, status=$4, meta=$5::jsonb, updated_at=now()
-WHERE id=$6 RETURNING id`, name, devid, ip, status, meta, id).Scan(&outID)
+		_, err = s.db.ExecContext(r.Context(), `
+UPDATE t_device SET name=?, devid=?, ip=?, status=?, meta=?, updated_at=NOW(6)
+WHERE id=?`, name, devid, ip, status, meta, id)
+		if err == nil {
+			err = s.db.QueryRowContext(r.Context(), `SELECT id FROM t_device WHERE id=?`, id).Scan(&outID)
+		}
 	} else {
-		err = s.db.QueryRowContext(r.Context(), `
+		var res sql.Result
+		res, err = s.db.ExecContext(r.Context(), `
 INSERT INTO t_device (name, devid, ip, status, meta, updated_at)
-VALUES ($1,$2,$3,$4,$5::jsonb,now())
-ON CONFLICT (devid) DO UPDATE SET name=EXCLUDED.name, ip=EXCLUDED.ip, status=EXCLUDED.status, meta=EXCLUDED.meta, updated_at=now()
-RETURNING id`, name, devid, ip, status, meta).Scan(&outID)
+VALUES (?,?,?,?,?,NOW(6))
+ON DUPLICATE KEY UPDATE
+  id=LAST_INSERT_ID(id),
+  name=VALUES(name),
+  ip=VALUES(ip),
+  status=VALUES(status),
+  meta=VALUES(meta),
+  updated_at=NOW(6)`, name, devid, ip, status, meta)
+		if err == nil {
+			outID, _ = res.LastInsertId()
+		}
 	}
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -570,18 +593,18 @@ func (s *Service) updateNodeStatus(ctx context.Context, target string, params ma
 	ip := parseNodeEndpoint(params).host
 	if target == "device" || target == "collector" {
 		if id != "" {
-			_, err := s.db.ExecContext(ctx, `UPDATE t_device SET status=$1, meta=meta || $2::jsonb, updated_at=now() WHERE id=$3`, status, string(nextMeta), id)
+			_, err := s.db.ExecContext(ctx, `UPDATE t_device SET status=?, meta=JSON_MERGE_PATCH(meta, CAST(? AS JSON)), updated_at=NOW(6) WHERE id=?`, status, string(nextMeta), id)
 			return err
 		}
-		_, err := s.db.ExecContext(ctx, `UPDATE t_device SET status=$1, meta=meta || $2::jsonb, updated_at=now() WHERE ip=$3`, status, string(nextMeta), ip)
+		_, err := s.db.ExecContext(ctx, `UPDATE t_device SET status=?, meta=JSON_MERGE_PATCH(meta, CAST(? AS JSON)), updated_at=NOW(6) WHERE ip=?`, status, string(nextMeta), ip)
 		return err
 	}
 	id = firstNonEmpty(params["id"], params["agent_id"])
 	if id != "" {
-		_, err := s.db.ExecContext(ctx, `UPDATE t_agent SET status=$1, meta=meta || $2::jsonb, updated_at=now() WHERE id=$3`, status, string(nextMeta), id)
+		_, err := s.db.ExecContext(ctx, `UPDATE t_agent SET status=?, meta=JSON_MERGE_PATCH(meta, CAST(? AS JSON)), updated_at=NOW(6) WHERE id=?`, status, string(nextMeta), id)
 		return err
 	}
-	_, err := s.db.ExecContext(ctx, `UPDATE t_agent SET status=$1, meta=meta || $2::jsonb, updated_at=now() WHERE ip=$3`, status, string(nextMeta), ip)
+	_, err := s.db.ExecContext(ctx, `UPDATE t_agent SET status=?, meta=JSON_MERGE_PATCH(meta, CAST(? AS JSON)), updated_at=NOW(6) WHERE ip=?`, status, string(nextMeta), ip)
 	return err
 }
 
@@ -601,7 +624,7 @@ func nodeMeta(params map[string]string) string {
 
 func (s *Service) requireDB(w http.ResponseWriter) bool {
 	if s == nil || s.db == nil {
-		writeCompatUnavailable(w, "ly_server PostgreSQL compatibility database is not configured")
+		writeCompatUnavailable(w, "ly_server MySQL compatibility database is not configured")
 		return false
 	}
 	if err := s.db.Ping(); err != nil {

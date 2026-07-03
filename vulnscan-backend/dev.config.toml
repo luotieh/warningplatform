@@ -32,12 +32,16 @@
 
 # 流量分析（trafficAnalysis）业务子系统配置
 [traffic]
-  # 存储后端：memory（默认，内存）或 postgres
-  store_backend = "memory"
-  # postgres 连接串（store_backend=postgres 时必填），示例：
-  # database_url = "postgres://user:pass@127.0.0.1:5432/traffic?sslmode=disable"
+  # 存储后端：mysql（默认）或 memory（内存，进程重启数据丢失）
+  # mysql 初始化失败（database_url 未配置 / 等待超时）时自动回退 memory 并打 ERROR 日志
+  store_backend = "mysql"
+  # MySQL 连接串（store_backend=mysql 时必填）；必须带 parseTime=true，示例：
+  # database_url = "user:pass@tcp(127.0.0.1:3306)/traffic?parseTime=true&charset=utf8mb4&loc=UTC"
   database_url = ""
-  auto_migrate = false
+  # 首次启动自动建库/建表/种子（全部幂等：CREATE DATABASE/TABLE IF NOT EXISTS）
+  auto_migrate = true
+  # 启动时等待 MySQL 就绪的最长秒数（容器编排下 MySQL 慢启动兜底）
+  db_wait_seconds = 30
   # internal 接口鉴权 key（前端 X-API-Key 默认 change-me-internal-key）
   internal_api_key = "change-me-internal-key"
   # LLM（OpenAI 兼容）配置

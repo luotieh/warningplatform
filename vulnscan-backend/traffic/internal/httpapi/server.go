@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
@@ -29,8 +30,10 @@ type Server struct {
 	states    map[string]bool
 }
 
-func New(cfg config.Config, services service.Services) *Server {
-	s := &Server{cfg: cfg, services: services, mux: http.NewServeMux(), tokens: map[string]string{}, ly: lyserver.New(cfg.DatabaseURL), socketHub: socketio.NewHub(), states: map[string]bool{}}
+// New 构造独立模式 HTTP 服务；db 为共享 MySQL 连接池（可为 nil，
+// 此时 /d/* LY 兼容接口降级为未启用）。
+func New(cfg config.Config, services service.Services, db *sql.DB) *Server {
+	s := &Server{cfg: cfg, services: services, mux: http.NewServeMux(), tokens: map[string]string{}, ly: lyserver.New(db), socketHub: socketio.NewHub(), states: map[string]bool{}}
 	s.routes()
 	return s
 }

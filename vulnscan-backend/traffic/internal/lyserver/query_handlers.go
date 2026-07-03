@@ -25,7 +25,7 @@ func (s *Service) Event(w http.ResponseWriter, r *http.Request) {
 SELECT id, aggre_key, event_type, event_count, threat_source, victim_target, first_time, last_time, severity, raw
 FROM t_event_data_aggre
 ORDER BY last_time DESC, id DESC
-LIMIT $1`, []string{"id", "aggre_key", "event_type", "event_count", "threat_source", "victim_target", "first_time", "last_time", "severity", "raw"}, limit)
+LIMIT ?`, []string{"id", "aggre_key", "event_type", "event_count", "threat_source", "victim_target", "first_time", "last_time", "severity", "raw"}, limit)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -41,9 +41,9 @@ LIMIT $1`, []string{"id", "aggre_key", "event_type", "event_count", "threat_sour
 		items, err := s.queryRows(r.Context(), `
 SELECT id, event_id, event_type, detail_type, event_level, rule_desc, threat_source, victim_target, method, occurrence_time, duration, processing_status, is_active, raw, created_at, updated_at
 FROM t_event_data
-WHERE event_id=$1 OR id::text=$1
+WHERE event_id=? OR CAST(id AS CHAR)=?
 ORDER BY occurrence_time DESC
-LIMIT 1`, eventColumns(), id)
+LIMIT 1`, eventColumns(), id, id)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -59,7 +59,7 @@ LIMIT 1`, eventColumns(), id)
 SELECT id, event_id, event_type, detail_type, event_level, rule_desc, threat_source, victim_target, method, occurrence_time, duration, processing_status, is_active, raw, created_at, updated_at
 FROM t_event_data
 ORDER BY occurrence_time DESC, id DESC
-LIMIT $1`, eventColumns(), limit)
+LIMIT ?`, eventColumns(), limit)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -79,7 +79,7 @@ func (s *Service) Feature(w http.ResponseWriter, r *http.Request) {
 		"id":       id,
 		"flow_id":  id,
 		"event":    item,
-		"features": map[string]any{"source": "postgres_compat", "derived": true},
+		"features": map[string]any{"source": "mysql_compat", "derived": true},
 	}
 	if src, ok := item["threat_source"]; ok {
 		feature["src_ip"] = src
@@ -111,12 +111,12 @@ func (s *Service) TopN(w http.ResponseWriter, r *http.Request) {
 		field = "event_level"
 	}
 	items, err := s.queryRows(r.Context(), `
-SELECT `+field+` AS name, COUNT(*)::bigint AS count
+SELECT `+field+` AS name, COUNT(*) AS count
 FROM t_event_data
 WHERE `+field+` <> ''
 GROUP BY `+field+`
 ORDER BY count DESC, name ASC
-LIMIT $1`, []string{"name", "count"}, limit)
+LIMIT ?`, []string{"name", "count"}, limit)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -152,7 +152,7 @@ func (s *Service) InternalAsset(w http.ResponseWriter, r *http.Request) {
 	items, err := s.queryRows(r.Context(), `
 SELECT ip, asset_name, owner, business, meta, created_at, updated_at
 FROM t_asset_ip
-WHERE ip=$1
+WHERE ip=?
 LIMIT 1`, []string{"ip", "asset_name", "owner", "business", "meta", "created_at", "updated_at"}, ip)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -160,8 +160,8 @@ LIMIT 1`, []string{"ip", "asset_name", "owner", "business", "meta", "created_at"
 	}
 	moItems, _ := s.queryRows(r.Context(), `
 SELECT id, moip, moport, protocol, modesc, tag, mogroupid, filter, devid, direction, meta, created_at, updated_at
-FROM t_mo WHERE moip=$1 ORDER BY id LIMIT 20`, []string{"id", "moip", "moport", "protocol", "modesc", "tag", "mogroupid", "filter", "devid", "direction", "meta", "created_at", "updated_at"}, ip)
-	services, _ := s.queryRows(r.Context(), `SELECT ip, port, protocol, service_name, meta, created_at, updated_at FROM t_asset_srv WHERE ip=$1 ORDER BY port LIMIT 100`, []string{"ip", "port", "protocol", "service_name", "meta", "created_at", "updated_at"}, ip)
+FROM t_mo WHERE moip=? ORDER BY id LIMIT 20`, []string{"id", "moip", "moport", "protocol", "modesc", "tag", "mogroupid", "filter", "devid", "direction", "meta", "created_at", "updated_at"}, ip)
+	services, _ := s.queryRows(r.Context(), `SELECT ip, port, protocol, service_name, meta, created_at, updated_at FROM t_asset_srv WHERE ip=? ORDER BY port LIMIT 100`, []string{"ip", "port", "protocol", "service_name", "meta", "created_at", "updated_at"}, ip)
 	data := map[string]any{"ip": ip, "asset": map[string]any{}, "managed_objects": moItems, "services": services}
 	if len(items) > 0 {
 		data["asset"] = items[0]
@@ -198,15 +198,15 @@ func (s *Service) InternalRelatedFlows(w http.ResponseWriter, r *http.Request) {
 		items, err = s.queryRows(r.Context(), `
 SELECT id, event_id, event_type, detail_type, event_level, rule_desc, threat_source, victim_target, method, occurrence_time, duration, processing_status, is_active, raw, created_at, updated_at
 FROM t_event_data
-WHERE threat_source=$1 OR victim_target=$1
+WHERE threat_source=? OR victim_target=?
 ORDER BY occurrence_time DESC, id DESC
-LIMIT $2`, eventColumns(), src, limit)
+LIMIT ?`, eventColumns(), src, src, limit)
 	} else {
 		items, err = s.queryRows(r.Context(), `
 SELECT id, event_id, event_type, detail_type, event_level, rule_desc, threat_source, victim_target, method, occurrence_time, duration, processing_status, is_active, raw, created_at, updated_at
 FROM t_event_data
 ORDER BY occurrence_time DESC, id DESC
-LIMIT $1`, eventColumns(), limit)
+LIMIT ?`, eventColumns(), limit)
 	}
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -244,9 +244,9 @@ LIMIT 1`, eventColumns())
 	items, err := s.queryRows(r.Context(), `
 SELECT id, event_id, event_type, detail_type, event_level, rule_desc, threat_source, victim_target, method, occurrence_time, duration, processing_status, is_active, raw, created_at, updated_at
 FROM t_event_data
-WHERE event_id=$1 OR id::text=$1 OR raw->>'flow_id'=$1 OR raw->>'id'=$1
+WHERE event_id=? OR CAST(id AS CHAR)=? OR raw->>'$.flow_id'=? OR raw->>'$.id'=?
 ORDER BY occurrence_time DESC, id DESC
-LIMIT 1`, eventColumns(), id)
+LIMIT 1`, eventColumns(), id, id, id, id)
 	if err == nil && len(items) > 0 {
 		return items[0]
 	}

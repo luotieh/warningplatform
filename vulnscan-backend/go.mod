@@ -11,11 +11,11 @@ require (
 	github.com/glebarez/sqlite v1.11.0
 	github.com/go-pdf/fpdf v0.9.0
 	github.com/go-rod/rod v0.116.2
+	github.com/go-sql-driver/mysql v1.9.3
 	github.com/gomutex/godocx v0.1.5
 	github.com/google/uuid v1.6.0
 	github.com/google/wire v0.7.0
 	github.com/gorilla/websocket v1.5.3
-	github.com/lib/pq v1.11.2
 	github.com/nats-io/nats.go v1.51.0
 	github.com/pelletier/go-toml/v2 v2.3.1
 	github.com/projectdiscovery/nuclei/v3 v3.4.10
@@ -167,7 +167,6 @@ require (
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/go-playground/validator/v10 v10.30.2 // indirect
 	github.com/go-sourcemap/sourcemap v2.1.4+incompatible // indirect
-	github.com/go-sql-driver/mysql v1.9.3 // indirect
 	github.com/goburrow/cache v0.1.4 // indirect
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/gobwas/httphead v0.1.0 // indirect
@@ -236,6 +235,7 @@ require (
 	github.com/labstack/gommon v0.4.2 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/leslie-qiwa/flat v0.0.0-20230424180412-f9d1cf014baa // indirect
+	github.com/lib/pq v1.11.2 // indirect
 	github.com/libdns/libdns v1.1.1 // indirect
 	github.com/logrusorgru/aurora v2.0.3+incompatible // indirect
 	github.com/logrusorgru/aurora/v4 v4.0.0 // indirect
