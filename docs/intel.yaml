@@ -1,0 +1,461 @@
+items:
+- id: 763001ec-d29d-4ff2-8f92-b32e786ce33d
+  type: domain
+  value: ip-scanner.org
+  category: c2
+  severity: high
+  source: Threat Intel Hub
+  description: '命中威胁: From Bing Search to Ransomware: Bumblebee and AdaptixC2 Deliver
+    Akira | 关联: rustdesk, trojanized installer, lateral movement, adaptixc2, akira,
+    credential dumping | 交叉验证: WhoisXML=malware, seen 2025-08-07~2026-07-06 | 来源:
+    otx · 置信: high (2 sources) | TLP:WHITE'
+  evidence:
+    activity: 'From Bing Search to Ransomware: Bumblebee and AdaptixC2 Deliver Akira'
+    threat_labels:
+    - rustdesk
+    - trojanized installer
+    - lateral movement
+    - adaptixc2
+    - akira
+    - credential dumping
+    - bumblebee
+    - seo poisoning
+    source: otx
+    cross_check: WhoisXML=malware, seen 2025-08-07~2026-07-06
+    confidence: high (2 sources)
+    tlp: white
+    misp_event_id: '2167'
+    narrative: 根据威胁情报，域名 `ip-scanner.org` 关联恶意软件活动，涉及 Akira 勒索软件投放链（Bumblebee、AdaptixC2
+      木马安装程序、RustDesk 横向移动、凭证窃取等），疑似利用 SEO 污染投递。WhoisXML 将其标记为恶意软件，观察到活跃时间为 2025-08-07
+      至 2026-07-06，置信度高。建议立即阻断该域名的访问，排查受感染主机是否存在凭证窃取或横向移动痕迹。
+  recommended_action: block_and_report
+  tags:
+  - source:otx
+  - tlp:white
+  - otx:tag="rustdesk"
+  - otx:tag="trojanized installer"
+  - otx:tag="lateral movement"
+  - otx:tag="adaptixc2"
+  - otx:tag="akira"
+  - otx:tag="credential dumping"
+  - otx:tag="bumblebee"
+  - otx:tag="seo poisoning"
+  - whoisxml:enriched
+  - whoisxml:threat="malware"
+  enabled: true
+  created_at: 1783412454
+  updated_at: 1783416113
+- id: b0f53503-eb5f-43b5-83ae-7a0303bb9a00
+  type: domain
+  value: ijt0l3i8brit6q.org
+  category: c2
+  severity: high
+  source: Threat Intel Hub
+  description: '命中威胁: From Bing Search to Ransomware: Bumblebee and AdaptixC2 Deliver
+    Akira | 关联: rustdesk, trojanized installer, lateral movement, adaptixc2, akira,
+    credential dumping | 交叉验证: WhoisXML=malware, seen 2025-07-10~2026-07-06 | 来源:
+    otx · 置信: high (2 sources) | TLP:WHITE'
+  evidence:
+    activity: 'From Bing Search to Ransomware: Bumblebee and AdaptixC2 Deliver Akira'
+    threat_labels:
+    - rustdesk
+    - trojanized installer
+    - lateral movement
+    - adaptixc2
+    - akira
+    - credential dumping
+    - bumblebee
+    - seo poisoning
+    source: otx
+    cross_check: WhoisXML=malware, seen 2025-07-10~2026-07-06
+    confidence: high (2 sources)
+    tlp: white
+    misp_event_id: '2167'
+    narrative: "**威胁告警**  \n发现域名 `ijt0l3i8brit6q.org` 与 Bumblebee、AdaptixC2 及 Akira\
+      \ 勒索软件攻击链相关，涉及 SEO 投毒、木马化安装程序（RustDesk）、凭据窃取与横向移动。该 IOC 被 OTX 和 WhoisXML 标记为恶意，活跃于\
+      \ 2025-07-10 起，置信度高。  \n**建议**：立即封锁该域名，排查 DNS 及流量日志，检查内网是否存在 RustDesk 或其他木马化程序痕迹。"
+  recommended_action: block_and_report
+  tags:
+  - source:otx
+  - tlp:white
+  - otx:tag="rustdesk"
+  - otx:tag="trojanized installer"
+  - otx:tag="lateral movement"
+  - otx:tag="adaptixc2"
+  - otx:tag="akira"
+  - otx:tag="credential dumping"
+  - otx:tag="bumblebee"
+  - otx:tag="seo poisoning"
+  - whoisxml:enriched
+  - whoisxml:threat="malware"
+  enabled: true
+  created_at: 1783412454
+  updated_at: 1783416113
+- id: 9ce68f10-5dff-4d7b-9f45-870fb7dbe1bf
+  type: domain
+  value: ev2sirbd269o5j.org
+  category: c2
+  severity: high
+  source: Threat Intel Hub
+  description: '命中威胁: From Bing Search to Ransomware: Bumblebee and AdaptixC2 Deliver
+    Akira | 关联: rustdesk, trojanized installer, lateral movement, adaptixc2, akira,
+    credential dumping | 交叉验证: WhoisXML=malware, seen 2025-07-10~2026-07-06 | 来源:
+    otx · 置信: high (2 sources) | TLP:WHITE'
+  evidence:
+    activity: 'From Bing Search to Ransomware: Bumblebee and AdaptixC2 Deliver Akira'
+    threat_labels:
+    - rustdesk
+    - trojanized installer
+    - lateral movement
+    - adaptixc2
+    - akira
+    - credential dumping
+    - bumblebee
+    - seo poisoning
+    source: otx
+    cross_check: WhoisXML=malware, seen 2025-07-10~2026-07-06
+    confidence: high (2 sources)
+    tlp: white
+    misp_event_id: '2167'
+    narrative: 已关联 Bumblebee 木马、AdaptixC2 及 Akira 勒索软件活动，用于 SEO 中毒投放木马化 RustDesk 安装程序，实现横向移动与凭证转储。OTX
+      与 WhoisXML 交叉验证均为恶意，置信度高。建议立即阻断该域名通信，并排查内网异常登入及可疑进程。
+  recommended_action: block_and_report
+  tags:
+  - source:otx
+  - tlp:white
+  - otx:tag="rustdesk"
+  - otx:tag="trojanized installer"
+  - otx:tag="lateral movement"
+  - otx:tag="adaptixc2"
+  - otx:tag="akira"
+  - otx:tag="credential dumping"
+  - otx:tag="bumblebee"
+  - otx:tag="seo poisoning"
+  - whoisxml:enriched
+  - whoisxml:threat="malware"
+  enabled: true
+  created_at: 1783412454
+  updated_at: 1783416113
+- id: 93841ae8-8458-4383-8b68-0d46a10db550
+  type: domain
+  value: axiscamerastation.org
+  category: c2
+  severity: high
+  source: Threat Intel Hub
+  description: '命中威胁: From Bing Search to Ransomware: Bumblebee and AdaptixC2 Deliver
+    Akira | 关联: rustdesk, trojanized installer, lateral movement, adaptixc2, akira,
+    credential dumping | 交叉验证: WhoisXML=malware, seen 2025-08-07~2026-07-06 | 来源:
+    otx · 置信: high (2 sources) | TLP:WHITE'
+  evidence:
+    activity: 'From Bing Search to Ransomware: Bumblebee and AdaptixC2 Deliver Akira'
+    threat_labels:
+    - rustdesk
+    - trojanized installer
+    - lateral movement
+    - adaptixc2
+    - akira
+    - credential dumping
+    - bumblebee
+    - seo poisoning
+    source: otx
+    cross_check: WhoisXML=malware, seen 2025-08-07~2026-07-06
+    confidence: high (2 sources)
+    tlp: white
+    misp_event_id: '2167'
+    narrative: 域名 axiscamerastation.org 与“Bumblebee 和 AdaptixC2 投递 Akira 勒索软件”活动相关，涉及
+      SEO 投毒、木马化安装程序、横向移动、凭证窃取等恶意行为。OTX 标记威胁，WhoisXML 交叉
+  recommended_action: block_and_report
+  tags:
+  - source:otx
+  - tlp:white
+  - otx:tag="rustdesk"
+  - otx:tag="trojanized installer"
+  - otx:tag="lateral movement"
+  - otx:tag="adaptixc2"
+  - otx:tag="akira"
+  - otx:tag="credential dumping"
+  - otx:tag="bumblebee"
+  - otx:tag="seo poisoning"
+  - whoisxml:enriched
+  - whoisxml:threat="malware"
+  enabled: true
+  created_at: 1783412454
+  updated_at: 1783416113
+- id: 8a9a9565-7041-4f55-a43a-aad0c471fd8b
+  type: domain
+  value: 2rxyt9urhq0bgj.org
+  category: c2
+  severity: high
+  source: Threat Intel Hub
+  description: '命中威胁: From Bing Search to Ransomware: Bumblebee and AdaptixC2 Deliver
+    Akira | 关联: rustdesk, trojanized installer, lateral movement, adaptixc2, akira,
+    credential dumping | 交叉验证: WhoisXML=malware, seen 2025-07-10~2026-07-06 | 来源:
+    otx · 置信: high (2 sources) | TLP:WHITE'
+  evidence:
+    activity: 'From Bing Search to Ransomware: Bumblebee and AdaptixC2 Deliver Akira'
+    threat_labels:
+    - rustdesk
+    - trojanized installer
+    - lateral movement
+    - adaptixc2
+    - akira
+    - credential dumping
+    - bumblebee
+    - seo poisoning
+    source: otx
+    cross_check: WhoisXML=malware, seen 2025-07-10~2026-07-06
+    confidence: high (2 sources)
+    tlp: white
+    misp_event_id: '2167'
+    narrative: 该域名 2rxyt9urhq0bgj.org 关联高置信度恶意活动，OTX 将其标记为恶意软件分发载体，WhoisXML 交叉确认恶意软件且观察期为
+      2025-07-10 至 2026-07-06。活动链涉及 Bumblebee 下载器、AdaptixC2、凭证窃取、横向移动及 Akira 勒索软件，可能通过
+      SEO 中毒诱导下载木马安装包。建议立即阻断对该域名的访问，并排查是否有主机进行过 DNS 请求或出站连接。
+  recommended_action: block_and_report
+  tags:
+  - source:otx
+  - tlp:white
+  - otx:tag="rustdesk"
+  - otx:tag="trojanized installer"
+  - otx:tag="lateral movement"
+  - otx:tag="adaptixc2"
+  - otx:tag="akira"
+  - otx:tag="credential dumping"
+  - otx:tag="bumblebee"
+  - otx:tag="seo poisoning"
+  - whoisxml:enriched
+  - whoisxml:threat="malware"
+  enabled: true
+  created_at: 1783412454
+  updated_at: 1783416113
+- id: 1c4aca06-4693-4bcf-8355-db713a943c41
+  type: domain
+  value: opmanager.pro
+  category: c2
+  severity: high
+  source: Threat Intel Hub
+  description: '命中威胁: From Bing Search to Ransomware: Bumblebee and AdaptixC2 Deliver
+    Akira | 关联: rustdesk, trojanized installer, lateral movement, adaptixc2, akira,
+    credential dumping | 交叉验证: WhoisXML=malware, seen 2025-08-07~2026-07-06 | 来源:
+    otx · 置信: high (2 sources) | TLP:WHITE'
+  evidence:
+    activity: 'From Bing Search to Ransomware: Bumblebee and AdaptixC2 Deliver Akira'
+    threat_labels:
+    - rustdesk
+    - trojanized installer
+    - lateral movement
+    - adaptixc2
+    - akira
+    - credential dumping
+    - bumblebee
+    - seo poisoning
+    source: otx
+    cross_check: WhoisXML=malware, seen 2025-08-07~2026-07-06
+    confidence: high (2 sources)
+    tlp: white
+    misp_event_id: '2167'
+    narrative: 据威胁情报，域名 opmanager.pro 关联 Akira 勒索软件分发链，通过 SEO 投毒传播 Bumblebee 和 AdaptixC2，并利用
+      RustDesk 木马安装包进行横向移动与凭据窃取。OTX 与 WhoisXML 均定性为 malware，活动时段 2025-08-07 至 2026-07-06，置信度高。建议立即阻断该域名通信，排查内部主机异常行为。
+  recommended_action: block_and_report
+  tags:
+  - source:otx
+  - tlp:white
+  - otx:tag="rustdesk"
+  - otx:tag="trojanized installer"
+  - otx:tag="lateral movement"
+  - otx:tag="adaptixc2"
+  - otx:tag="akira"
+  - otx:tag="credential dumping"
+  - otx:tag="bumblebee"
+  - otx:tag="seo poisoning"
+  - whoisxml:enriched
+  - whoisxml:threat="malware"
+  enabled: true
+  created_at: 1783412454
+  updated_at: 1783416113
+- id: 4b4bd93b-3543-4637-be1e-ec9e994cbe4e
+  type: domain
+  value: angryipscanner.org
+  category: c2
+  severity: high
+  source: Threat Intel Hub
+  description: '命中威胁: From Bing Search to Ransomware: Bumblebee and AdaptixC2 Deliver
+    Akira | 关联: rustdesk, trojanized installer, lateral movement, adaptixc2, akira,
+    credential dumping | 交叉验证: WhoisXML=malware, seen 2025-01-14~2026-07-06 | 来源:
+    otx · 置信: high (2 sources) | TLP:WHITE'
+  evidence:
+    activity: 'From Bing Search to Ransomware: Bumblebee and AdaptixC2 Deliver Akira'
+    threat_labels:
+    - rustdesk
+    - trojanized installer
+    - lateral movement
+    - adaptixc2
+    - akira
+    - credential dumping
+    - bumblebee
+    - seo poisoning
+    source: otx
+    cross_check: WhoisXML=malware, seen 2025-01-14~2026-07-06
+    confidence: high (2 sources)
+    tlp: white
+    misp_event_id: '2167'
+    narrative: SOC告警：域名 `angryipscanner.org` 被多源情报标记为恶意，关联 Bumblebee/AdaptixC2 活动链。攻击链通过
+      SEO 中毒诱导下载木马化安装程序，最终投递 Akira 勒索软件，涉及横向移动及凭证转储。依据 OTX 与 WhoisXML（标记时段 2025-01-14
+      至 2026-07-06），置信度高。建议立即封锁该域名，排查 DNS 及出站流量，检查终端是否触碰相关威胁指标。
+  recommended_action: block_and_report
+  tags:
+  - source:otx
+  - tlp:white
+  - otx:tag="rustdesk"
+  - otx:tag="trojanized installer"
+  - otx:tag="lateral movement"
+  - otx:tag="adaptixc2"
+  - otx:tag="akira"
+  - otx:tag="credential dumping"
+  - otx:tag="bumblebee"
+  - otx:tag="seo poisoning"
+  - whoisxml:enriched
+  - whoisxml:threat="malware"
+  enabled: true
+  created_at: 1783412454
+  updated_at: 1783416113
+- id: 828538e6-6771-4994-823a-56680244e410
+  type: domain
+  value: couldinstallup.com
+  category: c2
+  severity: high
+  source: Threat Intel Hub
+  description: '命中威胁: India''s government and energy sectors targeted with ZOHOMURK
+    and MINIRECON | 关联: india, government targeting, websocket, minirecon, zohomurk,
+    shadowpad | 交叉验证: WhoisXML=malware, seen 2026-07-01~2026-07-06 | 来源: otx · 置信:
+    high (2 sources) | TLP:WHITE'
+  evidence:
+    activity: India's government and energy sectors targeted with ZOHOMURK and MINIRECON
+    threat_labels:
+    - india
+    - government targeting
+    - websocket
+    - minirecon
+    - zohomurk
+    - shadowpad
+    - cloud c2
+    - hydropower
+    source: otx
+    cross_check: WhoisXML=malware, seen 2026-07-01~2026-07-06
+    confidence: high (2 sources)
+    tlp: white
+    misp_event_id: '2160'
+    narrative: 告警：域名 couldinstallup.com 关联印度政府及能源行业定向攻击（活动含 ZOHOMURK、MINIRECON 等）。OTX
+      与 WhoisXML 均将其判定为恶意，观测窗口 2026-07-01 至 07-06，置信度高。建议排查内网与该域名的通信记录，并隔离受感染主机。
+  recommended_action: block_and_report
+  tags:
+  - source:otx
+  - tlp:white
+  - otx:tag="india"
+  - otx:tag="government targeting"
+  - otx:tag="websocket"
+  - otx:tag="minirecon"
+  - otx:tag="zohomurk"
+  - otx:tag="shadowpad"
+  - otx:tag="cloud c2"
+  - otx:tag="hydropower"
+  - otx:tag="espionage"
+  - otx:tag="pubload"
+  - whoisxml:enriched
+  - whoisxml:threat="malware"
+  enabled: true
+  created_at: 1783412454
+  updated_at: 1783416113
+- id: 8a77fe25-dc9b-4929-b996-d66a9065143a
+  type: domain
+  value: tmodloader.pro
+  category: c2
+  severity: high
+  source: Threat Intel Hub
+  description: '命中威胁: How a single ScreenConnect incident exposed a massive campaign
+    | 关联: remote access trojan, fake software, c2 infrastructure, process hollowing,
+    screenconnect, powershell loader | 交叉验证: WhoisXML=malware, seen 2026-03-26~2026-07-06
+    | 来源: otx · 置信: high (2 sources) | TLP:WHITE'
+  evidence:
+    activity: How a single ScreenConnect incident exposed a massive campaign
+    threat_labels:
+    - remote access trojan
+    - fake software
+    - c2 infrastructure
+    - process hollowing
+    - screenconnect
+    - powershell loader
+    - typosquatting
+    - seo poisoning
+    source: otx
+    cross_check: WhoisXML=malware, seen 2026-03-26~2026-07-06
+    confidence: high (2 sources)
+    tlp: white
+    misp_event_id: '2151'
+    narrative: "**威胁告警：恶意域名 tmodloader.pro 涉及大规模木马活动**  \n该域名关联远程访问木马、ScreenConnect\
+      \ 滥用、PowerShell 加载、进程镂空等技术，被 OTX 标记，并经 WhoisXML 确认为恶意（活跃期 2026-03-26 至 2026-07-06）。域名通过仿冒与\
+      \ SEO 投毒传播，疑似 C2 设施。  \n**建议：** 立即阻断对该域名的访问与 DNS 解析，排查内网 ScreenConnect 异常连接并隔离受感染主机。"
+  recommended_action: block_and_report
+  tags:
+  - source:otx
+  - tlp:white
+  - otx:tag="remote access trojan"
+  - otx:tag="fake software"
+  - otx:tag="c2 infrastructure"
+  - otx:tag="process hollowing"
+  - otx:tag="screenconnect"
+  - otx:tag="powershell loader"
+  - otx:tag="typosquatting"
+  - otx:tag="seo poisoning"
+  - otx:tag="dll sideloading"
+  - otx:tag="AsyncRAT"
+  - whoisxml:enriched
+  - whoisxml:threat="malware"
+  enabled: true
+  created_at: 1783412454
+  updated_at: 1783416113
+- id: bf032243-6ad9-420a-9216-d1f651c2d2fe
+  type: domain
+  value: tmodloader.org
+  category: c2
+  severity: high
+  source: Threat Intel Hub
+  description: '命中威胁: How a single ScreenConnect incident exposed a massive campaign
+    | 关联: remote access trojan, fake software, c2 infrastructure, process hollowing,
+    screenconnect, powershell loader | 交叉验证: WhoisXML=malware, seen 2026-03-26~2026-07-06
+    | 来源: otx · 置信: high (2 sources) | TLP:WHITE'
+  evidence:
+    activity: How a single ScreenConnect incident exposed a massive campaign
+    threat_labels:
+    - remote access trojan
+    - fake software
+    - c2 infrastructure
+    - process hollowing
+    - screenconnect
+    - powershell loader
+    - typosquatting
+    - seo poisoning
+    source: otx
+    cross_check: WhoisXML=malware, seen 2026-03-26~2026-07-06
+    confidence: high (2 sources)
+    tlp: white
+    misp_event_id: '2151'
+    narrative: 【
+  recommended_action: block_and_report
+  tags:
+  - source:otx
+  - tlp:white
+  - otx:tag="remote access trojan"
+  - otx:tag="fake software"
+  - otx:tag="c2 infrastructure"
+  - otx:tag="process hollowing"
+  - otx:tag="screenconnect"
+  - otx:tag="powershell loader"
+  - otx:tag="typosquatting"
+  - otx:tag="seo poisoning"
+  - otx:tag="dll sideloading"
+  - otx:tag="AsyncRAT"
+  - whoisxml:enriched
+  - whoisxml:threat="malware"
+  enabled: true
+  created_at: 1783412454
+  updated_at: 1783416113

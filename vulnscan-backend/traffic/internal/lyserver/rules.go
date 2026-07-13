@@ -12,22 +12,38 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
+
+// ruleEvidence 对应新版 intel.yaml 中规则的 evidence 证据块（威胁情报上下文）。
+type ruleEvidence struct {
+	Activity     string   `json:"activity,omitempty" yaml:"activity"`
+	ThreatLabels []string `json:"threat_labels,omitempty" yaml:"threat_labels"`
+	Source       string   `json:"source,omitempty" yaml:"source"`
+	CrossCheck   string   `json:"cross_check,omitempty" yaml:"cross_check"`
+	Confidence   string   `json:"confidence,omitempty" yaml:"confidence"`
+	TLP          string   `json:"tlp,omitempty" yaml:"tlp"`
+	MISPEventID  string   `json:"misp_event_id,omitempty" yaml:"misp_event_id"`
+	Narrative    string   `json:"narrative,omitempty" yaml:"narrative"`
+}
 
 // ruleItem 对应 ta_node 规则文件 (intel.*.yaml) items 列表中的一条规则。
 // 本系统仅作只读展示，不提供上传/编辑能力。
 type ruleItem struct {
-	ID          string   `json:"id"`
-	Type        string   `json:"type"`
-	Value       string   `json:"value"`
-	Category    string   `json:"category"`
-	Severity    string   `json:"severity"`
-	Source      string   `json:"source"`
-	Description string   `json:"description"`
-	Tags        []string `json:"tags"`
-	Enabled     bool     `json:"enabled"`
-	CreatedAt   int64    `json:"created_at"`
-	UpdatedAt   int64    `json:"updated_at"`
+	ID                string        `json:"id" yaml:"id"`
+	Type              string        `json:"type" yaml:"type"`
+	Value             string        `json:"value" yaml:"value"`
+	Category          string        `json:"category" yaml:"category"`
+	Severity          string        `json:"severity" yaml:"severity"`
+	Source            string        `json:"source" yaml:"source"`
+	Description       string        `json:"description" yaml:"description"`
+	Evidence          *ruleEvidence `json:"evidence,omitempty" yaml:"evidence"`
+	RecommendedAction string        `json:"recommended_action,omitempty" yaml:"recommended_action"`
+	Tags              []string      `json:"tags" yaml:"tags"`
+	Enabled           bool          `json:"enabled" yaml:"enabled"`
+	CreatedAt         int64         `json:"created_at" yaml:"created_at"`
+	UpdatedAt         int64         `json:"updated_at" yaml:"updated_at"`
 }
 
 var (
@@ -133,7 +149,27 @@ func loadRules() ([]ruleItem, string, time.Time, error) {
 	return all, sig, rulesLoadedAt, nil
 }
 
+// parseRuleFile 解析一个规则 yaml 文件。优先用标准 YAML 解析（支持新版 intel.yaml
+// 的 evidence 证据块、块式 tags/threat_labels 列表、多行折行文本）；
+// 文件不是合法 YAML 时回退到旧的逐行宽松解析，保持对历史文件的兼容。
 func parseRuleFile(path string) ([]ruleItem, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var doc struct {
+		Items []ruleItem `yaml:"items"`
+	}
+	if err := yaml.Unmarshal(data, &doc); err == nil {
+		if doc.Items == nil {
+			return []ruleItem{}, nil
+		}
+		return doc.Items, nil
+	}
+	return parseRuleFileLegacy(path)
+}
+
+func parseRuleFileLegacy(path string) ([]ruleItem, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -195,6 +231,8 @@ func applyRuleKV(it *ruleItem, kv string) {
 		it.Source = unquoteYAML(val)
 	case "description":
 		it.Description = unquoteYAML(val)
+	case "recommended_action":
+		it.RecommendedAction = unquoteYAML(val)
 	case "enabled":
 		it.Enabled = strings.EqualFold(unquoteYAML(val), "true")
 	case "created_at":
@@ -237,6 +275,17 @@ func parseInlineList(s string) []string {
 	return out
 }
 
+// ruleSearchText 拼接一条规则参与关键字搜索的全部文本（含证据块），统一小写。
+func ruleSearchText(it *ruleItem) string {
+	parts := []string{it.Value, it.ID, it.Description, it.Category, it.Source, it.RecommendedAction}
+	parts = append(parts, it.Tags...)
+	if ev := it.Evidence; ev != nil {
+		parts = append(parts, ev.Activity, ev.Source, ev.CrossCheck, ev.Confidence, ev.TLP, ev.MISPEventID, ev.Narrative)
+		parts = append(parts, ev.ThreatLabels...)
+	}
+	return strings.ToLower(strings.Join(parts, " "))
+}
+
 // Rules 只读返回 ta_node 规则，支持按类型/关键字过滤与分页。无需数据库。
 func (s *Service) Rules(w http.ResponseWriter, r *http.Request) {
 	items, src, loadedAt, err := loadRules()
@@ -267,8 +316,7 @@ func (s *Service) Rules(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			if keyword != "" {
-				hay := strings.ToLower(it.Value + " " + it.ID + " " + it.Description + " " + it.Category + " " + it.Source)
-				if !strings.Contains(hay, keyword) {
+				if !strings.Contains(ruleSearchText(&it), keyword) {
 					continue
 				}
 			}
