@@ -3,6 +3,7 @@ package traffic
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -64,7 +65,10 @@ func NewTraffic(moduleCfg Config) *Traffic {
 	httpClient := &http.Client{Timeout: cfg.HTTPTimeout}
 	llmHTTPClient := &http.Client{Timeout: cfg.LLMTimeout}
 
-	db, st := loadStore(cfg)
+	db, st, actualBackend := loadStore(cfg)
+	// 健康接口必须报告实际生效的存储后端：配置 mysql 但初始化失败回退内存时，
+	// 若仍报 "mysql" 会掩盖“重启丢数据”的真实处境（资产/事件全在内存里）。
+	cfg.StoreBackend = actualBackend
 	queue := loadQueue(cfg, st)
 
 	services := service.Services{
@@ -112,12 +116,13 @@ func NewTraffic(moduleCfg Config) *Traffic {
 }
 
 // loadStore 初始化共享 MySQL 连接池（自动建库/建表/种子，幂等）并返回
-// 连接池与 Store 实现；初始化失败时回退内存存储并返回 nil 连接池
-// （lyserver 依赖注入 nil 时自动降级为未启用）。
-func loadStore(cfg config.Config) (*sql.DB, store.Store) {
+// 连接池、Store 实现与实际生效的后端标识；初始化失败时回退内存存储并返回
+// nil 连接池（lyserver 依赖注入 nil 时自动降级为未启用）。
+// 回退后返回 "memory (mysql fallback: ...)"，健康接口据此如实暴露降级状态。
+func loadStore(cfg config.Config) (*sql.DB, store.Store, string) {
 	switch strings.ToLower(cfg.StoreBackend) {
 	case "memory":
-		return nil, store.NewMemoryStore()
+		return nil, store.NewMemoryStore(), "memory"
 	case "postgres":
 		log.Printf("traffic: store backend %q is no longer supported, using mysql instead", cfg.StoreBackend)
 		fallthrough
@@ -125,9 +130,9 @@ func loadStore(cfg config.Config) (*sql.DB, store.Store) {
 		db, err := store.InitMySQL(context.Background(), cfg.DatabaseURL, cfg.AutoMigrate, cfg.DBWaitSeconds)
 		if err != nil {
 			log.Printf("traffic: init mysql store failed, falling back to memory: %v", err)
-			return nil, store.NewMemoryStore()
+			return nil, store.NewMemoryStore(), fmt.Sprintf("memory (mysql fallback: %v)", err)
 		}
-		return db, store.NewMySQLStore(db)
+		return db, store.NewMySQLStore(db), "mysql"
 	}
 }
 

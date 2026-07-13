@@ -273,6 +273,13 @@ jobs:
                   - name: __APP__
                     image: __IMAGE__
                     imagePullPolicy: Always
+                    env:
+                      # traffic 子系统持久化存储：不配置会静默回退内存，Pod 重启丢
+                      # 资产/事件/消息。库不存在时启动自动建库建表（auto_migrate 幂等）。
+                      # dev.config.toml 的 [traffic] database_url 必须保持留空，
+                      # 否则文件值会压过该环境变量（toInternal 的覆盖顺序）。
+                      - name: DATABASE_URL
+                        value: "db:1c3c2d4572236897d2e9cc90b9643424@tcp(10.20.30.144:3306)/traffic?parseTime=true&charset=utf8mb4&loc=UTC"
                     ports:
                       - containerPort: 8080
                         name: web
