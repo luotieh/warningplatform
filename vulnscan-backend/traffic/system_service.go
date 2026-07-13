@@ -41,6 +41,13 @@ func (s *SystemService) LLMHealth(ctx context.Context) any {
 	return s.core.LLM.HealthCheck(ctx)
 }
 
+// LLMHealthTest 用配置页表单当前值（可能尚未保存）做健康检查。
+// 空字段回退到已保存配置：api_key 表单以掩码展示不回传，为空即沿用已保存密钥，
+// 与保存接口的语义一致。
+func (s *SystemService) LLMHealthTest(ctx context.Context, baseURL, model, apiKey string, timeoutSeconds int) any {
+	return s.core.LLM.WithOverrides(baseURL, model, apiKey, timeoutSeconds).HealthTest(ctx)
+}
+
 func (s *SystemService) LLMConfig() trafficconfig.LLMSettings {
 	return trafficconfig.SettingsFromConfig(s.cfg)
 }

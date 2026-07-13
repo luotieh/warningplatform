@@ -35,6 +35,23 @@ func (h *Handler) LLMHealth(c *gin.Context) {
 	ok(c, h.system.LLMHealth(c.Request.Context()))
 }
 
+// LLMHealthTest 供模型配置页"健康检查"按钮使用：以请求体中的表单值
+// （base_url/model/api_key/timeout_seconds，均可缺省回退已保存配置）
+// 测试连通性并发送一条测试对话。
+func (h *Handler) LLMHealthTest(c *gin.Context) {
+	body, valid := readBody(c)
+	if !valid {
+		return
+	}
+	ok(c, h.system.LLMHealthTest(
+		c.Request.Context(),
+		stringValue(body["base_url"]),
+		stringValue(body["model"]),
+		stringValue(body["api_key"]),
+		intFromBody(body["timeout_seconds"]),
+	))
+}
+
 func (h *Handler) LLMConfig(c *gin.Context) {
 	switch c.Request.Method {
 	case http.MethodGet:

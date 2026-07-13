@@ -53,6 +53,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /health/llm", s.llmHealth)
 	s.mux.HandleFunc("GET /api/version", s.version)
 	s.mux.HandleFunc("GET /api/llm/health", s.llmHealth)
+	s.mux.HandleFunc("POST /api/llm/health", s.llmHealthTest)
 	s.mux.HandleFunc("GET /api/llm/config", s.llmConfig)
 	s.mux.HandleFunc("POST /api/llm/config", s.llmConfig)
 	s.mux.HandleFunc("PUT /api/llm/config", s.llmConfig)
@@ -156,6 +157,27 @@ func (s *Server) llmHealth(w http.ResponseWriter, r *http.Request) {
 	result := s.services.LLM.HealthCheck(ctx)
 	status := http.StatusOK
 	if !result.Configured || !result.OK {
+		status = http.StatusServiceUnavailable
+	}
+	writeJSON(w, status, domain.APIResponse{Status: statusText(result.OK), Data: result})
+}
+
+// llmHealthTest 与 Gin 路径的 LLMHealthTest 对等：以请求体表单值（空字段回退
+// 已保存配置）做连通性探测 + 测试对话。限时由探测客户端自身的超时负责，
+// 不再包一层 server 级超时，避免截断合法的慢速 LLM 响应。
+func (s *Server) llmHealthTest(w http.ResponseWriter, r *http.Request) {
+	var body map[string]any
+	if !decodeJSON(w, r, &body) {
+		return
+	}
+	result := s.services.LLM.WithOverrides(
+		asString(body["base_url"]),
+		asString(body["model"]),
+		asString(body["api_key"]),
+		intValue(body["timeout_seconds"]),
+	).HealthTest(r.Context())
+	status := http.StatusOK
+	if !result.OK {
 		status = http.StatusServiceUnavailable
 	}
 	writeJSON(w, status, domain.APIResponse{Status: statusText(result.OK), Data: result})

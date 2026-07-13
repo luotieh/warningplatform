@@ -364,6 +364,7 @@ func (m *Traffic) PublicRoutes(e *gin.RouterGroup) {
 	e.GET("/healthz", m.api.Health)
 	e.GET("/health", m.api.Health)
 	e.GET("/health/llm", m.api.LLMHealth)
+	e.POST("/health/llm", m.api.LLMHealthTest)
 	e.GET("/llm/config", m.api.LLMConfig)
 	e.POST("/llm/config", m.api.LLMConfig)
 	e.PUT("/llm/config", m.api.LLMConfig)
