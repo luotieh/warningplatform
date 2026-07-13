@@ -56,7 +56,7 @@ func (s *ChatService) Send(ctx context.Context, body map[string]any) (map[string
 	realtime.BroadcastMessage(eventID, userMessage)
 
 	prompt := s.engineerEventPrompt(event, message)
-	reply, err := s.core.LLM.Chat(ctx, prompt)
+	reply, err := s.core.LLM.Chat(ctx, trafficservice.EngineerChatSystemPrompt, prompt)
 	if err != nil {
 		return nil, err
 	}
@@ -156,6 +156,10 @@ func cleanEngineerQuestion(question string) string {
 	return strings.TrimSpace(question)
 }
 
+// jsonSectionMaxRunes 限制单个 JSON 区块(自动驾驶任务/动作/命令/执行/总结)的体量,
+// 防止大事件把工程师对话 prompt 撑爆 16K 窗口;末尾的工程师问题因此不会被挤掉。
+const jsonSectionMaxRunes = 1500
+
 func writeJSONSection(b *strings.Builder, title string, v any) {
 	b.WriteString(title)
 	b.WriteString("\n")
@@ -164,7 +168,12 @@ func writeJSONSection(b *strings.Builder, title string, v any) {
 		b.WriteString("暂无\n\n")
 		return
 	}
-	b.Write(raw)
+	if runes := []rune(string(raw)); len(runes) > jsonSectionMaxRunes {
+		b.WriteString(string(runes[:jsonSectionMaxRunes]))
+		b.WriteString("…(已截断)")
+	} else {
+		b.Write(raw)
+	}
 	b.WriteString("\n\n")
 }
 

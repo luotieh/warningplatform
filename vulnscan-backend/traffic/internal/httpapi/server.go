@@ -578,7 +578,7 @@ func (s *Server) engineerChatSend(w http.ResponseWriter, r *http.Request) {
 	}
 	_, _ = s.services.Store.AddMessage(domain.Message{EventID: eventID, MessageFrom: domain.RoleUser, MessageType: "user_message", MessageContent: message, RoundID: 1, MessageCategory: "engineer_chat", SenderType: "user"})
 	prompt := s.engineerEventPrompt(event, message)
-	reply, err := s.services.LLM.Chat(r.Context(), prompt)
+	reply, err := s.services.LLM.Chat(r.Context(), service.EngineerChatSystemPrompt, prompt)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, err.Error())
 		return

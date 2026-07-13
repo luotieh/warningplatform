@@ -60,7 +60,7 @@ func (s Services) RunAgentWorkflow(ctx context.Context, eventID string) error {
 		return err
 	}
 
-	reply, err := s.LLM.Chat(ctx, autoAnalysisPrompt(event))
+	reply, err := s.LLM.Chat(ctx, autoAnalysisSystemPrompt, autoAnalysisPrompt(event))
 	if err != nil {
 		err = fmt.Errorf("LLM自动分析失败，请检查LLM配置: %w", err)
 		_ = s.addLLMConfigRequiredMessage(eventID, roundID, err.Error())
@@ -90,36 +90,56 @@ func (s Services) addLLMConfigRequiredMessage(eventID string, roundID int, text 
 	})
 }
 
+// autoAnalysisSystemPrompt 是自动分析链路专用的精简 system(不复用工程师对话人格)。
+const autoAnalysisSystemPrompt = `你是 DeepSOC 安全运营自动分析引擎。仅基于给定的安全事件信息研判，不得编造未提供的日志、资产或情报事实。输出简体中文 Markdown。`
+
 func autoAnalysisPrompt(event domain.Event) string {
-	return fmt.Sprintf(`你是 DeepSOC 自动分析引擎。请仅基于下面的安全事件信息生成自动分析结果，不要编造未提供的日志、资产或情报事实。
+	obsStr := formatObservables(event.Observables)
+	auxStr := formatAuxContext(event.Context)
 
-输出要求：
-1. 使用中文 Markdown。
-2. 保持原版 DeepSOC 自动驾驶分析风格，覆盖 Captain 研判、Manager 动作拆解、Operator 命令建议、Executor 应由外部剧本验证的证据项、Expert 总结。
-3. 明确区分“已知事实”“待验证证据”“建议执行动作”，不要把未执行的剧本结果写成已完成。
-4. 充分结合下方「辅助研判信息」中的应用层证据（HTTP 方法/URL/User-Agent/请求头/请求体、DNS 查询与应答、payload 样本）、流量方向、流统计与威胁情报命中元数据，进行：威胁真假研判（是否误报）、攻击手法定性、影响面与横向风险评估、以及有针对性的处置/取证建议。
-5. 重点利用通联数据量与方向：wire_bytes(在线字节)/bytes(载荷字节) 结合「通联方向」（to_ioc=数据外传、from_ioc=载荷下载）判断数据外传/载荷下载/beacon 节律；并参考「节点侧局部突发」评估爆发强度——注意 local_hit_count 仅为该节点近似分诊提示，权威全局频次以发生次数(occurrence_count)为准，切勿与之重复计数或混淆。
-6. 如果信息不足，必须写清缺口和下一步需要查询的数据。
+	// 兜底:事件数据(可观察对象 + 辅助研判信息)整体不超预算;超了先压缩体量更大、
+	// 更可变的辅助信息块(逐字段截断已在 formatAuxContext 内做,此处是最后一道防线)。
+	if estimateTokens(obsStr)+estimateTokens(auxStr) > eventDataBudgetTokens {
+		auxStr = fitToTokenBudget(auxStr, eventDataBudgetTokens-estimateTokens(obsStr))
+	}
 
+	return fmt.Sprintf(`# 安全事件
 事件ID：%s
 事件名称：%s
 严重级别：%s
 来源：%s
 描述：%s
-可观察对象：%s
 
-辅助研判信息（融合采集节点 ta_node 解析的应用层与情报上下文）：
+## 可观察对象
 %s
 
-原始上下文(JSON)：%s`,
+## 辅助研判信息（融合采集节点 ta_node 解析的应用层与情报上下文）
+%s
+
+# 分析要求
+结合上方证据完成研判：威胁真假（是否误报）、攻击手法定性、影响面与横向风险、处置建议。
+- 利用「通联方向」（to_ioc=数据外传、from_ioc=载荷下载）与流量体量判断外传/下载/beacon；
+- local_hit_count 仅为节点近似分诊提示，权威全局频次以 occurrence_count 为准，勿重复计数；
+- 若事件带「建议处置(情报侧)」，需明确采纳或修正并说明理由；
+- 信息不足时写清缺口与下一步应查询的数据；不要把未执行的剧本结果写成已完成。
+
+# 输出格式（严格遵守）
+第一行必须输出以【结论】开头的一句话总结，先给结论再展开；禁止复述输入信息、禁止第一人称思考过程、禁止输出模板外内容。
+
+【结论】<一句话：研判定性(误报/探测/利用尝试/有效入侵) + 核心依据 + 建议动作>
+
+## 研判结论
+## 关键证据
+## 影响与风险
+## 建议处置
+## 信息缺口`,
 		event.EventID,
 		firstNonEmpty(event.EventName, event.Title, "未命名事件"),
 		firstNonEmpty(event.Severity, "unknown"),
 		firstNonEmpty(event.Source, "unknown"),
 		firstNonEmpty(event.Message, "无"),
-		formatObservables(event.Observables),
-		formatAuxContext(event.Context),
-		firstNonEmpty(event.Context, "无"),
+		obsStr,
+		auxStr,
 	)
 }
 
@@ -185,11 +205,11 @@ func formatAuxContext(raw string) string {
 		if h, ok := app["http_headers"].(map[string]any); ok && len(h) > 0 {
 			emit("  ", "请求头", kvJoin(h))
 		}
-		emit("  ", "请求体样本", app["http_body_sample"])
+		emit("  ", "请求体样本", truncateRunes(scalarString(app["http_body_sample"]), auxSampleMaxRunes))
 		emit("  ", "DNS 查询", app["dns_query"])
 		emit("  ", "DNS 类型", app["dns_qtype"])
 		emit("  ", "DNS 应答", listJoin(app["dns_answers"]))
-		emit("  ", "Payload 样本", app["payload_sample"])
+		emit("  ", "Payload 样本", truncateRunes(scalarString(app["payload_sample"]), auxSampleMaxRunes))
 		emit("  ", "ICMP 序列号", app["icmp_seq"])
 	}
 
@@ -204,6 +224,22 @@ func formatAuxContext(raw string) string {
 		emit("  ", "描述", ioc["ioc_description"])
 		emit("  ", "过期时间(epoch)", ioc["ioc_expire_at"])
 	}
+
+	// 情报富化证据（intel 命中且情报带该数据时出现）
+	if ie, ok := ctx["ioc_evidence"].(map[string]any); ok && len(ie) > 0 {
+		b.WriteString("- 情报富化证据(ioc_evidence)：\n")
+		emit("  ", "关联活动/战役", ie["activity"])
+		emit("  ", "威胁标签", listJoin(ie["threat_labels"]))
+		emit("  ", "情报来源", ie["source"])
+		emit("  ", "交叉验证", ie["cross_check"])
+		emit("  ", "置信度", ie["confidence"])
+		emit("  ", "TLP", ie["tlp"])
+		emit("  ", "MISP 事件", ie["misp_event_id"])
+		emit("  ", "告警叙述", truncateRunes(scalarString(ie["narrative"]), auxNarrativeMaxRunes))
+	}
+
+	// 情报侧建议处置（供模型在「建议处置」环节采纳/修正）
+	emit("", "建议处置(情报侧)", ctx["recommended_action"])
 
 	// 节点侧局部突发计数（近似分诊提示，非全局权威频次：全局频次见上方/原始上下文的 occurrence_count）
 	if lb, ok := ctx["local_burst"].(map[string]any); ok && len(lb) > 0 {
@@ -294,9 +330,18 @@ func formatObservables(items []domain.IOC) string {
 	if len(items) == 0 {
 		return "无"
 	}
-	lines := make([]string, 0, len(items))
-	for _, item := range items {
+	shown := items
+	omitted := 0
+	if len(items) > maxObservables {
+		shown = items[:maxObservables]
+		omitted = len(items) - maxObservables
+	}
+	lines := make([]string, 0, len(shown)+1)
+	for _, item := range shown {
 		lines = append(lines, fmt.Sprintf("- type=%s role=%s value=%s", item.Type, item.Role, item.Value))
+	}
+	if omitted > 0 {
+		lines = append(lines, fmt.Sprintf("- …(共 %d 条,省略 %d 条)", len(items), omitted))
 	}
 	return strings.Join(lines, "\n")
 }

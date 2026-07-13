@@ -113,21 +113,25 @@ func (c LLMClient) HealthCheck(ctx context.Context) LLMHealth {
 	return h
 }
 
-func (c LLMClient) Chat(ctx context.Context, prompt string) (string, error) {
+// chatMaxTokens 是给模型输出预留的 token 上限。本地 16K 窗口下,input 约 10K,
+// 输出预留 6K,避免 prompt 占满窗口把回答挤掉导致中途截断。
+const chatMaxTokens = 6000
+
+// Chat 以指定的 system prompt 与 user prompt 调用 LLM。不同链路(自动分析/工程师对话)
+// 传入各自的 system,避免复用同一段人格造成冲突与 token 浪费。
+func (c LLMClient) Chat(ctx context.Context, systemPrompt, prompt string) (string, error) {
 	if !c.Enabled() {
 		return "", errors.New("LLM未配置，请先在配置页面填写可用的LLM服务地址")
 	}
-	systemPrompt := `你是 DeepSOC 安全运营中心的 AI 助手，专门协助安全工程师处理安全事件。
-回答必须基于用户提供的事件信息、AI分析概要、自动驾驶过程和历史对话，不要编造未给出的日志、资产或情报事实。
-你的输出要体现 SOC 实战深度：先研判事件本质，再梳理证据链、影响面、风险等级、验证步骤、处置建议和后续监控。
-如果信息不足，要明确指出缺口，并给出下一步应查询的数据和可执行动作。保持中文、专业、结构化。`
 	payload := map[string]any{
 		"model": c.Model,
 		"messages": []map[string]string{
 			{"role": "system", "content": systemPrompt},
 			{"role": "user", "content": prompt},
 		},
-		"stream": false,
+		"stream":      false,
+		"max_tokens":  chatMaxTokens,
+		"temperature": 0.2,
 	}
 	b, err := json.Marshal(payload)
 	if err != nil {

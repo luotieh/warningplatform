@@ -72,6 +72,9 @@ func cleanEngineerQuestion(question string) string {
 	return strings.TrimSpace(question)
 }
 
+// jsonSectionMaxRunes 限制单个 JSON 区块体量,防止大事件撑爆 16K 窗口(与 chat_service 一致)。
+const jsonSectionMaxRunes = 1500
+
 func writeJSONSection(b *strings.Builder, title string, v any) {
 	b.WriteString(title)
 	b.WriteString("\n")
@@ -80,7 +83,12 @@ func writeJSONSection(b *strings.Builder, title string, v any) {
 		b.WriteString("暂无\n\n")
 		return
 	}
-	b.Write(raw)
+	if runes := []rune(string(raw)); len(runes) > jsonSectionMaxRunes {
+		b.WriteString(string(runes[:jsonSectionMaxRunes]))
+		b.WriteString("…(已截断)")
+	} else {
+		b.Write(raw)
+	}
 	b.WriteString("\n\n")
 }
 

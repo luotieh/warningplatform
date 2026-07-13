@@ -13,6 +13,7 @@ di/wire_gen.go
 
 sdk
 /server-linux
+/server-linux.old
 
 vue-vben-admin
 

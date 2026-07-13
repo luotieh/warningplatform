@@ -57,16 +57,16 @@
 ## 4. Token 预算(常量,无管理端配置)
 
 ```
-max-model-len 16384             (用户在 vllm-ascend/MindIE 端设置)
-├─ maxOutputTokens   = 6000     (Chat 新设 max_tokens)
-├─ safetyMargin      ~ 400
-└─ promptBudget      ≈ 9500     (system+user 全部计入)
+max-model-len 16384             (用户已在推理端设置;max_seq=16K, input=10K 已确认)
+├─ maxOutputTokens   = 6000     (Chat 新设 max_tokens;16384-10000-384≈6000)
+├─ safetyMargin      ~ 384
+└─ promptBudget      = 10000    (system+user 全部计入;input token 预算)
      ├─ 固定骨架(精简 system + 指令 + 模板)  ≤ ~1200
-     └─ 事件数据                              ≈ 8000  (超则截断)
+     └─ 事件数据                              ≈ 8500  (超则截断)
 ```
 
-以上为 Go 常量(如 `const maxOutputTokens = 6000`、`const promptBudgetTokens = 9500`、
-`const eventDataBudgetTokens = 8000`),集中定义、便于将来手改。
+以上为 Go 常量(`const maxOutputTokens = 6000`、`const promptBudgetTokens = 10000`、
+`const eventDataBudgetTokens = 8500`),集中定义、便于将来手改。
 
 ### Token 估算(轻量启发式,不引入 tokenizer 依赖)
 
