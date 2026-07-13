@@ -72,13 +72,25 @@ func (s Services) RunAgentWorkflow(ctx context.Context, eventID string) error {
 
 	sm, err := s.Store.AddSummary(domain.Summary{EventID: eventID, RoundID: roundID, EventSummary: reply})
 	if err != nil {
-		return err
+		return s.failAgentWorkflow(eventID, fmt.Errorf("保存分析总结失败: %w", err))
 	}
-	_ = s.addAgentMessage(eventID, domain.RoleExpert, "event_summary", roundID,
-		llmExpertResponse(event, roundID, sm, reply))
+	// 专家消息写库失败必须让状态如实反映：吞掉错误仍标记 round_finished 会出现
+	// “列表显示已生成、报告里却只有创建事件”的假完成状态。
+	if err := s.addAgentMessage(eventID, domain.RoleExpert, "event_summary", roundID,
+		llmExpertResponse(event, roundID, sm, reply)); err != nil {
+		return s.failAgentWorkflow(eventID, fmt.Errorf("保存专家分析消息失败: %w", err))
+	}
 	_, _ = s.Store.UpdateEvent(eventID, map[string]any{"event_status": "round_finished"})
 	realtime.BroadcastStatus(eventID, map[string]any{"event_id": eventID, "status": "round_finished"})
 	return nil
+}
+
+// failAgentWorkflow 把事件置为 failed 并广播失败详情；列表显示“分析失败”，
+// 且不阻断重试（专家消息未落库时 hasAgentWorkflowMessages 仍为 false，重推可再跑）。
+func (s Services) failAgentWorkflow(eventID string, err error) error {
+	_, _ = s.Store.UpdateEvent(eventID, map[string]any{"event_status": "failed"})
+	realtime.BroadcastStatus(eventID, map[string]any{"event_id": eventID, "status": "failed", "message": err.Error()})
+	return err
 }
 
 func (s Services) addLLMConfigRequiredMessage(eventID string, roundID int, text string) error {

@@ -324,14 +324,54 @@ function renderMarkdown(text?: string) {
   }
 }
 
+// —— 分析结果轮询兜底 ——
+// 自动分析在后台异步执行；实时推送依赖 websocket（部署环境反代未放行升级时收不到）。
+// 打开报告后若尚无分析产出，每 5 秒增量拉取一次，直到出现专家结论/失败提示或超时，
+// 保证"打开报告只有创建事件"的窗口期内容能自动补上。
+const ANALYSIS_POLL_INTERVAL_MS = 5000;
+const ANALYSIS_POLL_MAX_MS = 10 * 60 * 1000;
+let pollTimer: null | ReturnType<typeof setInterval> = null;
+let pollStartedAt = 0;
+
+function hasAnalysisOutcome(): boolean {
+  return messageRecord.value.some((item) => {
+    const from = String(item?.message_from || item?.from || '').toLowerCase();
+    const type = String(item?.message_type || '').toLowerCase();
+    return from.includes('expert') || type === 'event_summary' || type === 'llm_config_required';
+  });
+}
+
+function stopAnalysisPolling() {
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+}
+
+function startAnalysisPolling() {
+  stopAnalysisPolling();
+  if (!props.eventId || hasAnalysisOutcome()) return;
+  pollStartedAt = Date.now();
+  pollTimer = setInterval(async () => {
+    if (!props.eventId || hasAnalysisOutcome() || Date.now() - pollStartedAt > ANALYSIS_POLL_MAX_MS) {
+      stopAnalysisPolling();
+      return;
+    }
+    await fetchMessages();
+    if (hasAnalysisOutcome()) stopAnalysisPolling();
+  }, ANALYSIS_POLL_INTERVAL_MS);
+}
+
 watch(
   () => props.eventId,
   async (value, oldValue) => {
     if (oldValue) deepflowSocket.leave(oldValue);
     resetMessages();
+    stopAnalysisPolling();
     if (value) {
       deepflowSocket.join(value);
       await fetchMessages();
+      startAnalysisPolling();
     }
   },
   { immediate: true },
@@ -341,6 +381,7 @@ onMounted(async () => {
   if (props.eventId) {
     deepflowSocket.join(props.eventId);
     await fetchMessages();
+    startAnalysisPolling();
   }
   deepflowSocket.on('connected', handleSocketConnected);
   deepflowSocket.on('new_message', handleNewMessage);
@@ -348,6 +389,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  stopAnalysisPolling();
   if (props.eventId) deepflowSocket.leave(props.eventId);
   deepflowSocket.off('connected', handleSocketConnected);
   deepflowSocket.off('new_message', handleNewMessage);

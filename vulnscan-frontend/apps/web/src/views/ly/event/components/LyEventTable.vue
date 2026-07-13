@@ -114,8 +114,11 @@ async function ensureAnalysis(row: Record<string, any>) {
     const deepflowEventId = String(data?.deepsoc_event_id || data?.event_id || row.event_id || row.id || '');
     row.event_id = deepflowEventId;
     row.deepsoc_event_id = deepflowEventId;
-    row.analysisStatus = 'completed';
-    row.analysisStatusText = '已生成';
+    // 推送接口是异步受理（立即返回、LLM 分析在后台跑数十秒到几分钟），
+    // 此处只能如实标“分析中”；“已生成”由后端 event_status=round_finished 流转而来，
+    // 否则会出现“列表已生成、报告里只有创建事件”的假状态。
+    row.analysisStatus = 'processing';
+    row.analysisStatusText = '分析中';
     return deepflowEventId;
   } catch (error) {
     row.analysisStatus = 'failed';
@@ -129,7 +132,7 @@ async function ensureAnalysis(row: Record<string, any>) {
 
 async function analyzeHistorySequentially() {
   for (const row of props.rows || []) {
-    if (row.analysisStatus === 'completed') continue;
+    if (row.analysisStatus === 'completed' || row.analysisStatus === 'processing') continue;
     try {
       await ensureAnalysis(row);
     } catch {
