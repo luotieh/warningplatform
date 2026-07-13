@@ -5,6 +5,8 @@ import {
   NButton,
   NCard,
   NDataTable,
+  NDrawer,
+  NDrawerContent,
   NInput,
   NModal,
   NPagination,
@@ -15,7 +17,10 @@ import {
   useMessage,
 } from 'naive-ui';
 
+import { IconifyIcon } from '@vben/icons';
+
 import { lyRuleConfigGet, lyRuleConfigSave, lyRuleList } from '#/api/ly';
+import { formatTimestamp } from '#/utils/ly';
 
 defineOptions({ name: 'LyConfigRules' });
 
@@ -119,6 +124,64 @@ function severityTag(value: string) {
   return map[String(value).toLowerCase()] ?? { text: value || '-', type: 'default' };
 }
 
+// 行左侧严重度色条（与事件列表的视觉语言一致）
+function rowClassName(row: Record<string, any>): string {
+  const sev = String(row.severity ?? '').toLowerCase();
+  return ['high', 'medium', 'low'].includes(sev) ? `sev-${sev}` : 'sev-none';
+}
+
+// recommended_action → 展示元数据
+function actionMeta(value?: string): {
+  icon: string;
+  text: string;
+  type: 'default' | 'error' | 'info' | 'warning';
+} {
+  const map: Record<string, { icon: string; text: string; type: 'error' | 'info' | 'warning' }> = {
+    alert: { icon: 'lucide:bell-ring', text: '告警', type: 'warning' },
+    block: { icon: 'lucide:ban', text: '阻断', type: 'error' },
+    block_and_report: { icon: 'lucide:shield-ban', text: '阻断并上报', type: 'error' },
+    monitor: { icon: 'lucide:eye', text: '监控', type: 'info' },
+    report: { icon: 'lucide:flag', text: '上报', type: 'warning' },
+  };
+  const key = String(value ?? '').toLowerCase();
+  return map[key] ?? { icon: 'lucide:circle-help', text: value || '-', type: 'default' };
+}
+
+function tlpTagType(value?: string): 'default' | 'error' | 'success' | 'warning' {
+  const map: Record<string, 'error' | 'success' | 'warning'> = {
+    amber: 'warning',
+    green: 'success',
+    red: 'error',
+  };
+  return map[String(value ?? '').toLowerCase()] ?? 'default';
+}
+
+function threatLabels(row: Record<string, any>): string[] {
+  const labels = row?.evidence?.threat_labels;
+  return Array.isArray(labels) ? labels.filter(Boolean).map(String) : [];
+}
+
+const detail = reactive({
+  show: false,
+  row: null as null | Record<string, any>,
+});
+
+function openDetail(row: Record<string, any>) {
+  detail.row = row;
+  detail.show = true;
+}
+
+const detailEvidencePairs = computed(() => {
+  const ev = detail.row?.evidence ?? {};
+  return [
+    { label: '关联活动', value: ev.activity },
+    { label: '情报源', value: ev.source },
+    { label: '交叉验证', value: ev.cross_check },
+    { label: '置信度', value: ev.confidence },
+    { label: 'MISP 事件', value: ev.misp_event_id },
+  ].filter((item) => item.value);
+});
+
 const columns = [
   {
     title: '类型',
@@ -131,8 +194,19 @@ const columns = [
         { default: () => typeLabels[row.type] ?? row.type ?? '-' },
       ),
   },
-  { title: '值', key: 'value', minWidth: 220, ellipsis: { tooltip: true } },
-  { title: '类别', key: 'category', width: 140 },
+  {
+    title: '值',
+    key: 'value',
+    minWidth: 200,
+    ellipsis: { tooltip: true },
+    render: (row: Record<string, any>) =>
+      h(
+        'span',
+        { style: 'font-family:ui-monospace,SFMono-Regular,Menlo,monospace' },
+        row.value ?? '-',
+      ),
+  },
+  { title: '类别', key: 'category', width: 96 },
   {
     title: '等级',
     key: 'severity',
@@ -142,12 +216,71 @@ const columns = [
       return h(NTag, { size: 'small', type: tag.type }, { default: () => tag.text });
     },
   },
+  {
+    title: '处置建议',
+    key: 'recommended_action',
+    width: 128,
+    render: (row: Record<string, any>) => {
+      if (!row.recommended_action) return '-';
+      const meta = actionMeta(row.recommended_action);
+      return h(
+        NTag,
+        { size: 'small', round: true, type: meta.type },
+        {
+          default: () =>
+            h('span', { style: 'display:inline-flex;align-items:center;gap:3px' }, [
+              h(IconifyIcon, { icon: meta.icon }),
+              meta.text,
+            ]),
+        },
+      );
+    },
+  },
+  {
+    title: '威胁标签',
+    key: 'threat_labels',
+    minWidth: 190,
+    render: (row: Record<string, any>) => {
+      const labels = threatLabels(row);
+      if (labels.length === 0) return '-';
+      const shown = labels.slice(0, 2);
+      const rest = labels.length - shown.length;
+      const children = shown.map((label) =>
+        h(
+          NTag,
+          { size: 'small', bordered: false, style: 'max-width:120px' },
+          { default: () => h('span', { class: 'label-ellipsis', title: label }, label) },
+        ),
+      );
+      if (rest > 0) {
+        children.push(
+          h(
+            NTag,
+            { size: 'small', bordered: false, type: 'info' },
+            { default: () => `+${rest}` },
+          ),
+        );
+      }
+      return h('div', { style: 'display:flex;flex-wrap:wrap;gap:4px' }, children);
+    },
+  },
   { title: '来源', key: 'source', width: 130, ellipsis: { tooltip: true } },
   {
     title: '描述',
     key: 'description',
-    minWidth: 280,
+    minWidth: 240,
     ellipsis: { tooltip: true },
+  },
+  {
+    title: '操作',
+    key: 'actions',
+    width: 64,
+    render: (row: Record<string, any>) =>
+      h(
+        NButton,
+        { text: true, size: 'small', type: 'primary', onClick: () => openDetail(row) },
+        { default: () => '详情' },
+      ),
   },
 ];
 
@@ -222,7 +355,7 @@ onMounted(load);
           <NInput
             v-model:value="state.keyword"
             class="filter-keyword"
-            placeholder="按值 / 描述 / 类别 / 来源搜索"
+            placeholder="按值 / 描述 / 标签 / 证据 / 处置建议搜索"
             clearable
             @keyup.enter="onSearch"
           />
@@ -247,6 +380,8 @@ onMounted(load);
         :bordered="true"
         size="small"
         :row-key="(row) => row.id"
+        :row-class-name="rowClassName"
+        :scroll-x="1180"
       />
       <div class="pager-wrap">
         <NPagination
@@ -267,7 +402,7 @@ onMounted(load);
       preset="card"
       title="规则读取路径配置"
       class="config-modal"
-      :bordered="false"
+      ::bordered="false"
       :style="{ width: 'min(520px, 92vw)' }"
     >
       <NSpace vertical :size="14">
@@ -315,6 +450,131 @@ onMounted(load);
         </NSpace>
       </template>
     </NModal>
+
+    <NDrawer v-model:show="detail.show" placement="right" :width="640">
+      <NDrawerContent title="规则详情" closable>
+        <div v-if="detail.row" class="detail-body">
+          <div class="detail-value">
+            <IconifyIcon
+              icon="lucide:crosshair"
+              class="detail-value-icon"
+              :style="{ color: severityTag(detail.row.severity).type === 'error' ? '#d03050' : '#909399' }"
+            />
+            <span class="detail-value-text">{{ detail.row.value || '-' }}</span>
+          </div>
+          <NSpace :size="6" align="center" :wrap="true" class="detail-tags-row">
+            <NTag size="small" type="info" :bordered="false">
+              {{ typeLabels[detail.row.type] ?? detail.row.type ?? '-' }}
+            </NTag>
+            <NTag size="small" :type="severityTag(detail.row.severity).type">
+              {{ severityTag(detail.row.severity).text }}等级
+            </NTag>
+            <NTag v-if="detail.row.category" size="small" :bordered="false">
+              {{ detail.row.category }}
+            </NTag>
+            <NTag
+              v-if="detail.row.recommended_action"
+              size="small"
+              round
+              :type="actionMeta(detail.row.recommended_action).type"
+            >
+              <span class="pill-inline">
+                <IconifyIcon :icon="actionMeta(detail.row.recommended_action).icon" />
+                {{ actionMeta(detail.row.recommended_action).text }}
+              </span>
+            </NTag>
+            <NTag size="small" :type="detail.row.enabled ? 'success' : 'default'">
+              {{ detail.row.enabled ? '启用' : '停用' }}
+            </NTag>
+            <NTag
+              v-if="detail.row.evidence?.tlp"
+              size="small"
+              :type="tlpTagType(detail.row.evidence.tlp)"
+            >
+              TLP:{{ String(detail.row.evidence.tlp).toUpperCase() }}
+            </NTag>
+          </NSpace>
+
+          <div v-if="detail.row.evidence?.narrative" class="detail-section">
+            <div class="detail-section-title">
+              <IconifyIcon icon="lucide:sparkles" /> 情报研判
+            </div>
+            <div class="detail-narrative">{{ detail.row.evidence.narrative }}</div>
+          </div>
+
+          <div v-if="detail.row.description" class="detail-section">
+            <div class="detail-section-title">
+              <IconifyIcon icon="lucide:text" /> 描述
+            </div>
+            <div class="detail-desc">{{ detail.row.description }}</div>
+          </div>
+
+          <div v-if="detailEvidencePairs.length" class="detail-section">
+            <div class="detail-section-title">
+              <IconifyIcon icon="lucide:file-search" /> 证据信息
+            </div>
+            <div class="detail-kv">
+              <template v-for="item in detailEvidencePairs" :key="item.label">
+                <div class="detail-kv-label">{{ item.label }}</div>
+                <div class="detail-kv-value">{{ item.value }}</div>
+              </template>
+            </div>
+          </div>
+
+          <div v-if="threatLabels(detail.row).length" class="detail-section">
+            <div class="detail-section-title">
+              <IconifyIcon icon="lucide:tags" /> 威胁标签
+            </div>
+            <NSpace :size="6" :wrap="true">
+              <NTag
+                v-for="label in threatLabels(detail.row)"
+                :key="label"
+                size="small"
+                :bordered="false"
+              >
+                {{ label }}
+              </NTag>
+            </NSpace>
+          </div>
+
+          <div v-if="detail.row.tags?.length" class="detail-section">
+            <div class="detail-section-title">
+              <IconifyIcon icon="lucide:bookmark" /> 原始标签
+            </div>
+            <NSpace :size="6" :wrap="true">
+              <NTag
+                v-for="tag in detail.row.tags"
+                :key="tag"
+                size="small"
+                :bordered="false"
+                class="detail-raw-tag"
+              >
+                {{ tag }}
+              </NTag>
+            </NSpace>
+          </div>
+
+          <div class="detail-section">
+            <div class="detail-section-title">
+              <IconifyIcon icon="lucide:info" /> 元信息
+            </div>
+            <div class="detail-kv">
+              <div class="detail-kv-label">规则 ID</div>
+              <div class="detail-kv-value detail-mono">{{ detail.row.id || '-' }}</div>
+              <div class="detail-kv-label">来源</div>
+              <div class="detail-kv-value">{{ detail.row.source || '-' }}</div>
+              <div class="detail-kv-label">创建时间</div>
+              <div class="detail-kv-value">{{ formatTimestamp(detail.row.created_at) }}</div>
+              <div class="detail-kv-label">更新时间</div>
+              <div class="detail-kv-value">{{ formatTimestamp(detail.row.updated_at) }}</div>
+            </div>
+          </div>
+        </div>
+        <template #footer>
+          <NButton @click="detail.show = false">关闭</NButton>
+        </template>
+      </NDrawerContent>
+    </NDrawer>
   </div>
 </template>
 
@@ -399,6 +659,120 @@ onMounted(load);
 
 .config-note {
   font-size: 12px;
+}
+
+/* 行左侧严重度色条（与事件列表一致的视觉语言） */
+:deep(.n-data-table-tr.sev-high .n-data-table-td:first-child) {
+  box-shadow: inset 3px 0 0 #d03050;
+}
+
+:deep(.n-data-table-tr.sev-medium .n-data-table-td:first-child) {
+  box-shadow: inset 3px 0 0 #f0a020;
+}
+
+:deep(.n-data-table-tr.sev-low .n-data-table-td:first-child) {
+  box-shadow: inset 3px 0 0 #2080f0;
+}
+
+:deep(.label-ellipsis) {
+  display: inline-block;
+  max-width: 112px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+.pill-inline {
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+}
+
+.detail-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.detail-value {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.detail-value-icon {
+  flex: none;
+  font-size: 20px;
+}
+
+.detail-value-text {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 17px;
+  font-weight: 600;
+  word-break: break-all;
+}
+
+.detail-tags-row {
+  margin-top: -6px;
+}
+
+.detail-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.detail-section-title {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: hsl(var(--muted-foreground));
+}
+
+.detail-narrative {
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: hsl(var(--muted) / 40%);
+  border-radius: 8px;
+}
+
+.detail-desc {
+  font-size: 13px;
+  line-height: 1.6;
+  word-break: break-word;
+  color: var(--n-text-color-2, inherit);
+}
+
+.detail-kv {
+  display: grid;
+  grid-template-columns: 84px 1fr;
+  row-gap: 6px;
+  column-gap: 12px;
+  font-size: 13px;
+}
+
+.detail-kv-label {
+  color: hsl(var(--muted-foreground));
+  white-space: nowrap;
+}
+
+.detail-kv-value {
+  word-break: break-word;
+}
+
+.detail-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+.detail-raw-tag {
+  font-size: 11px;
 }
 
 @media (max-width: 640px) {
