@@ -24,7 +24,7 @@ async function parse(res: Response) {
 export interface LyAsset extends Record<string, any> {
   id?: string;
   name: string;
-  asset_type: 'domain_site' | 'ip';
+  asset_type: 'domain_site' | 'ip' | 'ip_segment';
   address: string;
   unit?: string;
   owner?: string;

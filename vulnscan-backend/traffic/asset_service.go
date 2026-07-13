@@ -31,7 +31,7 @@ func (s *AssetService) List() []domain.Asset { return s.store.ListAssets() }
 
 func (s *AssetService) Create(in domain.Asset) (domain.Asset, error) {
 	in.AssetType = normalizeAssetType(in.AssetType)
-	in.Address = normalizeAddr(in.Address)
+	in.Address = normalizeAddrForType(in.AssetType, in.Address)
 	in.Name = strings.TrimSpace(in.Name)
 	if err := validateAsset(in); err != nil {
 		return domain.Asset{}, err
@@ -44,7 +44,15 @@ func (s *AssetService) Update(id string, patch map[string]any) (domain.Asset, bo
 		patch["asset_type"] = normalizeAssetType(fmt.Sprint(v))
 	}
 	if v, ok := patch["address"]; ok {
-		patch["address"] = normalizeAddr(fmt.Sprint(v))
+		// 地址归一化依赖资产类型（网段不能截断 "/"），取 patch 中的新类型，
+		// 未修改类型时回退当前存量类型。
+		typ := ""
+		if t, ok := patch["asset_type"]; ok {
+			typ = fmt.Sprint(t)
+		} else if cur, found := s.store.GetAsset(id); found {
+			typ = cur.AssetType
+		}
+		patch["address"] = normalizeAddrForType(typ, fmt.Sprint(v))
 	}
 	// 组装校验用快照
 	cur, ok := s.store.GetAsset(id)
@@ -78,8 +86,22 @@ func normalizeAssetType(raw string) string {
 		return "ip"
 	case "domain_site", "域名网站", "domain", "website", "site":
 		return "domain_site"
+	case "ip_segment", "网段", "ip网段", "网段资产", "cidr", "subnet", "ip_range":
+		return "ip_segment"
 	}
 	return strings.TrimSpace(strings.ToLower(raw))
+}
+
+// normalizeAddrForType 按资产类型归一化地址：网段保留 "/" 并转为规范 CIDR，
+// 其余类型沿用去 scheme/路径的主机归一化。
+func normalizeAddrForType(assetType, raw string) string {
+	if normalizeAssetType(assetType) == "ip_segment" {
+		if cidr, err := canonicalCIDR(raw); err == nil {
+			return cidr
+		}
+		return strings.TrimSpace(strings.ToLower(raw))
+	}
+	return normalizeAddr(raw)
 }
 
 func normalizeAddr(raw string) string {
@@ -91,6 +113,34 @@ func normalizeAddr(raw string) string {
 		v = v[:i]
 	}
 	return strings.TrimSpace(v)
+}
+
+// canonicalCIDR 把网段写法转为规范 CIDR（网络基址/前缀长度）：
+// 支持 "192.168.1.0/24" 与点分掩码 "36.154.169.2/255.255.255.224"（→ 36.154.169.0/27）。
+func canonicalCIDR(raw string) (string, error) {
+	v := strings.TrimSpace(raw)
+	slash := strings.Index(v, "/")
+	if slash < 0 {
+		return "", errors.New("缺少 / 前缀长度或掩码")
+	}
+	ipPart := strings.TrimSpace(v[:slash])
+	maskPart := strings.TrimSpace(v[slash+1:])
+	if strings.Contains(maskPart, ".") {
+		maskIP := net.ParseIP(maskPart)
+		if maskIP == nil || maskIP.To4() == nil {
+			return "", fmt.Errorf("掩码非法: %s", maskPart)
+		}
+		ones, bits := net.IPMask(maskIP.To4()).Size()
+		if bits == 0 {
+			return "", fmt.Errorf("掩码非连续位: %s", maskPart)
+		}
+		maskPart = fmt.Sprint(ones)
+	}
+	_, ipnet, err := net.ParseCIDR(ipPart + "/" + maskPart)
+	if err != nil {
+		return "", err
+	}
+	return ipnet.String(), nil
 }
 
 func validateAsset(a domain.Asset) error {
@@ -109,8 +159,12 @@ func validateAsset(a domain.Asset) error {
 		if !strings.Contains(a.Address, ".") || strings.ContainsAny(a.Address, " ") {
 			return errors.New("域名格式非法")
 		}
+	case "ip_segment":
+		if _, err := canonicalCIDR(a.Address); err != nil {
+			return errors.New("网段格式非法（应为 CIDR 如 192.168.1.0/24，或 IP/点分掩码）")
+		}
 	default:
-		return errors.New("资产类型必须为 ip 或 domain_site")
+		return errors.New("资产类型必须为 ip、domain_site 或 ip_segment")
 	}
 	return nil
 }
@@ -197,6 +251,7 @@ func AssetImportTemplateCSV() []byte {
 	_ = w.Write(assetImportHeaders)
 	_ = w.Write([]string{"示例网站", "域名网站", "example.com", "单位甲", "张三", "关注资产"})
 	_ = w.Write([]string{"示例主机", "IP资产", "10.0.0.9", "单位乙", "李四", ""})
+	_ = w.Write([]string{"示例网段", "网段资产", "192.168.10.0/24", "单位丙", "王五", "出口网段"})
 	w.Flush()
 	return b.Bytes()
 }

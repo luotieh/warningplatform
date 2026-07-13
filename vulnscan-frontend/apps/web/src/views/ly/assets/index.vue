@@ -43,7 +43,13 @@ const state = reactive({ keyword: '', type: '', status: '', page: 1, pageSize: 1
 const typeOptions = [
   { label: 'IP资产', value: 'ip' },
   { label: '域名网站', value: 'domain_site' },
+  { label: '网段资产', value: 'ip_segment' },
 ];
+const typeMeta: Record<string, { label: string; tag: 'info' | 'success' | 'warning' }> = {
+  domain_site: { label: '域名网站', tag: 'warning' },
+  ip: { label: 'IP资产', tag: 'info' },
+  ip_segment: { label: '网段资产', tag: 'success' },
+};
 const statusOptions = [
   { label: '启用', value: '1' },
   { label: '停用', value: '0' },
@@ -153,8 +159,10 @@ const columns = [
     title: '类型',
     key: 'asset_type',
     width: 110,
-    render: (row: LyAsset) =>
-      h(NTag, { size: 'small', type: row.asset_type === 'ip' ? 'info' : 'warning' }, { default: () => (row.asset_type === 'ip' ? 'IP资产' : '域名网站') }),
+    render: (row: LyAsset) => {
+      const meta = typeMeta[row.asset_type ?? ''] ?? { label: row.asset_type || '-', tag: 'info' as const };
+      return h(NTag, { size: 'small', type: meta.tag }, { default: () => meta.label });
+    },
   },
   { title: '地址', key: 'address', minWidth: 160 },
   { title: '所属单位', key: 'unit', minWidth: 120 },
@@ -223,7 +231,10 @@ onMounted(load);
           <NSelect v-model:value="form.asset_type" :options="typeOptions" />
         </NFormItem>
         <NFormItem label="地址" required>
-          <NInput v-model:value="form.address" placeholder="IP 或 域名" />
+          <NInput
+            v-model:value="form.address"
+            :placeholder="form.asset_type === 'ip_segment' ? '网段 CIDR，如 192.168.1.0/24' : 'IP 或 域名'"
+          />
         </NFormItem>
         <NFormItem label="所属单位">
           <NInput v-model:value="form.unit" />
