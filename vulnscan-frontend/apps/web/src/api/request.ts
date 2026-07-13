@@ -28,9 +28,13 @@ function createRequestClient(baseURL: string, options?: RequestClientOptions) {
   });
 
   let isReAuthenticating = false;
+  // 整页跳登录只允许触发一次：页面上并发的一批请求会各自 401，
+  // isReAuthenticating 在 finally 里立即释放挡不住后续风暴，
+  // 反复赋值 location.href 会表现为页面不停刷新。
+  let hasRedirectedToLogin = false;
 
   async function doReAuthenticate() {
-    if (isReAuthenticating) return;
+    if (isReAuthenticating || hasRedirectedToLogin) return;
     isReAuthenticating = true;
     try {
       console.warn('Access token or refresh token is invalid or expired.');
@@ -46,6 +50,7 @@ function createRequestClient(baseURL: string, options?: RequestClientOptions) {
       } else {
         resetAllStores();
         if (!window.location.pathname.includes(LOGIN_PATH)) {
+          hasRedirectedToLogin = true;
           const current = window.location.pathname + window.location.search;
           const redirect = current === '/' ? '' : `?redirect=${encodeURIComponent(current)}`;
           window.location.href = `${LOGIN_PATH}${redirect}`;

@@ -66,7 +66,14 @@ function setupAccessGuard(router: Router) {
     }
 
     if (coreRouteNames.includes(to.name as string)) {
-      if (to.path === LOGIN_PATH && accessStore.accessToken) {
+      // 仅当本次会话已通过服务端校验（isAccessChecked）才把登录页弹回首页：
+      // 只凭 localStorage 里存在令牌就弹回，遇到过期令牌会与“接口 401 → 跳登录”
+      // 互相弹跳，形成无限刷新循环。
+      if (
+        to.path === LOGIN_PATH &&
+        accessStore.accessToken &&
+        accessStore.isAccessChecked
+      ) {
         return decodeURIComponent(
           (to.query?.redirect as string) ||
             userStore.userInfo?.homePath ||
