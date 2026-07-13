@@ -175,6 +175,11 @@ export function lyLLMConfigSave(params: Record<string, any>) {
   return post<Record<string, any>>('/config', params, '/api/traffic/llm');
 }
 
+/** LLM 健康检查：用表单当前值（可未保存）测连通性并发送一条测试对话 */
+export function lyLLMHealthCheck(params: Record<string, any>) {
+  return post<Record<string, any>>('/llm', params, '/api/traffic/health');
+}
+
 export function lyNodeTestConnection(params: Record<string, any>) {
   return post<Record<string, any>>('/config', {
     ...(params ?? {}),

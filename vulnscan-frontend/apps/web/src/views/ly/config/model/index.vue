@@ -9,18 +9,23 @@ import {
   NInput,
   NInputNumber,
   NSpace,
+  NTag,
   useMessage,
 } from 'naive-ui';
 
-import { lyLLMConfigGet, lyLLMConfigSave } from '#/api/ly';
+import { IconifyIcon } from '@vben/icons';
+
+import { lyLLMConfigGet, lyLLMConfigSave, lyLLMHealthCheck } from '#/api/ly';
 
 defineOptions({ name: 'LyConfigModel' });
 
 const message = useMessage();
 const llmSaving = ref(false);
 const llmLoading = ref(false);
+const llmChecking = ref(false);
 const llmKeyMasked = ref('');
 const llmConfigPath = ref('');
+const health = ref<null | Record<string, any>>(null);
 
 const llmForm = reactive({
   api_key: '',
@@ -77,6 +82,40 @@ async function saveLLMConfig() {
   }
 }
 
+// 健康检查：用表单当前值（无需先保存）测连通性 + 发一条测试对话。
+// api_key 留空时后端沿用已保存密钥，与保存接口语义一致。
+async function checkLLMHealth() {
+  if (!llmForm.base_url) {
+    message.warning('请输入LLM服务地址');
+    return;
+  }
+  llmChecking.value = true;
+  health.value = null;
+  try {
+    const payload: Record<string, any> = {
+      base_url: llmForm.base_url,
+      model: llmForm.model,
+      timeout_seconds: llmForm.timeout_seconds || 60,
+    };
+    if (llmForm.api_key.trim()) {
+      payload.api_key = llmForm.api_key.trim();
+    }
+    const data = await lyLLMHealthCheck(payload);
+    health.value = data ?? {};
+    if (data?.ok) {
+      message.success('健康检查通过：服务连通，对话测试成功');
+    } else if (data?.connectivity?.ok) {
+      message.warning('服务可达，但对话测试未通过');
+    } else {
+      message.error('无法连接LLM服务');
+    }
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : 'LLM健康检查失败');
+  } finally {
+    llmChecking.value = false;
+  }
+}
+
 onMounted(loadLLMConfig);
 </script>
 
@@ -117,10 +156,74 @@ onMounted(loadLLMConfig);
         <span class="config-path">{{ llmConfigPath || 'config.toml' }}</span>
         <NSpace>
           <NButton :loading="llmLoading" @click="loadLLMConfig">刷新</NButton>
+          <NButton
+            secondary
+            type="primary"
+            :loading="llmChecking"
+            @click="checkLLMHealth"
+          >
+            健康检查
+          </NButton>
           <NButton type="primary" :loading="llmSaving" @click="saveLLMConfig">
             保存LLM配置
           </NButton>
         </NSpace>
+      </div>
+
+      <div v-if="health" class="health-result">
+        <div class="health-row">
+          <IconifyIcon
+            :icon="health.connectivity?.ok ? 'lucide:circle-check' : 'lucide:circle-x'"
+            class="health-icon"
+            :class="health.connectivity?.ok ? 'health-icon-ok' : 'health-icon-fail'"
+          />
+          <span class="health-label">连通性</span>
+          <NTag size="small" :type="health.connectivity?.ok ? 'success' : 'error'">
+            {{ health.connectivity?.ok ? '可达' : '不可达' }}
+          </NTag>
+          <span v-if="health.connectivity?.ok" class="health-meta">
+            {{ health.connectivity.endpoint }} · HTTP
+            {{ health.connectivity.status_code }} ·
+            {{ health.connectivity.latency_ms }}ms
+          </span>
+          <span v-else class="health-meta health-error-text">
+            {{ health.connectivity?.error || '-' }}
+          </span>
+        </div>
+        <div v-if="health.connectivity?.hint" class="health-hint">
+          <IconifyIcon icon="lucide:lightbulb" /> {{ health.connectivity.hint }}
+        </div>
+
+        <div class="health-row">
+          <IconifyIcon
+            :icon="health.chat?.ok ? 'lucide:circle-check' : 'lucide:circle-x'"
+            class="health-icon"
+            :class="health.chat?.ok ? 'health-icon-ok' : 'health-icon-fail'"
+          />
+          <span class="health-label">对话测试</span>
+          <NTag size="small" :type="health.chat?.ok ? 'success' : 'error'">
+            {{ health.chat?.ok ? '通过' : '失败' }}
+          </NTag>
+          <span v-if="health.chat?.latency_ms" class="health-meta">
+            {{ health.model }} · {{ health.chat.latency_ms }}ms
+          </span>
+        </div>
+        <div v-if="health.chat?.ok" class="health-chat">
+          <div class="chat-line">
+            <span class="chat-role">问</span>
+            <span class="chat-text">{{ health.chat.question }}</span>
+          </div>
+          <div class="chat-line">
+            <span class="chat-role chat-role-ai">答</span>
+            <span class="chat-text">{{ health.chat.reply || '（空回复）' }}</span>
+          </div>
+        </div>
+        <div v-else-if="health.chat?.error" class="health-error-detail">
+          {{ health.chat.error }}
+        </div>
+        <div v-if="health.chat?.hint" class="health-hint">
+          <IconifyIcon icon="lucide:lightbulb" /> {{ health.chat.hint }}
+        </div>
       </div>
     </NCard>
   </div>
@@ -160,6 +263,105 @@ onMounted(loadLLMConfig);
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.health-result {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  margin-top: 14px;
+  font-size: 13px;
+  background: hsl(var(--muted) / 40%);
+  border-radius: 8px;
+}
+
+.health-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.health-icon {
+  flex: none;
+  font-size: 16px;
+}
+
+.health-icon-ok {
+  color: #18a058;
+}
+
+.health-icon-fail {
+  color: #d03050;
+}
+
+.health-label {
+  font-weight: 600;
+}
+
+.health-meta {
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.health-error-text {
+  color: #d03050;
+}
+
+.health-hint {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding-left: 24px;
+  font-size: 12px;
+  color: #f0a020;
+}
+
+.health-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  margin-left: 24px;
+  background: hsl(var(--muted) / 60%);
+  border-radius: 6px;
+}
+
+.chat-line {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  line-height: 1.6;
+}
+
+.chat-role {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  font-size: 12px;
+  line-height: 20px;
+  color: #fff;
+  text-align: center;
+  background: #2080f0;
+  border-radius: 50%;
+}
+
+.chat-role-ai {
+  background: #18a058;
+}
+
+.chat-text {
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.health-error-detail {
+  padding-left: 24px;
+  font-size: 12px;
+  color: #d03050;
+  word-break: break-all;
 }
 
 @media (max-width: 720px) {
