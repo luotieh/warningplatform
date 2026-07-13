@@ -27,7 +27,10 @@ func (s *EventService) Create(ctx context.Context, body map[string]any) (domain.
 	if err != nil {
 		return domain.Event{}, err
 	}
-	_ = s.core.RunAgentWorkflow(ctx, created.EventID)
+	// 分析必须异步且脱离请求上下文：同步跑会让创建接口阻塞到 LLM 返回，
+	// 前端超时断开即取消请求 ctx，报告页会留下“Post ... context canceled”
+	// 的假故障消息；Async 内部用 Background ctx 并带同事件去重锁。
+	s.core.RunAgentWorkflowAsync(created.EventID)
 	return created, nil
 }
 

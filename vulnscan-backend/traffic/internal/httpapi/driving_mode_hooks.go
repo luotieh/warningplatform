@@ -75,10 +75,10 @@ func (s *Server) withDrivingModeAutomation(next http.HandlerFunc) http.HandlerFu
 				eventID, _ = drivingEventFromBytes(requestBody)
 			}
 			if eventID != "" {
-				err := s.services.RunAgentWorkflow(r.Context(), eventID)
-				if err != nil {
-					log.Printf("auto-analysis: automation failed event_id=%s err=%v", eventID, err)
-				}
+				// 异步且脱离请求 ctx：同步跑会拖住响应 flush，且请求 ctx 在客户端
+				// 断开时被取消，LLM 调用中途被杀会在报告页留下 context canceled
+				// 假故障消息。失败详情由消息流/实时广播呈现，无需在此记日志。
+				s.services.RunAgentWorkflowAsync(eventID)
 			} else if shouldAutoDriveCreatedEvent(r, requestBody) {
 				log.Printf("auto-analysis: automation skipped because event id was not found path=%s", r.URL.Path)
 			}
