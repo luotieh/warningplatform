@@ -8,9 +8,32 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 )
+
+// 推理模型（DeepSeek-R1 蒸馏版/QwQ 等）会把思维链以 <think>…</think> 直接写进
+// content：思维过程不是报告内容，展示出来会污染专家报告与对话回复。
+// 三种形态都要处理：
+//  1. 成对标签 <think>…</think>；
+//  2. 只有开头 <think>…（输出被 max_tokens 截断，整段皆思维链）；
+//  3. 只有结尾 …</think>（部分服务端把 <think> 放进 prompt 模板，补全从推理
+//     正文直接开始，仅输出闭合标签——DeepSeek-R1 本地部署常见）。
+var (
+	thinkBlockRe = regexp.MustCompile(`(?is)<think>.*?</think>`)
+	thinkOpenRe  = regexp.MustCompile(`(?is)<think>.*$`)
+	thinkCloseRe = regexp.MustCompile(`(?is)^.*?</think>`)
+)
+
+// StripThinkBlocks 移除推理模型输出中的思维链并整理首尾空白。
+func StripThinkBlocks(s string) string {
+	s = thinkBlockRe.ReplaceAllString(s, "")
+	s = thinkOpenRe.ReplaceAllString(s, "")
+	// 剩余的孤儿闭合标签：开头到首个 </think> 之间全是（隐式开启的）思维链
+	s = thinkCloseRe.ReplaceAllString(s, "")
+	return strings.TrimSpace(s)
+}
 
 type LLMClient struct {
 	BaseURL string
@@ -290,7 +313,10 @@ func (c LLMClient) chatTest(ctx context.Context, httpClient *http.Client, baseUR
 		chat.Error = "LLM未返回有效内容(choices为空)"
 		return chat
 	}
-	chat.Reply = strings.TrimSpace(out.Choices[0].Message.Content)
+	chat.Reply = StripThinkBlocks(out.Choices[0].Message.Content)
+	if chat.Reply == "" && strings.TrimSpace(out.Choices[0].Message.Content) != "" {
+		chat.Hint = "模型仅输出了思维链(<think>)，正文被 max_tokens 截断"
+	}
 	chat.OK = true
 	return chat
 }
@@ -353,5 +379,9 @@ func (c LLMClient) Chat(ctx context.Context, systemPrompt, prompt string) (strin
 	if len(out.Choices) == 0 {
 		return "", errors.New("LLM未返回有效内容，请检查LLM配置")
 	}
-	return out.Choices[0].Message.Content, nil
+	content := StripThinkBlocks(out.Choices[0].Message.Content)
+	if content == "" {
+		return "", errors.New("LLM仅输出了思维链(<think>)没有正文，可能被 max_tokens 截断，请调大输出上限或更换模型")
+	}
+	return content, nil
 }

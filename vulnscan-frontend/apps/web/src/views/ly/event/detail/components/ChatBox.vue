@@ -11,6 +11,7 @@ import {
 import { message } from '#/adapter/naive';
 import { getMessageDisplay, normalizeDeepflowMessage } from '#/utils/deepflow';
 import deepflowSocket from '#/utils/deepflow-socket';
+import { stripThinkBlocks } from '#/utils/ly';
 
 interface ChatMessage extends Record<string, any> {
   created_at?: string;
@@ -316,11 +317,13 @@ function handleNewMessage(data: any) {
 }
 
 function renderMarkdown(text?: string) {
-  if (!text) return '';
+  // 历史消息可能残留推理模型的 <think> 思维链（新回复已在后端剥离）
+  const clean = stripThinkBlocks(text);
+  if (!clean) return '';
   try {
-    return marked.parse(text, { async: false }) as string;
+    return marked.parse(clean, { async: false }) as string;
   } catch {
-    return text;
+    return clean;
   }
 }
 

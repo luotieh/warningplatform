@@ -63,6 +63,20 @@ const ANALYSIS_STATUS_MAP: Record<string, string> = {
   processing: '分析中',
 };
 
+/**
+ * 剥离推理模型（DeepSeek-R1/QwQ 等）写进正文的思维链。
+ * 三种形态：成对 <think>…</think>；只有开头 <think>…（被截断）；
+ * 只有结尾 …</think>（<think> 在服务端 prompt 模板里，补全直接以推理开始）。
+ * 后端新回复已在落库前剥离；此函数用于净化历史消息的展示与报告导出。
+ */
+export function stripThinkBlocks(text?: string): string {
+  return String(text ?? '')
+    .replaceAll(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<think>[\s\S]*$/i, '')
+    .replace(/^[\s\S]*?<\/think>/i, '')
+    .trim();
+}
+
 export function formatTimestamp(value?: number | string | null, withTime = true) {
   if (value === '' || value === null || value === undefined) return '-';
   const num = Number(value);

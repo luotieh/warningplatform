@@ -159,6 +159,50 @@ func TestWithOverrides(t *testing.T) {
 	}
 }
 
+// 推理模型（DeepSeek-R1 等）的 <think> 思维链必须从回复中剥离。
+func TestStripThinkBlocks(t *testing.T) {
+	cases := map[string]string{
+		"<think>推理过程...</think>【结论】误报":               "【结论】误报",
+		"<THINK>\n多行\n推理\n</THINK>\n\n## 研判结论\n正文": "## 研判结论\n正文",
+		"<think>第一段</think>正文A<think>第二段</think>正文B": "正文A正文B",
+		"无思维链的普通回复": "无思维链的普通回复",
+		"<think>被截断的思维链，没有闭合标签": "",
+		// DeepSeek-R1 本地部署常见：<think> 在 prompt 模板里，补全只带闭合标签
+		"用户给了威胁情报事件，我先分析IOC...\n</think>\n\n【结论】真实威胁": "【结论】真实威胁",
+		"推理正文直接开始</THINK>## 研判结论":                  "## 研判结论",
+		"只有孤儿闭合，后面没正文</think>":                     "",
+	}
+	for in, want := range cases {
+		if got := StripThinkBlocks(in); got != want {
+			t.Fatalf("StripThinkBlocks(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// Chat 剥离思维链后返回正文；只剩思维链时报明确错误。
+func TestChatStripsThink(t *testing.T) {
+	reply := `<think>用户要求分析这个事件，我需要先看IOC...</think>【结论】真实威胁`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := json.Marshal(map[string]any{"choices": []map[string]any{{"message": map[string]any{"content": reply}}}})
+		_, _ = w.Write(b)
+	}))
+	defer srv.Close()
+
+	c := LLMClient{BaseURL: srv.URL, Model: "deepseek-r1-32b"}
+	got, err := c.Chat(context.Background(), "SYS", "USER")
+	if err != nil {
+		t.Fatalf("Chat error: %v", err)
+	}
+	if got != "【结论】真实威胁" {
+		t.Fatalf("reply = %q", got)
+	}
+
+	reply = `<think>还没想完就被截断了`
+	if _, err := c.Chat(context.Background(), "SYS", "USER"); err == nil || !strings.Contains(err.Error(), "思维链") {
+		t.Fatalf("纯思维链应报明确错误, got err=%v", err)
+	}
+}
+
 // Chat 必须携带独立的 system prompt、显式 max_tokens(给输出留空间)与低 temperature。
 func TestChatSendsSystemPromptAndOutputBudget(t *testing.T) {
 	var got map[string]any

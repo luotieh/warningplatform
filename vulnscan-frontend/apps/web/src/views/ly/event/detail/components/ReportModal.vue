@@ -12,6 +12,7 @@ import { message } from '#/adapter/naive';
 import { useDeepflowStore } from '#/store';
 import { formatDeepflowDate, mapSeverityToDisplay } from '#/utils/deepflow';
 import deepflowSocket from '#/utils/deepflow-socket';
+import { stripThinkBlocks } from '#/utils/ly';
 
 import ChatBox from './ChatBox.vue';
 
@@ -151,6 +152,7 @@ function close() {
 }
 
 // 把 LLM 自动分析总结（按轮）整理成 Markdown
+// stripThinkBlocks：历史总结可能残留推理模型的 <think> 思维链（新回复已在后端剥离）
 function formatSummary(res: any): string {
   const list = Array.isArray(res)
     ? res
@@ -165,16 +167,16 @@ function formatSummary(res: any): string {
         return [
           `## ${title}`,
           time ? `*${time}*` : '',
-          item.event_summary || '暂无总结内容',
+          stripThinkBlocks(item.event_summary) || '暂无总结内容',
         ]
           .filter(Boolean)
           .join('\n\n');
       })
       .join('\n\n');
   }
-  if (typeof res === 'string') return res;
-  if (res?.event_summary) return String(res.event_summary);
-  if (res?.data?.event_summary) return String(res.data.event_summary);
+  if (typeof res === 'string') return stripThinkBlocks(res);
+  if (res?.event_summary) return stripThinkBlocks(String(res.event_summary));
+  if (res?.data?.event_summary) return stripThinkBlocks(String(res.data.event_summary));
   return '';
 }
 
