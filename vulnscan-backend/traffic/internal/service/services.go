@@ -177,6 +177,15 @@ func asBool(v any) bool {
 	return false
 }
 
+func nestedMap(m map[string]any, key string) map[string]any {
+	if v, ok := m[key]; ok {
+		if nm, ok := v.(map[string]any); ok {
+			return nm
+		}
+	}
+	return nil
+}
+
 func (s Services) RunSyncOnce(ctx context.Context, batchSize, lookbackSeconds, maxRetries int) (map[string]any, error) {
 	cursor := s.Store.GetCursor("flowshadow_events")
 	since := cursor.LastTS
@@ -343,6 +352,56 @@ func buildOccurrence(ly map[string]any) map[string]any {
 	}
 	if v, ok := ly["packets"]; ok && v != nil {
 		occ["packets"] = toInt(v)
+	}
+	rp := nestedMap(ly, "raw_packet")
+	if rp == nil {
+		return occ
+	}
+	if v := asString(rp["message_direction"]); v != "" {
+		occ["message_direction"] = v
+	}
+	if v := asString(rp["payload_text"]); v != "" {
+		occ["payload_text"] = v
+	}
+	if v := asString(rp["payload_hex"]); v != "" {
+		if len(v) > 1024 {
+			occ["payload_hex"] = v[:1024]
+			occ["payload_hex_truncated"] = true
+		} else {
+			occ["payload_hex"] = v
+		}
+	}
+	if v, ok := rp["packet_sequence"]; ok && v != nil {
+		occ["packet_sequence"] = toInt(v)
+	}
+	if v, ok := rp["captured_length"]; ok && v != nil {
+		occ["captured_length"] = toInt(v)
+	}
+	if v, ok := rp["wire_length"]; ok && v != nil {
+		occ["wire_length"] = toInt(v)
+	}
+	if v, ok := rp["capture_truncated"]; ok {
+		occ["capture_truncated"] = v
+	}
+	if v := asString(rp["capture_time"]); v != "" {
+		occ["capture_time"] = v
+	}
+	if v := asString(rp["session_start_time"]); v != "" {
+		occ["session_start_time"] = v
+	}
+	if rm := nestedMap(rp, "request"); rm != nil {
+		occ["request"] = map[string]any{
+			"tcp_seq":        toInt(rm["tcp_seq"]),
+			"tcp_ack":        toInt(rm["tcp_ack"]),
+			"retransmission": rm["retransmission"],
+		}
+	}
+	if rm := nestedMap(rp, "response"); rm != nil {
+		occ["response"] = map[string]any{
+			"tcp_seq":        toInt(rm["tcp_seq"]),
+			"tcp_ack":        toInt(rm["tcp_ack"]),
+			"retransmission": rm["retransmission"],
+		}
 	}
 	return occ
 }

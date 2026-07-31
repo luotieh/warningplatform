@@ -106,6 +106,7 @@ func LyEventToDeepSOC(ly map[string]any) domain.Event {
 	putIfPresent(context, "packet_time_usec", ly["packet_time_usec"])
 	putIfPresent(context, "schema_version", ly["schema_version"])
 	putIfPresent(context, "sensor_version", ly["sensor_version"])
+	putIfPresent(context, "session_summary", ly["session_summary"])
 	// 应用层上下文（HTTP/DNS/payload/icmp），ta_node 以嵌套对象 app 下发，整体透传。
 	putIfPresent(context, "app", ly["app"])
 	// 流统计：流首次时间、持续时长、流/包/字节数（派生字段，零成本）。
@@ -120,6 +121,10 @@ func LyEventToDeepSOC(ly map[string]any) domain.Event {
 		"ioc_source", "ioc_tags", "ioc_description", "ioc_expire_at"); len(ioc) > 0 {
 		context["ioc"] = ioc
 	}
+	if evidence, ok := ly["ioc_evidence"].(map[string]any); ok && len(evidence) > 0 {
+		context["ioc_evidence"] = evidence
+	}
+	putIfPresent(context, "recommended_action", ly["recommended_action"])
 	// v1.2 节点侧局部突发计数：同一威胁键(IOC/规则)在该节点窗口内的命中次数，
 	// 属于近似分诊提示(local_scope=node)，非全局权威频次——全局频次以管理侧聚合的
 	// occurrence_count 为准，两者语义不同，AI 研判时勿混淆或重复计数。

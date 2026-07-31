@@ -8,7 +8,7 @@ import { useUserStore } from '@vben/stores';
 
 import { lyEventPushToAi, lyEventReview } from '#/api/ly';
 import { message } from '#/adapter/naive';
-import { formatBytes, formatTimestamp, paginate } from '#/utils/ly';
+import { formatBoolText, formatBytes, formatDirection, formatHexTruncated, formatTimestamp, formatVolumeRole, paginate } from '#/utils/ly';
 
 import ReportModal from '../detail/components/ReportModal.vue';
 
@@ -48,7 +48,37 @@ watch(
 );
 
 const occVisible = ref(false);
-const occRows = ref<Array<{ idx: number; time: string; size: string; packets: string }>>([]);
+const occRows = ref<Array<{
+  idx: number; time: string; size: string; packets: string;
+  message_direction: string; payload_text: string; payload_hex: string;
+  payload_hex_truncated: boolean; packet_sequence: any; captured_length: any;
+  wire_length: any; capture_truncated: any; capture_time: string;
+  session_start_time: string; request: any; response: any;
+}>>([]);
+
+const expandedOccIndices = ref<Set<number>>(new Set());
+const expandedHex = ref<Set<string>>(new Set());
+const currentEventContext = ref<Record<string, any>>({});
+
+function toggleOccExpand(idx: number) {
+  const next = new Set(expandedOccIndices.value);
+  if (next.has(idx)) {
+    next.delete(idx);
+  } else {
+    next.add(idx);
+  }
+  expandedOccIndices.value = next;
+}
+
+function toggleHex(key: string) {
+  const next = new Set(expandedHex.value);
+  if (next.has(key)) {
+    next.delete(key);
+  } else {
+    next.add(key);
+  }
+  expandedHex.value = next;
+}
 
 function buildOccRows(occ: any[]) {
   return (occ || []).map((o, i) => {
@@ -58,21 +88,28 @@ function buildOccRows(occ: any[]) {
       time: formatTimestamp(item.time) || '-',
       size: item.wire_bytes == null ? '-' : formatBytes(item.wire_bytes),
       packets: item.packets == null ? '-' : String(item.packets),
+      message_direction: item.message_direction || '',
+      payload_text: item.payload_text || '',
+      payload_hex: item.payload_hex || '',
+      payload_hex_truncated: Boolean(item.payload_hex_truncated),
+      packet_sequence: item.packet_sequence,
+      captured_length: item.captured_length,
+      wire_length: item.wire_length,
+      capture_truncated: item.capture_truncated,
+      capture_time: item.capture_time || '',
+      session_start_time: item.session_start_time || '',
+      request: item.request || null,
+      response: item.response || null,
     };
   });
 }
 
 function openOccurrences(row: Record<string, any>) {
   occRows.value = buildOccRows(row.occurrences || []);
+  currentEventContext.value = row;
+  expandedOccIndices.value = new Set();
   occVisible.value = true;
 }
-
-const occColumns = [
-  { title: '序号', key: 'idx', width: 70 },
-  { title: '命中时间', key: 'time', minWidth: 180 },
-  { title: '数据包大小', key: 'size', width: 120 },
-  { title: '包数', key: 'packets', width: 90 },
-];
 
 function buildAnalysisPayload(row: Record<string, any>) {
   return {
@@ -349,8 +386,223 @@ onMounted(() => {
 
     <ReportModal v-model:visible="reportVisible" :event-id="reportEventId" :context="reportContext" />
 
-    <NModal v-model:show="occVisible" preset="card" title="命中明细" style="width: 640px; max-width: 90vw">
-      <NDataTable :columns="occColumns" :data="occRows" size="small" :max-height="420" :bordered="false" />
+    <NModal v-model:show="occVisible" preset="card" title="命中明细" style="width: 880px; max-width: 95vw">
+      <div class="occ-container">
+        <div v-if="currentEventContext.session_summary" class="occ-card">
+          <div class="occ-card-title">双向会话统计</div>
+          <div class="occ-card-grid">
+            <div class="occ-field">
+              <span class="occ-label">会话时间</span>
+              <span class="occ-value">{{ formatTimestamp(currentEventContext.session_summary.first_time_usec) }} ~ {{ formatTimestamp(currentEventContext.session_summary.last_time_usec) }}</span>
+            </div>
+            <div class="occ-field">
+              <span class="occ-label">客户端 → 服务端</span>
+              <span class="occ-value">{{ currentEventContext.session_summary.client_packets ?? '-' }} 包 / {{ formatBytes(currentEventContext.session_summary.client_wire_bytes) }}</span>
+            </div>
+            <div class="occ-field">
+              <span class="occ-label">服务端 → 客户端</span>
+              <span class="occ-value">{{ currentEventContext.session_summary.server_packets ?? '-' }} 包 / {{ formatBytes(currentEventContext.session_summary.server_wire_bytes) }}</span>
+            </div>
+            <div class="occ-field">
+              <span class="occ-label">会话命中次数</span>
+              <span class="occ-value">{{ currentEventContext.session_summary.hit_count ?? '-' }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="currentEventContext.flow_stats" class="occ-card">
+          <div class="occ-card-title">流量统计与角色</div>
+          <div class="occ-card-grid">
+            <div v-if="currentEventContext.flow_stats.volume_role" class="occ-field">
+              <span class="occ-label">流量角色</span>
+              <span class="occ-value" :style="{ color: formatVolumeRole(currentEventContext.flow_stats.volume_role).color, fontWeight: 600 }">
+                {{ formatVolumeRole(currentEventContext.flow_stats.volume_role).text }}
+              </span>
+            </div>
+            <div v-if="currentEventContext.flow_stats.flows != null" class="occ-field">
+              <span class="occ-label">流数</span>
+              <span class="occ-value">{{ currentEventContext.flow_stats.flows }}</span>
+            </div>
+            <div v-if="currentEventContext.flow_stats.packets != null" class="occ-field">
+              <span class="occ-label">包数</span>
+              <span class="occ-value">{{ currentEventContext.flow_stats.packets }}</span>
+            </div>
+            <div v-if="currentEventContext.flow_stats.wire_bytes != null" class="occ-field">
+              <span class="occ-label">在线字节</span>
+              <span class="occ-value">{{ formatBytes(currentEventContext.flow_stats.wire_bytes) }}</span>
+            </div>
+            <div v-if="currentEventContext.flow_stats.bytes != null" class="occ-field">
+              <span class="occ-label">载荷字节</span>
+              <span class="occ-value">{{ formatBytes(currentEventContext.flow_stats.bytes) }}</span>
+            </div>
+            <div v-if="currentEventContext.flow_stats.duration_ms != null" class="occ-field">
+              <span class="occ-label">持续时长</span>
+              <span class="occ-value">{{ currentEventContext.flow_stats.duration_ms }} ms</span>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="currentEventContext.ioc" class="occ-card">
+          <div class="occ-card-title">威胁情报</div>
+          <div class="occ-card-grid">
+            <div v-if="currentEventContext.ioc.ioc_type" class="occ-field">
+              <span class="occ-label">IOC 类型</span>
+              <span class="occ-value">{{ currentEventContext.ioc.ioc_type }}</span>
+            </div>
+            <div v-if="currentEventContext.ioc.ioc_value" class="occ-field">
+              <span class="occ-label">IOC 值</span>
+              <span class="occ-value" style="font-family:monospace">{{ currentEventContext.ioc.ioc_value }}</span>
+            </div>
+            <div v-if="currentEventContext.ioc.ioc_category" class="occ-field">
+              <span class="occ-label">类别</span>
+              <span class="occ-value">{{ currentEventContext.ioc.ioc_category }}</span>
+            </div>
+            <div v-if="currentEventContext.ioc.ioc_source" class="occ-field">
+              <span class="occ-label">情报源</span>
+              <span class="occ-value">{{ currentEventContext.ioc.ioc_source }}</span>
+            </div>
+            <div v-if="currentEventContext.ioc.ioc_description" class="occ-field occ-field-full">
+              <span class="occ-label">描述</span>
+              <span class="occ-value">{{ currentEventContext.ioc.ioc_description }}</span>
+            </div>
+            <div v-if="currentEventContext.ioc.ioc_expire_at" class="occ-field">
+              <span class="occ-label">过期时间</span>
+              <span class="occ-value">{{ formatTimestamp(currentEventContext.ioc.ioc_expire_at) }}</span>
+            </div>
+            <div v-if="currentEventContext.ioc.ioc_tags" class="occ-field occ-field-full">
+              <span class="occ-label">标签</span>
+              <span class="occ-value">
+                <NTag v-for="tag in (Array.isArray(currentEventContext.ioc.ioc_tags) ? currentEventContext.ioc.ioc_tags : [currentEventContext.ioc.ioc_tags])" :key="tag" size="tiny" round style="margin-right:4px;margin-bottom:2px">{{ tag }}</NTag>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="currentEventContext.ioc_evidence" class="occ-card">
+          <div class="occ-card-title">情报证据</div>
+          <div class="occ-card-grid">
+            <div v-if="currentEventContext.ioc_evidence.confidence" class="occ-field">
+              <span class="occ-label">置信度</span>
+              <span class="occ-value">{{ currentEventContext.ioc_evidence.confidence }}</span>
+            </div>
+            <div v-if="currentEventContext.ioc_evidence.source" class="occ-field">
+              <span class="occ-label">来源</span>
+              <span class="occ-value">{{ currentEventContext.ioc_evidence.source }}</span>
+            </div>
+            <div v-if="currentEventContext.ioc_evidence.tlp" class="occ-field">
+              <span class="occ-label">TLP</span>
+              <span class="occ-value">{{ currentEventContext.ioc_evidence.tlp }}</span>
+            </div>
+            <div v-if="currentEventContext.ioc_evidence.activity" class="occ-field occ-field-full">
+              <span class="occ-label">关联活动</span>
+              <span class="occ-value">{{ currentEventContext.ioc_evidence.activity }}</span>
+            </div>
+            <div v-if="currentEventContext.ioc_evidence.threat_labels" class="occ-field occ-field-full">
+              <span class="occ-label">威胁标签</span>
+              <span class="occ-value">
+                <NTag v-for="tl in (Array.isArray(currentEventContext.ioc_evidence.threat_labels) ? currentEventContext.ioc_evidence.threat_labels : [currentEventContext.ioc_evidence.threat_labels])" :key="tl" size="tiny" type="error" round style="margin-right:4px;margin-bottom:2px">{{ tl }}</NTag>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="currentEventContext.recommended_action" class="occ-card">
+          <div class="occ-card-title">处置建议</div>
+          <div class="occ-card-grid">
+            <div class="occ-field occ-field-full">
+              <span class="occ-value" style="font-weight:600;color:#d03050">{{ currentEventContext.recommended_action }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="occ-section-title">命中记录</div>
+        <div class="occ-list">
+          <div v-for="occ in occRows" :key="occ.idx" class="occ-item">
+            <div class="occ-row" @click="toggleOccExpand(occ.idx)">
+              <IconifyIcon
+                :icon="expandedOccIndices.has(occ.idx) ? 'lucide:chevron-down' : 'lucide:chevron-right'"
+                class="occ-chevron"
+              />
+              <span class="occ-num">#{{ occ.idx }}</span>
+              <span class="occ-time">{{ occ.time }}</span>
+              <span class="occ-size">{{ occ.size }}</span>
+              <span class="occ-pkts">{{ occ.packets }} 包</span>
+              <NTag v-if="occ.message_direction" size="tiny" round :type="occ.message_direction === 'request' ? 'info' : 'warning'">
+                {{ formatDirection(occ.message_direction) }}
+              </NTag>
+            </div>
+            <div v-if="expandedOccIndices.has(occ.idx)" class="occ-detail">
+              <div class="occ-detail-row">
+                <span class="occ-detail-label">报文方向</span>
+                <span class="occ-detail-value">{{ formatDirection(occ.message_direction) }}</span>
+              </div>
+              <div v-if="occ.capture_time" class="occ-detail-row">
+                <span class="occ-detail-label">捕获时间</span>
+                <span class="occ-detail-value">{{ formatTimestamp(occ.capture_time) }}</span>
+              </div>
+              <div v-if="occ.session_start_time" class="occ-detail-row">
+                <span class="occ-detail-label">流首包时间</span>
+                <span class="occ-detail-value">{{ formatTimestamp(occ.session_start_time) }}</span>
+              </div>
+              <div class="occ-detail-row">
+                <span class="occ-detail-label">包序号</span>
+                <span class="occ-detail-value">{{ occ.packet_sequence ?? '-' }}</span>
+              </div>
+              <div class="occ-detail-row">
+                <span class="occ-detail-label">捕获/线缆长度</span>
+                <span class="occ-detail-value">{{ occ.captured_length ?? '-' }} / {{ occ.wire_length ?? '-' }} bytes</span>
+              </div>
+              <div v-if="occ.capture_truncated" class="occ-detail-row">
+                <span class="occ-detail-label">截断标记</span>
+                <NTag size="tiny" type="error" round>已截断</NTag>
+              </div>
+              <div v-if="occ.payload_text" class="occ-detail-row">
+                <span class="occ-detail-label">载荷明文</span>
+                <code class="occ-code-block">{{ occ.payload_text }}</code>
+              </div>
+              <div v-if="occ.payload_hex" class="occ-detail-row">
+                <span class="occ-detail-label">载荷 HEX</span>
+                <div class="occ-hex-wrap">
+                  <code class="occ-hex-text">{{ expandedHex.has('payload-' + occ.idx) ? occ.payload_hex : formatHexTruncated(occ.payload_hex).text }}</code>
+                  <NButton v-if="occ.payload_hex_truncated || occ.payload_hex.length > 128" text size="tiny" type="primary" @click.stop="toggleHex('payload-' + occ.idx)">
+                    {{ expandedHex.has('payload-' + occ.idx) ? '收起' : '展开完整报文' }}
+                  </NButton>
+                </div>
+              </div>
+              <template v-if="occ.request">
+                <div class="occ-detail-divider">TCP Request 详情</div>
+                <div class="occ-detail-row">
+                  <span class="occ-detail-label">SEQ</span>
+                  <span class="occ-detail-value">{{ occ.request.tcp_seq ?? '-' }}</span>
+                </div>
+                <div class="occ-detail-row">
+                  <span class="occ-detail-label">ACK</span>
+                  <span class="occ-detail-value">{{ occ.request.tcp_ack ?? '-' }}</span>
+                </div>
+                <div class="occ-detail-row">
+                  <span class="occ-detail-label">重传</span>
+                  <span class="occ-detail-value">{{ formatBoolText(occ.request.retransmission) }}</span>
+                </div>
+              </template>
+              <template v-if="occ.response">
+                <div class="occ-detail-divider">TCP Response 详情</div>
+                <div class="occ-detail-row">
+                  <span class="occ-detail-label">SEQ</span>
+                  <span class="occ-detail-value">{{ occ.response.tcp_seq ?? '-' }}</span>
+                </div>
+                <div class="occ-detail-row">
+                  <span class="occ-detail-label">ACK</span>
+                  <span class="occ-detail-value">{{ occ.response.tcp_ack ?? '-' }}</span>
+                </div>
+                <div class="occ-detail-row">
+                  <span class="occ-detail-label">重传</span>
+                  <span class="occ-detail-value">{{ formatBoolText(occ.response.retransmission) }}</span>
+                </div>
+              </template>
+            </div>
+          </div>
+        </div>
+      </div>
     </NModal>
   </div>
 </template>
@@ -364,4 +616,32 @@ onMounted(() => {
 :deep(.n-data-table-tr.sev-low .n-data-table-td:first-child) { box-shadow: inset 3px 0 0 #909399; }
 :deep(.n-data-table-td) { padding-top: 10px; padding-bottom: 10px; }
 :deep(.n-data-table-th) { font-weight: 600; }
+
+/* 命中明细弹窗 */
+.occ-container { max-height: 75vh; overflow-y: auto; }
+.occ-card { background: var(--n-color-target); border: 1px solid var(--n-border-color); border-radius: 8px; padding: 14px 16px; margin-bottom: 12px; }
+.occ-card-title { font-size: 14px; font-weight: 600; color: var(--n-text-color); margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--n-border-color); }
+.occ-card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; }
+.occ-field { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.occ-field-full { grid-column: 1 / -1; }
+.occ-label { font-size: 12px; color: var(--n-text-color-3); }
+.occ-value { font-size: 13px; color: var(--n-text-color); word-break: break-all; }
+.occ-section-title { font-size: 14px; font-weight: 600; margin: 16px 0 10px; color: var(--n-text-color); }
+.occ-list { display: flex; flex-direction: column; gap: 2px; }
+.occ-item { border: 1px solid var(--n-border-color); border-radius: 6px; overflow: hidden; }
+.occ-row { display: flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: pointer; user-select: none; transition: background .15s; }
+.occ-row:hover { background: var(--n-color-target); }
+.occ-chevron { font-size: 14px; color: var(--n-text-color-3); flex: none; transition: transform .15s; }
+.occ-num { font-size: 12px; color: var(--n-text-color-3); font-family: monospace; min-width: 24px; }
+.occ-time { font-size: 13px; color: var(--n-text-color); flex: 1; min-width: 0; }
+.occ-size { font-size: 12px; color: var(--n-text-color-2); white-space: nowrap; }
+.occ-pkts { font-size: 12px; color: var(--n-text-color-2); white-space: nowrap; }
+.occ-detail { padding: 0 12px 12px 40px; display: flex; flex-direction: column; gap: 4px; }
+.occ-detail-row { display: flex; gap: 8px; font-size: 12px; align-items: flex-start; }
+.occ-detail-label { color: var(--n-text-color-3); min-width: 100px; flex: none; padding-top: 2px; }
+.occ-detail-value { color: var(--n-text-color); word-break: break-all; }
+.occ-detail-divider { font-size: 11px; color: var(--n-text-color-3); border-top: 1px dashed var(--n-border-color); padding-top: 6px; margin-top: 2px; font-weight: 600; }
+.occ-code-block { display: block; background: var(--n-color-embedded-modal); padding: 6px 10px; border-radius: 4px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all; max-height: 200px; overflow-y: auto; }
+.occ-hex-wrap { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
+.occ-hex-text { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; word-break: break-all; white-space: pre-wrap; background: var(--n-color-embedded-modal); padding: 6px 10px; border-radius: 4px; max-height: 150px; overflow-y: auto; line-height: 1.5; }
 </style>

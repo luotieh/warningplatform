@@ -213,3 +213,37 @@ export function paginate<T>(list: T[], page: number, pageSize: number) {
   const start = (page - 1) * pageSize;
   return list.slice(start, start + pageSize);
 }
+
+export function formatHexTruncated(hex: string | null | undefined, limit = 128) {
+  if (!hex) return { text: '-', truncated: false };
+  if (hex.length <= limit) return { text: hex, truncated: false };
+  return { text: hex.slice(0, limit), truncated: true };
+}
+
+export function formatDirection(dir: string | null | undefined): string {
+  const map: Record<string, string> = {
+    request: '请求 (→)',
+    response: '响应 (←)',
+    unknown: '未知',
+  };
+  return map[dir ?? ''] || String(dir || '-');
+}
+
+export function formatBoolText(v: any): string {
+  if (v === true || v === 'true') return '是';
+  if (v === false || v === 'false' || v === undefined || v === null) return '否';
+  return String(v);
+}
+
+export function formatVolumeRole(role: string | null | undefined): { text: string; color: string } {
+  const map: Record<string, { text: string; color: string }> = {
+    to_ioc: { text: '流向IOC（外传）', color: '#d03050' },
+    from_ioc: { text: '来自IOC（下载）', color: '#f0a020' },
+    client_only: { text: '仅客户端有数据', color: '#2080f0' },
+    server_only: { text: '仅服务端有数据', color: '#18a058' },
+    upload_to_ioc: { text: '数据外泄', color: '#d03050' },
+    download_from_ioc: { text: '载荷投递', color: '#d03050' },
+    bidirectional: { text: '双向等量', color: '#909399' },
+  };
+  return map[role ?? ''] || { text: String(role || '-'), color: '#909399' };
+}

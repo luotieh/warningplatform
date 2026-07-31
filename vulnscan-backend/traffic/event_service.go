@@ -185,6 +185,12 @@ func lyCompatibleEvent(event domain.Event) map[string]any {
 		"is_final":           isFinal,
 		// 每次命中明细：时间 + 数据包大小(wire_bytes) + 包数(packets)，供前端命中频次弹窗
 		"occurrences": context["occurrences"],
+		// 事件级扩展字段：会话统计、流量统计、情报元数据
+		"session_summary":    context["session_summary"],
+		"flow_stats":         context["flow_stats"],
+		"ioc":                context["ioc"],
+		"ioc_evidence":       context["ioc_evidence"],
+		"recommended_action": context["recommended_action"],
 		// 审核状态：供事件列表展示「待审核/已通过/已驳回」与通报编号
 		"review_status": event.ReviewStatus,
 		"circular_code": event.CircularCode,
