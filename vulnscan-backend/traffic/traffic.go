@@ -117,6 +117,16 @@ func NewTraffic(moduleCfg Config) *Traffic {
 			}
 		}
 	}()
+	// 启动一次性归档回填：升级/部署后无需等每日 00:10，
+	// 已收敛且最后活跃早于今日的事件立即归档，今日视图从存量全量中收敛。
+	go func() {
+		time.Sleep(5 * time.Second)
+		if n, err := services.ArchiveConvergedEvents(context.Background()); err == nil && n > 0 {
+			log.Printf("traffic: startup archive backfill archived %d events", n)
+		} else if err != nil {
+			log.Printf("traffic: startup archive backfill failed: %v", err)
+		}
+	}()
 	return &Traffic{
 		api: NewHandler(
 			NewEventService(services),
