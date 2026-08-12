@@ -20,14 +20,22 @@ defineOptions({ name: 'LyOverviewOM' });
 const router = useRouter();
 const lyStore = useLyStore();
 
-const pagerAttack = reactive({ page: 1, pageSize: 8 });
-const pagerVictim = reactive({ page: 1, pageSize: 8 });
+const pagerAttack = reactive({ page: 1, pageSize: 10 });
+const pagerVictim = reactive({ page: 1, pageSize: 10 });
 const pagerTimeline = reactive({ page: 1, pageSize: 10 });
-const pagerPending = reactive({ page: 1, pageSize: 8 });
+const pagerReview = reactive({ page: 1, pageSize: 10 });
+const pagerAnalysis = reactive({ page: 1, pageSize: 10 });
 
 const allEvents = computed(() => lyStore.events ?? []);
-const pendingEvents = computed(() =>
-  allEvents.value.filter((item) => item.proc_status === 'unprocessed'),
+// 待审核：review_status 为空或 pending_review（已通过/已驳回不计入）
+const reviewPendingEvents = computed(() =>
+  allEvents.value.filter(
+    (item) => !item.review_status || item.review_status === 'pending_review',
+  ),
+);
+// 待分析：尚未生成报告（analysis_status = pending）
+const pendingAnalysisEvents = computed(() =>
+  allEvents.value.filter((item) => item.analysis_status === 'pending'),
 );
 const attackRank = computed(() => countByKey(allEvents.value, 'attackDevice'));
 const victimRank = computed(() => countByKey(allEvents.value, 'victimDevice'));
@@ -51,9 +59,10 @@ const timelineRows = computed(() => {
 const attackData = computed(() => paginate(attackRank.value, pagerAttack.page, pagerAttack.pageSize));
 const victimData = computed(() => paginate(victimRank.value, pagerVictim.page, pagerVictim.pageSize));
 const timelineData = computed(() => paginate(timelineRows.value, pagerTimeline.page, pagerTimeline.pageSize));
-const pendingData = computed(() => paginate(pendingEvents.value, pagerPending.page, pagerPending.pageSize));
+const reviewData = computed(() => paginate(reviewPendingEvents.value, pagerReview.page, pagerReview.pageSize));
+const analysisData = computed(() => paginate(pendingAnalysisEvents.value, pagerAnalysis.page, pagerAnalysis.pageSize));
 
-watch([attackRank, victimRank, timelineRows, pendingEvents], () => {
+watch([attackRank, victimRank, timelineRows, reviewPendingEvents, pendingAnalysisEvents], () => {
   const fit = (pager: { page: number; pageSize: number }, total: number) => {
     const max = Math.max(1, Math.ceil(total / pager.pageSize));
     if (pager.page > max) pager.page = max;
@@ -61,7 +70,8 @@ watch([attackRank, victimRank, timelineRows, pendingEvents], () => {
   fit(pagerAttack, attackRank.value.length);
   fit(pagerVictim, victimRank.value.length);
   fit(pagerTimeline, timelineRows.value.length);
-  fit(pagerPending, pendingEvents.value.length);
+  fit(pagerReview, reviewPendingEvents.value.length);
+  fit(pagerAnalysis, pendingAnalysisEvents.value.length);
 });
 
 const rankColumns = [
@@ -75,7 +85,7 @@ const timelineColumns = [
   { title: '数量', key: 'count', width: 90 },
 ];
 
-const pendingColumns = [
+const eventWorkColumns = [
   { title: '规则描述', key: 'desc', ellipsis: { tooltip: true } },
   { title: '威胁来源', key: 'attackDevice', width: 180 },
   {
@@ -109,7 +119,8 @@ onMounted(async () => {
       <NCard title="事件概览" size="small">
         <NFlex :size="12">
           <NStatistic label="事件总数" :value="allEvents.length" />
-          <NStatistic label="待处理" :value="pendingEvents.length" />
+          <NStatistic label="待审核" :value="reviewPendingEvents.length" />
+          <NStatistic label="待分析" :value="pendingAnalysisEvents.length" />
           <NStatistic label="威胁来源" :value="attackRank.length" />
           <NStatistic label="受害目标" :value="victimRank.length" />
         </NFlex>
@@ -119,13 +130,13 @@ onMounted(async () => {
         <NCard title="主机排行（威胁来源）" size="small">
           <NDataTable :columns="rankColumns" :data="attackData" :bordered="false" size="small" />
           <div class="pager-wrap">
-            <NPagination v-model:page="pagerAttack.page" v-model:page-size="pagerAttack.pageSize" :item-count="attackRank.length" show-size-picker :page-sizes="[8, 16, 24]" />
+            <NPagination v-model:page="pagerAttack.page" v-model:page-size="pagerAttack.pageSize" :item-count="attackRank.length" show-size-picker :page-sizes="[10, 20, 50]" />
           </div>
         </NCard>
         <NCard title="主机排行（受害目标）" size="small">
           <NDataTable :columns="rankColumns" :data="victimData" :bordered="false" size="small" />
           <div class="pager-wrap">
-            <NPagination v-model:page="pagerVictim.page" v-model:page-size="pagerVictim.pageSize" :item-count="victimRank.length" show-size-picker :page-sizes="[8, 16, 24]" />
+            <NPagination v-model:page="pagerVictim.page" v-model:page-size="pagerVictim.pageSize" :item-count="victimRank.length" show-size-picker :page-sizes="[10, 20, 50]" />
           </div>
         </NCard>
       </div>
@@ -137,13 +148,22 @@ onMounted(async () => {
             <NPagination v-model:page="pagerTimeline.page" v-model:page-size="pagerTimeline.pageSize" :item-count="timelineRows.length" show-size-picker :page-sizes="[10, 20, 50]" />
           </div>
         </NCard>
-        <NCard title="工作台（待处理事件）" size="small">
+        <NCard title="审核（待审核事件）" size="small">
           <template #header-extra>
-            <NTag type="warning" size="small">未处理 {{ pendingEvents.length }}</NTag>
+            <NTag type="warning" size="small">待审核 {{ reviewPendingEvents.length }}</NTag>
           </template>
-          <NDataTable :columns="pendingColumns" :data="pendingData" :bordered="false" size="small" />
+          <NDataTable :columns="eventWorkColumns" :data="reviewData" :bordered="false" size="small" />
           <div class="pager-wrap">
-            <NPagination v-model:page="pagerPending.page" v-model:page-size="pagerPending.pageSize" :item-count="pendingEvents.length" show-size-picker :page-sizes="[8, 16, 24]" />
+            <NPagination v-model:page="pagerReview.page" v-model:page-size="pagerReview.pageSize" :item-count="reviewPendingEvents.length" show-size-picker :page-sizes="[10, 20, 50]" />
+          </div>
+        </NCard>
+        <NCard title="待分析事件" size="small">
+          <template #header-extra>
+            <NTag type="info" size="small">待分析 {{ pendingAnalysisEvents.length }}</NTag>
+          </template>
+          <NDataTable :columns="eventWorkColumns" :data="analysisData" :bordered="false" size="small" />
+          <div class="pager-wrap">
+            <NPagination v-model:page="pagerAnalysis.page" v-model:page-size="pagerAnalysis.pageSize" :item-count="pendingAnalysisEvents.length" show-size-picker :page-sizes="[10, 20, 50]" />
           </div>
         </NCard>
       </div>
