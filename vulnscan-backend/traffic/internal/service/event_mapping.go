@@ -63,6 +63,7 @@ func LyEventToDeepSOC(ly map[string]any) domain.Event {
 	eventType := firstNonEmpty(asString(ly["event_type"]), asString(ly["type"]), asString(ly["threat_type"]))
 	method := firstNonEmpty(asString(ly["method"]), asString(ly["protocol"]))
 	occ := firstNonEmpty(asString(ly["occurrence_time"]), asString(ly["time"]))
+	lastSeenAt := time.Now().UTC()
 	occurrences := []any{}
 	if occ != "" {
 		occurrences = append(occurrences, buildOccurrence(ly))
@@ -93,7 +94,7 @@ func LyEventToDeepSOC(ly map[string]any) domain.Event {
 		"first_time":       occ,
 		"last_time":        occ,
 		"occurrences":      occurrences,
-		"last_seen_at":     time.Now().UTC().Format(time.RFC3339),
+		"last_seen_at":     lastSeenAt.Format(time.RFC3339),
 	}
 
 	// === ta_node schema v1.1 新增辅助信息 ===
@@ -103,6 +104,9 @@ func LyEventToDeepSOC(ly map[string]any) domain.Event {
 	putIfPresent(context, "threat_index", ly["threat_index"])
 	putIfPresent(context, "detection_model", ly["model"])
 	putIfPresent(context, "evidence_file", ly["evidence_file"])
+	if ef := normalizeEvidenceFiles(ly, 0, occ); len(ef) > 0 {
+		context["evidence_files"] = ef
+	}
 	putIfPresent(context, "packet_time_usec", ly["packet_time_usec"])
 	putIfPresent(context, "schema_version", ly["schema_version"])
 	putIfPresent(context, "sensor_version", ly["sensor_version"])
@@ -132,6 +136,8 @@ func LyEventToDeepSOC(ly map[string]any) domain.Event {
 		"local_first_seen", "local_scope"); len(burst) > 0 {
 		context["local_burst"] = burst
 	}
+	// 量化统计：首次命中即初始化（occurrence_count=1），后续合并见 updateQuantStats。
+	initQuantStats(context, ly)
 
 	ctx, _ := json.Marshal(context)
 	level := severityMap[asString(firstNonEmpty(asString(ly["event_level"]), asString(ly["severity"])))]
@@ -165,6 +171,7 @@ func LyEventToDeepSOC(ly map[string]any) domain.Event {
 		Context:     string(ctx),
 		EventStatus: "pending",
 		Observables: observables,
+		LastSeenAt:  &lastSeenAt,
 	}
 }
 

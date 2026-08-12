@@ -32,12 +32,10 @@
 
 # 流量分析（trafficAnalysis）业务子系统配置
 [traffic]
-  # 存储后端：mysql（默认）或 memory（内存，进程重启数据丢失）
-  # mysql 初始化失败（database_url 未配置 / 等待超时）时自动回退 memory 并打 ERROR 日志
+  # 存储后端：mysql（默认）或 memory（仅限开发/测试，进程重启数据丢失）
   store_backend = "mysql"
-  # MySQL 连接串（store_backend=mysql 时必填）；必须带 parseTime=true，示例：
-  # database_url = "user:pass@tcp(127.0.0.1:3306)/traffic?parseTime=true&charset=utf8mb4&loc=UTC"
-  database_url = ""
+  # MySQL 连接串（store_backend=mysql 时必填）；必须带 parseTime=true
+  database_url = "db:1c3c2d4572236897d2e9cc90b9643424@tcp(10.20.30.144:3306)/traffic?parseTime=true&charset=utf8mb4&loc=UTC"
   # 首次启动自动建库/建表/种子（全部幂等：CREATE DATABASE/TABLE IF NOT EXISTS）
   auto_migrate = true
   # 启动时等待 MySQL 就绪的最长秒数（容器编排下 MySQL 慢启动兜底）

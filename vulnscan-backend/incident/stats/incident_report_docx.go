@@ -35,6 +35,7 @@ func generateIncidentDocx(data *statsContract.IncidentReportData) ([]byte, error
 	}
 	docxAddDescriptionRow(tbl, data)
 	docxAddRemediationRow(tbl, data)
+	docxAddAnalysisRows(tbl, data)
 	if strings.TrimSpace(data.Attachment) != "" {
 		docxAddMetaRow4Col(tbl, "证据附件", data.Attachment, "", "")
 	}
@@ -44,6 +45,26 @@ func generateIncidentDocx(data *statsContract.IncidentReportData) ([]byte, error
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+// docxAddAnalysisRows 渲染安全事件分析扩展章节（事件概述/流量证据与IOC/影响评估/处置/附件）。
+func docxAddAnalysisRows(tbl *godocxdocx.Table, data *statsContract.IncidentReportData) {
+	for _, block := range reportAnalysisBlocks(data) {
+		tr := tbl.AddRow()
+		lbl := tr.AddCell()
+		setCellWidth(lbl, 1600, stypes.TableWidthDxa)
+		docxLabelCell(lbl, block.Title)
+		valCell := tr.AddCell()
+		setCellGridSpan(valCell, 3)
+		for _, line := range strings.Split(block.Body, "\n") {
+			line = strings.TrimRight(line, "\r")
+			if strings.TrimSpace(line) == "" {
+				valCell.AddEmptyPara()
+				continue
+			}
+			valCell.AddParagraph(line)
+		}
+	}
 }
 
 func docxAddMetaRow4Col(tbl *godocxdocx.Table, k1, v1, k2, v2 string) {

@@ -32,31 +32,32 @@ type Traffic struct {
 }
 
 type Config struct {
-	StoreBackend            string `json:"store_backend" toml:"store_backend"`
-	DatabaseURL             string `json:"database_url" toml:"database_url"`
-	AutoMigrate             bool   `json:"auto_migrate" toml:"auto_migrate"`
-	DBWaitSeconds           int    `json:"db_wait_seconds" toml:"db_wait_seconds"`
-	InternalAPIKey          string `json:"internal_api_key" toml:"internal_api_key"`
-	FlowShadowBaseURL       string `json:"flowshadow_base_url" toml:"flowshadow_base_url"`
-	FlowShadowAPIKey        string `json:"flowshadow_api_key" toml:"flowshadow_api_key"`
-	DeepSOCBaseURL          string `json:"deepsoc_base_url" toml:"deepsoc_base_url"`
-	DeepSOCUsername         string `json:"deepsoc_username" toml:"deepsoc_username"`
-	DeepSOCPassword         string `json:"deepsoc_password" toml:"deepsoc_password"`
-	DeepSOCAPIKey           string `json:"deepsoc_api_key" toml:"deepsoc_api_key"`
-	CircularBaseURL         string `json:"circular_base_url" toml:"circular_base_url"`
-	LLMBaseURL              string `json:"llm_base_url" toml:"llm_base_url"`
-	LLMAPIKey               string `json:"llm_api_key" toml:"llm_api_key"`
-	LLMModel                string `json:"llm_model" toml:"llm_model"`
-	LLMTimeoutSeconds       int    `json:"llm_timeout_seconds" toml:"llm_timeout_seconds"`
-	SyncBatchSize           int    `json:"sync_batch_size" toml:"sync_batch_size"`
-	SyncLookbackSeconds     int    `json:"sync_lookback_seconds" toml:"sync_lookback_seconds"`
-	SyncMaxRetries          int    `json:"sync_max_retries" toml:"sync_max_retries"`
-	HTTPTimeoutSeconds      int    `json:"http_timeout_seconds" toml:"http_timeout_seconds"`
-	MQBackend               string `json:"mq_backend" toml:"mq_backend"`
-	RabbitMQURL             string `json:"rabbitmq_url" toml:"rabbitmq_url"`
-	RabbitMQExchange        string `json:"rabbitmq_exchange" toml:"rabbitmq_exchange"`
-	RabbitMQEventQueue      string `json:"rabbitmq_event_queue" toml:"rabbitmq_event_queue"`
-	RabbitMQConsumerEnabled bool   `json:"rabbitmq_consumer_enabled" toml:"rabbitmq_consumer_enabled"`
+	StoreBackend            string            `json:"store_backend" toml:"store_backend"`
+	DatabaseURL             string            `json:"database_url" toml:"database_url"`
+	AutoMigrate             bool              `json:"auto_migrate" toml:"auto_migrate"`
+	DBWaitSeconds           int               `json:"db_wait_seconds" toml:"db_wait_seconds"`
+	InternalAPIKey          string            `json:"internal_api_key" toml:"internal_api_key"`
+	FlowShadowBaseURL       string            `json:"flowshadow_base_url" toml:"flowshadow_base_url"`
+	FlowShadowAPIKey        string            `json:"flowshadow_api_key" toml:"flowshadow_api_key"`
+	DeepSOCBaseURL          string            `json:"deepsoc_base_url" toml:"deepsoc_base_url"`
+	DeepSOCUsername         string            `json:"deepsoc_username" toml:"deepsoc_username"`
+	DeepSOCPassword         string            `json:"deepsoc_password" toml:"deepsoc_password"`
+	DeepSOCAPIKey           string            `json:"deepsoc_api_key" toml:"deepsoc_api_key"`
+	CircularBaseURL         string            `json:"circular_base_url" toml:"circular_base_url"`
+	LLMBaseURL              string            `json:"llm_base_url" toml:"llm_base_url"`
+	LLMAPIKey               string            `json:"llm_api_key" toml:"llm_api_key"`
+	LLMModel                string            `json:"llm_model" toml:"llm_model"`
+	LLMTimeoutSeconds       int               `json:"llm_timeout_seconds" toml:"llm_timeout_seconds"`
+	SyncBatchSize           int               `json:"sync_batch_size" toml:"sync_batch_size"`
+	SyncLookbackSeconds     int               `json:"sync_lookback_seconds" toml:"sync_lookback_seconds"`
+	SyncMaxRetries          int               `json:"sync_max_retries" toml:"sync_max_retries"`
+	HTTPTimeoutSeconds      int               `json:"http_timeout_seconds" toml:"http_timeout_seconds"`
+	MQBackend               string            `json:"mq_backend" toml:"mq_backend"`
+	RabbitMQURL             string            `json:"rabbitmq_url" toml:"rabbitmq_url"`
+	RabbitMQExchange        string            `json:"rabbitmq_exchange" toml:"rabbitmq_exchange"`
+	RabbitMQEventQueue      string            `json:"rabbitmq_event_queue" toml:"rabbitmq_event_queue"`
+	RabbitMQConsumerEnabled bool              `json:"rabbitmq_consumer_enabled" toml:"rabbitmq_consumer_enabled"`
+	EvidenceNodes           map[string]string `json:"evidence_nodes" toml:"evidence_nodes"`
 }
 
 func NewTraffic(moduleCfg Config) *Traffic {
@@ -95,10 +96,21 @@ func NewTraffic(moduleCfg Config) *Traffic {
 	}
 
 	socketHub := socketio.NewHub()
+	// 收敛终报后台扫描：每 1 分钟检查一次未收敛事件。
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			if n, err := services.ScanConverged(context.Background()); err == nil && n > 0 {
+				log.Printf("traffic: convergence scan scheduled %d final analysis", n)
+			}
+		}
+	}()
 	return &Traffic{
 		api: NewHandler(
 			NewEventService(services),
 			NewAssetService(st),
+			NewAssetReportService(services),
 			NewAccountService(services),
 			NewChatService(services),
 			NewSystemService(cfg, services),
@@ -112,20 +124,17 @@ func NewTraffic(moduleCfg Config) *Traffic {
 }
 
 // loadStore 初始化共享 MySQL 连接池（自动建库/建表/种子，幂等）并返回
-// 连接池与 Store 实现；初始化失败时回退内存存储并返回 nil 连接池
-// （lyserver 依赖注入 nil 时自动降级为未启用）。
+// 连接池与 Store 实现。全面迁移至 MySQL：初始化失败时直接终止启动，
+// 不再静默回退内存存储；STORE_BACKEND=memory 仅保留给开发/测试显式使用。
 func loadStore(cfg config.Config) (*sql.DB, store.Store) {
 	switch strings.ToLower(cfg.StoreBackend) {
 	case "memory":
+		log.Printf("traffic: store backend=memory（仅限开发/测试，进程重启数据丢失）")
 		return nil, store.NewMemoryStore()
-	case "postgres":
-		log.Printf("traffic: store backend %q is no longer supported, using mysql instead", cfg.StoreBackend)
-		fallthrough
-	default: // mysql（默认）
+	default:
 		db, err := store.InitMySQL(context.Background(), cfg.DatabaseURL, cfg.AutoMigrate, cfg.DBWaitSeconds)
 		if err != nil {
-			log.Printf("traffic: init mysql store failed, falling back to memory: %v", err)
-			return nil, store.NewMemoryStore()
+			log.Fatalf("traffic: mysql store 初始化失败（已禁用 memory 回退）: %v", err)
 		}
 		return db, store.NewMySQLStore(db)
 	}
@@ -204,6 +213,14 @@ func (c Config) toInternal() config.Config {
 		cfg.RabbitMQEventQueue = c.RabbitMQEventQueue
 	}
 	cfg.RabbitMQConsumerEnabled = c.RabbitMQConsumerEnabled
+	if len(c.EvidenceNodes) > 0 {
+		if cfg.EvidenceNodes == nil {
+			cfg.EvidenceNodes = map[string]string{}
+		}
+		for k, v := range c.EvidenceNodes {
+			cfg.EvidenceNodes[k] = v
+		}
+	}
 	return cfg
 }
 
@@ -236,6 +253,9 @@ func (m *Traffic) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
 				{Name: "LLM状态", Path: "llm-health", Method: "GET", Handler: m.api.LLMHealth, Enabled: true},
 				{Name: "LLM配置", Path: "llm-config", Method: "GET", Handler: m.api.LLMConfig, Enabled: true},
 				{Name: "保存LLM配置", Path: "llm-config", Method: "PUT", Handler: m.api.LLMConfig, Enabled: true},
+				{Name: "存储配置", Path: "store-config", Method: "GET", Handler: m.api.StoreConfig, Enabled: true},
+				{Name: "保存存储配置", Path: "store-config", Method: "PUT", Handler: m.api.StoreConfig, Enabled: true},
+				{Name: "存储健康测试", Path: "store-config/test", Method: "POST", Handler: m.api.TestStoreConfig, Enabled: true},
 				{Name: "版本信息", Path: "version", Method: "GET", Handler: m.api.Version, Enabled: true},
 				{Name: "全局报告", Path: "report/global", Method: "POST", Handler: m.api.ReportGlobal, Enabled: true},
 			},
@@ -275,6 +295,9 @@ func (m *Traffic) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
 				{Name: "完成执行", Path: "detail/:eventID/executions/:executionID/complete", Method: "POST", Handler: m.api.CompleteExecution, Enabled: true},
 				{Name: "事件层级", Path: "detail/:eventID/hierarchy", Method: "GET", Handler: m.api.EventHierarchy, Enabled: true},
 				{Name: "事件审核", Path: "detail/:eventID/review", Method: "POST", Handler: m.api.ReviewEvent, Enabled: true},
+				{Name: "手动刷新分析", Path: "detail/:eventID/report/refresh", Method: "POST", Handler: m.api.RefreshEventReport, Enabled: true},
+				{Name: "证据PCAP下载", Path: "detail/:eventID/evidence/:idx", Method: "GET", Handler: m.api.EventEvidence, Enabled: true},
+				{Name: "证据PCAP全量打包", Path: "detail/:eventID/evidence/archive", Method: "GET", Handler: m.api.EventEvidenceArchive, Enabled: true},
 			},
 		},
 	})...)
@@ -290,6 +313,9 @@ func (m *Traffic) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
 				{Name: "删除资产", Path: ":id", Method: "DELETE", Handler: m.api.DeleteAsset, Enabled: true},
 				{Name: "导入资产", Path: "import", Method: "POST", Handler: m.api.ImportAssets, Enabled: true},
 				{Name: "导入模板", Path: "import/template", Method: "GET", Handler: m.api.AssetImportTemplate, Enabled: true},
+				{Name: "资产月度总结", Path: "monthly-summary/run", Method: "POST", Handler: m.api.RunAssetMonthlySummary, Enabled: true},
+				{Name: "资产月度总结进度", Path: "monthly-summary/jobs/:jobID", Method: "GET", Handler: m.api.GetAssetMonthlyJob, Enabled: true},
+				{Name: "资产月度总结查询", Path: ":id/monthly-summary", Method: "GET", Handler: m.api.GetAssetMonthlySummary, Enabled: true},
 			},
 		},
 	})...)
@@ -368,6 +394,10 @@ func (m *Traffic) PublicRoutes(e *gin.RouterGroup) {
 	e.GET("/llm/config", m.api.LLMConfig)
 	e.POST("/llm/config", m.api.LLMConfig)
 	e.PUT("/llm/config", m.api.LLMConfig)
+	e.GET("/store/config", m.api.StoreConfig)
+	e.POST("/store/config", m.api.StoreConfig)
+	e.PUT("/store/config", m.api.StoreConfig)
+	e.POST("/store/config/test", m.api.TestStoreConfig)
 	e.POST("/internal/*path", m.api.Internal)
 	e.GET("/internal/*path", m.api.Internal)
 	e.PUT("/internal/*path", m.api.Internal)

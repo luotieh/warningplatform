@@ -1,12 +1,21 @@
 import { defineConfig } from '@vben/vite-config';
 
 export default defineConfig(async () => {
+  // mock/ 目录仅本地开发使用（已 gitignore）；不存在时跳过 mock 插件，
+  // 避免克隆/CI 构建因缺少该目录而失败。
+  const useEventMock = await import('node:fs')
+    .then((fs) => fs.existsSync(new URL('./mock/event-mock.ts', import.meta.url)))
+    .catch(() => false);
+  const eventMockPlugin = useEventMock
+    ? (await import('./mock/event-mock')).eventMockPlugin()
+    : null;
   return {
     application: {
       devtools: false,
       print: false,
     },
     vite: {
+      plugins: eventMockPlugin ? [eventMockPlugin] : [],
       build: {
         // ★ 直接输出到后端 embed 目录（见 vulnscan-backend/frontend/embed.go），单一二进制部署
         chunkSizeWarningLimit: 8000,

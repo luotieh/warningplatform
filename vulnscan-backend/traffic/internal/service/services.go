@@ -141,16 +141,25 @@ func (s Services) mergeOccurrence(eventID string, ly map[string]any) int {
 		}
 		ctx["occurrences"] = occs
 	}
+	// 聚合证据累积：后续命中的 PCAP 一并保留（按 path_ref/sha256 去重），
+	// 供“下载全部 PCAP(ZIP)”取回聚合事件首末区间内的全部证据。
+	if ef := normalizeEvidenceFiles(ly, count-1, occ); len(ef) > 0 {
+		mergeEvidenceFiles(ctx, ef)
+	}
 	// 刷新服务器侧最近命中时刻，用于静默超时收敛判定
-	ctx["last_seen_at"] = time.Now().UTC().Format(time.RFC3339)
+	lastSeenAt := time.Now().UTC()
+	ctx["last_seen_at"] = lastSeenAt.Format(time.RFC3339)
+	// 量化统计增量累计
+	updateQuantStats(ctx, ly)
 
 	ctxJSON, _ := json.Marshal(ctx)
 	summary := fmt.Sprintf("%s（聚合 %d 次，首次 %s，末次 %s）",
 		firstNonEmpty(ev.EventName, ev.Title, "安全事件"),
 		count, asString(ctx["first_time"]), asString(ctx["last_time"]))
 	s.Store.UpdateEvent(eventID, map[string]any{
-		"context": string(ctxJSON),
-		"message": summary,
+		"context":      string(ctxJSON),
+		"message":      summary,
+		"last_seen_at": lastSeenAt.Format(time.RFC3339),
 	})
 	return count
 }

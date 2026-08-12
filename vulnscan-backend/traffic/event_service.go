@@ -11,8 +11,9 @@ import (
 )
 
 // aggregateIdleWindow 聚合收敛窗口：距最近一次命中超过该时长无新增，即判定已收敛，
-// 此刻的发生次数视为该聚合事件的“最终频次”。
-const aggregateIdleWindow = 10 * time.Minute
+// 此刻的发生次数视为该聚合事件的“最终频次”。与 internal/service 的
+// ConvergenceIdleWindow 保持一致（量化终报依赖同一窗口）。
+const aggregateIdleWindow = trafficservice.ConvergenceIdleWindow
 
 type EventService struct {
 	core trafficservice.Services
@@ -82,6 +83,24 @@ func (s *EventService) Stats(ctx context.Context, eventID string) map[string]any
 
 func (s *EventService) Summaries(ctx context.Context, eventID string) []domain.Summary {
 	return s.core.Store.ListSummaries(eventID)
+}
+
+// RefreshReport 手动刷新事件分析报告：后台异步执行（脱离请求上下文），
+// 立即返回当前版本与状态，避免请求超时中断 LLM 调用。
+func (s *EventService) RefreshReport(ctx context.Context, eventID string) (map[string]any, error) {
+	ev, ok := s.core.Store.GetEvent(eventID)
+	if !ok {
+		return nil, errors.New("事件不存在")
+	}
+	status := "refresh_submitted"
+	if !s.core.RefreshAnalysisAsync(eventID) {
+		status = "already_running"
+	}
+	return map[string]any{
+		"event_id":         eventID,
+		"analysis_version": ev.AnalysisVersion,
+		"status":           status,
+	}, nil
 }
 
 func (s *EventService) SendMessage(ctx context.Context, eventID string, body map[string]any) (domain.Message, error) {
@@ -191,9 +210,14 @@ func lyCompatibleEvent(event domain.Event) map[string]any {
 		"ioc":                context["ioc"],
 		"ioc_evidence":       context["ioc_evidence"],
 		"recommended_action": context["recommended_action"],
+		"evidence_files":     context["evidence_files"],
 		// 审核状态：供事件列表展示「待审核/已通过/已驳回」与通报编号
 		"review_status": event.ReviewStatus,
 		"circular_code": event.CircularCode,
+		// 量化分析版本与收敛状态（供前端展示初版/终版/手动刷新）。
+		"analysis_version":   event.AnalysisVersion,
+		"aggregation_closed": event.AggregationClosed,
+		"last_analysis_at":   event.LastAnalysisAt,
 	}
 }
 

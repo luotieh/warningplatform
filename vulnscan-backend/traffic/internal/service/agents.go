@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"vulnscan-backend/traffic/internal/domain"
 	"vulnscan-backend/traffic/internal/realtime"
@@ -15,6 +16,16 @@ import (
 // agentWorkflowInflight 保证同一事件的分析同一时刻只跑一条，避免「查看报告」重推
 // 与摄入路径并发触发两次 LLM 调用。
 var agentWorkflowInflight sync.Map // eventID -> struct{}
+
+// 分析类型（与 Summary.Kind / Event.AnalysisVersion 对应）。
+const (
+	AnalysisKindInitial = "initial"
+	AnalysisKindFinal   = "final"
+	AnalysisKindManual  = "manual"
+)
+
+// manualRefreshCooldown 手动刷新冷却窗口，防止高频重跑 LLM。
+const manualRefreshCooldown = 60 * time.Second
 
 // RunAgentWorkflowAsync 在后台跑事件分析，并与 HTTP 请求上下文解耦：
 // 分析依赖 LLM、耗时较长，绝不能因请求返回/前端超时而被取消（否则报告页会看到
@@ -34,20 +45,113 @@ func (s Services) RunAgentWorkflowAsync(eventID string) {
 }
 
 func (s Services) RunAgentWorkflow(ctx context.Context, eventID string) error {
+	return s.runAnalysis(ctx, eventID, AnalysisKindInitial, 1)
+}
+
+// RunFinalAnalysis 收敛终报：仅在事件已收敛且尚未生成终版（version>=2）时执行。
+func (s Services) RunFinalAnalysis(ctx context.Context, eventID string) error {
 	event, ok := s.Store.GetEvent(eventID)
 	if !ok {
 		return fmt.Errorf("event not found: %s", eventID)
+	}
+	if !event.AggregationClosed {
+		return fmt.Errorf("事件尚未收敛，无法生成终版分析")
+	}
+	if event.AnalysisVersion >= 2 {
+		return nil
+	}
+	return s.runAnalysis(ctx, eventID, AnalysisKindFinal, 2)
+}
+
+// RefreshAnalysis 按需手动刷新：基于当前最新 quant_stats 重新生成分析，
+// 新版本号 = 当前版本 + 1（kind=manual），受冷却窗口限制。
+func (s Services) RefreshAnalysis(ctx context.Context, eventID string) (int, error) {
+	event, ok := s.Store.GetEvent(eventID)
+	if !ok {
+		return 0, fmt.Errorf("event not found: %s", eventID)
+	}
+	if event.LastAnalysisAt != nil && time.Since(*event.LastAnalysisAt) < manualRefreshCooldown {
+		remaining := int64(manualRefreshCooldown.Seconds()) - int64(time.Since(*event.LastAnalysisAt).Seconds())
+		if remaining < 1 {
+			remaining = 1
+		}
+		return 0, fmt.Errorf("手动刷新过于频繁，请 %d 秒后重试",
+			remaining)
+	}
+	version := event.AnalysisVersion + 1
+	if version < 3 {
+		version = 3
+	}
+	if err := s.runAnalysis(ctx, eventID, AnalysisKindManual, version); err != nil {
+		return 0, err
+	}
+	return version, nil
+}
+
+// RefreshAnalysisAsync 后台异步手动刷新：使用 context.Background() 运行分析，
+// 避免前端请求超时/断开导致 LLM 调用被取消（context canceled while reading body）。
+// 返回是否已开始（false 表示该事件正在分析中或事件不存在）。
+func (s Services) RefreshAnalysisAsync(eventID string) bool {
+	if strings.TrimSpace(eventID) == "" {
+		return false
+	}
+	if _, ok := s.Store.GetEvent(eventID); !ok {
+		return false
+	}
+	if _, running := agentWorkflowInflight.LoadOrStore(eventID, struct{}{}); running {
+		return false
+	}
+	go func() {
+		defer agentWorkflowInflight.Delete(eventID)
+		_, _ = s.RefreshAnalysis(context.Background(), eventID)
+	}()
+	return true
+}
+
+// RunFinalAnalysisAsync 后台执行收敛终报，与请求上下文解耦。
+func (s Services) RunFinalAnalysisAsync(eventID string) {
+	if strings.TrimSpace(eventID) == "" {
+		return
+	}
+	if _, running := agentWorkflowInflight.LoadOrStore(eventID, struct{}{}); running {
+		return
+	}
+	go func() {
+		defer agentWorkflowInflight.Delete(eventID)
+		_ = s.RunFinalAnalysis(context.Background(), eventID)
+	}()
+}
+
+// runAnalysis 版本化分析主流程：
+//   - initial：已分析过（version>=1）则跳过；
+//   - final：已生成终版（version>=2）则跳过（调用方已检查，此处兜底）；
+//   - manual：强制重跑（冷却由 RefreshAnalysis 控制）。
+func (s Services) runAnalysis(ctx context.Context, eventID string, kind string, version int) error {
+	event, ok := s.Store.GetEvent(eventID)
+	if !ok {
+		return fmt.Errorf("event not found: %s", eventID)
+	}
+	// 兼容升级前已分析过的旧事件：无版本号但已有 agent 工作流消息时视为已分析。
+	if kind == AnalysisKindInitial && (event.AnalysisVersion >= 1 || hasAgentWorkflowMessages(s.Store.ListMessages(eventID))) {
+		return nil
+	}
+	if kind == AnalysisKindFinal && event.AnalysisVersion >= 2 {
+		return nil
 	}
 	roundID := event.CurrentRound
 	if roundID == 0 {
 		roundID = 1
 	}
-	if hasAgentWorkflowMessages(s.Store.ListMessages(eventID)) {
-		return nil
-	}
 
 	_, _ = s.Store.UpdateEvent(eventID, map[string]any{"event_status": "processing"})
 
+	if s.LLM == nil {
+		err := fmt.Errorf("LLM未配置")
+		_ = s.addLLMConfigRequiredMessage(eventID, roundID, err.Error())
+		_, _ = s.Store.UpdateEvent(eventID, map[string]any{"event_status": "pending"})
+		realtime.BroadcastStatus(eventID, map[string]any{"event_id": eventID, "status": "llm_config_required", "message": err.Error()})
+		return err
+	}
 	health := s.LLM.HealthCheck(ctx)
 	if !health.Configured || !health.OK {
 		err := fmt.Errorf("LLM不可用，请先在配置页面填写并验证可用的LLM参数: %s", firstNonEmpty(health.Error, "health check failed"))
@@ -70,7 +174,13 @@ func (s Services) RunAgentWorkflow(ctx context.Context, eventID string) error {
 		return err
 	}
 
-	sm, err := s.Store.AddSummary(domain.Summary{EventID: eventID, RoundID: roundID, EventSummary: reply})
+	sm, err := s.Store.AddSummary(domain.Summary{
+		EventID:      eventID,
+		RoundID:      roundID,
+		EventSummary: reply,
+		Version:      version,
+		Kind:         kind,
+	})
 	if err != nil {
 		return s.failAgentWorkflow(eventID, fmt.Errorf("保存分析总结失败: %w", err))
 	}
@@ -80,7 +190,12 @@ func (s Services) RunAgentWorkflow(ctx context.Context, eventID string) error {
 		llmExpertResponse(event, roundID, sm, reply)); err != nil {
 		return s.failAgentWorkflow(eventID, fmt.Errorf("保存专家分析消息失败: %w", err))
 	}
-	_, _ = s.Store.UpdateEvent(eventID, map[string]any{"event_status": "round_finished"})
+now := time.Now().UTC().Format(time.RFC3339)
+	_, _ = s.Store.UpdateEvent(eventID, map[string]any{
+		"event_status":     "round_finished",
+		"analysis_version": version,
+		"last_analysis_at": now,
+	})
 	realtime.BroadcastStatus(eventID, map[string]any{"event_id": eventID, "status": "round_finished"})
 	return nil
 }
@@ -207,6 +322,19 @@ func formatAuxContext(raw string) string {
 		}
 	}
 
+	// 量化统计（聚合）：次数/窗口/速率/体量/规则/IOC/突发窗口。
+	// 数字由确定性引擎计算，LLM 只基于这些数字做定性研判，不得修改或编造。
+	if qs, ok := ctx[quantStatsKey].(map[string]any); ok && len(qs) > 0 {
+		if line := formatQuantStats(qs); line != "" {
+			b.WriteString("- 量化统计（聚合，数字为权威依据）：\n")
+			for _, l := range strings.Split(line, "\n") {
+				if strings.TrimSpace(l) != "" {
+					b.WriteString("  " + l + "\n")
+				}
+			}
+		}
+	}
+
 	// 应用层证据
 	if app, ok := ctx["app"].(map[string]any); ok && len(app) > 0 {
 		b.WriteString("- 应用层证据(app)：\n")
@@ -266,6 +394,34 @@ func formatAuxContext(raw string) string {
 	emit("", "威胁指数", ctx["threat_index"])
 	emit("", "检测模型", ctx["detection_model"])
 	emit("", "证据文件", ctx["evidence_file"])
+	if efs, ok := ctx["evidence_files"].([]any); ok && len(efs) > 0 {
+		b.WriteString("- 证据附件(evidence_files)：\n")
+		for _, raw := range efs {
+			ef, ok := raw.(map[string]any)
+			if !ok {
+				continue
+			}
+			name := scalarString(ef["name"])
+			if name == "" {
+				name = scalarString(ef["id"])
+			}
+			parts := []string{}
+			if t := scalarString(ef["type"]); t != "" {
+				parts = append(parts, "type="+t)
+			}
+			if size := scalarString(ef["size"]); size != "" && size != "0" {
+				parts = append(parts, "size="+size)
+			}
+			if p := scalarString(ef["path_ref"]); p != "" {
+				parts = append(parts, "path="+p)
+			}
+			b.WriteString("  - " + name)
+			if len(parts) > 0 {
+				b.WriteString("（" + strings.Join(parts, ", ") + "）")
+			}
+			b.WriteString("\n")
+		}
+	}
 	emit("", "Schema 版本", ctx["schema_version"])
 	emit("", "传感器版本", ctx["sensor_version"])
 
@@ -367,7 +523,7 @@ func llmExpertResponse(event domain.Event, roundID int, sm domain.Summary, reply
 		"round_id":      roundID,
 		"response_type": "SUMMARY",
 		"response_text": reply,
-		"suggestions":   []string{"当前结果由已配置 LLM 生成；如需执行封禁、取证或资产查询，请接入对应外部剧本/执行器。"},
+		"suggestions":   []string{},
 	}
 }
 

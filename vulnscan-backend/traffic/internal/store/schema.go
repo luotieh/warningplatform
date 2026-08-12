@@ -36,6 +36,10 @@ CREATE TABLE IF NOT EXISTS events (
     reviewed_by VARCHAR(128) NOT NULL DEFAULT '',
     reviewed_at DATETIME(6) NULL,
     circular_code VARCHAR(70) NOT NULL DEFAULT '',
+    analysis_version INTEGER NOT NULL DEFAULT 0,
+    aggregation_closed TINYINT(1) NOT NULL DEFAULT 0,
+    last_analysis_at DATETIME(6) NULL,
+    last_seen_at DATETIME(6) NULL,
     KEY idx_events_created_at (created_at DESC)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -139,10 +143,45 @@ CREATE TABLE IF NOT EXISTS summaries (
     event_id VARCHAR(128) NOT NULL,
     round_id INTEGER NOT NULL DEFAULT 1,
     event_summary TEXT NOT NULL,
+    version INTEGER NOT NULL DEFAULT 1,
+    kind VARCHAR(32) NOT NULL DEFAULT 'initial',
     created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     KEY idx_summaries_event_id (event_id),
     FOREIGN KEY (event_id) REFERENCES events(event_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS asset_report_summaries (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    summary_id VARCHAR(128) UNIQUE NOT NULL,
+    asset_id VARCHAR(64) NOT NULL DEFAULT '',
+    asset_ip VARCHAR(64) NOT NULL DEFAULT '',
+    period VARCHAR(16) NOT NULL DEFAULT '',
+    window_from VARCHAR(32) NOT NULL DEFAULT '',
+    window_to VARCHAR(32) NOT NULL DEFAULT '',
+    event_count INTEGER NOT NULL DEFAULT 0,
+    stats JSON NOT NULL,
+    narrative TEXT NOT NULL,
+    status VARCHAR(32) NOT NULL DEFAULT 'pending',
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    UNIQUE KEY uq_asset_report_period (asset_id, period),
+    KEY idx_asset_report_asset (asset_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS asset_report_jobs (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    job_id VARCHAR(128) UNIQUE NOT NULL,
+    period VARCHAR(16) NOT NULL DEFAULT '',
+    status VARCHAR(32) NOT NULL DEFAULT 'queued',
+    total_assets INTEGER NOT NULL DEFAULT 0,
+    completed_assets INTEGER NOT NULL DEFAULT 0,
+    error TEXT NOT NULL,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    started_at DATETIME(6) NULL,
+    finished_at DATETIME(6) NULL,
+    KEY idx_asset_report_jobs_created (created_at DESC)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS event_maps (

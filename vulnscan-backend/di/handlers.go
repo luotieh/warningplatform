@@ -10,6 +10,7 @@ import (
 
 	"vulnscan-backend/asset"
 	"vulnscan-backend/assetmgr"
+	"vulnscan-backend/authlocal"
 	"vulnscan-backend/boot"
 	"vulnscan-backend/circular"
 	"vulnscan-backend/cluster"
@@ -87,6 +88,7 @@ type Handlers struct {
 	Settings      *setting.Handler
 	payloadLoader *payload.Loader
 	Knowledge     *scanrunner.KnowledgeRegistry
+	LocalAuth     *authlocal.Service
 	logLevel      *slog.LevelVar
 }
 
@@ -106,22 +108,47 @@ func (h *Handlers) RouteLoad() {
 
 	apiGroup := engine.Group("/api")
 
-	h.IAM.RegisterProxyRoutes(apiGroup, proxy.Options{
-		MountPrefix: "iam",
-		ClientID:    h.Config.IAM.ClientID,
-		PublicAuth: &proxy.PublicAuthOptions{
-			SiteName:  h.Product.GetName(),
-			Copyright: h.Product.GetName(),
-		},
-	})
+	localMode := strings.EqualFold(h.Config.IAM.Mode, "local")
+	if localMode {
+		sess, err := h.DB.GetDBSession()
+		if err != nil {
+			slog.Error("[+] 本地认证初始化失败，请检查数据库连接", "error", err)
+		} else {
+			h.LocalAuth = authlocal.New(sess, h.Config)
+			if err := h.LocalAuth.Ensure(); err != nil {
+				slog.Error("[+] 本地认证初始化失败", "error", err)
+			} else {
+				h.LocalAuth.RegisterRoutes(apiGroup)
+				slog.Info("[+] 本地认证模式已启用（IAM 已剥离）")
+			}
+		}
+	} else {
+		h.IAM.RegisterProxyRoutes(apiGroup, proxy.Options{
+			MountPrefix: "iam",
+			ClientID:    h.Config.IAM.ClientID,
+			PublicAuth: &proxy.PublicAuthOptions{
+				SiteName:  h.Product.GetName(),
+				Copyright: h.Product.GetName(),
+			},
+		})
+		h.registerSSORoutes(engine.Engine)
+	}
 
-	h.registerSSORoutes(engine.Engine)
-
-	apiAuthenticated := apiGroup.Group("/", h.IAM.Middleware().Authentication())
+	var apiAuthenticated *gin.RouterGroup
+	if localMode && h.LocalAuth != nil {
+		apiAuthenticated = apiGroup.Group("/", h.LocalAuth.Middleware())
+	} else {
+		apiAuthenticated = apiGroup.Group("/", h.IAM.Middleware().Authentication())
+	}
 	h.registerPrivilegedFrontendSync(apiAuthenticated)
 	h.registerUserListAPI(apiAuthenticated)
 
-	apiAuthorized := apiAuthenticated.Group("", h.IAMAuthorization())
+	var apiAuthorized *gin.RouterGroup
+	if localMode && h.LocalAuth != nil {
+		apiAuthorized = apiAuthenticated.Group("", h.LocalAuth.Authorize())
+	} else {
+		apiAuthorized = apiAuthenticated.Group("", h.IAMAuthorization())
+	}
 
 	var backends []authorize.BackendItem
 	backends = append(backends, authorize.BackendItem{
@@ -230,6 +257,10 @@ func (h *Handlers) injectCrawlScreenshotUploader() {
 	if h.IAM == nil {
 		return
 	}
+	if strings.EqualFold(h.Config.IAM.Mode, "local") {
+		slog.Warn("[+] 本地认证模式，跳过 IAM Storage 截图上传注入")
+		return
+	}
 	iamBase := strings.TrimRight(h.Config.IAM.BaseURL, "/")
 	storageBaseURL := iamBase + h.Config.IAM.PathPrefix + "/storage/file"
 
@@ -257,6 +288,10 @@ func (h *Handlers) injectCrawlScreenshotUploader() {
 
 func (h *Handlers) injectAnnotatedScreenshotUploader() {
 	if h.IAM == nil || h.embeddedAgent == nil {
+		return
+	}
+	if strings.EqualFold(h.Config.IAM.Mode, "local") {
+		slog.Warn("[+] 本地认证模式，跳过 IAM Storage 标注上传注入")
 		return
 	}
 	iamBase := strings.TrimRight(h.Config.IAM.BaseURL, "/")
@@ -294,6 +329,10 @@ func (h *Handlers) injectAnnotatedScreenshotUploader() {
 }
 
 func (h *Handlers) syncBackends(backends []authorize.BackendItem) {
+	if strings.EqualFold(h.Config.IAM.Mode, "local") {
+		slog.Info("[sync-backends] 本地认证模式，跳过 IAM 后端同步")
+		return
+	}
 	if len(backends) == 0 || h.Config.IAM.ClientID == "" {
 		return
 	}

@@ -7,6 +7,7 @@ import { NModal } from 'naive-ui';
 import {
   deepflowGetEventDetail,
   deepflowGetEventSummary,
+  deepflowRefreshEventReport,
 } from '#/api/ly/deepflow';
 import { message } from '#/adapter/naive';
 import { useDeepflowStore } from '#/store';
@@ -39,6 +40,8 @@ const deepflowStore = useDeepflowStore();
 const detail = ref<Record<string, any>>({});
 const chatBoxRef = ref<{ getReportMarkdown: () => string } | null>(null);
 const downloading = ref(false);
+const refreshing = ref(false);
+const analysisVersion = ref(0);
 const wsConnectionStatus = ref<'connected' | 'connecting' | 'disconnected'>(
   'disconnected',
 );
@@ -131,6 +134,27 @@ async function getDetails() {
   }
 }
 
+async function refreshReport() {
+  if (refreshing.value || !props.eventId) return;
+  refreshing.value = true;
+  try {
+    const res = await deepflowRefreshEventReport(props.eventId);
+    analysisVersion.value = Number(res?.analysis_version || 0);
+    message.success(
+      res?.status === 'already_running'
+        ? '该事件正在分析中，请稍后查看'
+        : '分析刷新任务已提交，完成后自动更新',
+    );
+    await getDetails();
+  } catch (error) {
+    message.error(
+      error instanceof Error ? error.message : '刷新分析失败，请稍后重试',
+    );
+  } finally {
+    refreshing.value = false;
+  }
+}
+
 function bindSocket() {
   deepflowSocket.on('connected', handleSocketConnected);
   deepflowSocket.on('disconnected', handleSocketDisconnected);
@@ -150,7 +174,8 @@ function close() {
   show.value = false;
 }
 
-// 把 LLM 自动分析总结（按轮）整理成 Markdown
+// 把 LLM 自动分析总结整理成 Markdown：只取最新一轮（后端按 id 升序返回，
+// 最后一轮即最新报告），避免 Word 下载把历史所有轮次的报告都渲染进去。
 function formatSummary(res: any): string {
   const list = Array.isArray(res)
     ? res
@@ -158,18 +183,15 @@ function formatSummary(res: any): string {
       ? res.data
       : [];
   if (list.length > 0) {
-    return list
-      .map((item: Record<string, any>, index: number) => {
-        const title = `第 ${item.round_id || index + 1} 轮分析`;
-        const time = formatDeepflowDate(item.updated_at || item.created_at);
-        return [
-          `## ${title}`,
-          time ? `*${time}*` : '',
-          item.event_summary || '暂无总结内容',
-        ]
-          .filter(Boolean)
-          .join('\n\n');
-      })
+    const latest = list[list.length - 1] as Record<string, any>;
+    const title = `第 ${latest.round_id || 1} 轮分析`;
+    const time = formatDeepflowDate(latest.updated_at || latest.created_at);
+    return [
+      `## ${title}`,
+      time ? `*${time}*` : '',
+      latest.event_summary || '暂无总结内容',
+    ]
+      .filter(Boolean)
       .join('\n\n');
   }
   if (typeof res === 'string') return res;
@@ -293,6 +315,25 @@ watch(
           </div>
         </div>
         <div class="report-header-right">
+          <button
+            class="report-icon-btn"
+            type="button"
+            :disabled="refreshing || !eventId"
+            aria-label="手动刷新分析"
+            title="手动刷新分析"
+            @click="refreshReport"
+          >
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <path
+                d="M20 11a8 8 0 1 0-2.34 5.66M20 4v7h-7"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </button>
           <button
             class="report-icon-btn"
             type="button"

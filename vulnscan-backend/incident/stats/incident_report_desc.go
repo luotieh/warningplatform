@@ -53,6 +53,112 @@ func reportDescriptionBlocks(data *statsContract.IncidentReportData) []ReportDes
 	return []ReportDescriptionBlock{{Title: "隐患描述", Body: desc}}
 }
 
+// reportAnalysisBlocks 安全事件分析报告扩展章节（事件概述/流量证据与IOC/影响评估/
+// 处置行动/附件清单），仅渲染非空章节。
+func reportAnalysisBlocks(data *statsContract.IncidentReportData) []ReportDescriptionBlock {
+	if data == nil {
+		return nil
+	}
+	var blocks []ReportDescriptionBlock
+
+	if strings.TrimSpace(data.CoreConclusion) != "" {
+		blocks = append(blocks, ReportDescriptionBlock{Title: "事件概述", Body: data.CoreConclusion})
+	}
+
+	var evidence strings.Builder
+	for _, ev := range data.TrafficEvidence {
+		fmt.Fprintf(&evidence, "证据类型：%s\n", dashIfEmpty(ev.Type))
+		if strings.TrimSpace(ev.Detail) != "" {
+			fmt.Fprintf(&evidence, "技术细节：%s\n", ev.Detail)
+		}
+		if strings.TrimSpace(ev.Source) != "" {
+			fmt.Fprintf(&evidence, "证据来源：%s\n", ev.Source)
+		}
+		if ev.Confidence > 0 || strings.TrimSpace(ev.ConfidenceText) != "" {
+			fmt.Fprintf(&evidence, "置信度：%s (%d%%)\n", dashIfEmpty(ev.ConfidenceText), ev.Confidence)
+		}
+		evidence.WriteString("\n")
+	}
+	for _, ioc := range data.Iocs {
+		fmt.Fprintf(&evidence, "IOC类型：%s\n", dashIfEmpty(ioc.Type))
+		fmt.Fprintf(&evidence, "IOC值：%s\n", dashIfEmpty(ioc.Value))
+		if strings.TrimSpace(ioc.ThreatSource) != "" {
+			fmt.Fprintf(&evidence, "威胁情报来源：%s\n", ioc.ThreatSource)
+		}
+		if strings.TrimSpace(ioc.Match) != "" {
+			fmt.Fprintf(&evidence, "匹配结果：%s\n", ioc.Match)
+		}
+		evidence.WriteString("\n")
+	}
+	if strings.TrimSpace(data.IocValidity) != "" {
+		fmt.Fprintf(&evidence, "IOC有效性说明：%s\n", data.IocValidity)
+	}
+	if strings.TrimSpace(evidence.String()) != "" {
+		blocks = append(blocks, ReportDescriptionBlock{
+			Title: "流量证据与IOC明细",
+			Body:  strings.TrimRight(evidence.String(), "\n"),
+		})
+	}
+
+	var impact strings.Builder
+	if strings.TrimSpace(data.Impact.Business) != "" {
+		fmt.Fprintf(&impact, "业务影响：%s\n", data.Impact.Business)
+	}
+	if strings.TrimSpace(data.Impact.DataRisk) != "" {
+		fmt.Fprintf(&impact, "数据风险：%s\n", data.Impact.DataRisk)
+	}
+	if strings.TrimSpace(data.Impact.Intent) != "" {
+		fmt.Fprintf(&impact, "攻击意图：%s\n", data.Impact.Intent)
+	}
+	if strings.TrimSpace(impact.String()) != "" {
+		blocks = append(blocks, ReportDescriptionBlock{Title: "影响评估", Body: strings.TrimRight(impact.String(), "\n")})
+	}
+
+	var actions strings.Builder
+	if len(data.ImmediateActions) > 0 {
+		actions.WriteString("立即行动项（30分钟内完成）：\n")
+		for i, a := range data.ImmediateActions {
+			fmt.Fprintf(&actions, "%d. %s\n", i+1, a.Action)
+			if strings.TrimSpace(a.Detail) != "" {
+				fmt.Fprintf(&actions, "   - %s\n", a.Detail)
+			}
+		}
+		actions.WriteString("\n")
+	}
+	if len(data.FollowupActions) > 0 {
+		actions.WriteString("后续处置项（24小时内完成）：\n")
+		for i, a := range data.FollowupActions {
+			fmt.Fprintf(&actions, "%d. %s\n", i+1, a.Action)
+			if strings.TrimSpace(a.Detail) != "" {
+				fmt.Fprintf(&actions, "   - %s\n", a.Detail)
+			}
+		}
+	}
+	if strings.TrimSpace(actions.String()) != "" {
+		blocks = append(blocks, ReportDescriptionBlock{Title: "处置建议", Body: strings.TrimRight(actions.String(), "\n")})
+	}
+
+	var attachments strings.Builder
+	for _, at := range data.Attachments {
+		fmt.Fprintf(&attachments, "- %s", dashIfEmpty(at.Name))
+		if strings.TrimSpace(at.Path) != "" {
+			fmt.Fprintf(&attachments, "：%s", at.Path)
+		}
+		attachments.WriteString("\n")
+	}
+	if strings.TrimSpace(attachments.String()) != "" {
+		blocks = append(blocks, ReportDescriptionBlock{Title: "附件清单", Body: strings.TrimRight(attachments.String(), "\n")})
+	}
+	return blocks
+}
+
+func dashIfEmpty(v string) string {
+	if strings.TrimSpace(v) == "" {
+		return "-"
+	}
+	return v
+}
+
 const (
 	sectionCause    = "【事件成因】"
 	sectionEvidence = "【证据详情】"

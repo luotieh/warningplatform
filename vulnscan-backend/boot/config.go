@@ -15,6 +15,10 @@ type IAMConfig struct {
 	ClientID     string `json:"client_id" toml:"client_id"`
 	ClientSecret string `json:"client_secret" toml:"client_secret"`
 	PathPrefix   string `json:"path_prefix" toml:"path_prefix"`
+	// Mode 认证模式：remote（默认，IAM 代理）或 local（独立运行，本地账户登录）。
+	Mode string `json:"mode" toml:"mode"`
+	// LocalAdminPassword 本地模式默认管理员密码（首次建库时生效，缺省 admin）。
+	LocalAdminPassword string `json:"local_admin_password" toml:"local_admin_password"`
 }
 
 type CacheConfig struct {

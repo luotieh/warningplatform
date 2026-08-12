@@ -99,3 +99,16 @@ func intFromBody(v any) int {
 		return 0
 	}
 }
+
+func boolFromBody(v any) bool {
+	switch x := v.(type) {
+	case bool:
+		return x
+	case string:
+		switch strings.ToLower(strings.TrimSpace(x)) {
+		case "1", "true", "yes", "y", "on":
+			return true
+		}
+	}
+	return false
+}

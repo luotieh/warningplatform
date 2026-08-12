@@ -68,6 +68,28 @@ func (s *SystemService) SetLLMConfig(settings trafficconfig.LLMSettings, updateA
 	return updated, nil
 }
 
+func (s *SystemService) StoreConfig() trafficconfig.StoreSettings {
+	return trafficconfig.SettingsFromStoreConfig(s.cfg)
+}
+
+// SetStoreConfig 把 MySQL 配置写入 config.toml 并同步内存配置。
+// 存储后端切换需重启进程生效（返回 RestartRequired 语义由 handler 提示）。
+func (s *SystemService) SetStoreConfig(settings trafficconfig.StoreSettings, updatePassword bool) (trafficconfig.StoreSettings, error) {
+	updated, err := trafficconfig.WriteTrafficStoreSettings(settings, updatePassword)
+	if err != nil {
+		return trafficconfig.StoreSettings{}, err
+	}
+	s.cfg.StoreBackend = updated.StoreBackend
+	s.cfg.DatabaseURL = trafficconfig.BuildStoreDSN(updated)
+	s.cfg.AutoMigrate = updated.AutoMigrate
+	s.cfg.DBWaitSeconds = updated.DBWaitSeconds
+	return updated, nil
+}
+
+func (s *SystemService) TestStoreConfig(settings trafficconfig.StoreSettings) trafficconfig.StoreTestResult {
+	return trafficconfig.TestStoreSettings(settings)
+}
+
 func (s *SystemService) Version() map[string]any {
 	return map[string]any{"version": "0.3.0-db-mq", "name": "traffic-go"}
 }

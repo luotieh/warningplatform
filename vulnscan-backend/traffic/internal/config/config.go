@@ -1,6 +1,8 @@
 package config
 
 import (
+	"context"
+	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-sql-driver/mysql"
 	"github.com/pelletier/go-toml/v2"
 )
 
@@ -38,6 +41,9 @@ type Config struct {
 	RabbitMQExchange        string
 	RabbitMQEventQueue      string
 	RabbitMQConsumerEnabled bool
+	// EvidenceNodes 证据节点映射：device_id → 节点证据服务 base_url，
+	// 例如 {"node-arm-offline-001": "http://127.0.0.1:25640"}。
+	EvidenceNodes map[string]string
 }
 
 type LLMSettings struct {
@@ -48,6 +54,31 @@ type LLMSettings struct {
 	Model            string `json:"model"`
 	TimeoutSeconds   int    `json:"timeout_seconds"`
 	ConfigPath       string `json:"config_path,omitempty"`
+}
+
+// StoreSettings 流量存储配置（配置页读写与健康测试使用）。
+type StoreSettings struct {
+	StoreBackend       string `json:"store_backend"` // mysql / memory
+	Host               string `json:"host"`
+	Port               int    `json:"port"`
+	User               string `json:"user"`
+	Password           string `json:"-"`
+	PasswordConfigured bool   `json:"password_configured"`
+	PasswordMasked     string `json:"password_masked,omitempty"`
+	DBName             string `json:"db_name"`
+	AutoMigrate        bool   `json:"auto_migrate"`
+	DBWaitSeconds      int    `json:"db_wait_seconds"`
+	ConfigPath         string `json:"config_path,omitempty"`
+}
+
+// StoreTestResult 存储健康测试结果。
+type StoreTestResult struct {
+	OK         bool     `json:"ok"`
+	Backend    string   `json:"backend"`
+	LatencyMS  int64    `json:"latency_ms"`
+	Tables     []string `json:"tables"`
+	Error      string   `json:"error,omitempty"`
+	ConfigPath string   `json:"config_path,omitempty"`
 }
 
 func Load() Config {
@@ -99,6 +130,24 @@ func SettingsFromConfig(cfg Config) LLMSettings {
 	}
 }
 
+func SettingsFromStoreConfig(cfg Config) StoreSettings {
+	s := StoreSettings{
+		StoreBackend:  strings.ToLower(strings.TrimSpace(cfg.StoreBackend)),
+		AutoMigrate:   cfg.AutoMigrate,
+		DBWaitSeconds: normalizeDBWait(cfg.DBWaitSeconds),
+		ConfigPath:    findConfigFile(),
+	}
+	host, port, user, dbname, passwd := parseStoreDSN(cfg.DatabaseURL)
+	s.Host = host
+	s.Port = port
+	s.User = user
+	s.DBName = dbname
+	s.Password = passwd
+	s.PasswordConfigured = strings.TrimSpace(passwd) != ""
+	s.PasswordMasked = maskSecret(passwd)
+	return s
+}
+
 func WriteTrafficLLMSettings(settings LLMSettings, updateAPIKey bool) (LLMSettings, error) {
 	path := findConfigFile()
 	if path == "" {
@@ -123,9 +172,9 @@ func WriteTrafficLLMSettings(settings LLMSettings, updateAPIKey bool) (LLMSettin
 		replacements["llm_api_key"] = quoteTOMLString(strings.TrimSpace(settings.APIKey))
 	}
 
-	next := upsertTOMLSectionValues(content, "traffic", replacements)
+	next := upsertTOMLSectionValues(content, "traffic", replacements, []string{"llm_base_url", "llm_api_key", "llm_model", "llm_timeout_seconds"})
 	if err := os.WriteFile(path, []byte(next), 0o600); err != nil {
-		return LLMSettings{}, err
+		return LLMSettings{}, friendlyConfigWriteError(path, err)
 	}
 	out := settings
 	out.Model = firstNonEmpty(strings.TrimSpace(out.Model), "deepseek-chat")
@@ -134,6 +183,179 @@ func WriteTrafficLLMSettings(settings LLMSettings, updateAPIKey bool) (LLMSettin
 	out.APIKeyConfigured = strings.TrimSpace(out.APIKey) != ""
 	out.APIKeyMasked = maskSecret(out.APIKey)
 	return out, nil
+}
+
+// WriteTrafficStoreSettings 把 MySQL 存储配置写入 config.toml [traffic] 段。
+// updatePassword=false 时保留原 DSN 中的密码（前端留空表示不修改）。
+func WriteTrafficStoreSettings(settings StoreSettings, updatePassword bool) (StoreSettings, error) {
+	path := findConfigFile()
+	if path == "" {
+		wd, err := os.Getwd()
+		if err != nil {
+			return StoreSettings{}, err
+		}
+		path = filepath.Join(wd, "config.toml")
+	}
+
+	raw, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return StoreSettings{}, err
+	}
+	content := string(raw)
+
+	current := SettingsFromStoreConfig(Config{StoreBackend: "mysql", DatabaseURL: extractStoreDatabaseURL(content), AutoMigrate: settings.AutoMigrate, DBWaitSeconds: settings.DBWaitSeconds})
+	password := strings.TrimSpace(settings.Password)
+	if !updatePassword || password == "" {
+		password = current.Password
+	}
+	dsn := BuildStoreDSN(StoreSettings{
+		Host:        strings.TrimSpace(settings.Host),
+		Port:        settings.Port,
+		User:        strings.TrimSpace(settings.User),
+		Password:    password,
+		DBName:      strings.TrimSpace(settings.DBName),
+		AutoMigrate: settings.AutoMigrate,
+	})
+	if dsn == "" {
+		return StoreSettings{}, fmt.Errorf("MySQL 配置不完整：host/user/db_name 必填")
+	}
+
+	backend := strings.ToLower(strings.TrimSpace(settings.StoreBackend))
+	if backend == "" {
+		backend = "mysql"
+	}
+	replacements := map[string]string{
+		"store_backend":   quoteTOMLString(backend),
+		"database_url":    quoteTOMLString(dsn),
+		"auto_migrate":    strconv.FormatBool(settings.AutoMigrate),
+		"db_wait_seconds": strconv.Itoa(normalizeDBWait(settings.DBWaitSeconds)),
+	}
+	next := upsertTOMLSectionValues(content, "traffic", replacements, []string{"store_backend", "database_url", "auto_migrate", "db_wait_seconds"})
+	if err := os.WriteFile(path, []byte(next), 0o600); err != nil {
+		return StoreSettings{}, friendlyConfigWriteError(path, err)
+	}
+
+	out := settings
+	out.StoreBackend = backend
+	out.Password = password
+	out.PasswordConfigured = password != ""
+	out.PasswordMasked = maskSecret(password)
+	out.ConfigPath = path
+	return out, nil
+}
+
+// friendlyConfigWriteError 把配置文件不可写（只读挂载/权限不足）转换为
+// 可直接指导运维的中文错误，其余错误原样返回。
+func friendlyConfigWriteError(path string, err error) error {
+	if err == nil {
+		return nil
+	}
+	lower := strings.ToLower(err.Error())
+	if strings.Contains(lower, "read-only file system") || strings.Contains(lower, "permission denied") {
+		return fmt.Errorf("配置文件不可写（%s）：请将容器配置挂载改为可写（去掉 :ro）后重试: %w", path, err)
+	}
+	return err
+}
+
+// TestStoreSettings 测试 MySQL 连通性并检查核心表是否已建。
+func TestStoreSettings(settings StoreSettings) StoreTestResult {
+	result := StoreTestResult{Backend: "mysql", Tables: []string{}, ConfigPath: findConfigFile()}
+	dsn := BuildStoreDSN(settings)
+	if dsn == "" {
+		result.Error = "MySQL 配置不完整：host/user/db_name 必填"
+		return result
+	}
+	db, err := sql.Open("mysql", dsn)
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	defer db.Close()
+	start := time.Now()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := db.PingContext(ctx); err != nil {
+		result.Error = fmt.Sprintf("连接失败: %v", err)
+		return result
+	}
+	result.LatencyMS = time.Since(start).Milliseconds()
+	rows, err := db.QueryContext(ctx, `
+SELECT TABLE_NAME FROM information_schema.TABLES
+WHERE TABLE_SCHEMA = DATABASE()
+  AND TABLE_NAME IN ('events', 'summaries', 'event_maps', 'traffic_assets', 'asset_report_summaries')
+ORDER BY TABLE_NAME`)
+	if err != nil {
+		result.Error = fmt.Sprintf("查询表结构失败: %v", err)
+		return result
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		if rows.Scan(&name) == nil {
+			result.Tables = append(result.Tables, name)
+		}
+	}
+	result.OK = true
+	return result
+}
+
+// BuildStoreDSN 由结构化字段构造 go-sql-driver DSN。
+func BuildStoreDSN(settings StoreSettings) string {
+	host := strings.TrimSpace(settings.Host)
+	user := strings.TrimSpace(settings.User)
+	dbname := strings.TrimSpace(settings.DBName)
+	if host == "" || user == "" || dbname == "" {
+		return ""
+	}
+	port := settings.Port
+	if port <= 0 {
+		port = 3306
+	}
+	c := mysql.NewConfig()
+	c.User = user
+	c.Passwd = settings.Password
+	c.Net = "tcp"
+	c.Addr = fmt.Sprintf("%s:%d", host, port)
+	c.DBName = dbname
+	c.ParseTime = true
+	c.Params = map[string]string{"charset": "utf8mb4", "loc": "UTC"}
+	return c.FormatDSN()
+}
+
+func parseStoreDSN(dsn string) (host string, port int, user string, dbname string, passwd string) {
+	host, port, user, dbname = "127.0.0.1", 3306, "", ""
+	dsn = strings.TrimSpace(dsn)
+	if dsn == "" {
+		return
+	}
+	cfg, err := mysql.ParseDSN(dsn)
+	if err != nil {
+		return
+	}
+	addr := cfg.Addr
+	if idx := strings.LastIndex(addr, ":"); idx >= 0 {
+		host = addr[:idx]
+		if p, err := strconv.Atoi(addr[idx+1:]); err == nil {
+			port = p
+		}
+	} else if addr != "" {
+		host = addr
+	}
+	return host, port, cfg.User, cfg.DBName, cfg.Passwd
+}
+
+// extractStoreDatabaseURL 从 config.toml 原文提取 database_url，供写回时保留旧密码。
+func extractStoreDatabaseURL(content string) string {
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "database_url") && strings.Contains(trimmed, "=") {
+			value := strings.Trim(strings.TrimSpace(trimmed[strings.Index(trimmed, "=")+1:]), `"'`)
+			if value != "" {
+				return value
+			}
+		}
+	}
+	return ""
 }
 
 func applyTrafficFileConfig(cfg *Config) {
@@ -147,6 +369,10 @@ func applyTrafficFileConfig(cfg *Config) {
 
 	var fileCfg struct {
 		Traffic struct {
+			StoreBackend      string `toml:"store_backend"`
+			DatabaseURL       string `toml:"database_url"`
+			AutoMigrate       *bool  `toml:"auto_migrate"`
+			DBWaitSeconds     int    `toml:"db_wait_seconds"`
 			LLMBaseURL        string `toml:"llm_base_url"`
 			LLMAPIKey         string `toml:"llm_api_key"`
 			LLMModel          string `toml:"llm_model"`
@@ -161,6 +387,18 @@ func applyTrafficFileConfig(cfg *Config) {
 		return
 	}
 
+	if os.Getenv("STORE_BACKEND") == "" && strings.TrimSpace(fileCfg.Traffic.StoreBackend) != "" {
+		cfg.StoreBackend = strings.ToLower(strings.TrimSpace(fileCfg.Traffic.StoreBackend))
+	}
+	if os.Getenv("DATABASE_URL") == "" && strings.TrimSpace(fileCfg.Traffic.DatabaseURL) != "" {
+		cfg.DatabaseURL = fileCfg.Traffic.DatabaseURL
+	}
+	if os.Getenv("AUTO_MIGRATE") == "" && fileCfg.Traffic.AutoMigrate != nil {
+		cfg.AutoMigrate = *fileCfg.Traffic.AutoMigrate
+	}
+	if os.Getenv("DB_WAIT_SECONDS") == "" && fileCfg.Traffic.DBWaitSeconds > 0 {
+		cfg.DBWaitSeconds = fileCfg.Traffic.DBWaitSeconds
+	}
 	if os.Getenv("LLM_BASE_URL") == "" && strings.TrimSpace(fileCfg.Traffic.LLMBaseURL) != "" {
 		cfg.LLMBaseURL = fileCfg.Traffic.LLMBaseURL
 	}
@@ -193,7 +431,7 @@ func findConfigFile() string {
 	}
 }
 
-func upsertTOMLSectionValues(content, section string, values map[string]string) string {
+func upsertTOMLSectionValues(content, section string, values map[string]string, order []string) string {
 	lines := strings.Split(content, "\n")
 	if content == "" {
 		lines = []string{}
@@ -240,7 +478,7 @@ func upsertTOMLSectionValues(content, section string, values map[string]string) 
 	}
 
 	insert := []string{}
-	for _, key := range []string{"llm_base_url", "llm_api_key", "llm_model", "llm_timeout_seconds"} {
+	for _, key := range order {
 		value, ok := values[key]
 		if ok && !seen[key] {
 			insert = append(insert, fmt.Sprintf("%-19s = %s", key, value))
@@ -283,6 +521,13 @@ func quoteTOMLString(value string) string {
 func normalizeTimeout(value int) int {
 	if value <= 0 {
 		return 60
+	}
+	return value
+}
+
+func normalizeDBWait(value int) int {
+	if value <= 0 {
+		return 30
 	}
 	return value
 }

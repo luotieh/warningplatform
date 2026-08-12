@@ -197,6 +197,36 @@ export function normalizeLyEvents(list: Record<string, any>[] = []) {
   return list.map(normalizeLyEvent);
 }
 
+// matchesEventKeyword 关键字/IP 过滤：空格分词后按 AND 匹配。
+// 匹配字段：威胁来源/受害目标/描述/类型/event_id/IOC值/IOC类型/证据文件名。
+export function matchesEventKeyword(item: Record<string, any>, keyword: string): boolean {
+  const tokens = String(keyword ?? '')
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (!tokens.length) return true;
+
+  const haystack = [
+    String(item.attackDevice ?? ''),
+    String(item.victimDevice ?? ''),
+    String(item.desc ?? ''),
+    String(item.rule_desc ?? ''),
+    String(item.type ?? ''),
+    String(item.typeText ?? ''),
+    String(item.event_id ?? ''),
+    String(item.ioc?.ioc_value ?? ''),
+    String(item.ioc?.ioc_type ?? ''),
+    ...(Array.isArray(item.evidence_files)
+      ? item.evidence_files.map((ef: any) => String(ef?.name ?? ''))
+      : []),
+  ]
+    .join(' ')
+    .toLowerCase();
+
+  return tokens.every((token) => haystack.includes(token));
+}
+
 export function countByKey<T extends Record<string, any>>(list: T[], key: keyof T | string) {
   const map = new Map<string, number>();
   list.forEach((item) => {

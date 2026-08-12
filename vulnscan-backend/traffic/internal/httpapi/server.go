@@ -57,6 +57,10 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/llm/config", s.llmConfig)
 	s.mux.HandleFunc("POST /api/llm/config", s.llmConfig)
 	s.mux.HandleFunc("PUT /api/llm/config", s.llmConfig)
+	s.mux.HandleFunc("GET /api/store/config", s.storeConfig)
+	s.mux.HandleFunc("POST /api/store/config", s.storeConfig)
+	s.mux.HandleFunc("PUT /api/store/config", s.storeConfig)
+	s.mux.HandleFunc("POST /api/store/config/test", s.storeConfigTest)
 
 	s.mux.HandleFunc("POST /internal/event/push", s.withDrivingModeAutomation(s.internalEventPush))
 	s.mux.HandleFunc("POST /internal/sync:run", s.internalSyncRun)
@@ -227,6 +231,96 @@ func (s *Server) llmConfig(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
+}
+
+func (s *Server) storeConfig(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, domain.APIResponse{Status: "success", Data: config.SettingsFromStoreConfig(s.cfg)})
+	case http.MethodPost, http.MethodPut:
+		var body map[string]any
+		if !decodeJSON(w, r, &body) {
+			return
+		}
+		settings := config.SettingsFromStoreConfig(s.cfg)
+		if v := strings.TrimSpace(asString(body["store_backend"])); v != "" {
+			settings.StoreBackend = v
+		}
+		if v := strings.TrimSpace(asString(body["host"])); v != "" {
+			settings.Host = v
+		}
+		if port := intValue(body["port"]); port > 0 {
+			settings.Port = port
+		}
+		if v := strings.TrimSpace(asString(body["user"])); v != "" {
+			settings.User = v
+		}
+		if v := strings.TrimSpace(asString(body["db_name"])); v != "" {
+			settings.DBName = v
+		}
+		if v, ok := body["auto_migrate"]; ok {
+			settings.AutoMigrate = boolValue(v)
+		}
+		if wait := intValue(body["db_wait_seconds"]); wait > 0 {
+			settings.DBWaitSeconds = wait
+		}
+		password := strings.TrimSpace(asString(body["password"]))
+		updatePassword := password != ""
+		if updatePassword {
+			settings.Password = password
+		}
+		updated, err := config.WriteTrafficStoreSettings(settings, updatePassword)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		s.cfg.StoreBackend = updated.StoreBackend
+		s.cfg.DatabaseURL = config.BuildStoreDSN(updated)
+		s.cfg.AutoMigrate = updated.AutoMigrate
+		s.cfg.DBWaitSeconds = updated.DBWaitSeconds
+		writeJSON(w, http.StatusOK, domain.APIResponse{Status: "success", Message: "MySQL配置已保存，存储后端变更需重启后生效", Data: config.SettingsFromStoreConfig(s.cfg)})
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+func (s *Server) storeConfigTest(w http.ResponseWriter, r *http.Request) {
+	var body map[string]any
+	if !decodeJSON(w, r, &body) {
+		return
+	}
+	settings := config.StoreSettings{StoreBackend: "mysql"}
+	if v := strings.TrimSpace(asString(body["host"])); v != "" {
+		settings.Host = v
+	}
+	if port := intValue(body["port"]); port > 0 {
+		settings.Port = port
+	}
+	if v := strings.TrimSpace(asString(body["user"])); v != "" {
+		settings.User = v
+	}
+	if v := strings.TrimSpace(asString(body["password"])); v != "" {
+		settings.Password = v
+	}
+	if v := strings.TrimSpace(asString(body["db_name"])); v != "" {
+		settings.DBName = v
+	}
+	result := config.TestStoreSettings(settings)
+	status := http.StatusOK
+	if !result.OK {
+		status = http.StatusBadRequest
+	}
+	writeJSON(w, status, domain.APIResponse{Status: statusText(result.OK), Data: result})
+}
+
+func boolValue(v any) bool {
+	switch x := v.(type) {
+	case bool:
+		return x
+	case string:
+		return strings.EqualFold(strings.TrimSpace(x), "true") || x == "1"
+	}
+	return false
 }
 
 func (s *Server) version(w http.ResponseWriter, r *http.Request) {

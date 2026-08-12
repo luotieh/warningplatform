@@ -6,7 +6,7 @@ import {
   NButton, NCard, NDataTable, NDropdown, NInput, NSelect, NSpace, NTag, NPopconfirm,
   NModal, NForm, NFormItem, NDatePicker, NInputNumber, NTabs, NTabPane,
   NRadio, NRadioGroup,
-  useMessage, useDialog,
+  useMessage,
 } from 'naive-ui';
 import { useRouter } from 'vue-router';
 import {
@@ -30,7 +30,6 @@ const { perm } = useRoutePerm('/incident/list');
 
 const router = useRouter();
 const message = useMessage();
-const dialog = useDialog();
 const loading = ref(false);
 const data = ref<SecurityIncident[]>([]);
 const total = ref(0);
@@ -207,7 +206,7 @@ const columns = computed(() => [
   { title: 'AI预审', key: 'ai_pre_status', width: 90, align: 'center' as const, render: (row: SecurityIncident) => h(NTag, { size: 'small', type: row.ai_pre_status === 1 ? 'success' : 'default', bordered: false }, () => row.ai_pre_status === 1 ? '已预审' : '未预审') },
   { title: '处置截止时间', key: 'sla_deadline', width: 170, align: 'center' as const, render: (row: SecurityIncident) => { if (!row.sla_deadline) return '-'; const d = new Date(row.sla_deadline); const overdue = d < new Date(); const fmt = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; return h('span', { style: overdue ? 'color:#d03050;font-weight:600' : '' }, fmt); } },
   { title: '创建时间', key: 'created_at', width: 170, align: 'center' as const, render: (row: SecurityIncident) => { if (!row.created_at) return '-'; const d = new Date(row.created_at); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; } },
-  { title: '操作', key: 'actions', width: 350, align: 'center' as const, fixed: 'right' as const, render: (row: SecurityIncident) => {
+  { title: '操作', key: 'actions', width: 420, align: 'center' as const, fixed: 'right' as const, render: (row: SecurityIncident) => {
     const moreOpts: any[] = [
       { label: '导出 Word', key: 'docx' },
       { label: '导出 PDF', key: 'pdf' },
@@ -216,12 +215,9 @@ const columns = computed(() => [
       moreOpts.push({ type: 'divider', key: 'd0' });
       moreOpts.push({ label: 'AI预审', key: 'ai-audit' });
     }
-    moreOpts.push({ type: 'divider', key: 'd1' });
-    moreOpts.push({ label: '删除', key: 'delete', props: { style: 'color: #d03050' } });
     function handleMoreSelect(key: string) {
       if (key === 'docx' || key === 'pdf') handleRowExport(row, key as IncidentExportFormat);
       else if (key === 'ai-audit') handleAiAudit(row.id);
-      else if (key === 'delete') handleDelete(row.id);
     }
     const buttons = [
       h(NButton, { size: 'tiny', text: true, onClick: () => openPreview(row) }, () => '预览'),
@@ -233,6 +229,14 @@ const columns = computed(() => [
     buttons.push(
       h(NButton, { size: 'tiny', type: 'warning', text: true, onClick: () => openDispatch(row) }, () => '派发'),
       h(NButton, { size: 'tiny', type: 'success', text: true, onClick: () => handleTransferToCircular(row) }, () => '转通报'),
+      h(NPopconfirm, {
+        positiveText: '确认删除',
+        negativeText: '取消',
+        onPositiveClick: () => handleDeleteConfirm(row.id),
+      }, {
+        trigger: () => h(NButton, { size: 'tiny', type: 'error', text: true }, () => '删除'),
+        default: () => `确认删除事件「${row.name}」？此操作不可恢复。`,
+      }),
       h(NDropdown, { trigger: 'click', options: moreOpts, onSelect: handleMoreSelect }, {
         default: () => h(NButton, { size: 'tiny', text: true }, () => '更多'),
       }),
@@ -254,17 +258,9 @@ const { pagination } = useNaiveTablePagination({ page, pageSize, total, onFetch:
 async function handleAiAudit(id: string) {
   try { await aiPreAudit(id); message.success('AI预审已完成'); await fetchData(); } catch (e: any) { message.error(e?.message || 'AI预审失败'); }
 }
-function handleDelete(id: string) {
-  dialog.error({
-    title: '确认删除',
-    content: '确认删除该安全事件？此操作不可恢复。',
-    positiveText: '确认删除',
-    negativeText: '取消',
-    onPositiveClick: async () => {
-      try { await deleteIncident(id); message.success('已删除'); await fetchData(); }
-      catch (e: any) { message.error(e?.message || '删除失败'); }
-    },
-  });
+async function handleDeleteConfirm(id: string) {
+  try { await deleteIncident(id); message.success('已删除'); await fetchData(); }
+  catch (e: any) { message.error(e?.message || '删除失败'); }
 }
 
 async function handleBatchDelete() {

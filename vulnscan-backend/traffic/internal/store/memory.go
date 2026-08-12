@@ -1,7 +1,9 @@
 package store
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"sort"
 	"sync"
 	"time"
@@ -22,22 +24,26 @@ type MemoryStore struct {
 	messagesByEvent map[string][]domain.Message
 	messageSeq      int64
 
-	tasksByEvent     map[string][]domain.Task
-	actionsByEvent   map[string][]domain.Action
-	commandsByEvent  map[string][]domain.Command
-	execByEvent      map[string][]domain.Execution
-	summariesByEvent map[string][]domain.Summary
-	taskSeq          int64
-	actionSeq        int64
-	commandSeq       int64
-	execSeq          int64
-	summarySeq       int64
-	eventMaps        map[string]domain.EventMap
-	cursors          map[string]domain.SyncCursor
-	pushed           map[string]domain.PushedEvent
-	audits           []domain.AuditLog
-	auditSeq         int64
-	assets           map[string]domain.Asset
+	tasksByEvent      map[string][]domain.Task
+	actionsByEvent    map[string][]domain.Action
+	commandsByEvent   map[string][]domain.Command
+	execByEvent       map[string][]domain.Execution
+	summariesByEvent  map[string][]domain.Summary
+	taskSeq           int64
+	actionSeq         int64
+	commandSeq        int64
+	execSeq           int64
+	summarySeq        int64
+	assetReportSeq    int64
+	eventMaps         map[string]domain.EventMap
+	cursors           map[string]domain.SyncCursor
+	pushed            map[string]domain.PushedEvent
+	audits            []domain.AuditLog
+	auditSeq          int64
+	assets            map[string]domain.Asset
+	assetReports      map[string]domain.AssetReportSummary
+	assetReportJobs   map[string]domain.AssetReportJob
+	assetReportJobSeq int64
 }
 
 func NewMemoryStore() *MemoryStore {
@@ -55,6 +61,8 @@ func NewMemoryStore() *MemoryStore {
 		cursors:          map[string]domain.SyncCursor{},
 		pushed:           map[string]domain.PushedEvent{},
 		assets:           map[string]domain.Asset{},
+		assetReports:     map[string]domain.AssetReportSummary{},
+		assetReportJobs:  map[string]domain.AssetReportJob{},
 	}
 	now := time.Now().UTC()
 	admin := domain.User{
@@ -262,9 +270,90 @@ func (s *MemoryStore) UpdateEvent(eventID string, patch map[string]any) (domain.
 			e.ReviewedAt = &tu
 		}
 	}
+	if v, ok := intPatch(patch, "analysis_version"); ok {
+		e.AnalysisVersion = v
+	}
+	if v, ok := boolPatch(patch, "aggregation_closed"); ok {
+		e.AggregationClosed = v
+	}
+	if v, ok := stringPatch(patch, "last_analysis_at"); ok {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			tu := t.UTC()
+			e.LastAnalysisAt = &tu
+		}
+	}
+	if v, ok := stringPatch(patch, "last_seen_at"); ok {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			tu := t.UTC()
+			e.LastSeenAt = &tu
+		}
+	}
 	e.UpdatedAt = time.Now().UTC()
 	s.events[eventID] = e
 	return e, true
+}
+
+func (s *MemoryStore) ListEventsConvergedDue(threshold time.Time) []domain.Event {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := []domain.Event{}
+	for _, e := range s.events {
+		if e.AggregationClosed {
+			continue
+		}
+		last := eventLastSeenFromEvent(e)
+		if last.Before(threshold) {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+func (s *MemoryStore) ListEventsByTargetIP(ip string, from time.Time, to time.Time) []domain.Event {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := []domain.Event{}
+	for _, e := range s.events {
+		last := eventLastSeenFromEvent(e)
+		if last.Before(from) || !last.Before(to) {
+			continue
+		}
+		ctxMap := map[string]any{}
+		if e.Context != "" {
+			_ = json.Unmarshal([]byte(e.Context), &ctxMap)
+		}
+		dst := ""
+		if v, ok := ctxMap["dst_ip"].(string); ok {
+			dst = v
+		}
+		if dst == "" {
+			if v, ok := ctxMap["victim_target"].(string); ok {
+				dst = v
+			}
+		}
+		if dst == ip {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// eventLastSeenFromEvent 取事件最近命中时刻：优先列值，其次 context.last_seen_at，
+// 最后退回 UpdatedAt（兼容升级前旧数据与测试用例）。
+func eventLastSeenFromEvent(e domain.Event) time.Time {
+	if e.LastSeenAt != nil {
+		return *e.LastSeenAt
+	}
+	ctxMap := map[string]any{}
+	if e.Context != "" {
+		_ = json.Unmarshal([]byte(e.Context), &ctxMap)
+	}
+	if v, ok := ctxMap["last_seen_at"].(string); ok && v != "" {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			return t
+		}
+	}
+	return e.UpdatedAt
 }
 
 func (s *MemoryStore) AddMessage(m domain.Message) (domain.Message, error) {
@@ -510,6 +599,12 @@ func (s *MemoryStore) AddSummary(sm domain.Summary) (domain.Summary, error) {
 	if sm.RoundID == 0 {
 		sm.RoundID = 1
 	}
+	if sm.Version == 0 {
+		sm.Version = 1
+	}
+	if sm.Kind == "" {
+		sm.Kind = "initial"
+	}
 	if sm.CreatedAt.IsZero() {
 		sm.CreatedAt = now
 	}
@@ -677,4 +772,106 @@ func (s *MemoryStore) DeleteAsset(id string) bool {
 	}
 	delete(s.assets, id)
 	return true
+}
+
+func (s *MemoryStore) SaveAssetReportSummary(sm domain.AssetReportSummary) (domain.AssetReportSummary, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if sm.ID == "" {
+		s.assetReportSeq++
+		sm.ID = fmt.Sprintf("ars-%d", s.assetReportSeq)
+	}
+	now := time.Now().UTC()
+	if sm.CreatedAt.IsZero() {
+		sm.CreatedAt = now
+	}
+	sm.UpdatedAt = now
+	if sm.Status == "" {
+		sm.Status = "pending"
+	}
+	key := sm.AssetID + "|" + sm.Period
+	s.assetReports[key] = sm
+	return sm, nil
+}
+
+func (s *MemoryStore) GetAssetReportSummary(assetID string, period string) (domain.AssetReportSummary, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	sm, ok := s.assetReports[assetID+"|"+period]
+	return sm, ok
+}
+
+func (s *MemoryStore) ListAssetReportSummaries(assetID string) []domain.AssetReportSummary {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := []domain.AssetReportSummary{}
+	for _, sm := range s.assetReports {
+		if sm.AssetID == assetID {
+			out = append(out, sm)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Period > out[j].Period })
+	return out
+}
+
+func (s *MemoryStore) CreateAssetReportJob(job domain.AssetReportJob) (domain.AssetReportJob, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.assetReportJobSeq++
+	if job.ID == "" {
+		job.ID = fmt.Sprintf("arj-%d", s.assetReportJobSeq)
+	}
+	if job.Status == "" {
+		job.Status = "queued"
+	}
+	now := time.Now().UTC()
+	if job.CreatedAt.IsZero() {
+		job.CreatedAt = now
+	}
+	job.UpdatedAt = now
+	s.assetReportJobs[job.ID] = job
+	return job, nil
+}
+
+func (s *MemoryStore) UpdateAssetReportJob(jobID string, patch map[string]any) (domain.AssetReportJob, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	job, ok := s.assetReportJobs[jobID]
+	if !ok {
+		return domain.AssetReportJob{}, false
+	}
+	if v, ok := stringPatch(patch, "status"); ok {
+		job.Status = v
+	}
+	if v, ok := intPatch(patch, "total_assets"); ok {
+		job.TotalAssets = v
+	}
+	if v, ok := intPatch(patch, "completed_assets"); ok {
+		job.CompletedAssets = v
+	}
+	if v, ok := stringPatch(patch, "error"); ok {
+		job.Error = v
+	}
+	if v, ok := stringPatch(patch, "started_at"); ok {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			tu := t.UTC()
+			job.StartedAt = &tu
+		}
+	}
+	if v, ok := stringPatch(patch, "finished_at"); ok {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			tu := t.UTC()
+			job.FinishedAt = &tu
+		}
+	}
+	job.UpdatedAt = time.Now().UTC()
+	s.assetReportJobs[jobID] = job
+	return job, true
+}
+
+func (s *MemoryStore) GetAssetReportJob(jobID string) (domain.AssetReportJob, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	job, ok := s.assetReportJobs[jobID]
+	return job, ok
 }

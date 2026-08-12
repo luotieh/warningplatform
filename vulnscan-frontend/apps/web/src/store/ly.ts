@@ -4,7 +4,6 @@ import {
   lyBlacklistApi,
   lyDeviceApi,
   lyEventActionApi,
-  lyEventGet,
   lyEventIgnoreApi,
   lyEventLevelApi,
   lyEventRulesApi,
@@ -18,6 +17,7 @@ import {
   lyUserApi,
   lyWhitelistApi,
 } from '#/api/ly';
+import { deepflowGetEvents } from '#/api/ly/deepflow';
 import { normalizeLyEvents } from '#/utils/ly';
 
 export const useLyStore = defineStore('ly', {
@@ -40,10 +40,12 @@ export const useLyStore = defineStore('ly', {
     moFeature: [] as Record<string, any>[],
   }),
   actions: {
-    async loadEvents(params?: Record<string, any>) {
+    async loadEvents(_params?: Record<string, any>) {
       this.loading = true;
       try {
-        const data = await lyEventGet(params);
+        // 事件数据源统一为 /api/traffic/events/list（ta_node 推送写入 traffic.events）。
+        // 旧 /api/traffic/ly/event 查询的是 t_event_data_aggre 兼容表，内部推送不会写入。
+        const data = await deepflowGetEvents();
         this.events = normalizeLyEvents(Array.isArray(data) ? data : []);
         return this.events;
       } catch (error) {

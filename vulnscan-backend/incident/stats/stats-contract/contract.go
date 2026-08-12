@@ -54,6 +54,19 @@ type IncidentReportData struct {
 	Deadline            string                            `json:"remediation_deadline"`
 	OperationLogs       []IncidentReportOplog             `json:"operation_logs"`
 	Vulnerabilities     []IncidentReportVuln              `json:"vulnerabilities"`
+	// 安全事件分析报告扩展字段（对齐 docs/security_incident_report_template.md）。
+	CoreConclusion   string                          `json:"core_conclusion,omitempty"`
+	LevelEmoji       string                          `json:"level_emoji,omitempty"`
+	LevelBasis       string                          `json:"level_basis,omitempty"`
+	NotifyTargets    string                          `json:"notify_targets,omitempty"`
+	AssetIPRange     string                          `json:"asset_ip_range,omitempty"`
+	TrafficEvidence  []IncidentReportTrafficEvidence `json:"traffic_evidence,omitempty"`
+	Iocs             []IncidentReportIoc             `json:"iocs,omitempty"`
+	IocValidity      string                          `json:"ioc_validity,omitempty"`
+	Impact           IncidentReportImpact            `json:"impact,omitempty"`
+	ImmediateActions []IncidentReportAction          `json:"immediate_actions,omitempty"`
+	FollowupActions  []IncidentReportAction          `json:"followup_actions,omitempty"`
+	Attachments      []IncidentReportAttachment      `json:"attachments,omitempty"`
 }
 
 // IncidentReportDescriptionSections 隐患描述分段（成因/证据/详细证据/溯源）。
@@ -87,6 +100,38 @@ type IncidentReportVuln struct {
 	Status      string `json:"status"`
 	Description string `json:"description"`
 	Remediation string `json:"remediation"`
+}
+
+// IncidentReportTrafficEvidence 关键流量证据（数字来自确定性量化引擎）。
+type IncidentReportTrafficEvidence struct {
+	Type           string `json:"type"`
+	Detail         string `json:"detail"`
+	Source         string `json:"source"`
+	Confidence     int    `json:"confidence"`
+	ConfidenceText string `json:"confidence_text"`
+}
+
+type IncidentReportIoc struct {
+	Type         string `json:"type"`
+	Value        string `json:"value"`
+	ThreatSource string `json:"threat_source"`
+	Match        string `json:"match"`
+}
+
+type IncidentReportImpact struct {
+	Business string `json:"business"`
+	DataRisk string `json:"data_risk"`
+	Intent   string `json:"intent"`
+}
+
+type IncidentReportAction struct {
+	Action string `json:"action"`
+	Detail string `json:"detail"`
+}
+
+type IncidentReportAttachment struct {
+	Name string `json:"name"`
+	Path string `json:"path"`
 }
 
 type ServiceStats interface {

@@ -46,6 +46,14 @@ type Event struct {
 	ReviewedBy    string     `json:"reviewed_by,omitempty"`
 	ReviewedAt    *time.Time `json:"reviewed_at,omitempty"`
 	CircularCode  string     `json:"circular_code,omitempty"`
+	// AnalysisVersion 分析版本：0=未分析，1=初版快报，2=收敛终报，>=3=手动刷新。
+	AnalysisVersion int `json:"analysis_version"`
+	// AggregationClosed 聚合是否已收敛（quant_stats 冻结）。
+	AggregationClosed bool `json:"aggregation_closed"`
+	// LastAnalysisAt 最近一次分析完成时间，用于手动刷新冷却。
+	LastAnalysisAt *time.Time `json:"last_analysis_at,omitempty"`
+	// LastSeenAt 服务器最近一次收到该聚合命中的时刻（收敛判定专用列）。
+	LastSeenAt *time.Time `json:"last_seen_at,omitempty"`
 }
 
 type IOC struct {
@@ -209,12 +217,16 @@ type Execution struct {
 }
 
 type Summary struct {
-	ID           int64     `json:"id"`
-	EventID      string    `json:"event_id"`
-	RoundID      int       `json:"round_id"`
-	EventSummary string    `json:"event_summary"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID           int64  `json:"id"`
+	EventID      string `json:"event_id"`
+	RoundID      int    `json:"round_id"`
+	EventSummary string `json:"event_summary"`
+	// Version 分析版本（与 Event.AnalysisVersion 对应）。
+	Version int `json:"version"`
+	// Kind 分析类型：initial / final / manual。
+	Kind      string    `json:"kind"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 type LyEvent map[string]any
@@ -263,4 +275,88 @@ type Asset struct {
 	Remark    string    `json:"remark,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// QuantStats 事件聚合量化统计，随命中合并增量维护、收敛时冻结。
+type QuantStats struct {
+	EventID         string           `json:"event_id"`
+	WindowStart     string           `json:"window_start"`
+	WindowEnd       string           `json:"window_end"`
+	DurationSec     int64            `json:"duration_sec"`
+	OccurrenceCount int64            `json:"occurrence_count"`
+	UniqueSrcIPs    int              `json:"unique_src_ips"`
+	UniqueDstIPs    int              `json:"unique_dst_ips"`
+	SourceIPs       map[string]int64 `json:"source_ips,omitempty"`
+	DestIPs         map[string]int64 `json:"dest_ips,omitempty"`
+	TotalWireBytes  int64            `json:"total_wire_bytes"`
+	TotalPackets    int64            `json:"total_packets"`
+	RatePerMin      float64          `json:"rate_per_min"`
+	ByRule          map[string]int64 `json:"by_rule"`
+	ByDirection     map[string]int64 `json:"by_direction"`
+	ByIOC           []IocHitStat     `json:"by_ioc"`
+	PeakWindow      PeakWindowStat   `json:"peak_window"`
+	UpdatedAt       string           `json:"updated_at"`
+}
+
+type IocHitStat struct {
+	IOCValue  string `json:"ioc_value"`
+	IOCType   string `json:"ioc_type"`
+	Count     int64  `json:"count"`
+	FirstSeen string `json:"first_seen"`
+	LastSeen  string `json:"last_seen"`
+}
+
+type PeakWindowStat struct {
+	StartTime string `json:"start_time"`
+	EndTime   string `json:"end_time"`
+	Count     int64  `json:"count"`
+}
+
+// AssetReportSummary 资产 IP 月度总结（目标 IP 一个月内落档报告的汇总分析）。
+type AssetReportSummary struct {
+	ID         string            `json:"id"`
+	AssetID    string            `json:"asset_id"`
+	AssetIP    string            `json:"asset_ip"`
+	Period     string            `json:"period"` // 2026-08
+	WindowFrom string            `json:"window_from"`
+	WindowTo   string            `json:"window_to"`
+	EventCount int               `json:"event_count"`
+	Stats      AssetMonthlyStats `json:"stats"`
+	Narrative  string            `json:"narrative"` // LLM 月度总结
+	Status     string            `json:"status"`    // pending/completed/failed
+	CreatedAt  time.Time         `json:"created_at"`
+	UpdatedAt  time.Time         `json:"updated_at"`
+}
+
+type AssetMonthlyStats struct {
+	ClosedCount      int            `json:"closed_count"`
+	BySeverity       map[string]int `json:"by_severity"`
+	ByEventType      map[string]int `json:"by_event_type"`
+	ByStatus         map[string]int `json:"by_status"`
+	TotalOccurrences int64          `json:"total_occurrences"`
+	TotalWireBytes   int64          `json:"total_wire_bytes"`
+	TopSources       []CountItem    `json:"top_sources"`
+	TopIOCs          []CountItem    `json:"top_iocs"`
+	TopRules         []CountItem    `json:"top_rules"`
+	FirstEventTime   string         `json:"first_event_time"`
+	LastEventTime    string         `json:"last_event_time"`
+}
+
+type CountItem struct {
+	Value string `json:"value"`
+	Count int    `json:"count"`
+}
+
+// AssetReportJob 资产月度总结异步任务。
+type AssetReportJob struct {
+	ID              string     `json:"id"`
+	Period          string     `json:"period"`
+	Status          string     `json:"status"` // queued/running/completed/failed
+	TotalAssets     int        `json:"total_assets"`
+	CompletedAssets int        `json:"completed_assets"`
+	Error           string     `json:"error,omitempty"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
+	StartedAt       *time.Time `json:"started_at,omitempty"`
+	FinishedAt      *time.Time `json:"finished_at,omitempty"`
 }

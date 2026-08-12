@@ -233,6 +233,18 @@ func (t *pdfReportTable) drawRemediation(data *statsContract.IncidentReportData,
 	t.drawLabeledBlock("整改建议", b.String(), lineH)
 }
 
+// drawAnalysis 渲染安全事件分析扩展章节（事件概述/流量证据与IOC/影响评估/处置/附件）。
+func (t *pdfReportTable) drawAnalysis(data *statsContract.IncidentReportData, lineH float64) {
+	blocks := reportAnalysisBlocks(data)
+	if len(blocks) == 0 {
+		return
+	}
+	t.pdf.SetFont("report-font", "", 9.5)
+	for _, block := range blocks {
+		t.drawLabeledBlock(block.Title, block.Body, lineH)
+	}
+}
+
 func (t *pdfReportTable) drawEvidenceImage(idx int, img statsContract.IncidentReportEvidenceImage, lineH float64) {
 	raw, err := base64.StdEncoding.DecodeString(img.Base64)
 	if err != nil || len(raw) == 0 {

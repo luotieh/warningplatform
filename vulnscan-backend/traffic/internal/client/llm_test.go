@@ -197,3 +197,21 @@ func TestChatSendsSystemPromptAndOutputBudget(t *testing.T) {
 		t.Fatalf("user message = %v", usr)
 	}
 }
+
+func TestChatCompletionsEndpointNormalization(t *testing.T) {
+	cases := []struct {
+		base string
+		want string
+	}{
+		{"http://127.0.0.1:1025/v1", "http://127.0.0.1:1025/v1/chat/completions"},
+		{"http://127.0.0.1:1025/v1/", "http://127.0.0.1:1025/v1/chat/completions"},
+		{"http://127.0.0.1:1025/v1/chat/completions", "http://127.0.0.1:1025/v1/chat/completions"},
+		{"http://127.0.0.1:1025/v1/chat/completions/", "http://127.0.0.1:1025/v1/chat/completions"},
+		{"", ""},
+	}
+	for _, c := range cases {
+		if got := chatCompletionsEndpoint(c.base); got != c.want {
+			t.Fatalf("chatCompletionsEndpoint(%q) = %q, want %q", c.base, got, c.want)
+		}
+	}
+}

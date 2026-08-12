@@ -6,16 +6,22 @@ import {
   NButton,
   NCard,
   NCheckbox,
+  NDatePicker,
+  NInput,
   NSelect,
   NSpace,
   NTag,
 } from 'naive-ui';
 
 import { lyAssetList, type LyAsset } from '#/api/ly/assets';
-import { assetMatchesEvent, eventMatchesAnyAsset } from '#/utils/ly-asset';
+import {
+  assetMatchesEvent,
+  assetOptionFilter,
+  eventMatchesAnyAsset,
+} from '#/utils/ly-asset';
 
 import { useLyStore } from '#/store/ly';
-import { countByKey } from '#/utils/ly';
+import { countByKey, matchesEventKeyword } from '#/utils/ly';
 
 import LyEventTable from '../components/LyEventTable.vue';
 
@@ -25,11 +31,19 @@ const route = useRoute();
 const lyStore = useLyStore();
 
 const state = reactive({
-  proc_status: '',
-  is_alive: '' as '' | 'false' | 'true',
+  level: '',
+  starttime: null as null | number,
+  endtime: null as null | number,
+  keyword: '',
   rankKey: '' as '' | 'attackDevice' | 'victimDevice' | 'typeText',
   rankValue: '',
 });
+
+const levelOptions = [
+  { label: '高危', value: 'high' },
+  { label: '中危', value: 'medium' },
+  { label: '低危', value: 'low' },
+];
 
 const assets = ref<LyAsset[]>([]);
 const selectedAsset = ref<string>((route.query.asset as string) || '');
@@ -51,11 +65,13 @@ async function loadAssets() {
 // 保证选中某排行值后其它标签依然可见、可再切换。
 const baseRows = computed(() => {
   return (lyStore.events || []).filter((item) => {
-    if (state.proc_status && item.proc_status !== state.proc_status) return false;
-    if (state.is_alive) {
-      const alive = String(item.is_alive) === state.is_alive;
-      if (!alive) return false;
+    if (state.level && item.level !== state.level) return false;
+    if (state.starttime || state.endtime) {
+      const t = Number(item.starttime ?? 0) * 1000;
+      if (state.starttime && (!t || t < state.starttime)) return false;
+      if (state.endtime && (!t || t > state.endtime)) return false;
     }
+    if (state.keyword.trim() && !matchesEventKeyword(item, state.keyword)) return false;
     if (selectedAsset.value) {
       if (!assetMatchesEvent({ address: selectedAsset.value }, item)) return false;
     } else if (onlyAssetRelated.value) {
@@ -144,12 +160,20 @@ onMounted(async () => {
 
       <NCard size="small">
         <NSpace>
-          <NSelect v-model:value="state.proc_status" clearable placeholder="处理状态" :options="[{ label: '未处理', value: 'unprocessed' }, { label: '已处理', value: 'processed' }, { label: '已确认', value: 'assigned' }]" style="width: 160px" />
-          <NSelect v-model:value="state.is_alive" clearable placeholder="活跃状态" :options="[{ label: '活跃', value: 'true' }, { label: '不活跃', value: 'false' }]" style="width: 160px" />
+          <NSelect v-model:value="state.level" clearable placeholder="严重级别" :options="levelOptions" style="width: 140px" />
+          <NDatePicker v-model:value="state.starttime" type="date" clearable placeholder="开始日期" style="width: 150px" />
+          <NDatePicker v-model:value="state.endtime" type="date" clearable placeholder="结束日期" style="width: 150px" />
+          <NInput
+            v-model:value="state.keyword"
+            clearable
+            placeholder="关键字/IP（空格分词，如 c2 185.230）"
+            style="width: 260px"
+          />
           <NSelect
             v-model:value="selectedAsset"
             clearable
             filterable
+            :filter="assetOptionFilter"
             placeholder="按资产筛选"
             :options="assetOptions"
             style="width: 240px"

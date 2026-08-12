@@ -50,6 +50,7 @@ func generateIncidentPDF(data *statsContract.IncidentReportData) ([]byte, error)
 	tbl.drawMetaRows(data)
 	tbl.drawDescription(data, 4.8)
 	tbl.drawRemediation(data, 4.8)
+	tbl.drawAnalysis(data, 4.8)
 	if strings.TrimSpace(data.Attachment) != "" {
 		tbl.drawShortRow2Col("证据附件", data.Attachment, 7)
 	}

@@ -1,0 +1,87 @@
+# warning-platform 完整配置示例（离线内网机 / 本地独立运行）
+# 使用：复制为 /data/app/config/warning-v2.toml 后按环境修改
+# 容器内固定路径 /app/config.toml（compose 已挂载），[web] port 保持 8080
+
+[web]
+  host = "0.0.0.0"
+  port = 8080
+  cert = ""
+  key = ""
+  Debug = true
+
+# 平台主库（登录/用户/事件/通报等核心业务）
+[db]
+  host = "127.0.0.1"          # 本机 MySQL；如使用 compose mysql 服务改为 mysql
+  port = 3306
+  user = "wp"
+  passwd = "change-me-wp"
+  dbname = "warning_platform"
+  db-type = "mysql"
+  show-sql = false
+  read-only = false
+  max-idle-conn-count = 20
+  max-open-conn-count = 100
+  max-conn-life-time = 600
+
+# 独立运行：mode=local（不依赖 IAM，本地账户 admin/admin 登录）
+[iam]
+  mode = "local"
+  local_admin_password = "admin"
+  base_url = ""
+  client_id = ""
+  client_secret = ""
+  path_prefix = "/api"
+
+[sso]
+  callback_uri = "http://127.0.0.1:22125/callback"
+  success_redirect = "http://127.0.0.1:22125/auth/sso-callback"
+  cookie_secret = "change-me-cookie-secret"
+  token_relay_callback_uri = "http://127.0.0.1:22125/callback"
+
+# ============ 流量分析（traffic）============
+[traffic]
+  # 存储后端：mysql（生产）或 memory（仅开发/测试，重启丢数据）
+  store_backend = "mysql"
+  # MySQL 连接串：使用与主库同一个库即可（auto_migrate 会自动建表）
+  # 必须带 parseTime=true；如使用 compose mysql 服务，主机名改为 mysql
+  database_url = "wp:change-me-wp@tcp(127.0.0.1:3306)/warning_platform?parseTime=true&charset=utf8mb4&loc=UTC"
+  # 首次启动自动建表（幂等）
+  auto_migrate = true
+  # 启动时等待 MySQL 就绪的最长秒数
+  db_wait_seconds = 30
+  # internal 接口鉴权 key（ta_node 推送事件时 X-API-Key 必须一致）
+  internal_api_key = "change-me-internal-key"
+
+  # 证据节点映射：device_id → 节点证据服务地址（PCAP 下载走管理端代理）
+  # 融合采集节点推送到管理端的 device_id 需与下列键一致
+  evidence_nodes = { "node-arm-offline-001" = "http://127.0.0.1:19090" }
+
+  # LLM（OpenAI 兼容接口），用于事件分析/报告生成
+  llm_base_url = "http://127.0.0.1:1025/v1/chat/completions"
+  llm_api_key = ""
+  llm_model = "qwen"
+  llm_timeout_seconds = 180
+
+  # 消息队列：none（默认，进程内直投）或 rabbitmq
+  mq_backend = "none"
+  rabbitmq_url = ""
+  rabbitmq_exchange = "traffic.events"
+  rabbitmq_event_queue = "traffic.events.default"
+  rabbitmq_consumer_enabled = false
+
+  # 同步拉取（FlowShadow 未启用时无需配置）
+  flowshadow_base_url = ""
+  flowshadow_api_key = ""
+  sync_batch_size = 200
+  sync_lookback_seconds = 600
+  sync_max_retries = 5
+
+  # 兼容上游（DeepSOC/Circular 未启用时留空）
+  deepsoc_base_url = ""
+  deepsoc_username = "admin"
+  deepsoc_password = "admin"
+  deepsoc_api_key = ""
+  circular_base_url = ""
+
+  # 对外请求超时（秒）
+  http_timeout_seconds = 15

@@ -161,7 +161,8 @@ export function buildIncidentOverviewStats(
   });
   push(primary, '发现途径', sourceLabels[incident.source] || String(incident.source));
   push(primary, '事件类型', meta?.incident_type);
-  push(primary, '发现时间', fmt(incident.report_time));
+  push(primary, '发现时间', fmt(meta?.discovery_time));
+  push(primary, '上报时间', fmt(incident.report_time));
   push(primary, '创建时间', fmt(incident.created_at));
 
   let monitor: OverviewStatItem[] = [];

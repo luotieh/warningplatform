@@ -64,6 +64,9 @@ async function runSearch() {
     state.rows = normalizeLyEvents(rows).filter((item) => {
       if (keyword && !JSON.stringify(item).toLowerCase().includes(keyword)) return false;
       if (asset && !assetMatchesEvent({ address: asset }, item as Record<string, any>)) return false;
+      const t = Number(item.time ?? item.starttime ?? 0);
+      if (form.starttime && (!t || t < form.starttime / 1000)) return false;
+      if (form.endtime && (!t || t > form.endtime / 1000)) return false;
       return true;
     });
   } catch (error) {

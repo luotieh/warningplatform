@@ -7,8 +7,9 @@ import { IconifyIcon } from '@vben/icons';
 import { useUserStore } from '@vben/stores';
 
 import { lyEventPushToAi, lyEventReview } from '#/api/ly';
+import { deepflowEventArchiveUrl, deepflowEventEvidenceUrl } from '#/api/ly/deepflow';
 import { message } from '#/adapter/naive';
-import { formatBoolText, formatBytes, formatDirection, formatHexTruncated, formatTimestamp, formatVolumeRole, paginate } from '#/utils/ly';
+import { formatBoolText, formatBytes, formatDirection, formatHexTruncated, formatTimestamp, paginate } from '#/utils/ly';
 
 import ReportModal from '../detail/components/ReportModal.vue';
 
@@ -410,38 +411,6 @@ onMounted(() => {
           </div>
         </div>
 
-        <div v-if="currentEventContext.flow_stats" class="occ-card">
-          <div class="occ-card-title">流量统计与角色</div>
-          <div class="occ-card-grid">
-            <div v-if="currentEventContext.flow_stats.volume_role" class="occ-field">
-              <span class="occ-label">流量角色</span>
-              <span class="occ-value" :style="{ color: formatVolumeRole(currentEventContext.flow_stats.volume_role).color, fontWeight: 600 }">
-                {{ formatVolumeRole(currentEventContext.flow_stats.volume_role).text }}
-              </span>
-            </div>
-            <div v-if="currentEventContext.flow_stats.flows != null" class="occ-field">
-              <span class="occ-label">流数</span>
-              <span class="occ-value">{{ currentEventContext.flow_stats.flows }}</span>
-            </div>
-            <div v-if="currentEventContext.flow_stats.packets != null" class="occ-field">
-              <span class="occ-label">包数</span>
-              <span class="occ-value">{{ currentEventContext.flow_stats.packets }}</span>
-            </div>
-            <div v-if="currentEventContext.flow_stats.wire_bytes != null" class="occ-field">
-              <span class="occ-label">在线字节</span>
-              <span class="occ-value">{{ formatBytes(currentEventContext.flow_stats.wire_bytes) }}</span>
-            </div>
-            <div v-if="currentEventContext.flow_stats.bytes != null" class="occ-field">
-              <span class="occ-label">载荷字节</span>
-              <span class="occ-value">{{ formatBytes(currentEventContext.flow_stats.bytes) }}</span>
-            </div>
-            <div v-if="currentEventContext.flow_stats.duration_ms != null" class="occ-field">
-              <span class="occ-label">持续时长</span>
-              <span class="occ-value">{{ currentEventContext.flow_stats.duration_ms }} ms</span>
-            </div>
-          </div>
-        </div>
-
         <div v-if="currentEventContext.ioc" class="occ-card">
           <div class="occ-card-title">威胁情报</div>
           <div class="occ-card-grid">
@@ -461,13 +430,25 @@ onMounted(() => {
               <span class="occ-label">情报源</span>
               <span class="occ-value">{{ currentEventContext.ioc.ioc_source }}</span>
             </div>
-            <div v-if="currentEventContext.ioc.ioc_description" class="occ-field occ-field-full">
-              <span class="occ-label">描述</span>
-              <span class="occ-value">{{ currentEventContext.ioc.ioc_description }}</span>
+            <div v-if="currentEventContext.ioc_evidence?.confidence" class="occ-field">
+              <span class="occ-label">置信度</span>
+              <span class="occ-value">{{ currentEventContext.ioc_evidence.confidence }}</span>
+            </div>
+            <div v-if="currentEventContext.ioc_evidence?.tlp" class="occ-field">
+              <span class="occ-label">TLP</span>
+              <span class="occ-value">{{ currentEventContext.ioc_evidence.tlp }}</span>
             </div>
             <div v-if="currentEventContext.ioc.ioc_expire_at" class="occ-field">
               <span class="occ-label">过期时间</span>
               <span class="occ-value">{{ formatTimestamp(currentEventContext.ioc.ioc_expire_at) }}</span>
+            </div>
+            <div v-if="currentEventContext.ioc_evidence?.activity" class="occ-field occ-field-full">
+              <span class="occ-label">关联活动</span>
+              <span class="occ-value">{{ currentEventContext.ioc_evidence.activity }}</span>
+            </div>
+            <div v-if="currentEventContext.ioc.ioc_description" class="occ-field occ-field-full">
+              <span class="occ-label">描述</span>
+              <span class="occ-value">{{ currentEventContext.ioc.ioc_description }}</span>
             </div>
             <div v-if="currentEventContext.ioc.ioc_tags" class="occ-field occ-field-full">
               <span class="occ-label">标签</span>
@@ -475,29 +456,7 @@ onMounted(() => {
                 <NTag v-for="tag in (Array.isArray(currentEventContext.ioc.ioc_tags) ? currentEventContext.ioc.ioc_tags : [currentEventContext.ioc.ioc_tags])" :key="tag" size="tiny" round style="margin-right:4px;margin-bottom:2px">{{ tag }}</NTag>
               </span>
             </div>
-          </div>
-        </div>
-
-        <div v-if="currentEventContext.ioc_evidence" class="occ-card">
-          <div class="occ-card-title">情报证据</div>
-          <div class="occ-card-grid">
-            <div v-if="currentEventContext.ioc_evidence.confidence" class="occ-field">
-              <span class="occ-label">置信度</span>
-              <span class="occ-value">{{ currentEventContext.ioc_evidence.confidence }}</span>
-            </div>
-            <div v-if="currentEventContext.ioc_evidence.source" class="occ-field">
-              <span class="occ-label">来源</span>
-              <span class="occ-value">{{ currentEventContext.ioc_evidence.source }}</span>
-            </div>
-            <div v-if="currentEventContext.ioc_evidence.tlp" class="occ-field">
-              <span class="occ-label">TLP</span>
-              <span class="occ-value">{{ currentEventContext.ioc_evidence.tlp }}</span>
-            </div>
-            <div v-if="currentEventContext.ioc_evidence.activity" class="occ-field occ-field-full">
-              <span class="occ-label">关联活动</span>
-              <span class="occ-value">{{ currentEventContext.ioc_evidence.activity }}</span>
-            </div>
-            <div v-if="currentEventContext.ioc_evidence.threat_labels" class="occ-field occ-field-full">
+            <div v-if="currentEventContext.ioc_evidence?.threat_labels" class="occ-field occ-field-full">
               <span class="occ-label">威胁标签</span>
               <span class="occ-value">
                 <NTag v-for="tl in (Array.isArray(currentEventContext.ioc_evidence.threat_labels) ? currentEventContext.ioc_evidence.threat_labels : [currentEventContext.ioc_evidence.threat_labels])" :key="tl" size="tiny" type="error" round style="margin-right:4px;margin-bottom:2px">{{ tl }}</NTag>
@@ -506,11 +465,41 @@ onMounted(() => {
           </div>
         </div>
 
-        <div v-if="currentEventContext.recommended_action" class="occ-card">
-          <div class="occ-card-title">处置建议</div>
-          <div class="occ-card-grid">
-            <div class="occ-field occ-field-full">
-              <span class="occ-value" style="font-weight:600;color:#d03050">{{ currentEventContext.recommended_action }}</span>
+        <div
+          v-if="Array.isArray(currentEventContext.evidence_files) && currentEventContext.evidence_files.length"
+          class="occ-card"
+        >
+          <div class="occ-card-title">
+            证据附件
+            <a
+              class="evidence-archive-link"
+              :href="deepflowEventArchiveUrl(String(currentEventContext.event_id || currentEventContext.id))"
+              target="_blank"
+              rel="noopener"
+            >
+              下载全部 PCAP(ZIP)
+            </a>
+            <span v-if="currentEventContext.evidence_truncated" class="evidence-truncated-hint">
+              附件已达上限
+            </span>
+          </div>
+          <div class="occ-list">
+            <div
+              v-for="(ef, idx) in currentEventContext.evidence_files"
+              :key="idx"
+              class="occ-item evidence-item"
+            >
+              <a
+                class="evidence-link"
+                :href="deepflowEventEvidenceUrl(String(currentEventContext.event_id || currentEventContext.id), idx)"
+                target="_blank"
+                rel="noopener"
+              >
+                {{ ef.name || ef.id || `evidence_${idx + 1}` }}
+              </a>
+              <NTag v-if="ef.type" size="tiny" round type="info">{{ ef.type }}</NTag>
+              <span v-if="ef.size" class="evidence-size">{{ formatBytes(ef.size) }}</span>
+              <span v-if="ef.description" class="evidence-desc">{{ ef.description }}</span>
             </div>
           </div>
         </div>
@@ -619,16 +608,54 @@ onMounted(() => {
 
 /* 命中明细弹窗 */
 .occ-container { max-height: 75vh; overflow-y: auto; }
-.occ-card { background: var(--n-color-target); border: 1px solid var(--n-border-color); border-radius: 8px; padding: 14px 16px; margin-bottom: 12px; }
-.occ-card-title { font-size: 14px; font-weight: 600; color: var(--n-text-color); margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--n-border-color); }
-.occ-card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; }
-.occ-field { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.occ-field-full { grid-column: 1 / -1; }
-.occ-label { font-size: 12px; color: var(--n-text-color-3); }
-.occ-value { font-size: 13px; color: var(--n-text-color); word-break: break-all; }
+.occ-card {
+  background: var(--n-color);
+  border: 1px solid var(--n-border-color);
+  border-radius: 12px;
+  padding: 18px 20px;
+  margin-bottom: 14px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: box-shadow 0.2s;
+}
+.occ-card:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+.occ-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--n-text-color);
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 10px;
+  border-left: 3px solid #2080f0;
+}
+.occ-card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border: 1px solid var(--n-border-color); border-radius: 8px; overflow: hidden; }
+.occ-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--n-border-color);
+  font-size: 13px;
+  transition: background 0.15s;
+  min-width: 0;
+}
+.occ-field:hover { background: rgba(0, 0, 0, 0.02); }
+.occ-field:nth-child(odd) { border-right: 1px solid var(--n-border-color); }
+.occ-field-full { grid-column: 1 / -1; border-right: none !important; }
+.occ-label { font-size: 11px; color: var(--n-text-color-3); font-weight: 500; text-transform: uppercase; letter-spacing: 0.3px; }
+.occ-value { color: var(--n-text-color); word-break: break-all; }
 .occ-section-title { font-size: 14px; font-weight: 600; margin: 16px 0 10px; color: var(--n-text-color); }
 .occ-list { display: flex; flex-direction: column; gap: 2px; }
 .occ-item { border: 1px solid var(--n-border-color); border-radius: 6px; overflow: hidden; }
+.evidence-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; flex-wrap: wrap; }
+.evidence-link { color: #2080f0; font-weight: 500; text-decoration: none; }
+.evidence-archive-link { margin-left: auto; font-size: 12px; color: #2080f0; font-weight: 500; text-decoration: none; }
+.evidence-truncated-hint { font-size: 12px; color: #e6a23c; font-weight: 400; }
+.evidence-size { color: #909399; font-size: 12px; }
+.evidence-desc { color: #64748b; font-size: 12px; }
 .occ-row { display: flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: pointer; user-select: none; transition: background .15s; }
 .occ-row:hover { background: var(--n-color-target); }
 .occ-chevron { font-size: 14px; color: var(--n-text-color-3); flex: none; transition: transform .15s; }

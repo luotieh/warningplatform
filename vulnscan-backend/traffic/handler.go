@@ -1,10 +1,17 @@
 package traffic
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 
+	trafficconfig "vulnscan-backend/traffic/internal/config"
 	"vulnscan-backend/traffic/internal/domain"
 	"vulnscan-backend/traffic/internal/lyserver"
 	"vulnscan-backend/traffic/internal/socketio"
@@ -15,6 +22,7 @@ import (
 type Handler struct {
 	events  *EventService
 	assets  *AssetService
+	reports *AssetReportService
 	account *AccountService
 	chat    *ChatService
 	system  *SystemService
@@ -23,8 +31,8 @@ type Handler struct {
 	socket  *socketio.Hub
 }
 
-func NewHandler(events *EventService, assets *AssetService, account *AccountService, chat *ChatService, system *SystemService, inner *InternalService, ly *lyserver.Service, socket *socketio.Hub) *Handler {
-	return &Handler{events: events, assets: assets, account: account, chat: chat, system: system, inner: inner, ly: ly, socket: socket}
+func NewHandler(events *EventService, assets *AssetService, reports *AssetReportService, account *AccountService, chat *ChatService, system *SystemService, inner *InternalService, ly *lyserver.Service, socket *socketio.Hub) *Handler {
+	return &Handler{events: events, assets: assets, reports: reports, account: account, chat: chat, system: system, inner: inner, ly: ly, socket: socket}
 }
 
 func (h *Handler) Health(c *gin.Context) {
@@ -86,6 +94,95 @@ func (h *Handler) LLMConfig(c *gin.Context) {
 	default:
 		fail(c, http.StatusMethodNotAllowed, "method not allowed")
 	}
+}
+
+// StoreConfig 读取/保存 MySQL 存储配置（GET/POST/PUT /store/config）。
+func (h *Handler) StoreConfig(c *gin.Context) {
+	switch c.Request.Method {
+	case http.MethodGet:
+		ok(c, h.system.StoreConfig())
+	case http.MethodPost, http.MethodPut:
+		body, valid := readBody(c)
+		if !valid {
+			return
+		}
+		settings := h.system.StoreConfig()
+		if v := strings.TrimSpace(stringValue(body["store_backend"])); v != "" {
+			settings.StoreBackend = v
+		}
+		if v := strings.TrimSpace(stringValue(body["host"])); v != "" {
+			settings.Host = v
+		}
+		if port := intFromBody(body["port"]); port > 0 {
+			settings.Port = port
+		}
+		if v := strings.TrimSpace(stringValue(body["user"])); v != "" {
+			settings.User = v
+		}
+		if v := strings.TrimSpace(stringValue(body["db_name"])); v != "" {
+			settings.DBName = v
+		}
+		if _, ok := body["auto_migrate"]; ok {
+			settings.AutoMigrate = boolFromBody(body["auto_migrate"])
+		}
+		if wait := intFromBody(body["db_wait_seconds"]); wait > 0 {
+			settings.DBWaitSeconds = wait
+		}
+		password := strings.TrimSpace(stringValue(body["password"]))
+		updatePassword := password != ""
+		if updatePassword {
+			settings.Password = password
+		}
+		updated, err := h.system.SetStoreConfig(settings, updatePassword)
+		if err != nil {
+			fail(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		okMessage(c, "MySQL配置已保存，存储后端变更需重启后生效", updated)
+	default:
+		fail(c, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+// TestStoreConfig 测试 MySQL 连通性与核心表（POST /store/config/test，不落盘）。
+func (h *Handler) TestStoreConfig(c *gin.Context) {
+	body, valid := readBody(c)
+	if !valid {
+		return
+	}
+	settings := storeSettingsFromBody(body, h.system.StoreConfig())
+	result := h.system.TestStoreConfig(settings)
+	status := http.StatusOK
+	if !result.OK {
+		status = http.StatusBadRequest
+	}
+	c.JSON(status, gin.H{"code": 0, "data": result, "message": map[bool]string{true: "连接正常", false: "连接失败"}[result.OK]})
+}
+
+// storeSettingsFromBody 从请求体解析 MySQL 测试参数；
+// 请求未携带 password 时回填当前配置中的密码（与“留空不修改”语义一致），
+// 避免测试连接因空密码误报 Access denied。
+func storeSettingsFromBody(body map[string]any, current trafficconfig.StoreSettings) trafficconfig.StoreSettings {
+	settings := trafficconfig.StoreSettings{StoreBackend: "mysql"}
+	if v := strings.TrimSpace(stringValue(body["host"])); v != "" {
+		settings.Host = v
+	}
+	if port := intFromBody(body["port"]); port > 0 {
+		settings.Port = port
+	}
+	if v := strings.TrimSpace(stringValue(body["user"])); v != "" {
+		settings.User = v
+	}
+	if v := strings.TrimSpace(stringValue(body["password"])); v != "" {
+		settings.Password = v
+	}
+	if _, hasPassword := body["password"]; !hasPassword {
+		settings.Password = current.Password
+	}
+	if v := strings.TrimSpace(stringValue(body["db_name"])); v != "" {
+		settings.DBName = v
+	}
+	return settings
 }
 
 func (h *Handler) Version(c *gin.Context) {
@@ -155,7 +252,9 @@ func (h *Handler) CreateEvent(c *gin.Context) {
 }
 
 func (h *Handler) ListEvents(c *gin.Context) {
-	ok(c, h.events.List(c.Request.Context()))
+	// 返回 LY 兼容结构（attackDevice/victimDevice/type/desc/聚合字段），
+	// 供前端事件列表 normalizeLyEvent 直接渲染；原始 Event 结构字段名不匹配。
+	ok(c, h.events.LyCompatibleList(c.Request.Context()))
 }
 
 func (h *Handler) GetEvent(c *gin.Context) {
@@ -231,6 +330,135 @@ func (h *Handler) ReviewEvent(c *gin.Context) {
 		return
 	}
 	ok(c, result)
+}
+
+// RefreshEventReport 手动刷新事件分析报告（POST /events/detail/:eventID/report/refresh）。
+func (h *Handler) RefreshEventReport(c *gin.Context) {
+	result, err := h.events.RefreshReport(c.Request.Context(), c.Param("eventID"))
+	if err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	if result["status"] == "already_running" {
+		okMessage(c, "该事件正在分析中，请稍后查看", result)
+		return
+	}
+	okMessage(c, "分析刷新任务已提交，完成后自动更新", result)
+}
+
+// EventEvidence 管理端代理下载事件 PCAP 证据（GET /events/detail/:eventID/evidence/:idx）。
+func (h *Handler) EventEvidence(c *gin.Context) {
+	idx, err := strconv.Atoi(c.Param("idx"))
+	if err != nil || idx < 0 {
+		fail(c, http.StatusBadRequest, "证据序号非法")
+		return
+	}
+	data, name, contentType, err := h.inner.EvidenceFile(c.Request.Context(), c.Param("eventID"), idx)
+	if err != nil {
+		switch {
+		case errors.Is(err, errEventNotFound), errors.Is(err, errEvidenceNotFound):
+			fail(c, http.StatusNotFound, err.Error())
+		case errors.Is(err, errEvidenceInvalid):
+			fail(c, http.StatusBadRequest, err.Error())
+		default:
+			fail(c, http.StatusBadGateway, err.Error())
+		}
+		return
+	}
+	safeName := strings.Map(func(r rune) rune {
+		if strings.ContainsRune(`/\:*?"<>|`, r) {
+			return '_'
+		}
+		return r
+	}, name)
+	if safeName == "" {
+		safeName = "evidence.pcap"
+	}
+	c.Header("Content-Type", contentType)
+	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, safeName))
+	c.Data(http.StatusOK, contentType, data)
+}
+
+// EventEvidenceArchive 聚合事件全部 PCAP 打包下载（GET /events/detail/:eventID/evidence/archive）。
+func (h *Handler) EventEvidenceArchive(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), evidenceArchiveTimeout)
+	defer cancel()
+	dir, res, err := h.inner.EvidenceArchive(ctx, c.Param("eventID"))
+	if err != nil {
+		switch {
+		case errors.Is(err, errEventNotFound), errors.Is(err, errEvidenceNotFound):
+			fail(c, http.StatusNotFound, err.Error())
+		case errors.Is(err, errEvidenceInvalid):
+			fail(c, http.StatusBadRequest, err.Error())
+		case errors.Is(err, errEvidenceTooLarge):
+			fail(c, http.StatusRequestEntityTooLarge, err.Error())
+		case errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled):
+			fail(c, http.StatusGatewayTimeout, err.Error())
+		default:
+			fail(c, http.StatusBadGateway, err.Error())
+		}
+		return
+	}
+	if dir == "" {
+		fail(c, http.StatusBadGateway, "证据打包失败")
+		return
+	}
+	defer os.RemoveAll(dir)
+	zipPath := filepath.Join(dir, "archive.zip")
+	safeName := strings.Map(func(r rune) rune {
+		if strings.ContainsRune(`/\:*?"<>|`, r) {
+			return '_'
+		}
+		return r
+	}, c.Param("eventID"))
+	if safeName == "" {
+		safeName = "event"
+	}
+	c.Header("Content-Type", "application/zip")
+	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s_evidence.zip"`, safeName))
+	if res.Failed > 0 {
+		c.Header("X-Evidence-Failed", strconv.Itoa(res.Failed))
+	}
+	c.File(zipPath)
+}
+
+// RunAssetMonthlySummary 创建资产 IP 月度总结异步任务（POST /assets/monthly-summary/run）。
+func (h *Handler) RunAssetMonthlySummary(c *gin.Context) {
+	period := ""
+	if body, valid := readBody(c); valid {
+		period = firstString(body, "period")
+	}
+	job, err := h.reports.RunMonthlyAsync(c.Request.Context(), period)
+	if err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	okMessage(c, "月度总结任务已创建，可通过 job_id 查询进度", job)
+}
+
+// GetAssetMonthlyJob 查询月度总结任务进度（GET /assets/monthly-summary/jobs/:jobID）。
+func (h *Handler) GetAssetMonthlyJob(c *gin.Context) {
+	job, err := h.reports.GetJob(c.Param("jobID"))
+	if err != nil {
+		fail(c, http.StatusNotFound, err.Error())
+		return
+	}
+	ok(c, job)
+}
+
+// GetAssetMonthlySummary 查询资产月度总结（GET /assets/:id/monthly-summary?period=）。
+func (h *Handler) GetAssetMonthlySummary(c *gin.Context) {
+	period := strings.TrimSpace(c.Query("period"))
+	if period != "" {
+		sm, found := h.reports.GetMonthly(c.Param("id"), period)
+		if !found {
+			fail(c, http.StatusNotFound, "该资产指定月份暂无月度总结")
+			return
+		}
+		ok(c, sm)
+		return
+	}
+	ok(c, h.reports.ListMonthly(c.Param("id")))
 }
 
 // requestBaseURL 由入站请求推导同机 base（CircularClient.BaseURL 为空时使用）。

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"code.yt-security.com/public/access/authorize"
@@ -24,6 +25,10 @@ func (h *Handlers) registerPrivilegedFrontendSync(g *gin.RouterGroup) {
 }
 
 func (h *Handlers) syncFrontendsWithServiceToken(c *gin.Context) {
+	if strings.EqualFold(h.Config.IAM.Mode, "local") {
+		web.Resp(c, web.InternalError.SetMessage("本地认证模式不支持同步前端菜单到 IAM"))
+		return
+	}
 	user, ok := middleware.GetCurrentUser(c)
 	if !ok || user.UserID == "" {
 		web.Resp(c, web.Unauthorized.SetMessage("未登录"))

@@ -21,3 +21,8 @@ agent-transcripts/
 vulnscan-frontend/node_modules
 terminals/
 *.ex
+
+# 构建产物
+vulnscan-backend/server-arm64
+*.tar
+vulnscan-frontend/apps/web/mock/

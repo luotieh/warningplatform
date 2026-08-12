@@ -1,6 +1,8 @@
 import { preferences } from '@vben/preferences';
 import { useAccessStore } from '@vben/stores';
 
+import { deepflowGetEvents } from './deepflow';
+
 export interface LyEventItem extends Record<string, any> {
   id: number | string;
   obj?: string;
@@ -146,8 +148,68 @@ export function lyEventReview(params: {
   );
 }
 
-export function lyEventSearch(params?: Record<string, any>) {
-  return lyEventGet(params);
+export interface AssetReportSummary extends Record<string, any> {
+  asset_id: string;
+  asset_ip: string;
+  period: string;
+  window_from: string;
+  window_to: string;
+  event_count: number;
+  narrative: string;
+  status: string;
+}
+
+export interface AssetReportJob extends Record<string, any> {
+  id: string;
+  period: string;
+  status: 'queued' | 'running' | 'completed' | 'failed';
+  total_assets: number;
+  completed_assets: number;
+  error?: string;
+  created_at?: string;
+  updated_at?: string;
+  started_at?: string;
+  finished_at?: string;
+}
+
+export function lyEventReportRefresh(eventId: number | string) {
+  return post<{ analysis_version: number; status: string }>(
+    `/events/detail/${eventId}/report/refresh`,
+    {},
+    '/api/traffic',
+  );
+}
+
+export function lyRunAssetMonthlySummary(period?: string) {
+  return post<AssetReportJob>(
+    '/assets/monthly-summary/run',
+    period ? { period } : {},
+    '/api/traffic',
+  );
+}
+
+export function lyGetAssetMonthlyJob(jobId: string) {
+  return get<AssetReportJob>(
+    `/assets/monthly-summary/jobs/${jobId}`,
+    undefined,
+    '/api/traffic',
+  );
+}
+
+export function lyGetAssetMonthlySummary(
+  assetId: number | string,
+  period?: string,
+) {
+  return get<AssetReportSummary | AssetReportSummary[]>(
+    `/assets/${assetId}/monthly-summary`,
+    period ? { period } : undefined,
+    '/api/traffic',
+  );
+}
+
+export function lyEventSearch(_params?: Record<string, any>) {
+  // 搜索与事件列表统一使用 /api/traffic/events/list（数据源 traffic.events）。
+  return deepflowGetEvents();
 }
 
 export function lyConfigGet(params?: Record<string, any>) {
@@ -178,6 +240,44 @@ export function lyLLMConfigSave(params: Record<string, any>) {
 /** LLM 健康检查：用表单当前值（可未保存）测连通性并发送一条测试对话 */
 export function lyLLMHealthCheck(params: Record<string, any>) {
   return post<Record<string, any>>('/llm', params, '/api/traffic/health');
+}
+
+export function lyLLMHealth() {
+  return get<Record<string, any>>('/health/llm', undefined, '/api/traffic');
+}
+
+export interface StoreSettings extends Record<string, any> {
+  store_backend: string;
+  host: string;
+  port: number;
+  user: string;
+  password_configured: boolean;
+  password_masked?: string;
+  db_name: string;
+  auto_migrate: boolean;
+  db_wait_seconds: number;
+  config_path?: string;
+}
+
+export interface StoreTestResult {
+  ok: boolean;
+  backend: string;
+  latency_ms?: number;
+  tables?: string[];
+  error?: string;
+  config_path?: string;
+}
+
+export function lyStoreConfigGet() {
+  return get<StoreSettings>('/store/config', undefined, '/api/traffic');
+}
+
+export function lyStoreConfigSave(params: Record<string, any>) {
+  return post<StoreSettings>('/store/config', params, '/api/traffic');
+}
+
+export function lyStoreConfigTest(params: Record<string, any>) {
+  return post<StoreTestResult>('/store/config/test', params, '/api/traffic');
 }
 
 export function lyNodeTestConnection(params: Record<string, any>) {

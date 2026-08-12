@@ -109,6 +109,20 @@ export function deepflowGetEventSummary(eventId: string) {
   return deepflowGet(`/events/detail/${eventId}/summaries`);
 }
 
+export function deepflowRefreshEventReport(eventId: string) {
+  return deepflowPost<{ analysis_version: number; status: string }>(
+    `/events/detail/${eventId}/report/refresh`,
+  );
+}
+
+export function deepflowEventEvidenceUrl(eventId: string, idx: number) {
+  return `/api/traffic/events/detail/${eventId}/evidence/${idx}`;
+}
+
+export function deepflowEventArchiveUrl(eventId: string) {
+  return `/api/traffic/events/detail/${eventId}/evidence/archive`;
+}
+
 export function deepflowGetChatRecords(
   eventId: string,
   params: Record<string, any> = { last_message_db_id: 0 },

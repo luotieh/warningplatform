@@ -2,6 +2,7 @@ package di
 
 import (
 	"strconv"
+	"strings"
 
 	"code.yt-security.com/public/access/identity"
 	"code.yt-security.com/public/core/web"
@@ -13,6 +14,14 @@ func (h *Handlers) registerUserListAPI(g *gin.RouterGroup) {
 }
 
 func (h *Handlers) listIAMUsers(c *gin.Context) {
+	if strings.EqualFold(h.Config.IAM.Mode, "local") {
+		if h.LocalAuth != nil {
+			h.LocalAuth.ListUsers(c)
+			return
+		}
+		web.Fail(c).Msg("本地认证未初始化").Send()
+		return
+	}
 	if h.IAM == nil || h.IAM.Identity == nil {
 		web.Fail(c).Msg("IAM 未初始化").Send()
 		return

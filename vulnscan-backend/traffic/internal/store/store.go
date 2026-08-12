@@ -1,6 +1,10 @@
 package store
 
-import "vulnscan-backend/traffic/internal/domain"
+import (
+	"time"
+
+	"vulnscan-backend/traffic/internal/domain"
+)
 
 type Store interface {
 	CreateUser(u domain.User) (domain.User, error)
@@ -13,6 +17,8 @@ type Store interface {
 	CreateEvent(e domain.Event) (domain.Event, error)
 	GetEvent(eventID string) (domain.Event, bool)
 	ListEvents() []domain.Event
+	ListEventsConvergedDue(threshold time.Time) []domain.Event
+	ListEventsByTargetIP(ip string, from time.Time, to time.Time) []domain.Event
 	UpdateEvent(eventID string, patch map[string]any) (domain.Event, bool)
 
 	AddMessage(m domain.Message) (domain.Message, error)
@@ -49,4 +55,12 @@ type Store interface {
 	ListAssets() []domain.Asset
 	UpdateAsset(id string, patch map[string]any) (domain.Asset, bool)
 	DeleteAsset(id string) bool
+
+	SaveAssetReportSummary(sm domain.AssetReportSummary) (domain.AssetReportSummary, error)
+	GetAssetReportSummary(assetID string, period string) (domain.AssetReportSummary, bool)
+	ListAssetReportSummaries(assetID string) []domain.AssetReportSummary
+
+	CreateAssetReportJob(job domain.AssetReportJob) (domain.AssetReportJob, error)
+	UpdateAssetReportJob(jobID string, patch map[string]any) (domain.AssetReportJob, bool)
+	GetAssetReportJob(jobID string) (domain.AssetReportJob, bool)
 }

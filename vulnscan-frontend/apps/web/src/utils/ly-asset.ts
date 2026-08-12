@@ -75,3 +75,16 @@ export function eventMatchesAnyAsset(event: EventLike, assets: AssetLike[]): boo
     (a) => a.status === 1 && assetMatchesEvent(a, event),
   );
 }
+
+// assetOptionFilter 资产下拉模糊匹配：按名称/地址包含匹配，大小写不敏感。
+// 例如输入 "徐工" 可匹配 "徐工集团-58.218.196.193"。
+export function assetOptionFilter(
+  pattern: string,
+  option: any,
+): boolean {
+  const keyword = String(pattern ?? '').trim().toLowerCase();
+  if (!keyword) return true;
+  const label = String(option?.label ?? '').toLowerCase();
+  const value = String(option?.value ?? '').toLowerCase();
+  return label.includes(keyword) || value.includes(keyword);
+}

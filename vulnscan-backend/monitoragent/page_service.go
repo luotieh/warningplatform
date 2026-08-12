@@ -527,8 +527,17 @@ func matchDomain(pattern, host string) bool {
 func (ps *PageService) Close() {
 	ps.client.CloseIdleConnections()
 	if ps.browser != nil {
-		_ = ps.browser.Close()
+		closeBrowser(ps.browser)
 		ps.browser = nil
+	}
+}
+
+// closeBrowser 安全关闭浏览器实例：连接失效后 rod 的 Close 会对内部
+// websocket 指针解引用导致 SIGSEGV（崩溃重启），这里统一用 recover 兜底。
+func closeBrowser(b *rod.Browser) {
+	defer func() { _ = recover() }()
+	if b != nil {
+		_ = b.Close()
 	}
 }
 
@@ -623,7 +632,7 @@ func (ps *PageService) EnsureBrowser() {
 		if _, err := ps.browser.Version(); err == nil {
 			return
 		}
-		_ = ps.browser.Close()
+		closeBrowser(ps.browser)
 		ps.browser = nil
 	}
 	ps.browser = ps.initBrowser()

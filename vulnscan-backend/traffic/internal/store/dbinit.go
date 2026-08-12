@@ -100,6 +100,10 @@ func InitMySQL(ctx context.Context, dsn string, autoMigrate bool, waitSeconds in
 			_ = db.Close()
 			return nil, err
 		}
+		if err := ensureTrafficSchemaUpgrades(ctx, db); err != nil {
+			_ = db.Close()
+			return nil, err
+		}
 		if err := seedMySQLBaseData(ctx, db); err != nil {
 			_ = db.Close()
 			return nil, err
@@ -174,6 +178,55 @@ func migrateMySQLSchema(ctx context.Context, cfg *mysql.Config) error {
 	}
 	if _, err := mig.ExecContext(ctx, LyServerMySQLSchema); err != nil {
 		return fmt.Errorf("traffic: apply ly_server compatibility schema: %w", err)
+	}
+	return nil
+}
+
+// ensureTrafficSchemaUpgrades applies idempotent column additions for tables
+// created by older revisions of MySQLSchema (CREATE TABLE IF NOT EXISTS never
+// alters an existing table). New columns introduced by the quantitative
+// analysis design: events(analysis_version/aggregation_closed/last_analysis_at)
+// and summaries(version/kind).
+func ensureTrafficSchemaUpgrades(ctx context.Context, db *sql.DB) error {
+	type colDef struct {
+		table  string
+		column string
+		ddl    string
+	}
+	defs := []colDef{
+		{"events", "analysis_version", "ALTER TABLE events ADD COLUMN analysis_version INTEGER NOT NULL DEFAULT 0"},
+		{"events", "aggregation_closed", "ALTER TABLE events ADD COLUMN aggregation_closed TINYINT(1) NOT NULL DEFAULT 0"},
+		{"events", "last_analysis_at", "ALTER TABLE events ADD COLUMN last_analysis_at DATETIME(6) NULL"},
+		{"events", "last_seen_at", "ALTER TABLE events ADD COLUMN last_seen_at DATETIME(6) NULL"},
+		{"summaries", "version", "ALTER TABLE summaries ADD COLUMN version INTEGER NOT NULL DEFAULT 1"},
+		{"summaries", "kind", "ALTER TABLE summaries ADD COLUMN kind VARCHAR(32) NOT NULL DEFAULT 'initial'"},
+	}
+	for _, d := range defs {
+		var n int
+		if err := db.QueryRowContext(ctx, `
+SELECT COUNT(*) FROM information_schema.COLUMNS
+WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+			d.table, d.column).Scan(&n); err != nil {
+			return fmt.Errorf("traffic: check column %s.%s: %w", d.table, d.column, err)
+		}
+		if n > 0 {
+			continue
+		}
+		if _, err := db.ExecContext(ctx, d.ddl); err != nil {
+			var me *mysql.MySQLError
+			if errors.As(err, &me) && me.Number == 1060 { // 列已存在（并发初始化）
+				continue
+			}
+			return fmt.Errorf("traffic: %s: %w", d.ddl, err)
+		}
+		log.Printf("traffic: added missing column %s.%s", d.table, d.column)
+	}
+	// 存量事件回填 last_seen_at（升级前该字段只存在 context JSON 中）。
+	if _, err := db.ExecContext(ctx, `
+UPDATE events
+SET last_seen_at = STR_TO_DATE(JSON_UNQUOTE(JSON_EXTRACT(context, '$.last_seen_at')), '%Y-%m-%dT%H:%i:%s.%fZ')
+WHERE last_seen_at IS NULL AND JSON_EXTRACT(context, '$.last_seen_at') IS NOT NULL`); err != nil {
+		return fmt.Errorf("traffic: backfill events.last_seen_at: %w", err)
 	}
 	return nil
 }

@@ -35,6 +35,21 @@ func (c LLMClient) Enabled() bool {
 	return strings.TrimSpace(c.BaseURL) != ""
 }
 
+// chatCompletionsEndpoint 归一化 OpenAI 兼容端点：
+// 兼容 base_url 同时支持两种写法：
+//   - "http://host:1025/v1"                    → http://host:1025/v1/chat/completions
+//   - "http://host:1025/v1/chat/completions"   → 原样使用（不重复拼接）
+func chatCompletionsEndpoint(baseURL string) string {
+	base := strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if base == "" {
+		return ""
+	}
+	if strings.HasSuffix(base, "/chat/completions") {
+		return base
+	}
+	return base + "/chat/completions"
+}
+
 func (c LLMClient) HealthCheck(ctx context.Context) LLMHealth {
 	h := LLMHealth{
 		Configured: c.Enabled(),
@@ -42,7 +57,7 @@ func (c LLMClient) HealthCheck(ctx context.Context) LLMHealth {
 		Model:      strings.TrimSpace(c.Model),
 	}
 	if h.BaseURL != "" {
-		h.Endpoint = h.BaseURL + "/chat/completions"
+		h.Endpoint = chatCompletionsEndpoint(h.BaseURL)
 	}
 	if h.Model == "" {
 		h.Model = "deepseek-chat"
@@ -99,7 +114,7 @@ func (c LLMClient) HealthCheck(ctx context.Context) LLMHealth {
 		Error any `json:"error"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		h.Error = err.Error()
+		h.Error = fmt.Sprintf("LLM响应解析失败（POST %s, status=%d）: %v", h.Endpoint, resp.StatusCode, err)
 		return h
 	}
 	if resp.StatusCode >= 400 {
@@ -319,7 +334,8 @@ func (c LLMClient) Chat(ctx context.Context, systemPrompt, prompt string) (strin
 	if err != nil {
 		return "", err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(c.BaseURL, "/")+"/chat/completions", bytes.NewReader(b))
+	endpoint := chatCompletionsEndpoint(c.BaseURL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(b))
 	if err != nil {
 		return "", err
 	}
@@ -345,7 +361,7 @@ func (c LLMClient) Chat(ctx context.Context, systemPrompt, prompt string) (strin
 		Error any `json:"error"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return "", err
+		return "", fmt.Errorf("LLM响应解析失败（POST %s, status=%d）: %w", endpoint, resp.StatusCode, err)
 	}
 	if resp.StatusCode >= 400 {
 		return "", fmt.Errorf("LLM调用失败，请检查LLM配置: status=%d", resp.StatusCode)

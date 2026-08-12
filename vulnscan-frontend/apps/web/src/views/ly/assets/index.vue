@@ -2,6 +2,7 @@
 import { computed, h, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
+import { marked } from 'marked';
 import {
   NButton,
   NCard,
@@ -27,6 +28,13 @@ import {
   lyAssetUpdate,
   type LyAsset,
 } from '#/api/ly/assets';
+import {
+  lyGetAssetMonthlyJob,
+  lyGetAssetMonthlySummary,
+  lyRunAssetMonthlySummary,
+  type AssetReportJob,
+  type AssetReportSummary,
+} from '#/api/ly';
 import { useLyStore } from '#/store/ly';
 import { countAssetEvents } from '#/utils/ly-asset';
 import { paginate } from '#/utils/ly';
@@ -67,6 +75,15 @@ const filtered = computed(() =>
   }),
 );
 const paged = computed(() => paginate(filtered.value, state.page, state.pageSize));
+const monthlyRunning = ref(false);
+const monthlyJob = ref<AssetReportJob | null>(null);
+const downloadingSummary = ref(false);
+const summaryModalVisible = ref(false);
+const summaryContent = ref<AssetReportSummary | null>(null);
+const summaryHtml = computed(() => {
+  const narrative = summaryContent.value?.narrative || '（暂无内容）';
+  return marked.parse(narrative, { async: false }) as string;
+});
 
 async function load() {
   loading.value = true;
@@ -153,6 +170,125 @@ function jumpToEvents(row: LyAsset) {
   router.push({ path: '/ly/event/list', query: { asset: row.address } });
 }
 
+async function runMonthlySummary() {
+  if (monthlyRunning.value) return;
+  monthlyRunning.value = true;
+  try {
+    const job = await lyRunAssetMonthlySummary();
+    monthlyJob.value = job;
+    message.info(`月度总结任务已创建（job: ${job.id}，共 ${job.total_assets} 个资产）`);
+    const timer = window.setInterval(async () => {
+      try {
+        const current = await lyGetAssetMonthlyJob(job.id);
+        monthlyJob.value = current;
+        if (current.status === 'completed') {
+          window.clearInterval(timer);
+          monthlyRunning.value = false;
+          message.success(
+            `月度总结已完成（${current.completed_assets}/${current.total_assets}）`,
+          );
+        } else if (current.status === 'failed') {
+          window.clearInterval(timer);
+          monthlyRunning.value = false;
+          message.error(current.error || '月度总结任务失败');
+        }
+      } catch (error) {
+        window.clearInterval(timer);
+        monthlyRunning.value = false;
+        message.error(error instanceof Error ? error.message : '查询任务进度失败');
+      }
+    }, 2000);
+  } catch (error) {
+    monthlyRunning.value = false;
+    message.error(error instanceof Error ? error.message : '创建月度总结任务失败');
+  }
+}
+
+async function viewMonthlySummary(row: LyAsset) {
+  try {
+    const res = await lyGetAssetMonthlySummary(String(row.id));
+    const list = Array.isArray(res) ? res : res ? [res] : [];
+    if (!list.length) {
+      message.warning('该资产暂无月度总结，请先执行「生成月度总结」');
+      return;
+    }
+    summaryContent.value = list[0] as AssetReportSummary;
+    summaryModalVisible.value = true;
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '获取月度总结失败');
+  }
+}
+
+// 生成月度总结 Word 文档（与“查看报告”下载一致：Markdown → HTML → .doc，含 BOM）
+function buildMonthlyMarkdown(d: AssetReportSummary): string {
+  const s = d.stats || {};
+  const lines: string[] = [];
+  lines.push(`# 资产月度安全总结报告（${d.period || ''}）`, '');
+  lines.push(`- **资产IP**：${d.asset_ip || ''}`);
+  lines.push(`- **统计窗口**：${d.window_from || ''} ~ ${d.window_to || ''}`);
+  lines.push(`- **落档报告数**：${d.event_count ?? 0}（已闭环 ${s.closed_count ?? 0}）`, '');
+  lines.push('## 量化统计', '', '| 指标 | 值 |', '| --- | --- |');
+  lines.push(`| 总命中次数 | ${s.total_occurrences ?? 0} |`);
+  lines.push(`| 总体量（wire_bytes） | ${s.total_wire_bytes ?? 0} |`);
+  lines.push(`| 严重级别分布 | ${JSON.stringify(s.by_severity ?? {})} |`);
+  lines.push(`| 事件类型分布 | ${JSON.stringify(s.by_event_type ?? {})} |`);
+  lines.push(`| 处置状态分布 | ${JSON.stringify(s.by_status ?? {})} |`);
+  for (const [title, key] of [['攻击源 Top', 'top_sources'], ['IOC Top', 'top_iocs'], ['规则 Top', 'top_rules']] as const) {
+    lines.push('', `### ${title}`, '');
+    const items = s[key] || [];
+    if (!items.length) lines.push('- 无');
+    for (const item of items) lines.push(`- ${item.value}：${item.count} 次`);
+  }
+  lines.push('', '## LLM 月度总结', '', d.narrative || '（无）');
+  return lines.join('\n');
+}
+
+async function downloadMonthlySummary() {
+  const d = summaryContent.value;
+  if (!d || downloadingSummary.value) return;
+  downloadingSummary.value = true;
+  try {
+    const fullMd = buildMonthlyMarkdown(d);
+    const bodyHtml = marked.parse(fullMd, { async: false }) as string;
+    const safeName = `月度总结_${String(d.asset_ip || 'asset')}_${String(d.period || '')}`
+      .replace(/[\n\r\t\\/:*?"<>|]/g, '_');
+    const docHtml =
+      '<!DOCTYPE html>' +
+      '<html xmlns:o="urn:schemas-microsoft-com:office:office" ' +
+      'xmlns:w="urn:schemas-microsoft-com:office:word" ' +
+      'xmlns="http://www.w3.org/TR/REC-html40">' +
+      '<head><meta charset="utf-8">' +
+      `<title>${safeName}</title>` +
+      '<style>' +
+      'body{font-family:"Microsoft YaHei","PingFang SC",-apple-system,sans-serif;font-size:14px;line-height:1.7;color:#1a1a1a;}' +
+      'h1{font-size:22px;font-weight:700;margin:0 0 16px;}' +
+      'h2{font-size:18px;font-weight:700;margin:20px 0 10px;}' +
+      'h3{font-size:15px;font-weight:600;margin:16px 0 8px;}' +
+      'p,li{margin:6px 0;}' +
+      'hr{border:0;border-top:1px solid #d9d9d9;margin:18px 0;}' +
+      'pre,code{background:#f5f5f5;font-family:Consolas,monospace;}' +
+      'pre{padding:12px;}' +
+      'table{border-collapse:collapse;width:100%;}' +
+      'th,td{border:1px solid #d9d9d9;padding:6px 10px;}' +
+      '</style></head>' +
+      `<body>${bodyHtml}</body></html>`;
+    const blob = new Blob(['﻿', docHtml], { type: 'application/msword' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${safeName}.doc`;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('[monthly] 生成 Word 文档失败', error);
+    message.error('生成月度总结 Word 文档失败');
+  } finally {
+    downloadingSummary.value = false;
+  }
+}
+
 const columns = [
   { title: '名称', key: 'name', minWidth: 140 },
   {
@@ -186,10 +322,11 @@ const columns = [
   {
     title: '操作',
     key: 'actions',
-    width: 140,
+    width: 200,
     render: (row: LyAsset) =>
       h(NSpace, { size: 4 }, {
         default: () => [
+          h(NButton, { text: true, type: 'info', onClick: () => viewMonthlySummary(row) }, { default: () => '月度总结' }),
           h(NButton, { text: true, type: 'primary', onClick: () => openEdit(row) }, { default: () => '编辑' }),
           h(NButton, { text: true, type: 'error', onClick: () => remove(row) }, { default: () => '删除' }),
         ],
@@ -210,6 +347,7 @@ onMounted(load);
           <NSelect v-model:value="state.status" clearable placeholder="状态" :options="statusOptions" style="width: 120px" />
           <NButton type="primary" @click="openCreate">新增资产</NButton>
           <NButton @click="importVisible = true">导入</NButton>
+          <NButton :loading="monthlyRunning" @click="runMonthlySummary">生成月度总结</NButton>
           <NButton @click="load">刷新</NButton>
         </NSpace>
       </NCard>
@@ -271,10 +409,39 @@ onMounted(load);
         </div>
       </NSpace>
     </NModal>
+
+    <NModal
+      v-model:show="summaryModalVisible"
+      preset="card"
+      :title="`月度总结（${summaryContent?.period || ''}）`"
+      style="width: 680px"
+    >
+      <div v-if="summaryContent" class="summary-preview">
+        <div class="summary-meta">
+          资产 {{ summaryContent.asset_ip }} · 落档报告 {{ summaryContent.event_count }} 份 ·
+          窗口 {{ summaryContent.window_from }} ~ {{ summaryContent.window_to }}
+        </div>
+        <div class="summary-narrative markdown-body" v-html="summaryHtml"></div>
+      </div>
+      <template #footer>
+        <NSpace justify="end">
+          <NButton :loading="downloadingSummary" @click="downloadMonthlySummary">
+            下载Word
+          </NButton>
+          <NButton @click="summaryModalVisible = false">关闭</NButton>
+        </NSpace>
+      </template>
+    </NModal>
   </div>
 </template>
 
 <style scoped>
 .ly-page { padding: 12px; }
 .pager-wrap { display: flex; justify-content: flex-end; margin-top: 12px; }
+.summary-meta { margin-bottom: 10px; font-size: 13px; color: #64748b; }
+.summary-narrative { max-height: 60vh; margin: 0; overflow: auto; font-family: inherit; font-size: 13px; line-height: 1.7; word-break: break-word; }
+.summary-narrative :deep(h1), .summary-narrative :deep(h2), .summary-narrative :deep(h3) { margin: 12px 0 6px; font-size: 15px; }
+.summary-narrative :deep(p) { margin: 6px 0; }
+.summary-narrative :deep(ul), .summary-narrative :deep(ol) { margin: 6px 0; padding-left: 20px; }
+.summary-narrative :deep(strong) { color: #d03050; }
 </style>

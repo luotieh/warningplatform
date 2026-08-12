@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"vulnscan-backend/traffic/internal/domain"
@@ -161,9 +162,9 @@ func (s *MySQLStore) CreateEvent(e domain.Event) (domain.Event, error) {
 	e.ReviewedAt = nil
 	e.CircularCode = ""
 	res, err := s.db.ExecContext(context.Background(), `
-INSERT INTO events (event_id, event_name, title, message, context, source, severity, category, event_status, current_round, observables, created_at, updated_at, review_status, review_comment, reviewed_by, circular_code)
-VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		e.EventID, e.EventName, e.Title, e.Message, e.Context, e.Source, e.Severity, e.Category, e.EventStatus, e.CurrentRound, string(toJSON(e.Observables)), e.CreatedAt, e.UpdatedAt, e.ReviewStatus, e.ReviewComment, e.ReviewedBy, e.CircularCode)
+INSERT INTO events (event_id, event_name, title, message, context, source, severity, category, event_status, current_round, observables, created_at, updated_at, review_status, review_comment, reviewed_by, circular_code, analysis_version, aggregation_closed, last_seen_at)
+VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		e.EventID, e.EventName, e.Title, e.Message, e.Context, e.Source, e.Severity, e.Category, e.EventStatus, e.CurrentRound, string(toJSON(e.Observables)), e.CreatedAt, e.UpdatedAt, e.ReviewStatus, e.ReviewComment, e.ReviewedBy, e.CircularCode, e.AnalysisVersion, e.AggregationClosed, e.LastSeenAt)
 	if err != nil {
 		return domain.Event{}, err
 	}
@@ -175,7 +176,7 @@ VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 
 func (s *MySQLStore) GetEvent(eventID string) (domain.Event, bool) {
 	row := s.db.QueryRowContext(context.Background(), `
-SELECT id, event_id, event_name, title, message, context, source, severity, category, event_status, current_round, observables, created_at, updated_at, review_status, review_comment, reviewed_by, reviewed_at, circular_code
+SELECT id, event_id, event_name, title, message, context, source, severity, category, event_status, current_round, observables, created_at, updated_at, review_status, review_comment, reviewed_by, reviewed_at, circular_code, analysis_version, aggregation_closed, last_analysis_at, last_seen_at
 FROM events WHERE event_id=?`, eventID)
 	e, err := scanEvent(row)
 	return e, err == nil
@@ -183,13 +184,60 @@ FROM events WHERE event_id=?`, eventID)
 
 func (s *MySQLStore) ListEvents() []domain.Event {
 	rows, err := s.db.QueryContext(context.Background(), `
-SELECT id, event_id, event_name, title, message, context, source, severity, category, event_status, current_round, observables, created_at, updated_at, review_status, review_comment, reviewed_by, reviewed_at, circular_code
+SELECT id, event_id, event_name, title, message, context, source, severity, category, event_status, current_round, observables, created_at, updated_at, review_status, review_comment, reviewed_by, reviewed_at, circular_code, analysis_version, aggregation_closed, last_analysis_at, last_seen_at
 FROM events ORDER BY created_at DESC, id DESC`)
 	if err != nil {
 		return nil
 	}
 	defer rows.Close()
 
+	out := []domain.Event{}
+	for rows.Next() {
+		e, err := scanEvent(rows)
+		if err == nil {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// ListEventsConvergedDue 返回已到期收敛但未标记的事件（MySQL 条件查询，替代全表扫描）。
+func (s *MySQLStore) ListEventsConvergedDue(threshold time.Time) []domain.Event {
+	rows, err := s.db.QueryContext(context.Background(), `
+SELECT id, event_id, event_name, title, message, context, source, severity, category, event_status, current_round, observables, created_at, updated_at, review_status, review_comment, reviewed_by, reviewed_at, circular_code, analysis_version, aggregation_closed, last_analysis_at, last_seen_at
+FROM events
+WHERE aggregation_closed = 0 AND (last_seen_at IS NOT NULL AND last_seen_at < ?)
+ORDER BY last_seen_at ASC
+LIMIT 500`, threshold)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	out := []domain.Event{}
+	for rows.Next() {
+		e, err := scanEvent(rows)
+		if err == nil {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// ListEventsByTargetIP 按目标 IP（context.dst_ip / victim_target）与 last_seen_at
+// 时间窗口查询事件（月度总结用）。
+func (s *MySQLStore) ListEventsByTargetIP(ip string, from time.Time, to time.Time) []domain.Event {
+	rows, err := s.db.QueryContext(context.Background(), `
+SELECT id, event_id, event_name, title, message, context, source, severity, category, event_status, current_round, observables, created_at, updated_at, review_status, review_comment, reviewed_by, reviewed_at, circular_code, analysis_version, aggregation_closed, last_analysis_at, last_seen_at
+FROM events
+WHERE (JSON_UNQUOTE(JSON_EXTRACT(context, '$.dst_ip')) = ?
+       OR JSON_UNQUOTE(JSON_EXTRACT(context, '$.victim_target')) = ?)
+  AND last_seen_at IS NOT NULL AND last_seen_at >= ? AND last_seen_at < ?
+ORDER BY last_seen_at DESC
+LIMIT 1000`, ip, ip, from, to)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
 	out := []domain.Event{}
 	for rows.Next() {
 		e, err := scanEvent(rows)
@@ -238,12 +286,30 @@ func (s *MySQLStore) UpdateEvent(eventID string, patch map[string]any) (domain.E
 			e.ReviewedAt = &tu
 		}
 	}
+	if v, ok := intPatch(patch, "analysis_version"); ok {
+		e.AnalysisVersion = v
+	}
+	if v, ok := boolPatch(patch, "aggregation_closed"); ok {
+		e.AggregationClosed = v
+	}
+	if v, ok := stringPatch(patch, "last_analysis_at"); ok {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			tu := t.UTC()
+			e.LastAnalysisAt = &tu
+		}
+	}
+	if v, ok := stringPatch(patch, "last_seen_at"); ok {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			tu := t.UTC()
+			e.LastSeenAt = &tu
+		}
+	}
 	e.UpdatedAt = time.Now().UTC()
 	_, err := s.db.ExecContext(context.Background(), `
 UPDATE events
-SET event_name=?, title=?, message=?, context=?, source=?, severity=?, category=?, event_status=?, current_round=?, observables=?, updated_at=?, review_status=?, review_comment=?, reviewed_by=?, reviewed_at=?, circular_code=?
+SET event_name=?, title=?, message=?, context=?, source=?, severity=?, category=?, event_status=?, current_round=?, observables=?, updated_at=?, review_status=?, review_comment=?, reviewed_by=?, reviewed_at=?, circular_code=?, analysis_version=?, aggregation_closed=?, last_analysis_at=?, last_seen_at=?
 WHERE event_id=?`,
-		e.EventName, e.Title, e.Message, e.Context, e.Source, e.Severity, e.Category, e.EventStatus, e.CurrentRound, string(toJSON(e.Observables)), e.UpdatedAt, e.ReviewStatus, e.ReviewComment, e.ReviewedBy, e.ReviewedAt, e.CircularCode, eventID)
+		e.EventName, e.Title, e.Message, e.Context, e.Source, e.Severity, e.Category, e.EventStatus, e.CurrentRound, string(toJSON(e.Observables)), e.UpdatedAt, e.ReviewStatus, e.ReviewComment, e.ReviewedBy, e.ReviewedAt, e.CircularCode, e.AnalysisVersion, e.AggregationClosed, e.LastAnalysisAt, e.LastSeenAt, eventID)
 	if err != nil {
 		return domain.Event{}, false
 	}
@@ -558,15 +624,21 @@ func (s *MySQLStore) AddSummary(sm domain.Summary) (domain.Summary, error) {
 	if sm.RoundID == 0 {
 		sm.RoundID = 1
 	}
+	if sm.Version == 0 {
+		sm.Version = 1
+	}
+	if sm.Kind == "" {
+		sm.Kind = "initial"
+	}
 	now := time.Now().UTC()
 	if sm.CreatedAt.IsZero() {
 		sm.CreatedAt = now
 	}
 	sm.UpdatedAt = now
 	res, err := s.db.ExecContext(context.Background(), `
-INSERT INTO summaries (event_id, round_id, event_summary, created_at, updated_at)
-VALUES (?,?,?,?,?)`,
-		sm.EventID, sm.RoundID, sm.EventSummary, sm.CreatedAt, sm.UpdatedAt)
+INSERT INTO summaries (event_id, round_id, event_summary, version, kind, created_at, updated_at)
+VALUES (?,?,?,?,?,?,?)`,
+		sm.EventID, sm.RoundID, sm.EventSummary, sm.Version, sm.Kind, sm.CreatedAt, sm.UpdatedAt)
 	if err != nil {
 		return domain.Summary{}, err
 	}
@@ -578,7 +650,7 @@ VALUES (?,?,?,?,?)`,
 
 func (s *MySQLStore) ListSummaries(eventID string) []domain.Summary {
 	rows, err := s.db.QueryContext(context.Background(), `
-SELECT id, event_id, round_id, event_summary, created_at, updated_at
+SELECT id, event_id, round_id, event_summary, version, kind, created_at, updated_at
 FROM summaries WHERE event_id=? ORDER BY id`, eventID)
 	if err != nil {
 		return nil
@@ -588,7 +660,7 @@ FROM summaries WHERE event_id=? ORDER BY id`, eventID)
 	out := []domain.Summary{}
 	for rows.Next() {
 		var sm domain.Summary
-		if err := rows.Scan(&sm.ID, &sm.EventID, &sm.RoundID, &sm.EventSummary, &sm.CreatedAt, &sm.UpdatedAt); err == nil {
+		if err := rows.Scan(&sm.ID, &sm.EventID, &sm.RoundID, &sm.EventSummary, &sm.Version, &sm.Kind, &sm.CreatedAt, &sm.UpdatedAt); err == nil {
 			out = append(out, sm)
 		}
 	}
@@ -698,7 +770,7 @@ func scanUser(row scanner) (domain.User, error) {
 func scanEvent(row scanner) (domain.Event, error) {
 	var e domain.Event
 	var obs []byte
-	err := row.Scan(&e.ID, &e.EventID, &e.EventName, &e.Title, &e.Message, &e.Context, &e.Source, &e.Severity, &e.Category, &e.EventStatus, &e.CurrentRound, &obs, &e.CreatedAt, &e.UpdatedAt, &e.ReviewStatus, &e.ReviewComment, &e.ReviewedBy, &e.ReviewedAt, &e.CircularCode)
+	err := row.Scan(&e.ID, &e.EventID, &e.EventName, &e.Title, &e.Message, &e.Context, &e.Source, &e.Severity, &e.Category, &e.EventStatus, &e.CurrentRound, &obs, &e.CreatedAt, &e.UpdatedAt, &e.ReviewStatus, &e.ReviewComment, &e.ReviewedBy, &e.ReviewedAt, &e.CircularCode, &e.AnalysisVersion, &e.AggregationClosed, &e.LastAnalysisAt, &e.LastSeenAt)
 	if len(obs) > 0 {
 		_ = json.Unmarshal(obs, &e.Observables)
 	}
@@ -827,4 +899,156 @@ func (s *MySQLStore) DeleteAsset(id string) bool {
 	}
 	n, _ := res.RowsAffected()
 	return n > 0
+}
+
+func (s *MySQLStore) SaveAssetReportSummary(sm domain.AssetReportSummary) (domain.AssetReportSummary, error) {
+	if sm.ID == "" {
+		sm.ID = newID("ars")
+	}
+	now := time.Now().UTC()
+	if sm.CreatedAt.IsZero() {
+		sm.CreatedAt = now
+	}
+	sm.UpdatedAt = now
+	if sm.Status == "" {
+		sm.Status = "pending"
+	}
+	_, err := s.db.ExecContext(context.Background(), `
+INSERT INTO asset_report_summaries (summary_id, asset_id, asset_ip, period, window_from, window_to, event_count, stats, narrative, status, created_at, updated_at)
+VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+ON DUPLICATE KEY UPDATE
+asset_ip=VALUES(asset_ip),
+window_from=VALUES(window_from),
+window_to=VALUES(window_to),
+event_count=VALUES(event_count),
+stats=VALUES(stats),
+narrative=VALUES(narrative),
+status=VALUES(status),
+updated_at=VALUES(updated_at)`,
+		sm.ID, sm.AssetID, sm.AssetIP, sm.Period, sm.WindowFrom, sm.WindowTo, sm.EventCount, string(toJSON(sm.Stats)), sm.Narrative, sm.Status, sm.CreatedAt, sm.UpdatedAt)
+	if err != nil {
+		return domain.AssetReportSummary{}, err
+	}
+	saved, ok := s.GetAssetReportSummary(sm.AssetID, sm.Period)
+	if !ok {
+		return domain.AssetReportSummary{}, fmt.Errorf("保存后回读资产月度总结失败")
+	}
+	return saved, nil
+}
+
+func (s *MySQLStore) GetAssetReportSummary(assetID string, period string) (domain.AssetReportSummary, bool) {
+	row := s.db.QueryRowContext(context.Background(), `
+SELECT summary_id, asset_id, asset_ip, period, window_from, window_to, event_count, stats, narrative, status, created_at, updated_at
+FROM asset_report_summaries WHERE asset_id=? AND period=?`, assetID, period)
+	sm, err := scanAssetReportSummary(row)
+	return sm, err == nil
+}
+
+func (s *MySQLStore) ListAssetReportSummaries(assetID string) []domain.AssetReportSummary {
+	rows, err := s.db.QueryContext(context.Background(), `
+SELECT summary_id, asset_id, asset_ip, period, window_from, window_to, event_count, stats, narrative, status, created_at, updated_at
+FROM asset_report_summaries WHERE asset_id=? ORDER BY period DESC`, assetID)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	out := []domain.AssetReportSummary{}
+	for rows.Next() {
+		sm, err := scanAssetReportSummary(rows)
+		if err == nil {
+			out = append(out, sm)
+		}
+	}
+	return out
+}
+
+func scanAssetReportSummary(row scanner) (domain.AssetReportSummary, error) {
+	var sm domain.AssetReportSummary
+	var stats []byte
+	err := row.Scan(&sm.ID, &sm.AssetID, &sm.AssetIP, &sm.Period, &sm.WindowFrom, &sm.WindowTo, &sm.EventCount, &stats, &sm.Narrative, &sm.Status, &sm.CreatedAt, &sm.UpdatedAt)
+	if len(stats) > 0 {
+		_ = json.Unmarshal(stats, &sm.Stats)
+	}
+	return sm, err
+}
+
+func (s *MySQLStore) CreateAssetReportJob(job domain.AssetReportJob) (domain.AssetReportJob, error) {
+	if job.ID == "" {
+		job.ID = newID("arj")
+	}
+	if job.Status == "" {
+		job.Status = "queued"
+	}
+	now := time.Now().UTC()
+	if job.CreatedAt.IsZero() {
+		job.CreatedAt = now
+	}
+	job.UpdatedAt = now
+	_, err := s.db.ExecContext(context.Background(), `
+INSERT INTO asset_report_jobs (job_id, period, status, total_assets, completed_assets, error, created_at, updated_at, started_at, finished_at)
+VALUES (?,?,?,?,?,?,?,?,?,?)`,
+		job.ID, job.Period, job.Status, job.TotalAssets, job.CompletedAssets, job.Error, job.CreatedAt, job.UpdatedAt, job.StartedAt, job.FinishedAt)
+	if err != nil {
+		return domain.AssetReportJob{}, err
+	}
+	saved, ok := s.GetAssetReportJob(job.ID)
+	if !ok {
+		return domain.AssetReportJob{}, fmt.Errorf("创建后回读任务失败")
+	}
+	return saved, nil
+}
+
+func (s *MySQLStore) UpdateAssetReportJob(jobID string, patch map[string]any) (domain.AssetReportJob, bool) {
+	job, ok := s.GetAssetReportJob(jobID)
+	if !ok {
+		return domain.AssetReportJob{}, false
+	}
+	if v, ok := stringPatch(patch, "status"); ok {
+		job.Status = v
+	}
+	if v, ok := intPatch(patch, "total_assets"); ok {
+		job.TotalAssets = v
+	}
+	if v, ok := intPatch(patch, "completed_assets"); ok {
+		job.CompletedAssets = v
+	}
+	if v, ok := stringPatch(patch, "error"); ok {
+		job.Error = v
+	}
+	if v, ok := stringPatch(patch, "started_at"); ok {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			tu := t.UTC()
+			job.StartedAt = &tu
+		}
+	}
+	if v, ok := stringPatch(patch, "finished_at"); ok {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			tu := t.UTC()
+			job.FinishedAt = &tu
+		}
+	}
+	job.UpdatedAt = time.Now().UTC()
+	_, err := s.db.ExecContext(context.Background(), `
+UPDATE asset_report_jobs
+SET status=?, total_assets=?, completed_assets=?, error=?, updated_at=?, started_at=?, finished_at=?
+WHERE job_id=?`,
+		job.Status, job.TotalAssets, job.CompletedAssets, job.Error, job.UpdatedAt, job.StartedAt, job.FinishedAt, jobID)
+	if err != nil {
+		return domain.AssetReportJob{}, false
+	}
+	return s.GetAssetReportJob(jobID)
+}
+
+func (s *MySQLStore) GetAssetReportJob(jobID string) (domain.AssetReportJob, bool) {
+	row := s.db.QueryRowContext(context.Background(), `
+SELECT job_id, period, status, total_assets, completed_assets, error, created_at, updated_at, started_at, finished_at
+FROM asset_report_jobs WHERE job_id=?`, jobID)
+	job, err := scanAssetReportJob(row)
+	return job, err == nil
+}
+
+func scanAssetReportJob(row scanner) (domain.AssetReportJob, error) {
+	var j domain.AssetReportJob
+	err := row.Scan(&j.ID, &j.Period, &j.Status, &j.TotalAssets, &j.CompletedAssets, &j.Error, &j.CreatedAt, &j.UpdatedAt, &j.StartedAt, &j.FinishedAt)
+	return j, err
 }

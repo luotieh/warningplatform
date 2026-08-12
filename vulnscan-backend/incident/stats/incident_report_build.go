@@ -42,6 +42,9 @@ func buildIncidentReportData(incident model.SecurityIncident, logs []model.Incid
 	if data.RemediationAdvice == "" {
 		data.RemediationAdvice = data.RemediationPlan
 	}
+	data.CoreConclusion = firstReportLine(incident.AiOpinion)
+	data.LevelEmoji = incidentLevelEmoji(incident.Level)
+	data.NotifyTargets = incidentNotifyTargets(incident.Level)
 	if !incident.ReportTime.IsZero() {
 		data.ReportTime = incident.ReportTime.Format("2006-01-02 15:04:05")
 	}
@@ -62,6 +65,7 @@ func buildIncidentReportData(incident model.SecurityIncident, logs []model.Incid
 		data.MLPSLevel = a.MLPSLevel
 		data.MLPSRecordNo = a.MLPSRecordNo
 		data.Region = a.Region
+		data.AssetIPRange = firstNonEmpty(a.DomainIP, a.SiteIP)
 		if data.AssetName == "" {
 			data.AssetName = a.SystemName
 		}
@@ -119,4 +123,53 @@ func buildIncidentReportData(incident model.SecurityIncident, logs []model.Incid
 	}
 
 	return data
+}
+
+func firstReportLine(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	for _, line := range strings.Split(s, "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			return line
+		}
+	}
+	return ""
+}
+
+func incidentLevelEmoji(level int) string {
+	switch level {
+	case 1:
+		return "🔴"
+	case 2:
+		return "🟠"
+	case 3:
+		return "🟡"
+	default:
+		return "🟢"
+	}
+}
+
+func incidentNotifyTargets(level int) string {
+	switch level {
+	case 1:
+		return "安全运营中心（SOC）、网络运维部、CTO办公室、合规部、业务负责人"
+	case 2:
+		return "安全运营中心（SOC）、网络运维部、CTO办公室、合规部"
+	case 3:
+		return "安全运营中心（SOC）、网络运维部"
+	default:
+		return "安全运营中心（SOC）"
+	}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return ""
 }
