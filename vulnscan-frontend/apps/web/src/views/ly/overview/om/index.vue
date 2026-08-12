@@ -31,11 +31,22 @@ const pendingEvents = computed(() =>
 );
 const attackRank = computed(() => countByKey(allEvents.value, 'attackDevice'));
 const victimRank = computed(() => countByKey(allEvents.value, 'victimDevice'));
-const timelineRows = computed(() =>
-  [...allEvents.value]
-    .sort((a, b) => String(b.starttime ?? '').localeCompare(String(a.starttime ?? '')))
-    .map((item) => ({ time: item.startTimeText, count: 1, type: item.typeText })),
-);
+// 事件时间分布：按天（YYYY-MM-DD）聚合，避免精确到秒导致看不出分布效果。
+const timelineRows = computed(() => {
+  const buckets = new Map<string, { time: string; type: string; count: number }>();
+  for (const item of allEvents.value) {
+    const date = String(item.startTimeText ?? '').slice(0, 10);
+    if (!date) continue;
+    const type = item.typeText || '-';
+    const key = `${date}|${type}`;
+    const current = buckets.get(key) ?? { time: date, type, count: 0 };
+    current.count += 1;
+    buckets.set(key, current);
+  }
+  return [...buckets.values()].sort(
+    (a, b) => b.time.localeCompare(a.time) || a.type.localeCompare(b.type),
+  );
+});
 
 const attackData = computed(() => paginate(attackRank.value, pagerAttack.page, pagerAttack.pageSize));
 const victimData = computed(() => paginate(victimRank.value, pagerVictim.page, pagerVictim.pageSize));
@@ -59,7 +70,7 @@ const rankColumns = [
 ];
 
 const timelineColumns = [
-  { title: '时间', key: 'time', minWidth: 180 },
+  { title: '日期', key: 'time', minWidth: 140 },
   { title: '事件类型', key: 'type', width: 120 },
   { title: '数量', key: 'count', width: 90 },
 ];
