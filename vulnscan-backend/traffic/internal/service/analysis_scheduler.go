@@ -13,7 +13,7 @@ import (
 
 // ConvergenceIdleWindow 聚合收敛窗口：距最近一次命中超过该时长无新增，即判定收敛。
 // 与 traffic 包内列表侧的 aggregateIdleWindow 保持一致。
-const ConvergenceIdleWindow = 10 * time.Minute
+const ConvergenceIdleWindow = 30 * time.Minute
 
 // ScanConverged 扫描未收敛事件，满足静默超时条件时：
 //  1. 置 aggregation_closed=true 并冻结 quant_stats；
