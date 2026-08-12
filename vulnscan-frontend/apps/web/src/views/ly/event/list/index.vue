@@ -8,6 +8,7 @@ import {
   NCheckbox,
   NDatePicker,
   NInput,
+  NPagination,
   NSelect,
   NSpace,
   NTag,
@@ -35,6 +36,11 @@ const state = reactive({
   starttime: null as null | number,
   endtime: null as null | number,
   keyword: '',
+  scope: 'today' as 'today' | 'archive',
+  archiveDate: null as null | number,
+  page: 1,
+  pageSize: 20,
+  total: 0,
   rankKey: '' as '' | 'attackDevice' | 'victimDevice' | 'typeText',
   rankValue: '',
 });
@@ -59,6 +65,44 @@ async function loadAssets() {
   } catch {
     assets.value = [];
   }
+}
+
+function formatDay(ts: number | null | undefined) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+async function loadEvents() {
+  const params: Record<string, any> = {
+    scope: state.scope,
+    page: state.page,
+    page_size: state.pageSize,
+  };
+  if (state.level) params.level = state.level;
+  if (state.keyword.trim()) params.keyword = state.keyword.trim();
+  if (selectedAsset.value) params.asset = selectedAsset.value;
+  if (state.starttime) params.starttime = Math.floor(state.starttime / 1000);
+  if (state.endtime) params.endtime = Math.floor(state.endtime / 1000);
+  if (state.scope === 'archive') params.date = formatDay(state.archiveDate) || formatDay(Date.now());
+  await lyStore.loadEvents(params);
+  state.total = lyStore.eventTotal;
+  const maxPage = Math.max(1, Math.ceil(state.total / state.pageSize));
+  if (state.page > maxPage) {
+    state.page = maxPage;
+    await lyStore.loadEvents({ ...params, page: state.page });
+  }
+}
+
+function onScopeChange() {
+  state.page = 1;
+  void loadEvents();
+}
+
+function onPageChange(page: number) {
+  state.page = page;
+  void loadEvents();
 }
 
 // 基础筛选（处理状态/活跃/资产）——排行标签基于此计算，
@@ -119,9 +163,7 @@ function clearRankFilter() {
 }
 
 onMounted(async () => {
-  if (!lyStore.events.length) {
-    await lyStore.loadEvents();
-  }
+  await loadEvents();
   void loadAssets();
 });
 </script>
@@ -160,6 +202,24 @@ onMounted(async () => {
 
       <NCard size="small">
         <NSpace>
+          <NSelect
+            v-model:value="state.scope"
+            :options="[
+              { label: '今日视图', value: 'today' },
+              { label: '历史归档', value: 'archive' },
+            ]"
+            style="width: 130px"
+            @update:value="onScopeChange"
+          />
+          <NDatePicker
+            v-if="state.scope === 'archive'"
+            v-model:value="state.archiveDate"
+            type="date"
+            clearable
+            placeholder="归档日期"
+            style="width: 150px"
+            @update:value="onScopeChange"
+          />
           <NSelect v-model:value="state.level" clearable placeholder="严重级别" :options="levelOptions" style="width: 140px" />
           <NDatePicker v-model:value="state.starttime" type="date" clearable placeholder="开始日期" style="width: 150px" />
           <NDatePicker v-model:value="state.endtime" type="date" clearable placeholder="结束日期" style="width: 150px" />
@@ -181,7 +241,7 @@ onMounted(async () => {
           <NCheckbox v-model:checked="onlyAssetRelated" :disabled="!!selectedAsset">
             仅看已登记资产相关事件
           </NCheckbox>
-          <NButton type="primary" @click="lyStore.loadEvents()">刷新</NButton>
+          <NButton type="primary" @click="loadEvents">刷新</NButton>
           <NTag v-if="state.rankKey" size="small" type="info" closable @close="clearRankFilter">
             {{ RANK_LABELS[state.rankKey] }}：{{ state.rankValue }}
           </NTag>
@@ -189,7 +249,23 @@ onMounted(async () => {
       </NCard>
 
       <NCard size="small">
-        <LyEventTable :rows="filteredRows" :auto-analyze="true" :loading="lyStore.loading" />
+        <LyEventTable
+          :rows="filteredRows"
+          :auto-analyze="true"
+          :loading="lyStore.loading"
+          :page-size="state.pageSize"
+        />
+        <div class="pager-wrap">
+          <NPagination
+            v-model:page="state.page"
+            :item-count="state.total"
+            :page-size="state.pageSize"
+            show-size-picker
+            :page-sizes="[20, 50, 100]"
+            @update:page="onPageChange"
+            @update:page-size="(size: number) => { state.pageSize = size; state.page = 1; void loadEvents(); }"
+          />
+        </div>
       </NCard>
     </NSpace>
   </div>
@@ -197,6 +273,7 @@ onMounted(async () => {
 
 <style scoped>
 .ly-page { padding: 12px; }
+.pager-wrap { display: flex; justify-content: flex-end; padding-top: 12px; }
 .rank-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .rank-title { margin-bottom: 8px; font-weight: 600; }
 .rank-tag { cursor: pointer; }

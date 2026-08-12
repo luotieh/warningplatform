@@ -48,6 +48,49 @@ func (s Services) ScanConverged(ctx context.Context) (int, error) {
 	return scheduled, nil
 }
 
+// ArchiveConvergedEvents 每日归档：把已收敛且最后活跃早于今日 00:00（Asia/Shanghai）
+// 的未归档事件按最后活跃日标记归档。分批执行并记录 archive_jobs 审计。
+func (s Services) ArchiveConvergedEvents(ctx context.Context) (int, error) {
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		loc = time.UTC
+	}
+	nowLocal := time.Now().In(loc)
+	todayStartLocal := time.Date(nowLocal.Year(), nowLocal.Month(), nowLocal.Day(), 0, 0, 0, 0, loc)
+	threshold := todayStartLocal.UTC()
+	job := domain.ArchiveJob{
+		JobID:  newID("arc"),
+		Period: todayStartLocal.Format("2006-01-02"),
+		Status: "running",
+	}
+	job, _ = s.Store.SaveArchiveJob(job)
+
+	total := 0
+	for {
+		n, err := s.Store.ArchiveConvergedEvents(threshold, 500)
+		if err != nil {
+			job.Status = "failed"
+			job.Error = err.Error()
+			job.Total = total
+			job.Processed = total
+			_, _ = s.Store.SaveArchiveJob(job)
+			return total, err
+		}
+		total += n
+		if n == 0 {
+			break
+		}
+		if total >= 100000 { // 安全上限，避免单日任务无限循环
+			break
+		}
+	}
+	job.Status = "success"
+	job.Total = total
+	job.Processed = total
+	_, _ = s.Store.SaveArchiveJob(job)
+	return total, nil
+}
+
 func eventLastSeen(ev domain.Event) time.Time {
 	if ev.LastSeenAt != nil {
 		return *ev.LastSeenAt

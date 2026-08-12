@@ -198,6 +198,7 @@ func ensureTrafficSchemaUpgrades(ctx context.Context, db *sql.DB) error {
 		{"events", "aggregation_closed", "ALTER TABLE events ADD COLUMN aggregation_closed TINYINT(1) NOT NULL DEFAULT 0"},
 		{"events", "last_analysis_at", "ALTER TABLE events ADD COLUMN last_analysis_at DATETIME(6) NULL"},
 		{"events", "last_seen_at", "ALTER TABLE events ADD COLUMN last_seen_at DATETIME(6) NULL"},
+		{"events", "archive_date", "ALTER TABLE events ADD COLUMN archive_date DATE NULL COMMENT '逻辑归档日（Asia/Shanghai 自然日，NULL=未归档/今日视图）'"},
 		{"summaries", "version", "ALTER TABLE summaries ADD COLUMN version INTEGER NOT NULL DEFAULT 1"},
 		{"summaries", "kind", "ALTER TABLE summaries ADD COLUMN kind VARCHAR(32) NOT NULL DEFAULT 'initial'"},
 	}
@@ -220,6 +221,23 @@ WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
 			return fmt.Errorf("traffic: %s: %w", d.ddl, err)
 		}
 		log.Printf("traffic: added missing column %s.%s", d.table, d.column)
+	}
+	// 归档日索引（旧库补建；重复键名 1061 容忍）。
+	var idxCount int
+	if err := db.QueryRowContext(ctx, `
+SELECT COUNT(*) FROM information_schema.STATISTICS
+WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'events' AND INDEX_NAME = 'idx_events_archive_date'`).Scan(&idxCount); err != nil {
+		return fmt.Errorf("traffic: check events archive_date index: %w", err)
+	}
+	if idxCount == 0 {
+		if _, err := db.ExecContext(ctx,
+			"ALTER TABLE events ADD KEY idx_events_archive_date (archive_date, created_at DESC)"); err != nil {
+			var me *mysql.MySQLError
+			if !(errors.As(err, &me) && me.Number == 1061) {
+				return fmt.Errorf("traffic: add events archive_date index: %w", err)
+			}
+		}
+		log.Printf("traffic: added missing index events.idx_events_archive_date")
 	}
 	// 存量事件回填 last_seen_at（升级前该字段只存在 context JSON 中）。
 	if _, err := db.ExecContext(ctx, `

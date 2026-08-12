@@ -55,10 +55,15 @@ async function runSearch() {
   state.searched = true;
   try {
     const query: Record<string, any> = { keyword: form.keyword || undefined };
+    if (form.asset) query.asset = form.asset;
     if (form.starttime) query.starttime = Math.floor(form.starttime / 1000);
     if (form.endtime) query.endtime = Math.floor(form.endtime / 1000);
     const res = await lyEventSearch(query);
-    const rows = Array.isArray(res) ? res : [];
+    const rows = Array.isArray(res)
+      ? res
+      : Array.isArray(res?.items)
+        ? res.items
+        : [];
     const keyword = String(form.keyword || '').trim().toLowerCase();
     const asset = form.asset;
     state.rows = normalizeLyEvents(rows).filter((item) => {

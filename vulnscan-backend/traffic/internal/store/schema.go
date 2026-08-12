@@ -40,7 +40,9 @@ CREATE TABLE IF NOT EXISTS events (
     aggregation_closed TINYINT(1) NOT NULL DEFAULT 0,
     last_analysis_at DATETIME(6) NULL,
     last_seen_at DATETIME(6) NULL,
-    KEY idx_events_created_at (created_at DESC)
+    archive_date DATE NULL COMMENT '逻辑归档日（Asia/Shanghai 自然日，NULL=未归档/今日视图）',
+    KEY idx_events_created_at (created_at DESC),
+    KEY idx_events_archive_date (archive_date, created_at DESC)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS messages (
@@ -248,5 +250,18 @@ CREATE TABLE IF NOT EXISTS app_states (
     ` + "`key`" + ` VARCHAR(128) PRIMARY KEY,
     value JSON NOT NULL,
     updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS archive_jobs (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    job_id VARCHAR(64) UNIQUE NOT NULL,
+    period DATE NOT NULL,
+    status VARCHAR(32) NOT NULL DEFAULT 'running',
+    total INTEGER NOT NULL DEFAULT 0,
+    processed INTEGER NOT NULL DEFAULT 0,
+    error TEXT NOT NULL,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    KEY idx_archive_jobs_created_at (created_at DESC)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 `

@@ -100,9 +100,20 @@ func NewTraffic(moduleCfg Config) *Traffic {
 	go func() {
 		ticker := time.NewTicker(time.Minute)
 		defer ticker.Stop()
+		lastArchiveDay := ""
 		for range ticker.C {
 			if n, err := services.ScanConverged(context.Background()); err == nil && n > 0 {
 				log.Printf("traffic: convergence scan scheduled %d final analysis", n)
+			}
+			// 每日 00:10（Asia/Shanghai）逻辑归档：已收敛且昨日及以前活跃的事件按日归档。
+			loc, _ := time.LoadLocation("Asia/Shanghai")
+			nowLocal := time.Now().In(loc)
+			day := nowLocal.Format("2006-01-02")
+			if lastArchiveDay != day && nowLocal.Hour() == 0 && nowLocal.Minute() == 10 {
+				lastArchiveDay = day
+				if n, err := services.ArchiveConvergedEvents(context.Background()); err == nil && n > 0 {
+					log.Printf("traffic: daily archive archived %d events", n)
+				}
 			}
 		}
 	}()
@@ -298,6 +309,7 @@ func (m *Traffic) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
 				{Name: "手动刷新分析", Path: "detail/:eventID/report/refresh", Method: "POST", Handler: m.api.RefreshEventReport, Enabled: true},
 				{Name: "证据PCAP下载", Path: "detail/:eventID/evidence/:idx", Method: "GET", Handler: m.api.EventEvidence, Enabled: true},
 				{Name: "证据PCAP全量打包", Path: "detail/:eventID/evidence/archive", Method: "GET", Handler: m.api.EventEvidenceArchive, Enabled: true},
+				{Name: "归档任务查询", Path: "archive/jobs/:jobID", Method: "GET", Handler: m.api.GetArchiveJob, Enabled: true},
 			},
 		},
 	})...)

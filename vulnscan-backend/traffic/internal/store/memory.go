@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -20,6 +21,8 @@ type MemoryStore struct {
 
 	events   map[string]domain.Event
 	eventSeq int64
+	archiveJobs   map[string]domain.ArchiveJob
+	archiveJobSeq int64
 
 	messagesByEvent map[string][]domain.Message
 	messageSeq      int64
@@ -51,6 +54,7 @@ func NewMemoryStore() *MemoryStore {
 		usersByID:        map[string]domain.User{},
 		usersByUsername:  map[string]string{},
 		events:           map[string]domain.Event{},
+		archiveJobs:      map[string]domain.ArchiveJob{},
 		messagesByEvent:  map[string][]domain.Message{},
 		tasksByEvent:     map[string][]domain.Task{},
 		actionsByEvent:   map[string][]domain.Action{},
@@ -288,9 +292,148 @@ func (s *MemoryStore) UpdateEvent(eventID string, patch map[string]any) (domain.
 			e.LastSeenAt = &tu
 		}
 	}
+	if v, ok := patch["archive_date"]; ok {
+		if v == nil {
+			e.ArchiveDate = nil
+		} else if t, ok := v.(time.Time); ok {
+			tt := t
+			e.ArchiveDate = &tt
+		} else if s, ok := v.(string); ok && s != "" {
+			if t, err := time.Parse("2006-01-02", s); err == nil {
+				e.ArchiveDate = &t
+			}
+		}
+	}
 	e.UpdatedAt = time.Now().UTC()
 	s.events[eventID] = e
 	return e, true
+}
+
+func (s *MemoryStore) ListEventsPage(q EventQuery) (EventPage, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := []domain.Event{}
+	for _, e := range s.events {
+		switch strings.ToLower(strings.TrimSpace(q.Scope)) {
+		case "", "today":
+			if e.ArchiveDate != nil {
+				continue
+			}
+		case "archive":
+			if e.ArchiveDate == nil || e.ArchiveDate.Format("2006-01-02") != q.Date {
+				continue
+			}
+		case "all":
+		default:
+			if e.ArchiveDate != nil {
+				continue
+			}
+		}
+		if q.Level != "" && e.Severity != q.Level {
+			continue
+		}
+		if q.Keyword != "" {
+			kw := strings.ToLower(q.Keyword)
+			hay := strings.ToLower(e.EventName + " " + e.Title + " " + e.Message + " " + e.Context)
+			if !strings.Contains(hay, kw) {
+				continue
+			}
+		}
+		if q.Asset != "" {
+			asset := strings.ToLower(q.Asset)
+			if !strings.Contains(strings.ToLower(e.Context+string(toJSON(e.Observables))), asset) {
+				continue
+			}
+		}
+		if q.StartTime != nil && e.CreatedAt.Before(*q.StartTime) {
+			continue
+		}
+		if q.EndTime != nil && !e.CreatedAt.Before(*q.EndTime) {
+			continue
+		}
+		out = append(out, e)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].CreatedAt.Equal(out[j].CreatedAt) {
+			return out[i].ID > out[j].ID
+		}
+		return out[i].CreatedAt.After(out[j].CreatedAt)
+	})
+	total := len(out)
+	page, pageSize := normalizePage(q.Page, q.PageSize)
+	start := (page - 1) * pageSize
+	if start > len(out) {
+		start = len(out)
+	}
+	end := start + pageSize
+	if end > len(out) {
+		end = len(out)
+	}
+	return EventPage{Items: out[start:end], Total: total}, nil
+}
+
+func (s *MemoryStore) ArchiveConvergedEvents(threshold time.Time, batchSize int) (int, error) {
+	if batchSize <= 0 {
+		batchSize = 500
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	count := 0
+	ids := []string{}
+	for id, e := range s.events {
+		if !e.AggregationClosed || e.ArchiveDate != nil {
+			continue
+		}
+		last := eventLastSeenFromEvent(e)
+		if last.IsZero() || !last.Before(threshold) {
+			continue
+		}
+		ids = append(ids, id)
+		if len(ids) >= batchSize {
+			break
+		}
+	}
+	for _, id := range ids {
+		e := s.events[id]
+		last := eventLastSeenFromEvent(e)
+		d := time.Date(last.Year(), last.Month(), last.Day(), 0, 0, 0, 0, last.Location())
+		e.ArchiveDate = &d
+		e.UpdatedAt = time.Now().UTC()
+		s.events[id] = e
+		count++
+	}
+	return count, nil
+}
+
+func (s *MemoryStore) SaveArchiveJob(job domain.ArchiveJob) (domain.ArchiveJob, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if job.JobID == "" {
+		s.archiveJobSeq++
+		job.JobID = fmt.Sprintf("arc-%d", s.archiveJobSeq)
+	}
+	if job.Status == "" {
+		job.Status = "running"
+	}
+	now := time.Now().UTC()
+	if existing, ok := s.archiveJobs[job.JobID]; ok {
+		job.ID = existing.ID
+		job.CreatedAt = existing.CreatedAt
+	} else {
+		s.archiveJobSeq++
+		job.ID = s.archiveJobSeq
+		job.CreatedAt = now
+	}
+	job.UpdatedAt = now
+	s.archiveJobs[job.JobID] = job
+	return job, nil
+}
+
+func (s *MemoryStore) GetArchiveJob(jobID string) (domain.ArchiveJob, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	job, ok := s.archiveJobs[jobID]
+	return job, ok
 }
 
 func (s *MemoryStore) ListEventsConvergedDue(threshold time.Time) []domain.Event {

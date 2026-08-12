@@ -24,6 +24,7 @@ export const useLyStore = defineStore('ly', {
   state: () => ({
     loading: false,
     events: [] as Record<string, any>[],
+    eventTotal: 0,
     internal: [] as Record<string, any>[],
     black: [] as Record<string, any>[],
     white: [] as Record<string, any>[],
@@ -40,17 +41,25 @@ export const useLyStore = defineStore('ly', {
     moFeature: [] as Record<string, any>[],
   }),
   actions: {
-    async loadEvents(_params?: Record<string, any>) {
+    async loadEvents(params: Record<string, any> = {}) {
       this.loading = true;
       try {
-        // 事件数据源统一为 /api/traffic/events/list（ta_node 推送写入 traffic.events）。
-        // 旧 /api/traffic/ly/event 查询的是 t_event_data_aggre 兼容表，内部推送不会写入。
-        const data = await deepflowGetEvents();
-        this.events = normalizeLyEvents(Array.isArray(data) ? data : []);
+        // 事件数据源统一为 /api/traffic/events/list（服务端分页）。
+        // 默认今日视图（未归档），总览/搜索按需传 scope/page_size。
+        const data = await deepflowGetEvents({
+          scope: 'today',
+          page: 1,
+          page_size: 200,
+          ...params,
+        });
+        const items = Array.isArray(data?.items) ? data.items : [];
+        this.events = normalizeLyEvents(items);
+        this.eventTotal = Number(data?.total || 0);
         return this.events;
       } catch (error) {
         console.error('[ly] 加载事件列表失败', error);
         this.events = [];
+        this.eventTotal = 0;
         return this.events;
       } finally {
         this.loading = false;

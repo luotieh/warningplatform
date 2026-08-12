@@ -54,6 +54,21 @@ type Event struct {
 	LastAnalysisAt *time.Time `json:"last_analysis_at,omitempty"`
 	// LastSeenAt 服务器最近一次收到该聚合命中的时刻（收敛判定专用列）。
 	LastSeenAt *time.Time `json:"last_seen_at,omitempty"`
+	// ArchiveDate 逻辑归档日（Asia/Shanghai 自然日）；NULL=未归档（今日视图）。
+	ArchiveDate *time.Time `json:"archive_date,omitempty"`
+}
+
+// ArchiveJob 每日归档任务记录（审计/进度查询）。
+type ArchiveJob struct {
+	ID        int64     `json:"id"`
+	JobID     string    `json:"job_id"`
+	Period    string    `json:"period"` // YYYY-MM-DD（Asia/Shanghai 归档目标日）
+	Status    string    `json:"status"` // running/success/failed
+	Total     int       `json:"total"`
+	Processed int       `json:"processed"`
+	Error     string    `json:"error"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 type IOC struct {

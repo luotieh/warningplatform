@@ -4,7 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"vulnscan-backend/traffic/internal/domain"
@@ -176,7 +178,7 @@ VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 
 func (s *MySQLStore) GetEvent(eventID string) (domain.Event, bool) {
 	row := s.db.QueryRowContext(context.Background(), `
-SELECT id, event_id, event_name, title, message, context, source, severity, category, event_status, current_round, observables, created_at, updated_at, review_status, review_comment, reviewed_by, reviewed_at, circular_code, analysis_version, aggregation_closed, last_analysis_at, last_seen_at
+SELECT id, event_id, event_name, title, message, context, source, severity, category, event_status, current_round, observables, created_at, updated_at, review_status, review_comment, reviewed_by, reviewed_at, circular_code, analysis_version, aggregation_closed, last_analysis_at, last_seen_at, archive_date
 FROM events WHERE event_id=?`, eventID)
 	e, err := scanEvent(row)
 	return e, err == nil
@@ -184,7 +186,7 @@ FROM events WHERE event_id=?`, eventID)
 
 func (s *MySQLStore) ListEvents() []domain.Event {
 	rows, err := s.db.QueryContext(context.Background(), `
-SELECT id, event_id, event_name, title, message, context, source, severity, category, event_status, current_round, observables, created_at, updated_at, review_status, review_comment, reviewed_by, reviewed_at, circular_code, analysis_version, aggregation_closed, last_analysis_at, last_seen_at
+SELECT id, event_id, event_name, title, message, context, source, severity, category, event_status, current_round, observables, created_at, updated_at, review_status, review_comment, reviewed_by, reviewed_at, circular_code, analysis_version, aggregation_closed, last_analysis_at, last_seen_at, archive_date
 FROM events ORDER BY created_at DESC, id DESC`)
 	if err != nil {
 		return nil
@@ -201,10 +203,155 @@ FROM events ORDER BY created_at DESC, id DESC`)
 	return out
 }
 
+const eventSelectCols = `id, event_id, event_name, title, message, context, source, severity, category, event_status, current_round, observables, created_at, updated_at, review_status, review_comment, reviewed_by, reviewed_at, circular_code, analysis_version, aggregation_closed, last_analysis_at, last_seen_at, archive_date`
+
+// ListEventsPage 服务端分页/过滤查询：today=未归档（默认）、archive=按日、all=全量。
+func (s *MySQLStore) ListEventsPage(q EventQuery) (EventPage, error) {
+	where := []string{}
+	args := []any{}
+	switch strings.ToLower(strings.TrimSpace(q.Scope)) {
+	case "", "today":
+		where = append(where, "archive_date IS NULL")
+	case "archive":
+		if strings.TrimSpace(q.Date) == "" {
+			return EventPage{}, errors.New("archive scope requires date=YYYY-MM-DD")
+		}
+		where = append(where, "archive_date = ?")
+		args = append(args, q.Date)
+	case "all":
+	default:
+		where = append(where, "archive_date IS NULL")
+	}
+	if v := strings.TrimSpace(q.Level); v != "" {
+		where = append(where, "severity = ?")
+		args = append(args, v)
+	}
+	if v := strings.TrimSpace(q.Keyword); v != "" {
+		kw := "%" + escapeLike(v) + "%"
+		where = append(where, "(event_name LIKE ? OR title LIKE ? OR message LIKE ? OR context LIKE ?)")
+		args = append(args, kw, kw, kw, kw)
+	}
+	if v := strings.TrimSpace(q.Asset); v != "" {
+		asset := "%" + escapeLike(v) + "%"
+		where = append(where, "(context LIKE ? OR observables LIKE ?)")
+		args = append(args, asset, asset)
+	}
+	if q.StartTime != nil {
+		where = append(where, "created_at >= ?")
+		args = append(args, *q.StartTime)
+	}
+	if q.EndTime != nil {
+		where = append(where, "created_at < ?")
+		args = append(args, *q.EndTime)
+	}
+	whereSQL := ""
+	if len(where) > 0 {
+		whereSQL = " WHERE " + strings.Join(where, " AND ")
+	}
+	var total int
+	if err := s.db.QueryRowContext(context.Background(),
+		"SELECT COUNT(*) FROM events"+whereSQL, args...).Scan(&total); err != nil {
+		return EventPage{}, err
+	}
+	page, pageSize := normalizePage(q.Page, q.PageSize)
+	rows, err := s.db.QueryContext(context.Background(),
+		"SELECT "+eventSelectCols+" FROM events"+whereSQL+
+			" ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?",
+		append(args, pageSize, (page-1)*pageSize)...)
+	if err != nil {
+		return EventPage{}, err
+	}
+	defer rows.Close()
+	out := make([]domain.Event, 0, pageSize)
+	for rows.Next() {
+		e, err := scanEvent(rows)
+		if err == nil {
+			out = append(out, e)
+		}
+	}
+	return EventPage{Items: out, Total: total}, nil
+}
+
+func escapeLike(s string) string {
+	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(s)
+}
+
+func normalizePage(page, pageSize int) (int, int) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 20
+	}
+	if pageSize > 200 {
+		pageSize = 200
+	}
+	return page, pageSize
+}
+
+// ArchiveConvergedEvents 把已收敛且最后活跃早于阈值的未归档事件标记归档日
+// （archive_date = last_seen_at 所在自然日）。返回本次处理条数。
+func (s *MySQLStore) ArchiveConvergedEvents(threshold time.Time, batchSize int) (int, error) {
+	if batchSize <= 0 {
+		batchSize = 500
+	}
+	res, err := s.db.ExecContext(context.Background(), `
+UPDATE events
+SET archive_date = DATE(last_seen_at), updated_at = NOW(6)
+WHERE aggregation_closed = 1
+  AND last_seen_at IS NOT NULL
+  AND last_seen_at < ?
+  AND archive_date IS NULL
+ORDER BY last_seen_at ASC
+LIMIT ?`, threshold, batchSize)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return int(n), nil
+}
+
+func (s *MySQLStore) SaveArchiveJob(job domain.ArchiveJob) (domain.ArchiveJob, error) {
+	now := time.Now().UTC()
+	if job.JobID == "" {
+		job.JobID = newID("arc")
+	}
+	if job.Status == "" {
+		job.Status = "running"
+	}
+	_, err := s.db.ExecContext(context.Background(), `
+INSERT INTO archive_jobs (job_id, period, status, total, processed, error, created_at, updated_at)
+VALUES (?,?,?,?,?,?,?,?)
+ON DUPLICATE KEY UPDATE
+  status=VALUES(status), total=VALUES(total), processed=VALUES(processed),
+  error=VALUES(error), updated_at=VALUES(updated_at)`,
+		job.JobID, job.Period, job.Status, job.Total, job.Processed, job.Error, now, now)
+	if err != nil {
+		return domain.ArchiveJob{}, err
+	}
+	saved, ok := s.GetArchiveJob(job.JobID)
+	if !ok {
+		return domain.ArchiveJob{}, errors.New("archive job not found after save")
+	}
+	return saved, nil
+}
+
+func (s *MySQLStore) GetArchiveJob(jobID string) (domain.ArchiveJob, bool) {
+	var j domain.ArchiveJob
+	err := s.db.QueryRowContext(context.Background(), `
+SELECT id, job_id, period, status, total, processed, error, created_at, updated_at
+FROM archive_jobs WHERE job_id=?`, jobID).
+		Scan(&j.ID, &j.JobID, &j.Period, &j.Status, &j.Total, &j.Processed, &j.Error, &j.CreatedAt, &j.UpdatedAt)
+	if err != nil {
+		return domain.ArchiveJob{}, false
+	}
+	return j, true
+}
+
 // ListEventsConvergedDue 返回已到期收敛但未标记的事件（MySQL 条件查询，替代全表扫描）。
 func (s *MySQLStore) ListEventsConvergedDue(threshold time.Time) []domain.Event {
 	rows, err := s.db.QueryContext(context.Background(), `
-SELECT id, event_id, event_name, title, message, context, source, severity, category, event_status, current_round, observables, created_at, updated_at, review_status, review_comment, reviewed_by, reviewed_at, circular_code, analysis_version, aggregation_closed, last_analysis_at, last_seen_at
+SELECT id, event_id, event_name, title, message, context, source, severity, category, event_status, current_round, observables, created_at, updated_at, review_status, review_comment, reviewed_by, reviewed_at, circular_code, analysis_version, aggregation_closed, last_analysis_at, last_seen_at, archive_date
 FROM events
 WHERE aggregation_closed = 0 AND (last_seen_at IS NOT NULL AND last_seen_at < ?)
 ORDER BY last_seen_at ASC
@@ -227,7 +374,7 @@ LIMIT 500`, threshold)
 // 时间窗口查询事件（月度总结用）。
 func (s *MySQLStore) ListEventsByTargetIP(ip string, from time.Time, to time.Time) []domain.Event {
 	rows, err := s.db.QueryContext(context.Background(), `
-SELECT id, event_id, event_name, title, message, context, source, severity, category, event_status, current_round, observables, created_at, updated_at, review_status, review_comment, reviewed_by, reviewed_at, circular_code, analysis_version, aggregation_closed, last_analysis_at, last_seen_at
+SELECT id, event_id, event_name, title, message, context, source, severity, category, event_status, current_round, observables, created_at, updated_at, review_status, review_comment, reviewed_by, reviewed_at, circular_code, analysis_version, aggregation_closed, last_analysis_at, last_seen_at, archive_date
 FROM events
 WHERE (JSON_UNQUOTE(JSON_EXTRACT(context, '$.dst_ip')) = ?
        OR JSON_UNQUOTE(JSON_EXTRACT(context, '$.victim_target')) = ?)
@@ -304,12 +451,24 @@ func (s *MySQLStore) UpdateEvent(eventID string, patch map[string]any) (domain.E
 			e.LastSeenAt = &tu
 		}
 	}
+	if v, ok := patch["archive_date"]; ok {
+		if v == nil {
+			e.ArchiveDate = nil
+		} else if t, ok := v.(time.Time); ok {
+			tt := t
+			e.ArchiveDate = &tt
+		} else if s, ok := v.(string); ok && s != "" {
+			if t, err := time.Parse("2006-01-02", s); err == nil {
+				e.ArchiveDate = &t
+			}
+		}
+	}
 	e.UpdatedAt = time.Now().UTC()
 	_, err := s.db.ExecContext(context.Background(), `
 UPDATE events
-SET event_name=?, title=?, message=?, context=?, source=?, severity=?, category=?, event_status=?, current_round=?, observables=?, updated_at=?, review_status=?, review_comment=?, reviewed_by=?, reviewed_at=?, circular_code=?, analysis_version=?, aggregation_closed=?, last_analysis_at=?, last_seen_at=?
+SET event_name=?, title=?, message=?, context=?, source=?, severity=?, category=?, event_status=?, current_round=?, observables=?, updated_at=?, review_status=?, review_comment=?, reviewed_by=?, reviewed_at=?, circular_code=?, analysis_version=?, aggregation_closed=?, last_analysis_at=?, last_seen_at=?, archive_date=?
 WHERE event_id=?`,
-		e.EventName, e.Title, e.Message, e.Context, e.Source, e.Severity, e.Category, e.EventStatus, e.CurrentRound, string(toJSON(e.Observables)), e.UpdatedAt, e.ReviewStatus, e.ReviewComment, e.ReviewedBy, e.ReviewedAt, e.CircularCode, e.AnalysisVersion, e.AggregationClosed, e.LastAnalysisAt, e.LastSeenAt, eventID)
+		e.EventName, e.Title, e.Message, e.Context, e.Source, e.Severity, e.Category, e.EventStatus, e.CurrentRound, string(toJSON(e.Observables)), e.UpdatedAt, e.ReviewStatus, e.ReviewComment, e.ReviewedBy, e.ReviewedAt, e.CircularCode, e.AnalysisVersion, e.AggregationClosed, e.LastAnalysisAt, e.LastSeenAt, e.ArchiveDate, eventID)
 	if err != nil {
 		return domain.Event{}, false
 	}
@@ -770,7 +929,7 @@ func scanUser(row scanner) (domain.User, error) {
 func scanEvent(row scanner) (domain.Event, error) {
 	var e domain.Event
 	var obs []byte
-	err := row.Scan(&e.ID, &e.EventID, &e.EventName, &e.Title, &e.Message, &e.Context, &e.Source, &e.Severity, &e.Category, &e.EventStatus, &e.CurrentRound, &obs, &e.CreatedAt, &e.UpdatedAt, &e.ReviewStatus, &e.ReviewComment, &e.ReviewedBy, &e.ReviewedAt, &e.CircularCode, &e.AnalysisVersion, &e.AggregationClosed, &e.LastAnalysisAt, &e.LastSeenAt)
+	err := row.Scan(&e.ID, &e.EventID, &e.EventName, &e.Title, &e.Message, &e.Context, &e.Source, &e.Severity, &e.Category, &e.EventStatus, &e.CurrentRound, &obs, &e.CreatedAt, &e.UpdatedAt, &e.ReviewStatus, &e.ReviewComment, &e.ReviewedBy, &e.ReviewedAt, &e.CircularCode, &e.AnalysisVersion, &e.AggregationClosed, &e.LastAnalysisAt, &e.LastSeenAt, &e.ArchiveDate)
 	if len(obs) > 0 {
 		_ = json.Unmarshal(obs, &e.Observables)
 	}

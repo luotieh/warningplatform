@@ -17,8 +17,12 @@ type Store interface {
 	CreateEvent(e domain.Event) (domain.Event, error)
 	GetEvent(eventID string) (domain.Event, bool)
 	ListEvents() []domain.Event
+	ListEventsPage(q EventQuery) (EventPage, error)
 	ListEventsConvergedDue(threshold time.Time) []domain.Event
 	ListEventsByTargetIP(ip string, from time.Time, to time.Time) []domain.Event
+	ArchiveConvergedEvents(threshold time.Time, batchSize int) (int, error)
+	SaveArchiveJob(job domain.ArchiveJob) (domain.ArchiveJob, error)
+	GetArchiveJob(jobID string) (domain.ArchiveJob, bool)
 	UpdateEvent(eventID string, patch map[string]any) (domain.Event, bool)
 
 	AddMessage(m domain.Message) (domain.Message, error)
@@ -63,4 +67,24 @@ type Store interface {
 	CreateAssetReportJob(job domain.AssetReportJob) (domain.AssetReportJob, error)
 	UpdateAssetReportJob(jobID string, patch map[string]any) (domain.AssetReportJob, bool)
 	GetAssetReportJob(jobID string) (domain.AssetReportJob, bool)
+}
+
+// EventQuery 事件列表服务端分页/过滤条件。
+// Scope: today（默认，未归档）/ archive（按日归档）/ all（全量，全局搜索）。
+type EventQuery struct {
+	Scope     string
+	Date      string // YYYY-MM-DD，Scope=archive 时必填
+	Page      int
+	PageSize  int
+	Level     string
+	Keyword   string
+	Asset     string
+	StartTime *time.Time
+	EndTime   *time.Time
+}
+
+// EventPage 事件分页结果。
+type EventPage struct {
+	Items []domain.Event
+	Total int
 }

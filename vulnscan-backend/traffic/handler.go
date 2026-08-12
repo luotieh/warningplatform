@@ -10,11 +10,13 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	trafficconfig "vulnscan-backend/traffic/internal/config"
 	"vulnscan-backend/traffic/internal/domain"
 	"vulnscan-backend/traffic/internal/lyserver"
 	"vulnscan-backend/traffic/internal/socketio"
+	"vulnscan-backend/traffic/internal/store"
 
 	"github.com/gin-gonic/gin"
 )
@@ -252,9 +254,55 @@ func (h *Handler) CreateEvent(c *gin.Context) {
 }
 
 func (h *Handler) ListEvents(c *gin.Context) {
-	// 返回 LY 兼容结构（attackDevice/victimDevice/type/desc/聚合字段），
-	// 供前端事件列表 normalizeLyEvent 直接渲染；原始 Event 结构字段名不匹配。
-	ok(c, h.events.LyCompatibleList(c.Request.Context()))
+	// 服务端分页/过滤：scope=today（默认，未归档）/ archive（按日）/ all（全局搜索）。
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	if page < 1 {
+		page = 1
+	}
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	if pageSize < 1 {
+		pageSize = 20
+	}
+	if pageSize > 200 {
+		pageSize = 200
+	}
+	q := store.EventQuery{
+		Scope:    c.DefaultQuery("scope", "today"),
+		Date:     c.Query("date"),
+		Page:     page,
+		PageSize: pageSize,
+		Level:    c.Query("level"),
+		Keyword:  c.Query("keyword"),
+		Asset:    c.Query("asset"),
+	}
+	if v := c.Query("starttime"); v != "" {
+		if sec, err := strconv.ParseInt(v, 10, 64); err == nil {
+			t := time.Unix(sec, 0).UTC()
+			q.StartTime = &t
+		}
+	}
+	if v := c.Query("endtime"); v != "" {
+		if sec, err := strconv.ParseInt(v, 10, 64); err == nil {
+			t := time.Unix(sec, 0).UTC()
+			q.EndTime = &t
+		}
+	}
+	items, total, err := h.events.ListPage(c.Request.Context(), q)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	ok(c, map[string]any{"items": items, "total": total, "page": page, "page_size": pageSize})
+}
+
+// GetArchiveJob 查询每日归档任务（GET /events/archive/jobs/:jobID）。
+func (h *Handler) GetArchiveJob(c *gin.Context) {
+	job, found := h.events.GetArchiveJob(c.Param("jobID"))
+	if !found {
+		fail(c, http.StatusNotFound, "归档任务不存在")
+		return
+	}
+	ok(c, job)
 }
 
 func (h *Handler) GetEvent(c *gin.Context) {

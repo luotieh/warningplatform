@@ -8,6 +8,7 @@ import (
 
 	"vulnscan-backend/traffic/internal/domain"
 	trafficservice "vulnscan-backend/traffic/internal/service"
+	"vulnscan-backend/traffic/internal/store"
 )
 
 // aggregateIdleWindow 聚合收敛窗口：距最近一次命中超过该时长无新增，即判定已收敛，
@@ -46,6 +47,24 @@ func (s *EventService) LyCompatibleList(ctx context.Context) []map[string]any {
 		rows = append(rows, lyCompatibleEvent(event))
 	}
 	return rows
+}
+
+// ListPage 服务端分页/过滤的事件列表（LY 兼容结构），供今日/归档视图与全局搜索使用。
+func (s *EventService) ListPage(ctx context.Context, q store.EventQuery) ([]map[string]any, int, error) {
+	page, err := s.core.Store.ListEventsPage(q)
+	if err != nil {
+		return nil, 0, err
+	}
+	rows := make([]map[string]any, 0, len(page.Items))
+	for _, event := range page.Items {
+		rows = append(rows, lyCompatibleEvent(event))
+	}
+	return rows, page.Total, nil
+}
+
+// GetArchiveJob 查询每日归档任务状态。
+func (s *EventService) GetArchiveJob(jobID string) (domain.ArchiveJob, bool) {
+	return s.core.Store.GetArchiveJob(jobID)
 }
 
 func (s *EventService) Detail(ctx context.Context, eventID string) (domain.Event, bool) {
@@ -218,6 +237,7 @@ func lyCompatibleEvent(event domain.Event) map[string]any {
 		"analysis_version":   event.AnalysisVersion,
 		"aggregation_closed": event.AggregationClosed,
 		"last_analysis_at":   event.LastAnalysisAt,
+		"archive_date":       event.ArchiveDate,
 	}
 }
 

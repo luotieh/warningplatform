@@ -93,8 +93,17 @@ export function deepflowLogin(data: { password: string; username: string }) {
   );
 }
 
-export function deepflowGetEvents() {
-  return deepflowGet('/events/list').then(unwrapListResponse);
+export function deepflowGetEvents(params?: Record<string, any>) {
+  return deepflowGet<Record<string, any>>('/events/list', params);
+}
+
+export function deepflowGetEventsPage(params?: Record<string, any>) {
+  return deepflowGetEvents(params).then((res: Record<string, any>) => ({
+    items: Array.isArray(res?.items) ? res.items : [],
+    total: Number(res?.total || 0),
+    page: Number(res?.page || 1),
+    page_size: Number(res?.page_size || 20),
+  }));
 }
 
 export function deepflowGetEventDetail(eventId: string) {

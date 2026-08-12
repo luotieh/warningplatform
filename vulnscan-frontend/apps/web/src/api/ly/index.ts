@@ -208,8 +208,8 @@ export function lyGetAssetMonthlySummary(
 }
 
 export function lyEventSearch(_params?: Record<string, any>) {
-  // 搜索与事件列表统一使用 /api/traffic/events/list（数据源 traffic.events）。
-  return deepflowGetEvents();
+  // 搜索与事件列表统一使用 /api/traffic/events/list；全局搜索跨归档范围（scope=all）。
+  return deepflowGetEvents({ scope: 'all', page_size: 200, ...(_params ?? {}) });
 }
 
 export function lyConfigGet(params?: Record<string, any>) {

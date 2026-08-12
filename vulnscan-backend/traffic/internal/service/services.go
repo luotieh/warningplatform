@@ -156,11 +156,17 @@ func (s Services) mergeOccurrence(eventID string, ly map[string]any) int {
 	summary := fmt.Sprintf("%s（聚合 %d 次，首次 %s，末次 %s）",
 		firstNonEmpty(ev.EventName, ev.Title, "安全事件"),
 		count, asString(ctx["first_time"]), asString(ctx["last_time"]))
-	s.Store.UpdateEvent(eventID, map[string]any{
+	patch := map[string]any{
 		"context":      string(ctxJSON),
 		"message":      summary,
 		"last_seen_at": lastSeenAt.Format(time.RFC3339),
-	})
+	}
+	// 收敛后新命中：重新打开收敛状态并从归档日拉回今日视图（“最终频次”不再视为最终）。
+	if ev.AggregationClosed {
+		patch["aggregation_closed"] = false
+		patch["archive_date"] = nil
+	}
+	s.Store.UpdateEvent(eventID, patch)
 	return count
 }
 
