@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -218,7 +219,7 @@ func (s Services) addLLMConfigRequiredMessage(eventID string, roundID int, text 
 }
 
 // autoAnalysisSystemPrompt 是自动分析链路专用的精简 system(不复用工程师对话人格)。
-const autoAnalysisSystemPrompt = `你是 DeepSOC 安全运营自动分析引擎。仅基于给定的安全事件信息研判，不得编造未提供的日志、资产或情报事实。输出简体中文 Markdown。`
+const autoAnalysisSystemPrompt = `你是 DeepSOC 安全运营自动分析引擎。仅基于给定的安全事件信息研判，不得编造未提供的日志、资产或情报事实。输出简体中文 Markdown。涉及证据附件/证据文件时只引用文件名，不得输出任何本地路径或下载路径。`
 
 func autoAnalysisPrompt(event domain.Event) string {
 	obsStr := formatObservables(event.Observables)
@@ -393,17 +394,18 @@ func formatAuxContext(raw string) string {
 	// 其它元数据
 	emit("", "威胁指数", ctx["threat_index"])
 	emit("", "检测模型", ctx["detection_model"])
-	emit("", "证据文件", ctx["evidence_file"])
+	// 只展示文件名，避免把节点上的完整 PCAP 路径带进分析上下文/报告。
+	emit("", "证据文件", filepath.Base(scalarString(ctx["evidence_file"])))
 	if efs, ok := ctx["evidence_files"].([]any); ok && len(efs) > 0 {
 		b.WriteString("- 证据附件(evidence_files)：\n")
-		for _, raw := range efs {
+		for i, raw := range efs {
 			ef, ok := raw.(map[string]any)
 			if !ok {
 				continue
 			}
 			name := scalarString(ef["name"])
 			if name == "" {
-				name = scalarString(ef["id"])
+				name = fmt.Sprintf("证据%d", i+1)
 			}
 			parts := []string{}
 			if t := scalarString(ef["type"]); t != "" {
@@ -411,9 +413,6 @@ func formatAuxContext(raw string) string {
 			}
 			if size := scalarString(ef["size"]); size != "" && size != "0" {
 				parts = append(parts, "size="+size)
-			}
-			if p := scalarString(ef["path_ref"]); p != "" {
-				parts = append(parts, "path="+p)
 			}
 			b.WriteString("  - " + name)
 			if len(parts) > 0 {

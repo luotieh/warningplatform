@@ -495,7 +495,7 @@ onMounted(() => {
                 target="_blank"
                 rel="noopener"
               >
-                {{ ef.name || ef.id || `evidence_${idx + 1}` }}
+                {{ ef.name || `证据${idx + 1}` }}
               </a>
               <NTag v-if="ef.type" size="tiny" round type="info">{{ ef.type }}</NTag>
               <span v-if="ef.size" class="evidence-size">{{ formatBytes(ef.size) }}</span>
