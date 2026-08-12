@@ -98,6 +98,32 @@ func (h *Handler) LLMConfig(c *gin.Context) {
 	}
 }
 
+// TestLLMConfig 用表单传入的 LLM 参数做一次真实健康探测（POST /llm/config/test，不落盘）。
+func (h *Handler) TestLLMConfig(c *gin.Context) {
+	body, valid := readBody(c)
+	if !valid {
+		return
+	}
+	settings := trafficconfig.LLMSettings{
+		BaseURL: strings.TrimSpace(stringValue(body["base_url"])),
+		Model:   strings.TrimSpace(stringValue(body["model"])),
+		APIKey:  strings.TrimSpace(stringValue(body["api_key"])),
+	}
+	if timeout := intFromBody(body["timeout_seconds"]); timeout > 0 {
+		settings.TimeoutSeconds = timeout
+	}
+	result := h.system.TestLLMConfig(settings)
+	status := http.StatusOK
+	if !result.OK {
+		status = http.StatusBadRequest
+	}
+	c.JSON(status, gin.H{
+		"code":    successCode,
+		"data":    result,
+		"message": map[bool]string{true: "连接正常", false: "连接失败"}[result.OK],
+	})
+}
+
 // StoreConfig 读取/保存 MySQL 存储配置（GET/POST/PUT /store/config）。
 func (h *Handler) StoreConfig(c *gin.Context) {
 	switch c.Request.Method {

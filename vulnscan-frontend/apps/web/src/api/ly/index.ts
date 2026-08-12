@@ -242,6 +242,10 @@ export function lyLLMHealthCheck(params: Record<string, any>) {
   return post<Record<string, any>>('/llm', params, '/api/traffic/health');
 }
 
+export function lyLLMConfigTest(params: Record<string, any>) {
+  return post<Record<string, any>>('/config/test', params, '/api/traffic/llm');
+}
+
 export function lyLLMHealth() {
   return get<Record<string, any>>('/health/llm', undefined, '/api/traffic');
 }

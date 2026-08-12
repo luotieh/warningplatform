@@ -3,9 +3,11 @@ package traffic
 import (
 	"context"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
+	"vulnscan-backend/traffic/internal/client"
 	trafficconfig "vulnscan-backend/traffic/internal/config"
 	trafficservice "vulnscan-backend/traffic/internal/service"
 )
@@ -46,6 +48,27 @@ func (s *SystemService) LLMHealth(ctx context.Context) any {
 // 与保存接口的语义一致。
 func (s *SystemService) LLMHealthTest(ctx context.Context, baseURL, model, apiKey string, timeoutSeconds int) any {
 	return s.core.LLM.WithOverrides(baseURL, model, apiKey, timeoutSeconds).HealthTest(ctx)
+}
+
+// TestLLMConfig 用表单传入的 base_url/model/api_key（未保存也生效）做一次真实健康探测。
+// api_key 留空时沿用当前已保存的 key，便于"只改地址/模型先测试"的场景。
+func (s *SystemService) TestLLMConfig(settings trafficconfig.LLMSettings) client.LLMHealth {
+	probe := *s.core.LLM
+	if strings.TrimSpace(settings.BaseURL) != "" {
+		probe.BaseURL = strings.TrimSpace(settings.BaseURL)
+	}
+	if strings.TrimSpace(settings.APIKey) != "" {
+		probe.APIKey = strings.TrimSpace(settings.APIKey)
+	}
+	if strings.TrimSpace(settings.Model) != "" {
+		probe.Model = strings.TrimSpace(settings.Model)
+	}
+	timeout := time.Duration(settings.TimeoutSeconds) * time.Second
+	if timeout <= 0 {
+		timeout = 15 * time.Second
+	}
+	probe.HTTP = &http.Client{Timeout: timeout}
+	return probe.HealthCheck(context.Background())
 }
 
 func (s *SystemService) LLMConfig() trafficconfig.LLMSettings {

@@ -416,6 +416,7 @@ func (m *Traffic) PublicRoutes(e *gin.RouterGroup) {
 	e.GET("/llm/config", m.api.LLMConfig)
 	e.POST("/llm/config", m.api.LLMConfig)
 	e.PUT("/llm/config", m.api.LLMConfig)
+	e.POST("/llm/config/test", m.api.TestLLMConfig)
 	e.GET("/store/config", m.api.StoreConfig)
 	e.POST("/store/config", m.api.StoreConfig)
 	e.PUT("/store/config", m.api.StoreConfig)

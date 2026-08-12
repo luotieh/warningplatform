@@ -19,8 +19,9 @@ import { IconifyIcon } from '@vben/icons';
 import {
   lyLLMConfigGet,
   lyLLMConfigSave,
-  lyLLMHealth,
+lyLLMHealth,
   lyLLMHealthCheck,
+  lyLLMConfigTest,
   lyStoreConfigGet,
   lyStoreConfigSave,
   lyStoreConfigTest,
@@ -149,7 +150,15 @@ async function testLLMConfig() {
   }
   llmTesting.value = true;
   try {
-    const result = await lyLLMHealth();
+    const payload: Record<string, any> = {
+      base_url: llmForm.base_url.trim(),
+      model: llmForm.model.trim(),
+      timeout_seconds: llmForm.timeout_seconds || 60,
+    };
+    if (llmForm.api_key.trim()) {
+      payload.api_key = llmForm.api_key.trim();
+    }
+    const result = await lyLLMConfigTest(payload);
     if (result?.ok) {
       message.success(
         `LLM连接正常（${result.latency_ms ?? '-'}ms），模型：${result.model || llmForm.model}`,

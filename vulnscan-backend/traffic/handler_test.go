@@ -1,9 +1,13 @@
 package traffic
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	trafficconfig "vulnscan-backend/traffic/internal/config"
+	"vulnscan-backend/traffic/internal/client"
+	trafficservice "vulnscan-backend/traffic/internal/service"
 )
 
 func TestStoreSettingsFromBodyPasswordFallback(t *testing.T) {
@@ -40,5 +44,29 @@ func TestStoreSettingsFromBodyPasswordFallback(t *testing.T) {
 	got = storeSettingsFromBody(map[string]any{"password": "new-secret"}, current)
 	if got.Password != "new-secret" {
 		t.Fatalf("explicit password not used: %q", got.Password)
+	}
+}
+
+func TestLLMConfigFormProbe(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"OK"}}]}`))
+	}))
+	defer srv.Close()
+
+	core := trafficservice.Services{
+		LLM: &client.LLMClient{HTTP: &http.Client{}},
+	}
+	svc := NewSystemService(trafficconfig.Config{}, core)
+	res := svc.TestLLMConfig(trafficconfig.LLMSettings{
+		BaseURL:        srv.URL,
+		Model:          "qwen",
+		TimeoutSeconds: 5,
+	})
+	if !res.OK {
+		t.Fatalf("llm form probe failed: %+v", res)
+	}
+	if res.Endpoint != srv.URL+"/chat/completions" {
+		t.Fatalf("endpoint=%s", res.Endpoint)
 	}
 }
