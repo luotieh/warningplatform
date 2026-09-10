@@ -76,6 +76,28 @@ export function eventMatchesAnyAsset(event: EventLike, assets: AssetLike[]): boo
   );
 }
 
+interface AssetNameLike extends AssetLike {
+  name?: string;
+}
+
+/**
+ * eventAssetNames 事件归属资产名列表：来源/目标任一命中启用（status=1）资产
+ * 的 address 即视为归属，返回去重后的资产名；无命中返回空数组（调用方显示「未登记」）。
+ */
+export function eventAssetNames(
+  event: EventLike,
+  assets: AssetNameLike[],
+): string[] {
+  const names: string[] = [];
+  for (const a of assets || []) {
+    if (a.status !== 1) continue;
+    if (assetMatchesEvent(a, event) && a.name && !names.includes(a.name)) {
+      names.push(a.name);
+    }
+  }
+  return names;
+}
+
 // assetOptionFilter 资产下拉模糊匹配：按名称/地址包含匹配，大小写不敏感。
 // 例如输入 "徐工" 可匹配 "徐工集团-58.218.196.193"。
 export function assetOptionFilter(

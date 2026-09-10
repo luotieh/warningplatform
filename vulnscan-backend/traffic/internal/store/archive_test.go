@@ -1,6 +1,7 @@
 package store
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -97,5 +98,52 @@ func TestSaveGetArchiveJob(t *testing.T) {
 	got, ok := st.GetArchiveJob(job.JobID)
 	if !ok || got.Status != "success" || got.Total != 3 {
 		t.Fatalf("job=%+v ok=%v", got, ok)
+	}
+}
+func TestListEventsPageSortPayloadAndFrequency(t *testing.T) {
+	st := NewMemoryStore()
+	mk := func(id string, payload float64, count float64, created time.Time) domain.Event {
+		ctx := map[string]any{
+			"occurrence_count": count,
+			"quant_stats":      map[string]any{"total_payload_bytes": payload},
+		}
+		b, _ := json.Marshal(ctx)
+		return domain.Event{EventID: id, Context: string(b), CreatedAt: created}
+	}
+	base := time.Now().UTC()
+	small := mk("evt-small", 100, 2, base.Add(-3*time.Hour))
+	big := mk("evt-big", 9000, 5, base.Add(-2*time.Hour))
+	oldNoStats := domain.Event{EventID: "evt-old", CreatedAt: base.Add(-time.Hour)}
+	for _, e := range []domain.Event{small, big, oldNoStats} {
+		if _, err := st.CreateEvent(e); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// 总载荷降序：big(9000) > small(100) > old(0，无 quant_stats 排最后)
+	byPayload, _ := st.ListEventsPage(EventQuery{Scope: "all", Sort: "payload", Order: "desc", Page: 1, PageSize: 10})
+	if byPayload.Total != 3 {
+		t.Fatalf("total=%d", byPayload.Total)
+	}
+	if byPayload.Items[0].EventID != "evt-big" || byPayload.Items[2].EventID != "evt-old" {
+		t.Fatalf("payload desc order: %s,%s,%s", byPayload.Items[0].EventID, byPayload.Items[1].EventID, byPayload.Items[2].EventID)
+	}
+
+	// 命中频次降序：big(5) > small(2) > old(0)
+	byFreq, _ := st.ListEventsPage(EventQuery{Scope: "all", Sort: "frequency", Order: "desc", Page: 1, PageSize: 10})
+	if byFreq.Items[0].EventID != "evt-big" || byFreq.Items[1].EventID != "evt-small" {
+		t.Fatalf("frequency desc order: %s,%s,%s", byFreq.Items[0].EventID, byFreq.Items[1].EventID, byFreq.Items[2].EventID)
+	}
+
+	// 总载荷升序
+	byPayloadAsc, _ := st.ListEventsPage(EventQuery{Scope: "all", Sort: "payload", Order: "asc", Page: 1, PageSize: 10})
+	if byPayloadAsc.Items[0].EventID != "evt-old" || byPayloadAsc.Items[2].EventID != "evt-big" {
+		t.Fatalf("payload asc order: %s,%s,%s", byPayloadAsc.Items[0].EventID, byPayloadAsc.Items[1].EventID, byPayloadAsc.Items[2].EventID)
+	}
+
+	// 默认（时间倒序）：old 最新排第一
+	def, _ := st.ListEventsPage(EventQuery{Scope: "all", Page: 1, PageSize: 10})
+	if def.Items[0].EventID != "evt-old" {
+		t.Fatalf("default order first=%s", def.Items[0].EventID)
 	}
 }

@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/netip"
+	"strconv"
+	"strings"
 	"time"
 
 	"vulnscan-backend/traffic/internal/domain"
@@ -173,6 +176,13 @@ func lyCompatibleEvent(event domain.Event) map[string]any {
 	source, destination := observablePair(event.Observables)
 	source = firstNonEmpty(source, stringValue(context["threat_source"]), stringValue(context["src_ip"]))
 	destination = firstNonEmpty(destination, stringValue(context["victim_target"]), stringValue(context["dst_ip"]))
+	// 原始流向：始终为 ta_node 推送的真实 src/dst（研判重推指纹依赖），不随 IOC 修正交换。
+	srcIP, dstIP := source, destination
+	// IOC 规则地址修正：IP/CIDR 型 IOC 命中且目的地址即 IOC 值时，目的地址是威胁地址
+	// （如 C2），并非受害主机；交换展示源/目标，使「受害目标」列不出现 IOC 规则 IP。
+	if iocDestinationIsIOC(context, destination) {
+		source, destination = destination, source
+	}
 	eventType := firstNonEmpty(stringValue(context["event_type"]), stringValue(context["type"]), "cap")
 	level := lyLevel(event.Severity)
 	startTime := event.CreatedAt.Unix()
@@ -199,6 +209,11 @@ func lyCompatibleEvent(event domain.Event) map[string]any {
 		"attackDevice":      source,
 		"victimDevice":      destination,
 		"obj":               source + ">" + destination,
+		// 原始流向（不随 IOC 修正交换）：研判重推/AI 分析使用，保证指纹稳定。
+		"src_ip":            srcIP,
+		"dst_ip":            dstIP,
+		// 事件总载荷（字节）：quant_stats.total_payload_bytes，列表「总载荷」列与排序口径。
+		"total_payload_bytes": quantPayloadBytes(context),
 		"type":              eventType,
 		"level":             level,
 		"desc":              firstNonEmpty(event.EventName, event.Title, event.Message),
@@ -267,6 +282,52 @@ func observablePair(items []domain.IOC) (string, string) {
 		}
 	}
 	return source, destination
+}
+
+// iocDestinationIsIOC 判定展示目标地址是否为 IP/CIDR 型 IOC 规则地址。
+// ioc_type ∈ {ip, cidr} 且 destination 命中 ioc_value（cidr 按网段包含匹配）时返回 true。
+func iocDestinationIsIOC(ctx map[string]any, destination string) bool {
+	ioc, _ := ctx["ioc"].(map[string]any)
+	iocType := strings.ToLower(strings.TrimSpace(stringValue(ioc["ioc_type"])))
+	iocValue := strings.TrimSpace(stringValue(ioc["ioc_value"]))
+	if iocType == "" || iocValue == "" || strings.TrimSpace(destination) == "" {
+		return false
+	}
+	dst := strings.ToLower(strings.TrimSpace(destination))
+	switch iocType {
+	case "ip":
+		return dst == strings.ToLower(iocValue)
+	case "cidr":
+		if network, err := netip.ParsePrefix(strings.ToLower(iocValue)); err == nil {
+			if addr, err := netip.ParseAddr(dst); err == nil {
+				return network.Contains(addr)
+			}
+		}
+		return false
+	default:
+		return false
+	}
+}
+
+// quantPayloadBytes 读取 context.quant_stats.total_payload_bytes（旧事件缺失返回 0）。
+func quantPayloadBytes(ctx map[string]any) int64 {
+	qs, _ := ctx["quant_stats"].(map[string]any)
+	if qs == nil {
+		return 0
+	}
+	switch v := qs["total_payload_bytes"].(type) {
+	case float64:
+		return int64(v)
+	case int64:
+		return v
+	case int:
+		return int64(v)
+	case string:
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+			return n
+		}
+	}
+	return 0
 }
 
 func lyLevel(severity string) string {

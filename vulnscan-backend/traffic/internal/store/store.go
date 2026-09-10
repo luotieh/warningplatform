@@ -81,6 +81,10 @@ type EventQuery struct {
 	Asset     string
 	StartTime *time.Time
 	EndTime   *time.Time
+	// Sort 排序依据：time（默认，created_at 倒序）/ payload（总载荷）/ frequency（命中频次）。
+	Sort string
+	// Order 排序方向：desc（默认）/ asc。
+	Order string
 }
 
 // EventPage 事件分页结果。

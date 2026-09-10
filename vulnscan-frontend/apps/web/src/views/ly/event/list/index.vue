@@ -23,6 +23,7 @@ import {
 
 import { useLyStore } from '#/store/ly';
 import { countByKey, matchesEventKeyword } from '#/utils/ly';
+import { eventAssetNames } from '#/utils/ly-asset';
 
 import LyEventTable from '../components/LyEventTable.vue';
 
@@ -43,7 +44,20 @@ const state = reactive({
   total: 0,
   rankKey: '' as '' | 'attackDevice' | 'victimDevice' | 'typeText',
   rankValue: '',
+  // 排序：time=时间倒序（默认）/ payload=总载荷大小 / frequency=命中频次
+  sort: 'time' as 'time' | 'payload' | 'frequency',
+  order: 'desc' as 'desc' | 'asc',
 });
+
+const sortOptions = [
+  { label: '时间', value: 'time' },
+  { label: '总载荷大小', value: 'payload' },
+  { label: '命中频次', value: 'frequency' },
+];
+const orderOptions = [
+  { label: '降序', value: 'desc' },
+  { label: '升序', value: 'asc' },
+];
 
 const levelOptions = [
   { label: '高危', value: 'high' },
@@ -86,6 +100,11 @@ async function loadEvents() {
   if (state.starttime) params.starttime = Math.floor(state.starttime / 1000);
   if (state.endtime) params.endtime = Math.floor(state.endtime / 1000);
   if (state.scope === 'archive') params.date = formatDay(state.archiveDate) || formatDay(Date.now());
+  // 服务端排序（分页前生效），默认 time/desc 与现状一致
+  if (state.sort !== 'time' || state.order !== 'desc') {
+    params.sort = state.sort;
+    params.order = state.order;
+  }
   await lyStore.loadEvents(params);
   state.total = lyStore.eventTotal;
   const maxPage = Math.max(1, Math.ceil(state.total / state.pageSize));
@@ -105,10 +124,16 @@ function onPageChange(page: number) {
   void loadEvents();
 }
 
+// 排序变更：回到第 1 页并按新排序重新加载（服务端分页前排序）。
+function onSortChange() {
+  state.page = 1;
+  void loadEvents();
+}
+
 // 基础筛选（处理状态/活跃/资产）——排行标签基于此计算，
 // 保证选中某排行值后其它标签依然可见、可再切换。
 const baseRows = computed(() => {
-  return (lyStore.events || []).filter((item) => {
+  const rows = (lyStore.events || []).filter((item) => {
     if (state.level && item.level !== state.level) return false;
     if (state.starttime || state.endtime) {
       const t = Number(item.starttime ?? 0) * 1000;
@@ -123,6 +148,13 @@ const baseRows = computed(() => {
     }
     return true;
   });
+  // 资产归属：来源/目标命中启用资产显示资产名，否则「未登记」（新增行字段供表格展示）
+  return rows.map(
+    (item): Record<string, any> => ({
+      ...item,
+      assetText: eventAssetNames(item, assets.value).join('、') || '未登记',
+    }),
+  );
 });
 // 叠加"事件排行筛选"后的最终列表（表格与分页用）。
 const filteredRows = computed(() => {
@@ -241,6 +273,18 @@ onMounted(async () => {
           <NCheckbox v-model:checked="onlyAssetRelated" :disabled="!!selectedAsset">
             仅看已登记资产相关事件
           </NCheckbox>
+          <NSelect
+            v-model:value="state.sort"
+            :options="sortOptions"
+            style="width: 140px"
+            @update:value="onSortChange"
+          />
+          <NSelect
+            v-model:value="state.order"
+            :options="orderOptions"
+            style="width: 100px"
+            @update:value="onSortChange"
+          />
           <NButton type="primary" @click="loadEvents">刷新</NButton>
           <NTag v-if="state.rankKey" size="small" type="info" closable @close="clearRankFilter">
             {{ RANK_LABELS[state.rankKey] }}：{{ state.rankValue }}
@@ -254,6 +298,7 @@ onMounted(async () => {
           :auto-analyze="true"
           :loading="lyStore.loading"
           :page-size="state.pageSize"
+          :show-asset="true"
         />
         <div class="pager-wrap">
           <NPagination

@@ -254,9 +254,10 @@ func (s *MySQLStore) ListEventsPage(q EventQuery) (EventPage, error) {
 		return EventPage{}, err
 	}
 	page, pageSize := normalizePage(q.Page, q.PageSize)
+	orderBy := eventOrderBy(q)
 	rows, err := s.db.QueryContext(context.Background(),
 		"SELECT "+eventSelectCols+" FROM events"+whereSQL+
-			" ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?",
+			" ORDER BY "+orderBy+" LIMIT ? OFFSET ?",
 		append(args, pageSize, (page-1)*pageSize)...)
 	if err != nil {
 		return EventPage{}, err
@@ -287,6 +288,31 @@ func normalizePage(page, pageSize int) (int, int) {
 		pageSize = 200
 	}
 	return page, pageSize
+}
+
+// eventOrderBy 把 EventQuery.Sort/Order 翻译为 SQL 排序子句。
+// payload 与 frequency 取自 context JSON（quant_stats.total_payload_bytes / occurrence_count），
+// 缺失（旧事件）或 context 非合法 JSON（手工创建）时按 0 处理；同值以时间倒序兜底。
+func eventOrderBy(q EventQuery) string {
+	dir := strings.ToLower(strings.TrimSpace(q.Order))
+	if dir != "asc" && dir != "desc" {
+		dir = "desc"
+	}
+	dir = strings.ToUpper(dir)
+	jsonNum := func(path string) string {
+		return "CASE WHEN JSON_VALID(context) THEN " +
+			"CAST(JSON_UNQUOTE(JSON_EXTRACT(context, '" + path + "')) AS UNSIGNED) ELSE 0 END"
+	}
+	switch strings.ToLower(strings.TrimSpace(q.Sort)) {
+	case "payload":
+		return jsonNum("$.quant_stats.total_payload_bytes") + " " + dir +
+			", created_at DESC, id DESC"
+	case "frequency":
+		return jsonNum("$.occurrence_count") + " " + dir +
+			", created_at DESC, id DESC"
+	default:
+		return "created_at " + dir + ", id DESC"
+	}
 }
 
 // ArchiveConvergedEvents 把已收敛且最后活跃早于阈值的未归档事件标记归档日

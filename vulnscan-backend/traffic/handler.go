@@ -300,6 +300,9 @@ func (h *Handler) ListEvents(c *gin.Context) {
 		Level:    c.Query("level"),
 		Keyword:  c.Query("keyword"),
 		Asset:    c.Query("asset"),
+		// 排序：sort=time|payload|frequency，order=desc|asc（非法值由 store 兜底默认）。
+		Sort:  c.Query("sort"),
+		Order: c.Query("order"),
 	}
 	if v := c.Query("starttime"); v != "" {
 		if sec, err := strconv.ParseInt(v, 10, 64); err == nil {

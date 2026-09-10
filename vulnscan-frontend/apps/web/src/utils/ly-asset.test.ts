@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   assetMatchesEvent,
   countAssetEvents,
+  eventAssetNames,
   eventMatchesAnyAsset,
   ipInSegment,
   normalizeAddr,
@@ -53,5 +54,20 @@ describe('ly-asset', () => {
     ];
     expect(eventMatchesAnyAsset({ attackDevice: '1.1.1.1' }, assets)).toBe(true);
     expect(eventMatchesAnyAsset({ attackDevice: '10.0.0.9' }, assets)).toBe(false);
+  });
+
+  it('eventAssetNames returns deduped enabled asset names', () => {
+    const assets = [
+      { name: '徐工集团', address: '10.0.0.9', status: 1 },
+      { name: '徐工出口', address: '10.0.0.9', status: 1 },
+      { name: '停用资产', address: '172.16.0.1', status: 0 },
+      { name: '目标资产', address: '10.0.0.20', status: 1 },
+    ];
+    expect(
+      eventAssetNames({ attackDevice: '10.0.0.9', victimDevice: '10.0.0.20' }, assets),
+    ).toEqual(['徐工集团', '徐工出口', '目标资产']);
+    expect(eventAssetNames({ attackDevice: '8.8.8.8', victimDevice: '8.8.4.4' }, assets)).toEqual([]);
+    // 停用资产不参与匹配
+    expect(eventAssetNames({ attackDevice: '172.16.0.1' }, assets)).toEqual([]);
   });
 });

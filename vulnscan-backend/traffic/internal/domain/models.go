@@ -304,6 +304,8 @@ type QuantStats struct {
 	SourceIPs       map[string]int64 `json:"source_ips,omitempty"`
 	DestIPs         map[string]int64 `json:"dest_ips,omitempty"`
 	TotalWireBytes  int64            `json:"total_wire_bytes"`
+	// TotalPayloadBytes 载荷总字节（ta_node bytes 字段累加），列表「总载荷」排序口径。
+	TotalPayloadBytes int64          `json:"total_payload_bytes"`
 	TotalPackets    int64            `json:"total_packets"`
 	RatePerMin      float64          `json:"rate_per_min"`
 	ByRule          map[string]int64 `json:"by_rule"`

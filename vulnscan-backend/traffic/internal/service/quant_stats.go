@@ -136,6 +136,10 @@ func applyHitStats(qs *domain.QuantStats, ly map[string]any) {
 	if v := toInt(ly["wire_bytes"]); v > 0 {
 		qs.TotalWireBytes += int64(v)
 	}
+	// 载荷总字节（ta_node bytes 字段，必填）——事件列表「总载荷大小」排序口径。
+	if v := toInt(ly["bytes"]); v > 0 {
+		qs.TotalPayloadBytes += int64(v)
+	}
 	if v := toInt(ly["packets"]); v > 0 {
 		qs.TotalPackets += int64(v)
 	}

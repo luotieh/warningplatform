@@ -16,7 +16,7 @@
 
 services:
   warning-platform:
-    image: warning-platform:dev.20260810.2
+    image: warning-platform:dev.20260820.1
     container_name: warning-platform-v2
     restart: unless-stopped
     ports:

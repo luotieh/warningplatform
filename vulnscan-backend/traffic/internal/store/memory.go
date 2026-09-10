@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -353,12 +354,7 @@ func (s *MemoryStore) ListEventsPage(q EventQuery) (EventPage, error) {
 		}
 		out = append(out, e)
 	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].CreatedAt.Equal(out[j].CreatedAt) {
-			return out[i].ID > out[j].ID
-		}
-		return out[i].CreatedAt.After(out[j].CreatedAt)
-	})
+	sortEvents(out, q)
 	total := len(out)
 	page, pageSize := normalizePage(q.Page, q.PageSize)
 	start := (page - 1) * pageSize
@@ -370,6 +366,86 @@ func (s *MemoryStore) ListEventsPage(q EventQuery) (EventPage, error) {
 		end = len(out)
 	}
 	return EventPage{Items: out[start:end], Total: total}, nil
+}
+
+// sortEvents 按 EventQuery.Sort/Order 排序（与 MySQL eventOrderBy 口径一致）：
+// time=created_at、payload=context.quant_stats.total_payload_bytes、
+// frequency=context.occurrence_count；同值以 created_at DESC, id DESC 兜底。
+func sortEvents(out []domain.Event, q EventQuery) {
+	dir := strings.ToLower(strings.TrimSpace(q.Order))
+	if dir != "asc" && dir != "desc" {
+		dir = "desc"
+	}
+	lessTime := func(i, j int) bool {
+		if out[i].CreatedAt.Equal(out[j].CreatedAt) {
+			return out[i].ID > out[j].ID
+		}
+		return out[i].CreatedAt.After(out[j].CreatedAt)
+	}
+	ctxNum := func(e domain.Event, path string) int64 {
+		m := map[string]any{}
+		if e.Context != "" {
+			_ = json.Unmarshal([]byte(e.Context), &m)
+		}
+		var cur any = m
+		for _, key := range strings.Split(path, ".") {
+			mm, ok := cur.(map[string]any)
+			if !ok {
+				return 0
+			}
+			cur, ok = mm[key]
+			if !ok {
+				return 0
+			}
+		}
+		switch v := cur.(type) {
+		case float64:
+			return int64(v)
+		case int64:
+			return v
+		case int:
+			return int64(v)
+		case string:
+			n, _ := strconv.ParseInt(v, 10, 64)
+			return n
+		}
+		return 0
+	}
+	switch strings.ToLower(strings.TrimSpace(q.Sort)) {
+	case "payload":
+		sort.SliceStable(out, func(i, j int) bool {
+			a, b := ctxNum(out[i], "quant_stats.total_payload_bytes"), ctxNum(out[j], "quant_stats.total_payload_bytes")
+			if a == b {
+				return lessTime(i, j)
+			}
+			if dir == "asc" {
+				return a < b
+			}
+			return a > b
+		})
+	case "frequency":
+		sort.SliceStable(out, func(i, j int) bool {
+			a, b := ctxNum(out[i], "occurrence_count"), ctxNum(out[j], "occurrence_count")
+			if a == b {
+				return lessTime(i, j)
+			}
+			if dir == "asc" {
+				return a < b
+			}
+			return a > b
+		})
+	default:
+		if dir == "asc" {
+			sort.SliceStable(out, func(i, j int) bool {
+				if out[i].CreatedAt.Equal(out[j].CreatedAt) {
+					return out[i].ID > out[j].ID
+				}
+				return out[i].CreatedAt.Before(out[j].CreatedAt)
+			})
+		} else {
+			sort.SliceStable(out, lessTime)
+		}
+	}
 }
 
 func (s *MemoryStore) ArchiveConvergedEvents(threshold time.Time, batchSize int) (int, error) {

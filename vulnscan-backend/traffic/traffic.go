@@ -106,7 +106,11 @@ func NewTraffic(moduleCfg Config) *Traffic {
 				log.Printf("traffic: convergence scan scheduled %d final analysis", n)
 			}
 			// 每日 00:10（Asia/Shanghai）逻辑归档：已收敛且昨日及以前活跃的事件按日归档。
-			loc, _ := time.LoadLocation("Asia/Shanghai")
+			// 容器未安装 tzdata 时 LoadLocation 失败，回退 UTC 避免 Time.In(nil) panic。
+			loc, err := time.LoadLocation("Asia/Shanghai")
+			if err != nil {
+				loc = time.UTC
+			}
 			nowLocal := time.Now().In(loc)
 			day := nowLocal.Format("2006-01-02")
 			if lastArchiveDay != day && nowLocal.Hour() == 0 && nowLocal.Minute() == 10 {

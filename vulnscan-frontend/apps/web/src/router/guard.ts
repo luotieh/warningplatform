@@ -54,7 +54,10 @@ function setupAccessGuard(router: Router) {
 
     const skipAuth = import.meta.env.VITE_SKIP_AUTH === 'true';
 
-    if (skipAuth && !accessStore.accessToken) {
+    // 开发模式（VITE_SKIP_AUTH=true）强制使用本地模拟态：即使浏览器残留了旧的
+    // IAM token/用户信息也一律覆盖，避免残留态触发 /iam/profile 401 → 登录页 ↔ 首页
+    // 无限重定向（认证跳转循环）。
+    if (skipAuth) {
       accessStore.setAccessToken('dev-mock-token');
       userStore.setUserInfo({
         realName: '开发者',

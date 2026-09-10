@@ -22,8 +22,10 @@ const props = withDefaults(
     autoAnalyze?: boolean;
     loading?: boolean;
     pageSize?: number;
+    /** 是否展示「资产」列（行内 assetText：资产名或「未登记」）。 */
+    showAsset?: boolean;
   }>(),
-  { showDesc: false, autoAnalyze: false, loading: false, pageSize: 10 },
+  { showDesc: false, autoAnalyze: false, loading: false, pageSize: 10, showAsset: false },
 );
 
 const userStore = useUserStore();
@@ -131,8 +133,11 @@ function buildAnalysisPayload(row: Record<string, any>) {
     aggregation_status: row.isFinal ? 'closed' : 'active',
     analysis_only: true,
     rule_desc: row.desc || '',
-    threat_source: row.attackDevice || '',
-    victim_target: row.victimDevice || '',
+    // 研判重推以 (threat_source|victim_target|event_type) 定位既有事件：
+    // 必须使用原始流向（src_ip/dst_ip，IOC 事件展示层已交换，但研判需真实方向），
+    // 否则指纹不命中会误建重复事件。
+    threat_source: row.src_ip || row.attackDevice || '',
+    victim_target: row.dst_ip || row.victimDevice || '',
   };
 }
 
@@ -276,6 +281,24 @@ const columns = computed(() => [
         h('span', { style: 'color:#2080f0' }, row.victimDevice || '-'),
       ]),
   },
+  ...(props.showAsset
+    ? [
+        {
+          title: '资产',
+          key: 'assetText',
+          minWidth: 150,
+          render: (row: Record<string, any>) => {
+            const text = String(row.assetText || '');
+            const unregistered = !text || text === '未登记';
+            return h(
+              NTag,
+              { size: 'small', round: true, type: unregistered ? 'default' : 'info' },
+              { default: () => text || '未登记' },
+            );
+          },
+        },
+      ]
+    : []),
   {
     title: '严重程度',
     key: 'levelText',
@@ -316,6 +339,19 @@ const columns = computed(() => [
         );
       }
       return h('div', { style: 'display:flex;flex-wrap:wrap;align-items:center;gap:4px' }, children);
+    },
+  },
+  {
+    title: '总载荷',
+    key: 'totalPayloadText',
+    width: 110,
+    render: (row: Record<string, any>) => {
+      const bytes = Number(row.total_payload_bytes ?? 0);
+      return h(
+        'span',
+        { style: bytes > 0 ? 'font-family:ui-monospace,SFMono-Regular,Menlo,monospace' : '' },
+        bytes > 0 ? formatBytes(bytes) : '-',
+      );
     },
   },
   {
