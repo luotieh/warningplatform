@@ -89,6 +89,7 @@ func NewTraffic(moduleCfg Config) *Traffic {
 			BaseURL: cfg.LLMBaseURL,
 			APIKey:  cfg.LLMAPIKey,
 			Model:   cfg.LLMModel,
+			Temperature: cfg.LLMTemperature,
 			HTTP:    llmHTTPClient,
 		},
 		Queue: queue,

@@ -2,15 +2,18 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 
 import { marked } from 'marked';
-import { NButton, NInput, NScrollbar, NSpin } from 'naive-ui';
+import { NAlert, NButton, NInput, NScrollbar, NSpin } from 'naive-ui';
 
 import {
   deepflowAskAI,
   deepflowGetChatRecords,
 } from '#/api/ly/deepflow';
+import { DeepflowRequestError } from '#/api/ly/deepflow';
 import { message } from '#/adapter/naive';
 import { getMessageDisplay, normalizeDeepflowMessage } from '#/utils/deepflow';
 import deepflowSocket from '#/utils/deepflow-socket';
+
+defineOptions({ name: 'ChatBox2' });
 
 interface ChatMessage extends Record<string, any> {
   created_at?: string;
@@ -33,7 +36,33 @@ const messageRecord = ref<ChatMessage[]>([]);
 const chatRef = ref<InstanceType<typeof NScrollbar> | null>(null);
 const lastMessageDbId = ref(0);
 const aiThinkingId = ref('');
+const errorMessage = ref('');
 
+function explainAIError(error: unknown): string {
+  if (error instanceof DeepflowRequestError) {
+    const labels: Record<string, string> = {
+      model_not_configured: '模型未配置', model_invalid_url: '模型地址无效',
+      quota_exhausted: '模型额度不足', billing_required: '模型账户计费异常',
+      upstream_auth: '模型 API Key 无效', upstream_forbidden: '模型访问权限不足',
+      model_not_found: '指定模型不存在', upstream_rate_limit: '模型请求被限流',
+      upstream_timeout: '模型服务响应超时', upstream_unavailable: '模型服务暂时不可用',
+      context_too_long: '事件上下文超过模型限制', content_rejected: '请求被模型内容策略拦截',
+      upstream_endpoint: '模型接口路径不可用', upstream_connection: '无法连接模型服务',
+    };
+    const title = labels[error.errorCode] || error.message;
+    const extra = [error.hint, error.detail ? `上游详情：${error.detail}` : '', error.requestId ? `请求 ID：${error.requestId}` : ''].filter(Boolean).join(' ');
+    return extra ? `${title}。${extra}` : title;
+  }
+  const text = String(error instanceof Error ? error.message : error || '').toLowerCase();
+  if (text.includes('model') && (text.includes('config') || text.includes('未配置') || text.includes('missing'))) return '模型未配置：请在系统设置 → AI/LLM 中配置模型地址、API Key 和模型名称。';
+  if (text.includes('quota') || text.includes('credit') || text.includes('余额') || text.includes('额度') || text.includes('insufficient')) return '模型额度不足：上游模型账户余额或调用额度已用尽，请补充额度或更换模型。';
+  if (text.includes('timeout') || text.includes('超时')) return '上游模型响应超时：请检查模型服务地址、网络连通性或稍后重试。';
+  if (text.includes('401') || text.includes('403') || text.includes('unauthorized') || text.includes('forbidden')) return '模型认证失败：请检查 API Key、权限和模型访问范围。';
+  if (text.includes('429') || text.includes('rate limit') || text.includes('频率')) return '模型请求过于频繁：已触发上游限流，请稍后再试。';
+  if (text.includes('network') || text.includes('connect') || text.includes('fetch')) return '无法连接模型服务：请检查网络、代理和 LLM Base URL。';
+  return error instanceof Error && error.message ? `AI 服务调用失败：${error.message}` : 'AI 服务调用失败，请查看服务日志。';
+}
+\n
 const displayMessages = computed(() =>
   messageRecord.value.map((item) => ({
     ...item,
@@ -251,6 +280,7 @@ async function sendAIMessage(text: string) {
   if (!text) return;
 
   loading.value = true;
+  errorMessage.value = '';
   const tempId = `temp_${Date.now()}`;
   upsertMessages([
     {
@@ -280,7 +310,8 @@ async function sendAIMessage(text: string) {
     }
     await fetchMessages();
   } catch (error) {
-    message.error(error instanceof Error ? error.message : '发送消息失败');
+    errorMessage.value = explainAIError(error);
+    message.error(errorMessage.value);
     messageRecord.value = messageRecord.value.filter((item) => item.temp_id !== aiThinkingId.value);
     aiThinkingId.value = '';
   } finally {
@@ -398,6 +429,9 @@ onUnmounted(() => {
 
 <template>
   <div class="chat-shell">
+    <NAlert v-if="errorMessage" type="error" closable class="chat-error" @close="errorMessage = ''">
+      {{ errorMessage }}
+    </NAlert>
     <NScrollbar ref="chatRef" class="chat-body">
       <div v-if="chatMessages.length" class="messages">
         <div
@@ -707,6 +741,18 @@ onUnmounted(() => {
   z-index: 2;
 }
 
+.chat-error {
+  flex: 0 0 auto;
+  margin: 12px 16px 0;
+}
+
+.chat-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 auto 8px;
+  max-width: 1000px;
+}
+
 .chat-input-wrapper {
   align-items: flex-end;
   background: hsl(var(--card));
@@ -835,3 +881,5 @@ onUnmounted(() => {
   }
 }
 </style>
+
+

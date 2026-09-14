@@ -394,13 +394,13 @@ async function loginWith(provider: string) {
       :show-forget-password="true"
       :show-qrcode-login="false"
       :show-register="allowRegister"
-      :show-third-party-login="true"
+      :show-third-party-login="false"
       @submit="handleLogin"
     >
       <template #title>
         <div class="vuln-login-head">
           <h2 class="vuln-login-head__title">账号登录</h2>
-          <p class="vuln-login-head__hint">使用企业账号继续访问工作台</p>
+          <p class="vuln-login-head__hint">使用本地账号登录工作台</p>
         </div>
       </template>
 

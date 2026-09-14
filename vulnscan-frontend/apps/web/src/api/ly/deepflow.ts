@@ -16,22 +16,54 @@ function buildUrl(url: string, params?: Record<string, any>) {
   return query ? `${full}?${query}` : full;
 }
 
+export class DeepflowRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly errorCode = '',
+    readonly stage = 'backend',
+    readonly hint = '',
+    readonly detail = '',
+    readonly upstreamStatus = 0,
+    readonly requestId = '',
+  ) {
+    super(message);
+    this.name = 'DeepflowRequestError';
+  }
+}
+
 async function parseResponse(response: Response) {
-  if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`);
+  let data: any;
+  try {
+    data = await response.json();
+  } catch {
+    throw new DeepflowRequestError('平台接口返回了非 JSON 响应', response.status, 'invalid_response');
   }
 
-  const data = await response.json();
+  const fail = () => {
+    const providerMessage = typeof data?.error === 'string' ? data.error : data?.error?.message;
+    throw new DeepflowRequestError(
+      String(data?.message || data?.msg || providerMessage || '请求失败'),
+      response.status,
+      String(data?.error_code || ''),
+      String(data?.stage || 'backend'),
+      String(data?.hint || ''),
+      String(data?.detail || ''),
+      Number(data?.upstream_status || 0),
+      String(data?.request_id || response.headers.get('X-Request-Id') || ''),
+    );
+  };
+  if (!response.ok) fail();
 
   if (data?.code !== undefined) {
-    if (![200, 2000].includes(data.code)) throw new Error(data.message || 'Request failed');
+    if (![200, 2000].includes(data.code)) fail();
     if (data.access_token !== undefined) return data;
     return data.data;
   }
 
   if (data?.status !== undefined) {
     if (data.status !== 'success') {
-      throw new Error(data.message || 'Request failed');
+      fail();
     }
     if (data.access_token !== undefined) return data;
     return data.data !== undefined ? data.data : data;

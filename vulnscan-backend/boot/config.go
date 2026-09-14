@@ -11,6 +11,8 @@ import (
 )
 
 type IAMConfig struct {
+	Mode         string `json:"mode" toml:"mode"`
+	LocalAdminPassword string `json:"local_admin_password" toml:"local_admin_password"`
 	BaseURL      string `json:"base_url" toml:"base_url"`
 	ClientID     string `json:"client_id" toml:"client_id"`
 	ClientSecret string `json:"client_secret" toml:"client_secret"`

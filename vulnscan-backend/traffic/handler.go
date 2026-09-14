@@ -1,10 +1,12 @@
 package traffic
 
 import (
+	"errors"
 	"io"
 	"net/http"
 	"strings"
 
+	"vulnscan-backend/traffic/internal/client"
 	"vulnscan-backend/traffic/internal/domain"
 	"vulnscan-backend/traffic/internal/lyserver"
 	"vulnscan-backend/traffic/internal/socketio"
@@ -350,6 +352,16 @@ func (h *Handler) EngineerChatSend(c *gin.Context) {
 	}
 	result, err := h.chat.Send(c.Request.Context(), body)
 	if err != nil {
+		var llmErr *client.LLMCallError
+		if errors.As(err, &llmErr) {
+			c.JSON(http.StatusBadGateway, gin.H{
+				"code": http.StatusBadGateway, "message": llmErr.Message,
+				"error_code": llmErr.Code, "stage": llmErr.Stage, "hint": llmErr.Hint,
+				"upstream_status": llmErr.UpstreamStatus, "detail": llmErr.Detail,
+				"request_id": c.Writer.Header().Get("X-Request-Id"),
+			})
+			return
+		}
 		switch {
 		case strings.Contains(err.Error(), "不能为空"):
 			fail(c, http.StatusBadRequest, err.Error())
@@ -421,7 +433,10 @@ func (h *Handler) Ly(c *gin.Context) {
 }
 
 func (h *Handler) Internal(c *gin.Context) {
-	path := c.Param("path")
+	// Gin wildcard parameters may be returned with or without the leading
+	// slash depending on the router/version. Normalize before dispatching so
+	// /api/traffic/internal/event/push consistently matches this handler.
+	path := "/" + strings.TrimPrefix(c.Param("path"), "/")
 	switch {
 	case c.Request.Method == http.MethodPost && path == "/event/push":
 		body, valid := readBody(c)

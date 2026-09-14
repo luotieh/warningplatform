@@ -34,20 +34,7 @@ const state = reactive({
 const assets = ref<LyAsset[]>([]);
 const selectedAsset = ref<string>((route.query.asset as string) || '');
 const onlyAssetRelated = ref(false);
-
-const assetOptions = computed(() =>
-  assets.value.map((a) => ({ label: `${a.name}（${a.address}）`, value: a.address })),
-);
-
-async function loadAssets() {
-  try {
-    assets.value = (await lyAssetList()) || [];
-  } catch {
-    assets.value = [];
-  }
-}
-
-// 基础筛选（处理状态/活跃/资产）——排行标签基于此计算，
+// 基础筛选// 基础筛选（处理状态/活跃/资产）——排行标签基于此计算，
 // 保证选中某排行值后其它标签依然可见、可再切换。
 const baseRows = computed(() => {
   return (lyStore.events || []).filter((item) => {
@@ -178,3 +165,5 @@ onMounted(async () => {
 .rank-tag { cursor: pointer; }
 .rank-tag--active { outline: 2px solid var(--n-color-target, #2080f0); outline-offset: 1px; font-weight: 600; }
 </style>
+
+

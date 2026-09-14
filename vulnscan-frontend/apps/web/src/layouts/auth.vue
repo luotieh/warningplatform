@@ -60,7 +60,7 @@ const brandFeatures = [
         <p class="vuln-auth-intro__eyebrow">Network Security Early Warning</p>
         <h1 class="vuln-auth-intro__title">{{ appName }}</h1>
         <p class="vuln-auth-intro__desc">
-          统一身份认证接入，覆盖风险监测、通报处置与安全运营全流程
+          本地账号登录，覆盖风险监测、通报处置与安全运营全流程
         </p>
         <ul class="vuln-auth-intro__features">
           <li v-for="item in brandFeatures" :key="item.label">

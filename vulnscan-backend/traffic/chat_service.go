@@ -41,7 +41,7 @@ func (s *ChatService) Send(ctx context.Context, body map[string]any) (map[string
 		return nil, errors.New("事件不存在")
 	}
 
-	userMessage, _ := s.core.Store.AddMessage(domain.Message{
+	userMessage, err := s.core.Store.AddMessage(domain.Message{
 		EventID:         eventID,
 		MessageFrom:     domain.RoleUser,
 		MessageType:     "user_message",
@@ -53,6 +53,7 @@ func (s *ChatService) Send(ctx context.Context, body map[string]any) (map[string
 		UserID:          stringValue(body["user_id"]),
 		UserNickname:    stringValue(body["user_nickname"]),
 	})
+	if err != nil { return nil, errors.New("聊天消息保存失败，请检查数据库连接和写入权限") }
 	realtime.BroadcastMessage(eventID, userMessage)
 
 	prompt := s.engineerEventPrompt(event, message)
@@ -61,7 +62,7 @@ func (s *ChatService) Send(ctx context.Context, body map[string]any) (map[string
 		return nil, err
 	}
 
-	assistantMessage, _ := s.core.Store.AddMessage(domain.Message{
+	assistantMessage, err := s.core.Store.AddMessage(domain.Message{
 		EventID:         eventID,
 		MessageFrom:     domain.RoleAssistant,
 		MessageType:     "assistant_response",
@@ -71,6 +72,7 @@ func (s *ChatService) Send(ctx context.Context, body map[string]any) (map[string
 		SenderType:      "ai",
 		ChatSessionID:   stringValue(body["chat_session_id"]),
 	})
+	if err != nil { return nil, errors.New("AI 已回复，但回答保存失败，请检查数据库连接和写入权限") }
 	realtime.BroadcastMessage(eventID, assistantMessage)
 
 	return map[string]any{
@@ -125,7 +127,15 @@ func (s *ChatService) engineerEventPrompt(event domain.Event, question string) s
 	b.WriteString(question)
 	b.WriteString("\n\n")
 	b.WriteString(deepSOCEngineerAnswerGuide)
-	return b.String()
+	result := b.String()
+	// Keep engineer prompts bounded before sending them upstream. Preserve the
+	// event header and latest question while trimming the oldest history.
+	const maxPromptRunes = 40000
+	if len([]rune(result)) > maxPromptRunes {
+		r := []rune(result)
+		result = string(r[:maxPromptRunes/2]) + "\n[历史上下文已截断]\n" + string(r[len(r)-maxPromptRunes/2:])
+	}
+	return result
 }
 
 const deepSOCEngineerAnswerGuide = `# 回答要求

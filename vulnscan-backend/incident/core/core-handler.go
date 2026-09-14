@@ -26,7 +26,11 @@ func (h *HandlerCore) List(c *gin.Context) {
 	if !ok {
 		return
 	}
-	scope := definition.SafeDataFilterScope(c, definition.VulnscanFieldMapping)
+	// This query joins incident_assets, which also has a created_by column.
+	// Qualify the data-scope column so MySQL does not report it as ambiguous.
+	incidentFieldMapping := definition.VulnscanFieldMapping
+	incidentFieldMapping.UserIDColumn = "security_incidents.created_by"
+	scope := definition.SafeDataFilterScope(c, incidentFieldMapping)
 	items, count, err := h.svc.ListIncidents(c.Request.Context(), req, scope)
 	if err != nil {
 		web.Fail(c).Err(err).Send()

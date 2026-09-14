@@ -21,3 +21,6 @@ agent-transcripts/
 vulnscan-frontend/node_modules
 terminals/
 *.ex
+
+# Native local deployment: tools, logs, process state and credentials
+/.local/

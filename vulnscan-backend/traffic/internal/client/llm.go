@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -16,8 +16,11 @@ type LLMClient struct {
 	BaseURL string
 	APIKey  string
 	Model   string
+	Temperature float64
 	HTTP    *http.Client
 }
+
+func (c LLMClient) temperature() float64 { if c.Temperature == 0 { return 1 }; return c.Temperature }
 
 type LLMHealth struct {
 	Configured bool   `json:"configured"`
@@ -60,7 +63,9 @@ func (c LLMClient) HealthCheck(ctx context.Context) LLMHealth {
 		},
 		"stream":      false,
 		"max_tokens":  4,
-		"temperature": 0,
+		// The configured k3 model only accepts temperature=1, including
+		// lightweight health checks. Keep this consistent with Chat().
+		"temperature": c.temperature(),
 	}
 	b, err := json.Marshal(payload)
 	if err != nil {
@@ -303,7 +308,15 @@ const chatMaxTokens = 6000
 // 传入各自的 system,避免复用同一段人格造成冲突与 token 浪费。
 func (c LLMClient) Chat(ctx context.Context, systemPrompt, prompt string) (string, error) {
 	if !c.Enabled() {
-		return "", errors.New("LLM未配置，请先在配置页面填写可用的LLM服务地址")
+		return "", callError("model_not_configured", "configuration", "模型服务地址未配置", "请在流量分析 → 配置 → 模型中保存服务地址和模型名称。")
+	}
+	if strings.TrimSpace(c.Model) == "" {
+		return "", callError("model_not_configured", "configuration", "模型名称未配置", "请在流量分析的模型配置中填写模型名称。")
+	}
+	baseURL := strings.TrimRight(strings.TrimSpace(c.BaseURL), "/")
+	parsed, parseErr := url.Parse(baseURL)
+	if parseErr != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return "", callError("model_invalid_url", "configuration", "模型服务地址格式无效", "请填写完整的 http:// 或 https:// Base URL。")
 	}
 	payload := map[string]any{
 		"model": c.Model,
@@ -313,13 +326,14 @@ func (c LLMClient) Chat(ctx context.Context, systemPrompt, prompt string) (strin
 		},
 		"stream":      false,
 		"max_tokens":  chatMaxTokens,
-		"temperature": 0.2,
+		// The configured k3 endpoint only accepts temperature=1.
+		"temperature": c.temperature(),
 	}
 	b, err := json.Marshal(payload)
 	if err != nil {
 		return "", err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(c.BaseURL, "/")+"/chat/completions", bytes.NewReader(b))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/chat/completions", bytes.NewReader(b))
 	if err != nil {
 		return "", err
 	}
@@ -333,9 +347,14 @@ func (c LLMClient) Chat(ctx context.Context, systemPrompt, prompt string) (strin
 	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("LLM调用失败，请检查LLM配置: %w", err)
+		return "", llmTransportError(err)
 	}
 	defer resp.Body.Close()
+	responseBody, err := io.ReadAll(io.LimitReader(resp.Body, 2*1024*1024))
+	if err != nil { return "", llmTransportError(err) }
+	if resp.StatusCode >= 400 {
+		return "", llmResponseError(resp.StatusCode, responseBody, c.APIKey)
+	}
 	var out struct {
 		Choices []struct {
 			Message struct {
@@ -344,14 +363,12 @@ func (c LLMClient) Chat(ctx context.Context, systemPrompt, prompt string) (strin
 		} `json:"choices"`
 		Error any `json:"error"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return "", err
+	if err := json.Unmarshal(responseBody, &out); err != nil {
+		return "", callError("upstream_invalid_response", "upstream", "模型返回了无法解析的响应", "确认接口返回 OpenAI 兼容 JSON，而非 HTML 网关页面或流式响应。")
 	}
-	if resp.StatusCode >= 400 {
-		return "", fmt.Errorf("LLM调用失败，请检查LLM配置: status=%d", resp.StatusCode)
-	}
-	if len(out.Choices) == 0 {
-		return "", errors.New("LLM未返回有效内容，请检查LLM配置")
+	if out.Error != nil { return "", llmResponseError(resp.StatusCode, responseBody, c.APIKey) }
+	if len(out.Choices) == 0 || strings.TrimSpace(out.Choices[0].Message.Content) == "" {
+		return "", callError("upstream_empty_response", "upstream", "模型没有返回有效的回答", "检查模型是否支持当前对话接口，或稍后重试。")
 	}
 	return out.Choices[0].Message.Content, nil
 }
