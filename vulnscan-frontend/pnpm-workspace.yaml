@@ -12,6 +12,14 @@ packages:
   - docs
   - playground
 
+allowBuilds:
+  '@parcel/watcher': set this to true or false
+  core-js: set this to true or false
+  core-js-pure: set this to true or false
+  esbuild: set this to true or false
+  less: set this to true or false
+  vue-demi: set this to true or false
+
 catalog:
   '@ast-grep/napi': ^0.39.9
   '@changesets/changelog-github': ^0.5.2

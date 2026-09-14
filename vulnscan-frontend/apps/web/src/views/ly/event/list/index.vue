@@ -297,7 +297,6 @@ onMounted(async () => {
           :rows="filteredRows"
           :auto-analyze="true"
           :loading="lyStore.loading"
-          :page-size="state.pageSize"
           :show-asset="true"
         />
         <div class="pager-wrap">

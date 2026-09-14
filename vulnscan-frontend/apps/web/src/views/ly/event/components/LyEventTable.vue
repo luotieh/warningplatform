@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import { computed, h, onMounted, reactive, ref, watch } from 'vue';
 
-import { NButton, NDataTable, NModal, NPagination, NSpace, NTag } from 'naive-ui';
+import { NButton, NDataTable, NModal, NSpace, NTag } from 'naive-ui';
 
 import { IconifyIcon } from '@vben/icons';
 import { useUserStore } from '@vben/stores';
@@ -9,7 +9,7 @@ import { useUserStore } from '@vben/stores';
 import { lyEventPushToAi, lyEventReview } from '#/api/ly';
 import { deepflowEventArchiveUrl, deepflowEventEvidenceUrl } from '#/api/ly/deepflow';
 import { message } from '#/adapter/naive';
-import { formatBoolText, formatBytes, formatDirection, formatHexTruncated, formatTimestamp, paginate } from '#/utils/ly';
+import { formatBoolText, formatBytes, formatDirection, formatHexTruncated, formatTimestamp } from '#/utils/ly';
 
 import ReportModal from '../detail/components/ReportModal.vue';
 
@@ -21,11 +21,10 @@ const props = withDefaults(
     showDesc?: boolean;
     autoAnalyze?: boolean;
     loading?: boolean;
-    pageSize?: number;
     /** 是否展示「资产」列（行内 assetText：资产名或「未登记」）。 */
     showAsset?: boolean;
   }>(),
-  { showDesc: false, autoAnalyze: false, loading: false, pageSize: 10, showAsset: false },
+  { showDesc: false, autoAnalyze: false, loading: false, showAsset: false },
 );
 
 const userStore = useUserStore();
@@ -36,19 +35,10 @@ const reportContext = ref<Record<string, any>>({});
 
 const state = reactive({
   analyzingIds: new Set<string>(),
-  page: 1,
-  pageSize: props.pageSize,
 });
 
-const pagedRows = computed(() => paginate(props.rows, state.page, state.pageSize));
-
-// 行集变化（筛选切换/新检索/刷新）时回到第 1 页，等价旧事件列表点排行即重置分页的行为。
-watch(
-  () => props.rows,
-  () => {
-    state.page = 1;
-  },
-);
+// 事件列表分页由父页面统一负责服务端分页；此组件只展示当前页数据。
+const pagedRows = computed(() => props.rows);
 
 const occVisible = ref(false);
 const occRows = ref<Array<{
@@ -417,9 +407,6 @@ onMounted(() => {
 <template>
   <div>
     <NDataTable :columns="columns" :data="pagedRows" :loading="props.loading" :bordered="false" size="small" :row-class-name="rowClass" />
-    <div class="pager-wrap">
-      <NPagination v-model:page="state.page" v-model:page-size="state.pageSize" :item-count="props.rows.length" show-size-picker :page-sizes="[10, 20, 50, 100]" />
-    </div>
 
     <ReportModal v-model:visible="reportVisible" :event-id="reportEventId" :context="reportContext" />
 
