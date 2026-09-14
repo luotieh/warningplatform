@@ -62,7 +62,6 @@ function explainAIError(error: unknown): string {
   if (text.includes('network') || text.includes('connect') || text.includes('fetch')) return '无法连接模型服务：请检查网络、代理和 LLM Base URL。';
   return error instanceof Error && error.message ? `AI 服务调用失败：${error.message}` : 'AI 服务调用失败，请查看服务日志。';
 }
-\n
 const displayMessages = computed(() =>
   messageRecord.value.map((item) => ({
     ...item,
