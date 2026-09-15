@@ -1,0 +1,44 @@
+[web]
+host = "127.0.0.1"
+port = 8090
+Debug = false
+
+[db]
+host = "127.0.0.1"
+port = 3306
+user = "manage_platform"
+passwd = "REPLACE_ME"
+dbname = "manage_platform"
+db-type = "mysql"
+show-sql = false
+read-only = false
+max-idle-conn-count = 5
+max-open-conn-count = 20
+max-conn-life-time = 600
+
+[iam]
+base_url = "REPLACE_ME"
+client_id = "REPLACE_ME"
+client_secret = "REPLACE_ME"
+path_prefix = "/api"
+
+[sso]
+callback_uri = "http://127.0.0.1:8090/callback"
+success_redirect = "http://127.0.0.1:8090/auth/sso-callback"
+cookie_secret = "REPLACE_ME"
+token_relay_callback_uri = "http://127.0.0.1:8090/callback"
+
+# Cache defaults to the supported in-process cache; Redis is optional.
+[traffic]
+store_backend = "mysql"
+# Use a dedicated local database; URL-encode query parameter values when needed.
+database_url = "REPLACE_ME"
+auto_migrate = true
+db_wait_seconds = 15
+internal_api_key = "REPLACE_ME"
+mq_backend = "noop"
+rabbitmq_consumer_enabled = false
+llm_base_url = ""
+llm_api_key = ""
+llm_model = ""
+llm_timeout_seconds = 60

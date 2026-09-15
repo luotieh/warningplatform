@@ -29,6 +29,11 @@ var loginOnlyGetPrefixes = []string{
 // IAMAuthorization 使用 IAM verify 下发的 AllowedPaths 做接口级鉴权（与前端 backend_refs 同步一致）。
 // 支撑类前缀仅要求登录，避免未单独分配权限码时页面不可用。
 func (h *Handlers) IAMAuthorization() gin.HandlerFunc {
+	// 本地模式不依赖 IAM 权限服务；apiAuthenticated 已完成登录态校验，
+	// 这里直接放行已登录用户，避免本地 SDK 未配置远程 PermissionService。
+	if h.Config != nil && strings.EqualFold(strings.TrimSpace(h.Config.IAM.Mode), "local") {
+		return func(c *gin.Context) { c.Next() }
+	}
 	sdkAuth := h.IAM.Middleware().Authorization()
 	return func(c *gin.Context) {
 		user, ok := authMiddleware.GetCurrentUser(c)

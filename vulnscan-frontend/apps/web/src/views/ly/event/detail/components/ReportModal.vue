@@ -286,10 +286,12 @@ watch(
       unbindSocket();
       return;
     }
-    const token = (props.context as Record<string, any>)?.deepsoc_token;
     try {
-      if (token) deepflowStore.useToken(String(token));
-      else await deepflowStore.ensureToken();
+      // Refresh the auxiliary DeepSOC session on every open. Tokens are held
+      // in backend memory and may be invalid after a local service restart;
+      // reusing a stale token from the event context causes a 401 report call.
+      deepflowStore.clearUser();
+      await deepflowStore.ensureToken();
     } catch (error) {
       console.error('[DeepFlow] 自动登录失败:', error);
     }
@@ -372,8 +374,9 @@ watch(
 
       <div class="report-body">
         <div class="report-chat">
+          <!-- DeepFlow API has its own token; mount only after automatic login. -->
           <ChatBox
-            v-if="eventId"
+            v-if="eventId && deepflowStore.accessToken"
             ref="chatBoxRef"
             :event-id="eventId"
             :event-context="eventContext"
