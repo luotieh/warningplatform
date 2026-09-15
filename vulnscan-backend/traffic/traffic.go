@@ -10,6 +10,7 @@ import (
 
 	"vulnscan-backend/traffic/internal/client"
 	"vulnscan-backend/traffic/internal/config"
+	"vulnscan-backend/traffic/internal/domain"
 	"vulnscan-backend/traffic/internal/lyserver"
 	"vulnscan-backend/traffic/internal/mq"
 	"vulnscan-backend/traffic/internal/service"
@@ -106,11 +107,7 @@ func NewTraffic(moduleCfg Config) *Traffic {
 				log.Printf("traffic: convergence scan scheduled %d final analysis", n)
 			}
 			// 每日 00:10（Asia/Shanghai）逻辑归档：已收敛且昨日及以前活跃的事件按日归档。
-			// 容器未安装 tzdata 时 LoadLocation 失败，回退 UTC 避免 Time.In(nil) panic。
-			loc, err := time.LoadLocation("Asia/Shanghai")
-			if err != nil {
-				loc = time.UTC
-			}
+			loc := domain.Beijing
 			nowLocal := time.Now().In(loc)
 			day := nowLocal.Format("2006-01-02")
 			if lastArchiveDay != day && nowLocal.Hour() == 0 && nowLocal.Minute() == 10 {
@@ -391,6 +388,7 @@ func (m *Traffic) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
 			Enabled: true,
 			Children: []authorize.Route{
 				{Name: "发送消息", Path: "send", Method: "POST", Handler: m.api.EngineerChatSend, Enabled: true},
+				{Name: "请求估算", Path: "estimate", Method: "POST", Handler: m.api.EngineerChatEstimate, Enabled: true},
 				{Name: "历史记录", Path: "history", Method: "GET", Handler: m.api.EngineerChatHistory, Enabled: true},
 				{Name: "新建会话", Path: "new-session", Method: "POST", Handler: m.api.EngineerChatNewSession, Enabled: true},
 				{Name: "会话状态", Path: "status", Method: "GET", Handler: m.api.EngineerChatStatus, Enabled: true},

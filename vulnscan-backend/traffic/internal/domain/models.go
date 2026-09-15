@@ -52,7 +52,7 @@ type Event struct {
 	AggregationClosed bool `json:"aggregation_closed"`
 	// LastAnalysisAt 最近一次分析完成时间，用于手动刷新冷却。
 	LastAnalysisAt *time.Time `json:"last_analysis_at,omitempty"`
-	// LastSeenAt 服务器最近一次收到该聚合命中的时刻（收敛判定专用列）。
+	// LastSeenAt 最近一次攻击活动的时刻（UTC 存储，收敛判定专用列）。
 	LastSeenAt *time.Time `json:"last_seen_at,omitempty"`
 	// ArchiveDate 逻辑归档日（Asia/Shanghai 自然日）；NULL=未归档（今日视图）。
 	ArchiveDate *time.Time `json:"archive_date,omitempty"`

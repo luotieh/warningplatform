@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"vulnscan-backend/traffic/internal/client"
 	trafficconfig "vulnscan-backend/traffic/internal/config"
 	"vulnscan-backend/traffic/internal/domain"
 	"vulnscan-backend/traffic/internal/lyserver"
@@ -280,7 +281,7 @@ func (h *Handler) CreateEvent(c *gin.Context) {
 }
 
 func (h *Handler) ListEvents(c *gin.Context) {
-	// 服务端分页/过滤：scope=today（默认，未归档）/ archive（按日）/ all（全局搜索）。
+	// 服务端分页/过滤：scope=today（未归档）/ archive（日期范围可选）/ all（全局搜索）。
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	if page < 1 {
 		page = 1
@@ -293,13 +294,15 @@ func (h *Handler) ListEvents(c *gin.Context) {
 		pageSize = 200
 	}
 	q := store.EventQuery{
-		Scope:    c.DefaultQuery("scope", "today"),
-		Date:     c.Query("date"),
-		Page:     page,
-		PageSize: pageSize,
-		Level:    c.Query("level"),
-		Keyword:  c.Query("keyword"),
-		Asset:    c.Query("asset"),
+		Scope:       c.DefaultQuery("scope", "today"),
+		Date:        c.Query("date"),
+		ArchiveFrom: c.Query("archive_from"),
+		ArchiveTo:   c.Query("archive_to"),
+		Page:        page,
+		PageSize:    pageSize,
+		Level:       c.Query("level"),
+		Keyword:     c.Query("keyword"),
+		Asset:       c.Query("asset"),
 		// 排序：sort=time|payload|frequency，order=desc|asc（非法值由 store 兜底默认）。
 		Sort:  c.Query("sort"),
 		Order: c.Query("order"),
@@ -315,6 +318,10 @@ func (h *Handler) ListEvents(c *gin.Context) {
 			t := time.Unix(sec, 0).UTC()
 			q.EndTime = &t
 		}
+	}
+	if _, _, err := q.ArchiveRange(); err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
 	}
 	items, total, err := h.events.ListPage(c.Request.Context(), q)
 	if err != nil {
@@ -655,7 +662,10 @@ func (h *Handler) EngineerChatSend(c *gin.Context) {
 	}
 	result, err := h.chat.Send(c.Request.Context(), body)
 	if err != nil {
+		var llmErr *client.LLMCallError
 		switch {
+		case errors.As(err, &llmErr):
+			fail(c, http.StatusBadGateway, err.Error())
 		case strings.Contains(err.Error(), "不能为空"):
 			fail(c, http.StatusBadRequest, err.Error())
 		case strings.Contains(err.Error(), "不存在"):
@@ -670,6 +680,19 @@ func (h *Handler) EngineerChatSend(c *gin.Context) {
 
 func (h *Handler) EngineerChatHistory(c *gin.Context) {
 	ok(c, h.chat.History(c.Request.Context(), c.Query("event_id")))
+}
+
+func (h *Handler) EngineerChatEstimate(c *gin.Context) {
+	body, valid := readBody(c)
+	if !valid {
+		return
+	}
+	result, err := h.chat.Estimate(stringValue(body["event_id"]), stringValue(body["message"]))
+	if err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	ok(c, result)
 }
 
 func (h *Handler) EngineerChatNewSession(c *gin.Context) {

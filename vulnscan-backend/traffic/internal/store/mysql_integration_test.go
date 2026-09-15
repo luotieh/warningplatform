@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -11,6 +12,48 @@ import (
 
 	"vulnscan-backend/traffic/internal/domain"
 )
+
+func TestMySQLConvergencePatchAndBeijingArchive(t *testing.T) {
+	st, _ := newMySQLTestStore(t)
+	last := time.Date(2026, 9, 14, 16, 5, 0, 0, time.UTC)
+	_, err := st.CreateEvent(domain.Event{EventID: "quiet", LastSeenAt: &last})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(st.ListEventsConvergedDue(last)) != 1 {
+		t.Fatal("exact boundary excluded")
+	}
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 20; i++ {
+			if _, ok := st.UpdateEvent("quiet", map[string]any{"event_status": "round_finished", "analysis_version": 2}); !ok {
+				t.Error("analysis update failed")
+			}
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 20; i++ {
+			if _, ok := st.UpdateEvent("quiet", map[string]any{"aggregation_closed": true, "context": `{"occurrence_count":9}`, "last_seen_at": last.Format(time.RFC3339)}); !ok {
+				t.Error("convergence update failed")
+			}
+		}
+	}()
+	wg.Wait()
+	e, _ := st.GetEvent("quiet")
+	if !e.AggregationClosed || e.Context != `{"occurrence_count":9}` || e.AnalysisVersion != 2 || !e.LastSeenAt.Equal(last) {
+		t.Fatalf("concurrent patch lost fields: %+v", e)
+	}
+	if n, err := st.ArchiveConvergedEvents(last.Add(24*time.Hour), 10); err != nil || n != 1 {
+		t.Fatalf("archive=%d %v", n, err)
+	}
+	e, _ = st.GetEvent("quiet")
+	if e.ArchiveDate == nil || e.ArchiveDate.Format("2006-01-02") != "2026-09-15" {
+		t.Fatalf("archive date is not Beijing day: %v", e.ArchiveDate)
+	}
+}
 
 // newMySQLTestStore connects to the MySQL instance pointed at by
 // TRAFFIC_TEST_MYSQL_DSN, drops all store tables and re-creates them from

@@ -70,17 +70,19 @@ type Store interface {
 }
 
 // EventQuery 事件列表服务端分页/过滤条件。
-// Scope: today（默认，未归档）/ archive（按日归档）/ all（全量，全局搜索）。
+// Scope: today（默认，未归档）/ archive（全部归档，可按归档日期范围筛选）/ all（全量）。
 type EventQuery struct {
-	Scope     string
-	Date      string // YYYY-MM-DD，Scope=archive 时必填
-	Page      int
-	PageSize  int
-	Level     string
-	Keyword   string
-	Asset     string
-	StartTime *time.Time
-	EndTime   *time.Time
+	Scope       string
+	Date        string // YYYY-MM-DD，兼容旧单日筛选，可选
+	ArchiveFrom string // YYYY-MM-DD，归档日期下界（包含）
+	ArchiveTo   string // YYYY-MM-DD，归档日期上界（包含）
+	Page        int
+	PageSize    int
+	Level       string
+	Keyword     string
+	Asset       string
+	StartTime   *time.Time
+	EndTime     *time.Time
 	// Sort 排序依据：time（默认，created_at 倒序）/ payload（总载荷）/ frequency（命中频次）。
 	Sort string
 	// Order 排序方向：desc（默认）/ asc。

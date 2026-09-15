@@ -13,7 +13,7 @@ import (
 
 // ConvergenceIdleWindow 聚合收敛窗口：距最近一次命中超过该时长无新增，即判定收敛。
 // 与 traffic 包内列表侧的 aggregateIdleWindow 保持一致。
-const ConvergenceIdleWindow = 30 * time.Minute
+const ConvergenceIdleWindow = domain.ConvergenceIdleWindow
 
 // ScanConverged 扫描未收敛事件，满足静默超时条件时：
 //  1. 置 aggregation_closed=true 并冻结 quant_stats；
@@ -25,25 +25,20 @@ func (s Services) ScanConverged(ctx context.Context) (int, error) {
 	events := s.Store.ListEventsConvergedDue(now.Add(-ConvergenceIdleWindow))
 	scheduled := 0
 	for i := range events {
-		ev := events[i]
-		if ev.AggregationClosed {
-			continue
+		lock := lifecycleLock(&eventLocks, events[i].EventID)
+		lock.Lock()
+		// Re-read after acquiring the same lock used by ingestion.
+		ev, ok := s.Store.GetEvent(events[i].EventID)
+		if ok && !ev.AggregationClosed && domain.IsConverged(ev, now) {
+			if !s.closeEvent(ev) {
+				lock.Unlock()
+				return scheduled, fmt.Errorf("保存事件 %s 收敛状态失败", ev.EventID)
+			}
+			if ev.AnalysisVersion < 2 {
+				scheduled++
+			}
 		}
-		lastSeen := eventLastSeen(ev)
-		if now.Sub(lastSeen) < ConvergenceIdleWindow {
-			continue
-		}
-		ctxMap := decodeEventContext(ev.Context)
-		freezeQuantStats(ctxMap)
-		ctxJSON, _ := json.Marshal(ctxMap)
-		s.Store.UpdateEvent(ev.EventID, map[string]any{
-			"context":            string(ctxJSON),
-			"aggregation_closed": true,
-		})
-		if ev.AnalysisVersion < 2 {
-			s.RunFinalAnalysisAsync(ev.EventID)
-			scheduled++
-		}
+		lock.Unlock()
 	}
 	return scheduled, nil
 }
@@ -51,10 +46,7 @@ func (s Services) ScanConverged(ctx context.Context) (int, error) {
 // ArchiveConvergedEvents 每日归档：把已收敛且最后活跃早于今日 00:00（Asia/Shanghai）
 // 的未归档事件按最后活跃日标记归档。分批执行并记录 archive_jobs 审计。
 func (s Services) ArchiveConvergedEvents(ctx context.Context) (int, error) {
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		loc = time.UTC
-	}
+	loc := domain.Beijing
 	nowLocal := time.Now().In(loc)
 	todayStartLocal := time.Date(nowLocal.Year(), nowLocal.Month(), nowLocal.Day(), 0, 0, 0, 0, loc)
 	threshold := todayStartLocal.UTC()
@@ -92,16 +84,7 @@ func (s Services) ArchiveConvergedEvents(ctx context.Context) (int, error) {
 }
 
 func eventLastSeen(ev domain.Event) time.Time {
-	if ev.LastSeenAt != nil {
-		return *ev.LastSeenAt
-	}
-	ctxMap := decodeEventContext(ev.Context)
-	if v := asString(ctxMap["last_seen_at"]); v != "" {
-		if t, err := time.Parse(time.RFC3339, v); err == nil {
-			return t
-		}
-	}
-	return ev.UpdatedAt
+	return domain.LastActivity(ev)
 }
 
 func decodeEventContext(raw string) map[string]any {

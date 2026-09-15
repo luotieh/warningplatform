@@ -205,19 +205,27 @@ FROM events ORDER BY created_at DESC, id DESC`)
 
 const eventSelectCols = `id, event_id, event_name, title, message, context, source, severity, category, event_status, current_round, observables, created_at, updated_at, review_status, review_comment, reviewed_by, reviewed_at, circular_code, analysis_version, aggregation_closed, last_analysis_at, last_seen_at, archive_date`
 
-// ListEventsPage 服务端分页/过滤查询：today=未归档（默认）、archive=按日、all=全量。
+// ListEventsPage 服务端分页/过滤查询：today=未归档、archive=归档日期范围（可选）、all=全量。
 func (s *MySQLStore) ListEventsPage(q EventQuery) (EventPage, error) {
+	from, to, err := q.ArchiveRange()
+	if err != nil {
+		return EventPage{}, err
+	}
 	where := []string{}
 	args := []any{}
 	switch strings.ToLower(strings.TrimSpace(q.Scope)) {
 	case "", "today":
 		where = append(where, "archive_date IS NULL")
 	case "archive":
-		if strings.TrimSpace(q.Date) == "" {
-			return EventPage{}, errors.New("archive scope requires date=YYYY-MM-DD")
+		where = append(where, "archive_date IS NOT NULL")
+		if from != "" {
+			where = append(where, "archive_date >= ?")
+			args = append(args, from)
 		}
-		where = append(where, "archive_date = ?")
-		args = append(args, q.Date)
+		if to != "" {
+			where = append(where, "archive_date <= ?")
+			args = append(args, to)
+		}
 	case "all":
 	default:
 		where = append(where, "archive_date IS NULL")
@@ -323,7 +331,7 @@ func (s *MySQLStore) ArchiveConvergedEvents(threshold time.Time, batchSize int) 
 	}
 	res, err := s.db.ExecContext(context.Background(), `
 UPDATE events
-SET archive_date = DATE(last_seen_at), updated_at = NOW(6)
+SET archive_date = DATE(DATE_ADD(last_seen_at, INTERVAL 8 HOUR)), updated_at = NOW(6)
 WHERE aggregation_closed = 1
   AND last_seen_at IS NOT NULL
   AND last_seen_at < ?
@@ -379,7 +387,7 @@ func (s *MySQLStore) ListEventsConvergedDue(threshold time.Time) []domain.Event 
 	rows, err := s.db.QueryContext(context.Background(), `
 SELECT id, event_id, event_name, title, message, context, source, severity, category, event_status, current_round, observables, created_at, updated_at, review_status, review_comment, reviewed_by, reviewed_at, circular_code, analysis_version, aggregation_closed, last_analysis_at, last_seen_at, archive_date
 FROM events
-WHERE aggregation_closed = 0 AND (last_seen_at IS NOT NULL AND last_seen_at < ?)
+WHERE aggregation_closed = 0 AND (last_seen_at IS NOT NULL AND last_seen_at <= ?)
 ORDER BY last_seen_at ASC
 LIMIT 500`, threshold)
 	if err != nil {
@@ -422,79 +430,43 @@ LIMIT 1000`, ip, ip, from, to)
 }
 
 func (s *MySQLStore) UpdateEvent(eventID string, patch map[string]any) (domain.Event, bool) {
-	e, ok := s.GetEvent(eventID)
-	if !ok {
-		return domain.Event{}, false
-	}
-	if v, ok := stringPatch(patch, "event_name"); ok {
-		e.EventName = v
-	}
-	if v, ok := stringPatch(patch, "message"); ok {
-		e.Message = v
-	}
-	if v, ok := stringPatch(patch, "context"); ok {
-		e.Context = v
-	}
-	if v, ok := stringPatch(patch, "severity"); ok {
-		e.Severity = v
-	}
-	if v, ok := stringPatch(patch, "event_status"); ok {
-		e.EventStatus = v
-	}
-	if v, ok := stringPatch(patch, "review_status"); ok {
-		e.ReviewStatus = v
-	}
-	if v, ok := stringPatch(patch, "review_comment"); ok {
-		e.ReviewComment = v
-	}
-	if v, ok := stringPatch(patch, "reviewed_by"); ok {
-		e.ReviewedBy = v
-	}
-	if v, ok := stringPatch(patch, "circular_code"); ok {
-		e.CircularCode = v
-	}
-	if v, ok := stringPatch(patch, "reviewed_at"); ok {
-		if t, err := time.Parse(time.RFC3339, v); err == nil {
-			tu := t.UTC()
-			e.ReviewedAt = &tu
+	// Write only supplied columns: background analysis must never restore stale
+	// aggregation/context/last_seen values read before a concurrent attack.
+	columns := []string{}
+	args := []any{}
+	add := func(key string, value any) { columns = append(columns, key+"=?"); args = append(args, value) }
+	for _, key := range []string{"event_name", "message", "context", "severity", "event_status", "review_status", "review_comment", "reviewed_by", "circular_code"} {
+		if v, ok := stringPatch(patch, key); ok {
+			add(key, v)
 		}
 	}
-	if v, ok := intPatch(patch, "analysis_version"); ok {
-		e.AnalysisVersion = v
-	}
-	if v, ok := boolPatch(patch, "aggregation_closed"); ok {
-		e.AggregationClosed = v
-	}
-	if v, ok := stringPatch(patch, "last_analysis_at"); ok {
-		if t, err := time.Parse(time.RFC3339, v); err == nil {
-			tu := t.UTC()
-			e.LastAnalysisAt = &tu
-		}
-	}
-	if v, ok := stringPatch(patch, "last_seen_at"); ok {
-		if t, err := time.Parse(time.RFC3339, v); err == nil {
-			tu := t.UTC()
-			e.LastSeenAt = &tu
-		}
-	}
-	if v, ok := patch["archive_date"]; ok {
-		if v == nil {
-			e.ArchiveDate = nil
-		} else if t, ok := v.(time.Time); ok {
-			tt := t
-			e.ArchiveDate = &tt
-		} else if s, ok := v.(string); ok && s != "" {
-			if t, err := time.Parse("2006-01-02", s); err == nil {
-				e.ArchiveDate = &t
+	for _, key := range []string{"reviewed_at", "last_analysis_at", "last_seen_at"} {
+		if v, ok := stringPatch(patch, key); ok {
+			if t, err := time.Parse(time.RFC3339Nano, v); err == nil {
+				add(key, t.UTC())
 			}
 		}
 	}
-	e.UpdatedAt = time.Now().UTC()
-	_, err := s.db.ExecContext(context.Background(), `
-UPDATE events
-SET event_name=?, title=?, message=?, context=?, source=?, severity=?, category=?, event_status=?, current_round=?, observables=?, updated_at=?, review_status=?, review_comment=?, reviewed_by=?, reviewed_at=?, circular_code=?, analysis_version=?, aggregation_closed=?, last_analysis_at=?, last_seen_at=?, archive_date=?
-WHERE event_id=?`,
-		e.EventName, e.Title, e.Message, e.Context, e.Source, e.Severity, e.Category, e.EventStatus, e.CurrentRound, string(toJSON(e.Observables)), e.UpdatedAt, e.ReviewStatus, e.ReviewComment, e.ReviewedBy, e.ReviewedAt, e.CircularCode, e.AnalysisVersion, e.AggregationClosed, e.LastAnalysisAt, e.LastSeenAt, e.ArchiveDate, eventID)
+	if v, ok := intPatch(patch, "analysis_version"); ok {
+		add("analysis_version", v)
+	}
+	if v, ok := boolPatch(patch, "aggregation_closed"); ok {
+		add("aggregation_closed", v)
+	}
+	if v, ok := patch["archive_date"]; ok {
+		if v == nil {
+			add("archive_date", nil)
+		} else if t, ok := v.(time.Time); ok {
+			add("archive_date", t)
+		} else if str, ok := v.(string); ok {
+			if t, err := time.Parse("2006-01-02", str); err == nil {
+				add("archive_date", t)
+			}
+		}
+	}
+	add("updated_at", time.Now().UTC())
+	args = append(args, eventID)
+	_, err := s.db.ExecContext(context.Background(), "UPDATE events SET "+strings.Join(columns, ",")+" WHERE event_id=?", args...)
 	if err != nil {
 		return domain.Event{}, false
 	}

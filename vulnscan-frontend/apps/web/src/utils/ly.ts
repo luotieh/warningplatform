@@ -63,17 +63,35 @@ const ANALYSIS_STATUS_MAP: Record<string, string> = {
   processing: '分析中',
 };
 
+// Offset-free business times are Beijing times; explicit offsets remain absolute.
+export function eventTimestampMs(value?: number | string | null): number {
+  if (value === '' || value === null || value === undefined) return Number.NaN;
+  const num = Number(value);
+  if (Number.isFinite(num)) {
+    return Math.abs(num) >= 1e14 ? num / 1000 : Math.abs(num) >= 1e11 ? num : num * 1000;
+  }
+  let text = String(value).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) text += 'T00:00:00+08:00';
+  else if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(text)) {
+    text = text.replace(' ', 'T') + '+08:00';
+  }
+  return Date.parse(text);
+}
+
+const beijingFormatter = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Asia/Shanghai', hourCycle: 'h23',
+  year: 'numeric', month: '2-digit', day: '2-digit',
+  hour: '2-digit', minute: '2-digit', second: '2-digit',
+});
+
 export function formatTimestamp(value?: number | string | null, withTime = true) {
   if (value === '' || value === null || value === undefined) return '-';
-  const num = Number(value);
-  const date = Number.isFinite(num)
-    ? new Date(String(value).length <= 10 ? num * 1000 : num)
-    : new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  const text = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-  if (!withTime) return text;
-  return `${text} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  const ms = eventTimestampMs(value);
+  if (!Number.isFinite(ms)) return String(value);
+  const p: Record<string, string> = {};
+  beijingFormatter.formatToParts(new Date(ms)).forEach(({ type, value }) => { p[type] = value; });
+  const date = `${p.year}-${p.month}-${p.day}`;
+  return withTime ? `${date} ${p.hour}:${p.minute}:${p.second}` : date;
 }
 
 export function formatDuration(value?: number | string | null) {
@@ -116,8 +134,8 @@ export function translateAnalysisStatus(value?: string) {
 }
 
 function hitSpanSeconds(first?: string, last?: string) {
-  const a = Date.parse(String(first ?? ''));
-  const b = Date.parse(String(last ?? ''));
+  const a = eventTimestampMs(first);
+  const b = eventTimestampMs(last);
   if (!Number.isFinite(a) || !Number.isFinite(b)) return 0;
   return Math.max(0, Math.round((b - a) / 1000));
 }
@@ -173,7 +191,8 @@ export function normalizeLyEvent(item: Record<string, any>): NormalizedLyEvent {
     analysisStatusText: translateAnalysisStatus(item.analysis_status || item.analysisStatus),
     aliveText,
     startTimeText: formatTimestamp(item.starttime || item.time || item.created_at),
-    durationText: formatDuration(item.duration),
+    durationText: Number(item.duration) === 0 ? '0秒' : formatDuration(item.duration),
+    convergedTimeText: formatTimestamp(item.converged_at),
     // 聚合：发生次数与首/末次时间（同来源+目标+类型、仅时间不同的事件已合并）
     eventCount: hitCount,
     firstTimeText: formatTimestamp(
@@ -186,10 +205,10 @@ export function normalizeLyEvent(item: Record<string, any>): NormalizedLyEvent {
     hitFrequencyText: hitFreq.text,
     hitFrequencyLevel: hitFreq.level,
     hitSpanText: humanizeSpan(hitSpan),
-    // 收敛状态：已收敛(最终频次确定) / 进行中(可能继续)。单次事件不展示。
+    // 收敛状态：已收敛(最终频次确定) / 进行中(可能继续)。单次与多次命中使用相同生命周期。
     isFinal: Boolean(item.is_final),
     aggregationStatusText:
-      hitCount > 1 ? (item.is_final ? '已收敛' : '进行中') : '',
+      item.is_final ? '已收敛' : '进行中',
   };
 }
 

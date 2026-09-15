@@ -88,7 +88,7 @@ func TestLyCompatibleEventIOCSourceNoSwap(t *testing.T) {
 }
 
 func TestLyCompatibleEventDomainIOCNoSwap(t *testing.T) {
-	// 域名型 IOC：ioc_value 非 IP，不与 dst 比对，保持现状
+	// 域名型 IOC 作为威胁源展示，受害主机保留为目标
 	ctx := map[string]any{
 		"src_ip": "172.16.100.16",
 		"dst_ip": "192.185.86.177",
@@ -99,7 +99,7 @@ func TestLyCompatibleEventDomainIOCNoSwap(t *testing.T) {
 	}
 	b, _ := json.Marshal(ctx)
 	row := lyCompatibleEvent(domain.Event{EventID: "evt-ioc3", Context: string(b)})
-	if row["attackDevice"] != "172.16.100.16" || row["victimDevice"] != "192.185.86.177" {
+	if row["attackDevice"] != "evil.example.com" || row["victimDevice"] != "172.16.100.16" {
 		t.Fatalf("unexpected swap: %v > %v", row["attackDevice"], row["victimDevice"])
 	}
 }

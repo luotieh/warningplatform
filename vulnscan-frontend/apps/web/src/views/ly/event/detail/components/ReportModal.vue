@@ -12,6 +12,7 @@ import {
 import { message } from '#/adapter/naive';
 import { useDeepflowStore } from '#/store';
 import { formatDeepflowDate, mapSeverityToDisplay } from '#/utils/deepflow';
+import { eventTimestampMs, formatTimestamp } from '#/utils/ly';
 import deepflowSocket from '#/utils/deepflow-socket';
 
 import ChatBox from './ChatBox.vue';
@@ -49,11 +50,13 @@ const wsConnectionStatus = ref<'connected' | 'connecting' | 'disconnected'>(
 const ctx = computed(() => props.context ?? {});
 
 const severityText = computed(() => mapSeverityToDisplay(detail.value?.severity));
-const createdAtText = computed(
-  () =>
-    formatDeepflowDate(detail.value?.created_at) ||
-    String(ctx.value.occurrence_time || '-'),
-);
+const activityContext = computed(() => {
+  try { return JSON.parse(detail.value?.context || '{}'); } catch { return {}; }
+});
+const createdAtText = computed(() => formatTimestamp(activityContext.value.first_time || activityContext.value.occurrence_time || ctx.value.occurrence_time || detail.value?.created_at));
+const lastActivity = computed(() => activityContext.value.last_time || activityContext.value.occurrence_time || detail.value?.last_seen_at || ctx.value.last_time);
+const isConverged = computed(() => Boolean(detail.value?.aggregation_closed || detail.value?.archive_date || ctx.value.is_final) || Date.now() - eventTimestampMs(lastActivity.value) >= 30 * 60 * 1000);
+const lifecycleText = computed(() => `${isConverged.value ? '收敛时间' : '最近活动'}：${formatTimestamp(lastActivity.value)}（北京时间）`);
 const eventTitle = computed(() => {
   const type = String(
     ctx.value.event_type_name ||
@@ -89,11 +92,11 @@ const eventContext = computed(() => ({
   // 命中频次/聚合信息：供研判分析参考（是否在某段时间内多次命中）
   hit_frequency: ctx.value.hit_frequency || '单次',
   hit_count: ctx.value.hit_count || 1,
-  first_time: ctx.value.first_time || '',
-  last_time: ctx.value.last_time || '',
+  first_time: createdAtText.value,
+  last_time: formatTimestamp(lastActivity.value),
   // 收敛状态：closed 表示已收敛、hit_count 为最终频次；active 表示可能继续
-  aggregation_status: ctx.value.aggregation_status || 'active',
-  is_final: Boolean(ctx.value.is_final),
+  aggregation_status: isConverged.value ? 'closed' : 'active',
+  is_final: isConverged.value,
 }));
 
 function updateWSStatus(status: 'connected' | 'connecting' | 'disconnected') {
@@ -310,7 +313,7 @@ watch(
             <h2 class="report-title">{{ eventTitle }}</h2>
             <div class="report-sub">
               {{ eventSource }} · 严重程度 {{ eventLevelText }} ·
-              {{ createdAtText }}
+              发生：{{ createdAtText }}（北京时间） · {{ lifecycleText }}
             </div>
           </div>
         </div>

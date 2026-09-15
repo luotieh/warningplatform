@@ -41,6 +41,8 @@ func (s *ChatService) Send(ctx context.Context, body map[string]any) (map[string
 		return nil, errors.New("事件不存在")
 	}
 
+	// Build before persisting the current question so it is not duplicated in history.
+	prompt := s.engineerEventPrompt(event, message)
 	userMessage, _ := s.core.Store.AddMessage(domain.Message{
 		EventID:         eventID,
 		MessageFrom:     domain.RoleUser,
@@ -55,7 +57,6 @@ func (s *ChatService) Send(ctx context.Context, body map[string]any) (map[string
 	})
 	realtime.BroadcastMessage(eventID, userMessage)
 
-	prompt := s.engineerEventPrompt(event, message)
 	reply, err := s.core.LLM.Chat(ctx, trafficservice.EngineerChatSystemPrompt, prompt)
 	if err != nil {
 		return nil, err
@@ -93,18 +94,35 @@ func (s *ChatService) Status(ctx context.Context, eventID string) map[string]str
 }
 
 func (s *ChatService) engineerEventPrompt(event domain.Event, question string) string {
+	var b strings.Builder
+	for _, part := range s.engineerPromptParts(event, question) {
+		b.WriteString(part.text)
+	}
+	return b.String()
+}
+
+type engineerPromptPart struct{ name, text string }
+
+func (s *ChatService) engineerPromptParts(event domain.Event, question string) []engineerPromptPart {
 	question = cleanEngineerQuestion(question)
 	var b strings.Builder
+	parts := []engineerPromptPart{}
+	flush := func(name string) {
+		parts = append(parts, engineerPromptPart{name, b.String()})
+		b.Reset()
+	}
 	b.WriteString("# 安全事件完整信息\n\n")
 	b.WriteString(fmt.Sprintf("事件ID: %s\n", event.EventID))
 	b.WriteString(fmt.Sprintf("事件名称: %s\n", firstNonEmpty(event.EventName, event.Title, "未命名事件")))
 	b.WriteString(fmt.Sprintf("事件描述: %s\n", firstNonEmpty(event.Message, "无描述")))
-	b.WriteString(fmt.Sprintf("事件上下文: %s\n", firstNonEmpty(event.Context, "无上下文")))
 	b.WriteString(fmt.Sprintf("严重程度: %s\n", firstNonEmpty(event.Severity, "未知")))
 	b.WriteString(fmt.Sprintf("事件来源: %s\n", firstNonEmpty(event.Source, "未知")))
 	b.WriteString(fmt.Sprintf("事件状态: %s\n", firstNonEmpty(event.EventStatus, "未知")))
 	b.WriteString(fmt.Sprintf("当前轮次: %d\n", event.CurrentRound))
 	b.WriteString(fmt.Sprintf("创建时间: %s\n\n", event.CreatedAt.Format("2006-01-02 15:04:05")))
+	flush("事件基本信息")
+	b.WriteString(fmt.Sprintf("事件上下文: %s\n\n", compactEngineerContext(event.Context)))
+	flush("事件上下文与明细样本")
 
 	if len(event.Observables) > 0 {
 		b.WriteString("## 可观察对象\n")
@@ -113,19 +131,28 @@ func (s *ChatService) engineerEventPrompt(event domain.Event, question string) s
 		}
 		b.WriteString("\n")
 	}
+	flush("可观察对象")
 
 	writeJSONSection(&b, "## 自动驾驶任务", s.core.Store.ListTasks(event.EventID))
+	flush("任务")
 	writeJSONSection(&b, "## 自动驾驶动作", s.core.Store.ListActions(event.EventID))
+	flush("动作")
 	writeJSONSection(&b, "## 自动驾驶命令", s.core.Store.ListCommands(event.EventID))
+	flush("命令")
 	writeJSONSection(&b, "## 执行结果", s.core.Store.ListExecutions(event.EventID))
+	flush("执行结果")
 	writeJSONSection(&b, "## 事件总结", s.core.Store.ListSummaries(event.EventID))
+	flush("事件总结")
 	writeEngineerHistory(&b, s.core.Store.ListMessages(event.EventID))
+	flush("最近工程师对话")
 
 	b.WriteString("# 当前工程师问题\n")
 	b.WriteString(question)
 	b.WriteString("\n\n")
+	flush("当前问题")
 	b.WriteString(deepSOCEngineerAnswerGuide)
-	return b.String()
+	flush("报告格式与回答要求")
+	return parts
 }
 
 const deepSOCEngineerAnswerGuide = `# 回答要求
@@ -196,11 +223,24 @@ func writeEngineerHistory(b *strings.Builder, messages []domain.Message) {
 		if content == "" {
 			continue
 		}
-		lines = append(lines, fmt.Sprintf("%s: %s", role, content))
+		lines = append(lines, fmt.Sprintf("%s: %s", role, limitEngineerText(content, 1000)))
 	}
 	if len(lines) > 20 {
 		lines = lines[len(lines)-20:]
 	}
+	// Retain recent turns within a fixed budget; long reports must not grow
+	// every subsequent request without bound.
+	remaining := 3000
+	start := len(lines)
+	for start > 0 {
+		size := len([]rune(lines[start-1]))
+		if size > remaining {
+			break
+		}
+		remaining -= size
+		start--
+	}
+	lines = lines[start:]
 	b.WriteString("## 最近工程师对话\n")
 	if len(lines) == 0 {
 		b.WriteString("暂无历史对话\n\n")

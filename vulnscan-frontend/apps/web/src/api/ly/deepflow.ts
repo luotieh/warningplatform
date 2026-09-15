@@ -18,7 +18,8 @@ function buildUrl(url: string, params?: Record<string, any>) {
 
 async function parseResponse(response: Response) {
   if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`);
+    const error = await response.json().catch(() => null);
+    throw new Error(error?.msg || error?.message || `HTTP error! status: ${response.status}`);
   }
 
   const data = await response.json();
@@ -139,6 +140,10 @@ export function deepflowGetChatRecords(
   return deepflowGet(`/events/detail/${eventId}/messages`, params).then(unwrapListResponse);
 }
 
-export function deepflowAskAI(data: Record<string, any>) {
-  return deepflowPost('/engineer-chat/send', data);
+export function deepflowAskAI(data: Record<string, any>, signal?: AbortSignal) {
+  return request('/engineer-chat/send', { method: 'POST', body: JSON.stringify(data), signal });
+}
+
+export function deepflowEstimateAI(data: Record<string, any>, signal?: AbortSignal) {
+  return request('/engineer-chat/estimate', { method: 'POST', body: JSON.stringify(data), signal });
 }

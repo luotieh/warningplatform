@@ -67,6 +67,44 @@ func TestHealthTestHappyPath(t *testing.T) {
 	}
 }
 
+// 仅展示最终回答；推理内容和截断结果不能被当作成功的对话。
+func TestHealthTestFinalAnswerOnly(t *testing.T) {
+	for _, tc := range []struct {
+		name, content, reasoning, finish string
+		wantOK                           bool
+	}{
+		{"answer and reasoning", "最终回答", "内部思考", "stop", true},
+		{"reasoning only", "", "内部思考", "stop", false},
+		{"reasoning exhausted budget", "", "内部思考", "length", false},
+		{"truncated answer", "未完成", "", "length", false},
+		{"empty answer", "", "", "stop", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/models" {
+					_, _ = w.Write([]byte(`{"data":[]}`))
+					return
+				}
+				_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{
+					"finish_reason": tc.finish,
+					"message":       map[string]string{"content": tc.content, "reasoning_content": tc.reasoning},
+				}}})
+			}))
+			defer srv.Close()
+			report := (LLMClient{BaseURL: srv.URL, Model: "test"}).HealthTest(context.Background())
+			if report.OK != tc.wantOK || report.Chat.OK != tc.wantOK || report.Chat.Reply != tc.content {
+				t.Fatalf("unexpected report: %+v", report)
+			}
+			if !tc.wantOK && report.Chat.Error == "" {
+				t.Fatal("missing error for incomplete answer")
+			}
+			if tc.finish == "length" && !strings.Contains(report.Chat.Error, "token") {
+				t.Fatalf("missing truncation error: %+v", report.Chat)
+			}
+		})
+	}
+}
+
 // 服务不可达：两段都失败并给出网络错误。
 func TestHealthTestUnreachable(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
@@ -159,7 +197,7 @@ func TestWithOverrides(t *testing.T) {
 	}
 }
 
-// Chat 必须携带独立的 system prompt、显式 max_tokens(给输出留空间)与低 temperature。
+// Chat 保留 system prompt 和输出预算，并使用模型默认温度以兼容固定温度模型。
 func TestChatSendsSystemPromptAndOutputBudget(t *testing.T) {
 	var got map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -180,8 +218,8 @@ func TestChatSendsSystemPromptAndOutputBudget(t *testing.T) {
 	if mt, ok := got["max_tokens"].(float64); !ok || int(mt) != chatMaxTokens {
 		t.Fatalf("max_tokens = %v, want %d", got["max_tokens"], chatMaxTokens)
 	}
-	if _, ok := got["temperature"]; !ok {
-		t.Fatalf("temperature must be set for structured output")
+	if _, ok := got["temperature"]; ok {
+		t.Fatalf("temperature must use the model default")
 	}
 
 	msgs, ok := got["messages"].([]any)

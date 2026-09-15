@@ -8,8 +8,8 @@ import (
 	"vulnscan-backend/traffic/internal/store"
 )
 
-// 已收敛事件再次收到命中：收敛标记重开 + 归档日清空（拉回今日视图）。
-func TestMergeOccurrenceReopensConvergedEvent(t *testing.T) {
+// 收敛后的历史事件不可重开，次数、证据和归档日期保持不变。
+func TestMergeOccurrencePreservesConvergedEvent(t *testing.T) {
 	st := store.NewMemoryStore()
 	last := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
 	d := time.Now().UTC().AddDate(0, 0, -1)
@@ -28,11 +28,11 @@ func TestMergeOccurrenceReopensConvergedEvent(t *testing.T) {
 		"evidence_files":  []any{},
 	})
 	got, _ := st.GetEvent("evt-reopen")
-	if got.AggregationClosed {
-		t.Fatal("aggregation_closed should be reopened to false")
+	if !got.AggregationClosed {
+		t.Fatal("aggregation_closed must remain true")
 	}
-	if got.ArchiveDate != nil {
-		t.Fatalf("archive_date should be cleared, got %v", got.ArchiveDate)
+	if got.ArchiveDate == nil || !got.ArchiveDate.Equal(d) || got.Context != created.Context {
+		t.Fatal("historical event was modified")
 	}
 }
 

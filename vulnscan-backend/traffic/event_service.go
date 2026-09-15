@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/netip"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -176,63 +177,93 @@ func lyCompatibleEvent(event domain.Event) map[string]any {
 	source, destination := observablePair(event.Observables)
 	source = firstNonEmpty(source, stringValue(context["threat_source"]), stringValue(context["src_ip"]))
 	destination = firstNonEmpty(destination, stringValue(context["victim_target"]), stringValue(context["dst_ip"]))
-	// 原始流向：始终为 ta_node 推送的真实 src/dst（研判重推指纹依赖），不随 IOC 修正交换。
+	// Preserve the original packet direction for correlation and AI analysis.
 	srcIP, dstIP := source, destination
+	// Keep the packet IPs below for correlation, but display the hostname when
+	// ta_node captured one. Native IP traffic therefore remains IP-only.
+	domainName := eventDomain(context)
+	indicator := threatIndicator(context)
+	if indicator != "" {
+		// A domain/URL IOC is the threat source being accessed. Keep the
+		// protected host as the displayed destination, while src_ip/dst_ip
+		// below remain the original packet direction.
+		source, destination = indicator, source
+		domainName = indicator
+	}
+	// 原始流向不随 IOC 展示修正交换。
 	// IOC 规则地址修正：IP/CIDR 型 IOC 命中且目的地址即 IOC 值时，目的地址是威胁地址
 	// （如 C2），并非受害主机；交换展示源/目标，使「受害目标」列不出现 IOC 规则 IP。
 	if iocDestinationIsIOC(context, destination) {
 		source, destination = destination, source
 	}
+	if domainName != "" && indicator == "" {
+		destination = domainName
+	}
 	eventType := firstNonEmpty(stringValue(context["event_type"]), stringValue(context["type"]), "cap")
 	level := lyLevel(event.Severity)
-	startTime := event.CreatedAt.Unix()
-	if v, ok := unixLike(context["occurrence_time"]); ok {
-		startTime = v
+	first := domain.ParseEventTime(context["first_time"])
+	if first.IsZero() {
+		first = domain.ParseEventTime(context["occurrence_time"])
 	}
-	analysisStatus := analysisStatusForEvent(event.EventStatus)
-
-	// 静默超时收敛判定：距服务器最近一次收到该聚合命中超过 aggregateIdleWindow
-	// 仍无新增 ⟹ 已收敛(closed)，此刻 occurrence_count 即“最终频次”。
-	lastSeen, _ := time.Parse(time.RFC3339, stringValue(context["last_seen_at"]))
-	if lastSeen.IsZero() {
-		lastSeen = event.UpdatedAt
+	if first.IsZero() {
+		first = event.CreatedAt
 	}
-	isFinal := !lastSeen.IsZero() && time.Since(lastSeen) >= aggregateIdleWindow
+	lastSeen := domain.LastActivity(event)
+	now := time.Now().UTC()
+	isFinal := domain.IsConverged(event, now)
 	aggregationStatus := "active"
+	var convergedAt any
+	end := now
 	if isFinal {
 		aggregationStatus = "closed"
+		// The quiet window is a detection delay, not part of the attack duration.
+		convergedAt = lastSeen.In(domain.Beijing).Format(time.RFC3339Nano)
+		end = lastSeen
 	}
+	duration := int64(end.Sub(first).Seconds())
+	if duration < 0 {
+		duration = 0
+	}
+	startTime := first.Unix()
+	analysisStatus := analysisStatusForEvent(event.EventStatus)
+	heartbeat, heartbeatPeriod := detectHeartbeat(context["occurrences"])
 
 	return map[string]any{
-		"id":                firstNonEmpty(event.EventID, stringValue(event.ID)),
-		"event_id":          event.EventID,
-		"attackDevice":      source,
-		"victimDevice":      destination,
-		"obj":               source + ">" + destination,
+		"id":           firstNonEmpty(event.EventID, stringValue(event.ID)),
+		"event_id":     event.EventID,
+		"attackDevice": source,
+		"victimDevice": destination,
+		"obj":          source + ">" + destination,
 		// 原始流向（不随 IOC 修正交换）：研判重推/AI 分析使用，保证指纹稳定。
-		"src_ip":            srcIP,
-		"dst_ip":            dstIP,
+		"src_ip":               srcIP,
+		"dst_ip":               dstIP,
+		"domain":               domainName,
+		"heartbeat_detected":   heartbeat,
+		"heartbeat_period_sec": heartbeatPeriod,
 		// 事件总载荷（字节）：quant_stats.total_payload_bytes，列表「总载荷」列与排序口径。
 		"total_payload_bytes": quantPayloadBytes(context),
-		"type":              eventType,
-		"level":             level,
-		"desc":              firstNonEmpty(event.EventName, event.Title, event.Message),
-		"rule_desc":         firstNonEmpty(event.EventName, event.Title, event.Message),
-		"proc_status":       "unprocessed",
-		"processing_status": "unprocessed",
-		"analysis_status":   analysisStatus,
-		"analysisStatus":    analysisStatus,
-		"starttime":         startTime,
-		"time":              startTime,
-		"duration":          context["duration"],
-		"is_alive":          true,
-		"is_active":         true,
-		"show_model":        firstNonEmpty(stringValue(context["detection_method"]), stringValue(context["protocol"])),
-		"source":            event.Source,
+		"type":                eventType,
+		"level":               level,
+		"desc":                firstNonEmpty(event.EventName, event.Title, event.Message),
+		"rule_desc":           firstNonEmpty(event.EventName, event.Title, event.Message),
+		"proc_status":         "unprocessed",
+		"processing_status":   "unprocessed",
+		"analysis_status":     analysisStatus,
+		"analysisStatus":      analysisStatus,
+		"starttime":           startTime,
+		"time":                startTime,
+		"duration":            duration,
+		"converged_at":        convergedAt,
+		"last_seen_at":        lastSeen.In(domain.Beijing).Format(time.RFC3339Nano),
+		"timezone":            "Asia/Shanghai",
+		"is_alive":            !isFinal,
+		"is_active":           !isFinal,
+		"show_model":          firstNonEmpty(stringValue(context["detection_method"]), stringValue(context["protocol"])),
+		"source":              event.Source,
 		// 聚合信息：发生次数与首/末次时间（同来源+目标+类型、仅时间不同的事件已合并为一条）
 		"event_count": context["occurrence_count"],
-		"first_time":  stringValue(context["first_time"]),
-		"last_time":   stringValue(context["last_time"]),
+		"first_time":  first.In(domain.Beijing).Format(time.RFC3339Nano),
+		"last_time":   lastSeen.In(domain.Beijing).Format(time.RFC3339Nano),
 		// 收敛状态：active=进行中(可能继续)，closed=已收敛(occurrence_count 即最终频次)
 		"aggregation_status": aggregationStatus,
 		"is_final":           isFinal,
@@ -250,10 +281,102 @@ func lyCompatibleEvent(event domain.Event) map[string]any {
 		"circular_code": event.CircularCode,
 		// 量化分析版本与收敛状态（供前端展示初版/终版/手动刷新）。
 		"analysis_version":   event.AnalysisVersion,
-		"aggregation_closed": event.AggregationClosed,
+		"aggregation_closed": isFinal,
 		"last_analysis_at":   event.LastAnalysisAt,
 		"archive_date":       event.ArchiveDate,
 	}
+}
+
+// eventDomain extracts the best hostname evidence supplied by ta_node.
+func eventDomain(ctx map[string]any) string {
+	if app, ok := ctx["app"].(map[string]any); ok {
+		if v := firstNonEmpty(stringValue(app["http_host"]), stringValue(app["dns_query"]), stringValue(app["tls_sni"])); v != "" {
+			return v
+		}
+	}
+	if ioc, ok := ctx["ioc"].(map[string]any); ok && (strings.EqualFold(stringValue(ioc["ioc_type"]), "domain") || strings.EqualFold(stringValue(ioc["ioc_type"]), "url")) {
+		return stringValue(ioc["ioc_value"])
+	}
+	return ""
+}
+
+func threatIndicator(ctx map[string]any) string {
+	ioc, ok := ctx["ioc"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	typ := strings.ToLower(strings.TrimSpace(stringValue(ioc["ioc_type"])))
+	if typ != "domain" && typ != "url" {
+		return ""
+	}
+	return stringValue(ioc["ioc_value"])
+}
+
+// detectHeartbeat is intentionally strict: >=8 observations, 5s..24h period,
+// coefficient of variation <=15%, at least three periods, and <=5 packets per
+// observation. Ordinary or insufficient traffic returns false.
+func detectHeartbeat(raw any) (bool, int64) {
+	items, ok := raw.([]any)
+	if !ok || len(items) < 8 {
+		return false, 0
+	}
+	var ts []time.Time
+	for _, item := range items {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if numberValue(m["packets"]) > 5 {
+			return false, 0
+		}
+		if t := domain.ParseEventTime(stringValue(m["time"])); !t.IsZero() {
+			ts = append(ts, t)
+		}
+	}
+	if len(ts) < 8 {
+		return false, 0
+	}
+	sort.Slice(ts, func(i, j int) bool { return ts[i].Before(ts[j]) })
+	intervals := make([]float64, 0, len(ts)-1)
+	for i := 1; i < len(ts); i++ {
+		d := ts[i].Sub(ts[i-1]).Seconds()
+		if d < 5 || d > 86400 {
+			return false, 0
+		}
+		intervals = append(intervals, d)
+	}
+	mean := 0.0
+	for _, d := range intervals {
+		mean += d
+	}
+	mean /= float64(len(intervals))
+	if ts[len(ts)-1].Sub(ts[0]).Seconds() < mean*3 {
+		return false, 0
+	}
+	variance := 0.0
+	for _, d := range intervals {
+		x := d - mean
+		variance += x * x
+	}
+	variance /= float64(len(intervals))
+	if variance > (mean*0.15)*(mean*0.15) {
+		return false, 0
+	}
+	return true, int64(mean + 0.5)
+}
+
+func numberValue(v any) float64 {
+	switch x := v.(type) {
+	case float64:
+		return x
+	case int:
+		return float64(x)
+	case int64:
+		return float64(x)
+	case uint64:
+		return float64(x)
+	}
+	return 0
 }
 
 func analysisStatusForEvent(status string) string {

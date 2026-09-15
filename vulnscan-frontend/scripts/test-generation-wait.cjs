@@ -1,0 +1,32 @@
+const fs = require('node:fs');
+const path = require('node:path');
+const { createRequire } = require('node:module');
+const assert = require('node:assert/strict');
+const root = path.resolve(__dirname, '..');
+const ts = createRequire(path.join(root, 'package.json'))('typescript');
+
+(async () => {
+  const source = fs.readFileSync(path.join(root, 'apps/web/src/views/ly/event/detail/components/generation-wait.ts'), 'utf8');
+  const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext } }).outputText;
+  const { estimateWait, waitText, loadDurations, saveDuration } = await import('data:text/javascript;base64,' + Buffer.from(js).toString('base64'));
+  const initial = estimateWait([]);
+  assert.deepEqual(initial, { low: 45, high: 90, timeout: 180, samples: 0 });
+  assert.equal(waitText(89, initial).slow, false);
+  assert.equal(waitText(90, initial).title, '已超出预估时间');
+  assert.equal(waitText(150, initial).title, '等待时间较长');
+  assert.equal(waitText(180, initial).title, '等待超时结果');
+  assert.ok(!waitText(95, initial).text.includes('剩余'));
+  assert.equal(estimateWait([65, NaN, -1, Infinity], 60).high, 60);
+  assert.equal(estimateWait([65, NaN, -1, Infinity], 60).samples, 1);
+  assert.equal(estimateWait([], NaN).timeout, 180);
+  const cache = new Map();
+  global.localStorage = { getItem: k => cache.get(k), setItem: (k, v) => cache.set(k, v) };
+  for (let i = 1; i <= 25; i++) saveDuration('model-a', i);
+  assert.equal(loadDurations('model-a').length, 20);
+  assert.deepEqual(loadDurations('model-b'), []);
+  saveDuration('model-a', Infinity);
+  assert.equal(loadDurations('model-a').length, 20);
+  global.localStorage.getItem = () => { throw Error('Storage disabled'); };
+  assert.deepEqual(loadDurations('model-a'), []);
+  console.log('PASS: estimated/slow/timeout states, config bounds, invalid timings, model isolation, optional storage');
+})().catch(error => { console.error(error); process.exitCode = 1; });

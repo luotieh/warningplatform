@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"vulnscan-backend/traffic/internal/client"
@@ -29,40 +30,53 @@ type Services struct {
 }
 
 func (s Services) ProcessLyEvent(ctx context.Context, ly map[string]any) (map[string]any, error) {
-	fp := Fingerprint(ly)
-	lyID := asString(ly["id"])
-	if !s.Store.ReserveFingerprint(fp) {
-		row, _ := s.Store.GetEventMap(fp)
-		// 研判请求（前端“查看报告”重推）只是复用既有事件，不能计为一次新命中，
-		// 否则会虚增发生次数并重置收敛时钟，使“最终频次”失真。
-		// 仍按需补跑一次分析（RunAgentWorkflow 幂等：已分析则跳过），
-		// 保证“查看报告”能触发研判而不影响频次。
-		if asBool(ly["analysis_only"]) {
-			s.RunAgentWorkflowAsync(row.DeepSOCEventID)
-			return map[string]any{
-				"aggregated":       false,
-				"reason":           "analysis-only",
-				"fingerprint":      fp,
-				"ly_id":            lyID,
-				"deepsoc_event_id": row.DeepSOCEventID,
-			}, nil
+	// Analysis always addresses a concrete lifecycle, never the latest fingerprint.
+	if asBool(ly["analysis_only"]) {
+		id := asString(ly["event_id"])
+		if id == "" {
+			id = strings.TrimPrefix(asString(ly["id"]), "#")
 		}
-		// 命中既有聚合键（同来源+目标+类型，仅时间不同）：合并到既有事件，
-		// 累加发生次数、更新首/末次时间与发生时间列表，不重复触发分析。
-		count := s.mergeOccurrence(row.DeepSOCEventID, ly)
-		return map[string]any{
-			"aggregated":       true,
-			"reason":           "merged-by-aggregate-key",
-			"fingerprint":      fp,
-			"ly_id":            lyID,
-			"deepsoc_event_id": row.DeepSOCEventID,
-			"occurrence_count": count,
-		}, nil
+		if _, ok := s.Store.GetEvent(id); !ok {
+			return nil, errors.New("待分析事件不存在，请刷新事件列表")
+		}
+		s.RunAgentWorkflowAsync(id)
+		return map[string]any{"aggregated": false, "reason": "analysis-only", "deepsoc_event_id": id}, nil
+	}
+	fp := Fingerprint(ly)
+	lock := lifecycleLock(&fingerprintLocks, fp)
+	lock.Lock()
+	defer lock.Unlock()
+	lyID := asString(ly["id"])
+	s.Store.ReserveFingerprint(fp)
+	row, _ := s.Store.GetEventMap(fp)
+	if row.DeepSOCEventID != "" {
+		eventLock := lifecycleLock(&eventLocks, row.DeepSOCEventID)
+		eventLock.Lock()
+		ev, found := s.Store.GetEvent(row.DeepSOCEventID)
+		if found {
+			// Also check at ingestion: a delayed scheduler must not join separate attacks.
+			closed := domain.IsConverged(ev, time.Now().UTC()) || domain.IsConverged(ev, activityTime(ly))
+			if !closed {
+				count := s.mergeOccurrenceLocked(ev.EventID, ly)
+				eventLock.Unlock()
+				if count == 0 {
+					return nil, errors.New("更新事件聚合失败")
+				}
+				return map[string]any{"aggregated": true, "reason": "merged-by-aggregate-key", "fingerprint": fp, "ly_id": lyID, "deepsoc_event_id": ev.EventID, "occurrence_count": count}, nil
+			}
+			if !s.closeEvent(ev) {
+				eventLock.Unlock()
+				return nil, errors.New("保存事件收敛状态失败")
+			}
+		}
+		eventLock.Unlock()
 	}
 
 	payload := LyEventToDeepSOC(ly)
+	// Source record IDs stay in context; each attack lifecycle has its own ID.
+	payload.EventID = newID("ly")
 	if s.DeepSOC.Enabled() {
-		resp, err := s.DeepSOC.CreateEvent(ctx, payload, fp)
+		resp, err := s.DeepSOC.CreateEvent(ctx, payload, payload.EventID)
 		if err != nil {
 			return nil, err
 		}
@@ -76,9 +90,6 @@ func (s Services) ProcessLyEvent(ctx context.Context, ly map[string]any) (map[st
 		return map[string]any{"success": true, "fingerprint": fp, "ly_event_id": lyID, "deepsoc_event_id": deepID, "upstream": resp}, nil
 	}
 
-	if payload.EventID == "" {
-		payload.EventID = "ly-" + fp[:16]
-	}
 	event, err := s.Store.CreateEvent(payload)
 	if err != nil {
 		return nil, err
@@ -105,11 +116,18 @@ func (s Services) ProcessLyEvent(ctx context.Context, ly map[string]any) (map[st
 // mergeOccurrence 把一条同聚合键的新事件合并进既有事件：累加发生次数、
 // 更新首/末次时间与发生时间列表，并把聚合摘要写回 message。返回累计次数。
 func (s Services) mergeOccurrence(eventID string, ly map[string]any) int {
+	lock := lifecycleLock(&eventLocks, eventID)
+	lock.Lock()
+	defer lock.Unlock()
+	return s.mergeOccurrenceLocked(eventID, ly)
+}
+
+func (s Services) mergeOccurrenceLocked(eventID string, ly map[string]any) int {
 	if eventID == "" {
 		return 0
 	}
 	ev, ok := s.Store.GetEvent(eventID)
-	if !ok {
+	if !ok || ev.AggregationClosed || ev.ArchiveDate != nil {
 		return 0
 	}
 	ctx := map[string]any{}
@@ -124,14 +142,14 @@ func (s Services) mergeOccurrence(eventID string, ly map[string]any) int {
 	count++
 	ctx["occurrence_count"] = count
 
-	occ := firstNonEmpty(asString(ly["occurrence_time"]), asString(ly["time"]))
+	occ := activityTime(ly).Format(time.RFC3339Nano)
 	if occ != "" {
 		first := asString(ctx["first_time"])
 		last := asString(ctx["last_time"])
-		if first == "" || occ < first {
+		if first == "" || parseOccurrenceTime(occ).Before(parseOccurrenceTime(first)) {
 			ctx["first_time"] = occ
 		}
-		if last == "" || occ > last {
+		if last == "" || parseOccurrenceTime(occ).After(parseOccurrenceTime(last)) {
 			ctx["last_time"] = occ
 		}
 		occs, _ := ctx["occurrences"].([]any)
@@ -146,8 +164,11 @@ func (s Services) mergeOccurrence(eventID string, ly map[string]any) int {
 	if ef := normalizeEvidenceFiles(ly, count-1, occ); len(ef) > 0 {
 		mergeEvidenceFiles(ctx, ef)
 	}
-	// 刷新服务器侧最近命中时刻，用于静默超时收敛判定
-	lastSeenAt := time.Now().UTC()
+	// 乱序命中不能把最后活动时间倒退。
+	lastSeenAt := activityTime(ly)
+	if previous := domain.LastActivity(ev); previous.After(lastSeenAt) {
+		lastSeenAt = previous
+	}
 	ctx["last_seen_at"] = lastSeenAt.Format(time.RFC3339)
 	// 量化统计增量累计
 	updateQuantStats(ctx, ly)
@@ -161,12 +182,9 @@ func (s Services) mergeOccurrence(eventID string, ly map[string]any) int {
 		"message":      summary,
 		"last_seen_at": lastSeenAt.Format(time.RFC3339),
 	}
-	// 收敛后新命中：重新打开收敛状态并从归档日拉回今日视图（“最终频次”不再视为最终）。
-	if ev.AggregationClosed {
-		patch["aggregation_closed"] = false
-		patch["archive_date"] = nil
+	if _, ok := s.Store.UpdateEvent(eventID, patch); !ok {
+		return 0
 	}
-	s.Store.UpdateEvent(eventID, patch)
 	return count
 }
 

@@ -53,5 +53,12 @@
     "vue": "catalog:",
     "vue-echarts": "^8.0.1",
     "vue-router": "catalog:"
+  },
+  "devDependencies": {
+    "autoprefixer": "10.4.21",
+    "cssnano": "7.0.6",
+    "postcss-antd-fixes": "0.2.0",
+    "postcss-import": "16.1.0",
+    "postcss-preset-env": "10.1.5"
   }
 }

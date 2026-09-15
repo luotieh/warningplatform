@@ -42,8 +42,8 @@ func TestArchiveConvergedEventsAndPageScopes(t *testing.T) {
 		t.Fatalf("archived=%d want 1", n)
 	}
 	got, _ := st.GetEvent("evt-archivable")
-	if got.ArchiveDate == nil || got.ArchiveDate.Format("2006-01-02") != old.Format("2006-01-02") {
-		t.Fatalf("archive_date=%v want %s", got.ArchiveDate, old.Format("2006-01-02"))
+	if got.ArchiveDate == nil || got.ArchiveDate.Format("2006-01-02") != old.In(domain.Beijing).Format("2006-01-02") {
+		t.Fatalf("archive_date=%v want %s", got.ArchiveDate, old.In(domain.Beijing).Format("2006-01-02"))
 	}
 	if _, ok := st.GetEvent("evt-closed-recent"); ok {
 		if e, _ := st.GetEvent("evt-closed-recent"); e.ArchiveDate != nil {
@@ -60,7 +60,7 @@ func TestArchiveConvergedEventsAndPageScopes(t *testing.T) {
 		t.Fatalf("today total=%d want 2", today.Total)
 	}
 	archivePage, _ := st.ListEventsPage(EventQuery{
-		Scope: "archive", Date: old.Format("2006-01-02"), Page: 1, PageSize: 10,
+		Scope: "archive", Date: old.In(domain.Beijing).Format("2006-01-02"), Page: 1, PageSize: 10,
 	})
 	if archivePage.Total != 1 || len(archivePage.Items) != 1 {
 		t.Fatalf("archive total=%d items=%d want 1/1", archivePage.Total, len(archivePage.Items))

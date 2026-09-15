@@ -73,9 +73,8 @@ func (c LLMClient) HealthCheck(ctx context.Context) LLMHealth {
 			{"role": "system", "content": "Return only OK."},
 			{"role": "user", "content": "health"},
 		},
-		"stream":      false,
-		"max_tokens":  4,
-		"temperature": 0,
+		"stream":     false,
+		"max_tokens": 4,
 	}
 	b, err := json.Marshal(payload)
 	if err != nil {
@@ -108,7 +107,8 @@ func (c LLMClient) HealthCheck(ctx context.Context) LLMHealth {
 	var out struct {
 		Choices []struct {
 			Message struct {
-				Content string `json:"content"`
+				Content          string `json:"content"`
+				ReasoningContent string `json:"reasoning_content"`
 			} `json:"message"`
 		} `json:"choices"`
 		Error any `json:"error"`
@@ -164,8 +164,8 @@ type LLMHealthReport struct {
 // healthTestQuestion 是对话测试所发的固定问题，回复直接展示给用户看。
 const healthTestQuestion = "你好，请用一句话介绍你自己。"
 
-// healthTestMaxTokens 限制对话测试回复长度：只为验证链路可用，无需长回答。
-const healthTestMaxTokens = 64
+// 推理模型可能将思考与正文共用输出预算；一句话的正文不代表总输出只需 64 tokens。
+const healthTestMaxTokens = 1024
 
 // WithOverrides 返回应用了表单临时参数的客户端副本：非空字段覆盖当前值，
 // 空字段沿用已保存配置（与配置保存接口语义一致，api_key 掩码展示不回传）。
@@ -285,8 +285,10 @@ func (c LLMClient) chatTest(ctx context.Context, httpClient *http.Client, baseUR
 
 	var out struct {
 		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
+			FinishReason string `json:"finish_reason"`
+			Message      struct {
+				Content          string `json:"content"`
+				ReasoningContent string `json:"reasoning_content"`
 			} `json:"message"`
 		} `json:"choices"`
 		Error any `json:"error"`
@@ -306,13 +308,27 @@ func (c LLMClient) chatTest(ctx context.Context, httpClient *http.Client, baseUR
 		return chat
 	}
 	chat.Reply = strings.TrimSpace(out.Choices[0].Message.Content)
-	chat.OK = true
+	if out.Choices[0].FinishReason == "length" {
+		chat.Error = "模型输出达到 token 上限，未完成回答"
+		chat.Hint = "推理可能与正文共用输出预算，请增加输出上限或按模型服务说明关闭思考模式"
+		return chat
+	}
+	if chat.Reply == "" {
+		chat.Error = "模型未返回最终回答（content 为空）"
+		if strings.TrimSpace(out.Choices[0].Message.ReasoningContent) != "" {
+			chat.Hint = "模型仅返回推理内容，请检查输出预算及模型服务的思考模式配置"
+		}
+		return chat
+	}
+
+	chat.OK = chat.Reply != ""
 	return chat
 }
 
 // chatMaxTokens 是给模型输出预留的 token 上限。本地 16K 窗口下,input 约 10K,
 // 输出预留 6K,避免 prompt 占满窗口把回答挤掉导致中途截断。
-const chatMaxTokens = 6000
+const ChatMaxTokens = 6000
+const chatMaxTokens = ChatMaxTokens
 
 // Chat 以指定的 system prompt 与 user prompt 调用 LLM。不同链路(自动分析/工程师对话)
 // 传入各自的 system,避免复用同一段人格造成冲突与 token 浪费。
@@ -320,15 +336,15 @@ func (c LLMClient) Chat(ctx context.Context, systemPrompt, prompt string) (strin
 	if !c.Enabled() {
 		return "", errors.New("LLM未配置，请先在配置页面填写可用的LLM服务地址")
 	}
+	// 使用模型默认 temperature；部分推理模型只支持固定值，不能统一设置为 0.2。
 	payload := map[string]any{
 		"model": c.Model,
 		"messages": []map[string]string{
 			{"role": "system", "content": systemPrompt},
 			{"role": "user", "content": prompt},
 		},
-		"stream":      false,
-		"max_tokens":  chatMaxTokens,
-		"temperature": 0.2,
+		"stream":     false,
+		"max_tokens": chatMaxTokens,
 	}
 	b, err := json.Marshal(payload)
 	if err != nil {
@@ -337,7 +353,7 @@ func (c LLMClient) Chat(ctx context.Context, systemPrompt, prompt string) (strin
 	endpoint := chatCompletionsEndpoint(c.BaseURL)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(b))
 	if err != nil {
-		return "", err
+		return "", c.callError(endpoint, 0, err.Error())
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if key := strings.TrimSpace(c.APIKey); key != "" {
@@ -349,25 +365,30 @@ func (c LLMClient) Chat(ctx context.Context, systemPrompt, prompt string) (strin
 	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("LLM调用失败，请检查LLM配置: %w", err)
+		return "", c.callError(endpoint, 0, err.Error())
 	}
 	defer resp.Body.Close()
+	responseBody, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	if err != nil {
+		return "", c.callError(endpoint, resp.StatusCode, "读取上游响应失败: "+err.Error())
+	}
+	if resp.StatusCode >= 400 {
+		return "", c.callError(endpoint, resp.StatusCode, upstreamErrorDetail(responseBody))
+	}
 	var out struct {
 		Choices []struct {
 			Message struct {
-				Content string `json:"content"`
+				Content          string `json:"content"`
+				ReasoningContent string `json:"reasoning_content"`
 			} `json:"message"`
 		} `json:"choices"`
 		Error any `json:"error"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return "", fmt.Errorf("LLM响应解析失败（POST %s, status=%d）: %w", endpoint, resp.StatusCode, err)
-	}
-	if resp.StatusCode >= 400 {
-		return "", fmt.Errorf("LLM调用失败，请检查LLM配置: status=%d", resp.StatusCode)
+	if err := json.Unmarshal(responseBody, &out); err != nil {
+		return "", c.callError(endpoint, resp.StatusCode, "上游响应不是有效的对话 JSON: "+err.Error())
 	}
 	if len(out.Choices) == 0 {
-		return "", errors.New("LLM未返回有效内容，请检查LLM配置")
+		return "", c.callError(endpoint, resp.StatusCode, "choices为空；"+upstreamErrorDetail(responseBody))
 	}
 	return out.Choices[0].Message.Content, nil
 }

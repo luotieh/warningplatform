@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -42,10 +41,10 @@ func updateQuantStats(ctx map[string]any, ly map[string]any) {
 	occ := firstNonEmpty(asString(ly["occurrence_time"]), asString(ly["time"]))
 	qs.OccurrenceCount++
 	if occ != "" {
-		if qs.WindowStart == "" || occ < qs.WindowStart {
+		if qs.WindowStart == "" || parseOccurrenceTime(occ).Before(parseOccurrenceTime(qs.WindowStart)) {
 			qs.WindowStart = occ
 		}
-		if occ > qs.WindowEnd {
+		if parseOccurrenceTime(occ).After(parseOccurrenceTime(qs.WindowEnd)) {
 			qs.WindowEnd = occ
 		}
 	}
@@ -101,10 +100,10 @@ func applyHitStats(qs *domain.QuantStats, ly map[string]any) {
 		for i := range qs.ByIOC {
 			if qs.ByIOC[i].IOCValue == v {
 				qs.ByIOC[i].Count++
-				if occ != "" && (qs.ByIOC[i].FirstSeen == "" || occ < qs.ByIOC[i].FirstSeen) {
+				if occ != "" && (qs.ByIOC[i].FirstSeen == "" || parseOccurrenceTime(occ).Before(parseOccurrenceTime(qs.ByIOC[i].FirstSeen))) {
 					qs.ByIOC[i].FirstSeen = occ
 				}
-				if occ != "" && occ > qs.ByIOC[i].LastSeen {
+				if occ != "" && parseOccurrenceTime(occ).After(parseOccurrenceTime(qs.ByIOC[i].LastSeen)) {
 					qs.ByIOC[i].LastSeen = occ
 				}
 				found = true
@@ -181,27 +180,15 @@ func peakWindow(occurrences any) domain.PeakWindowStat {
 		}
 	}
 	return domain.PeakWindowStat{
-		StartTime: bestStart.Format("2006-01-02 15:04:05"),
-		EndTime:   bestStart.Add(window).Format("2006-01-02 15:04:05"),
+		StartTime: bestStart.In(domain.Beijing).Format("2006-01-02 15:04:05"),
+		EndTime:   bestStart.Add(window).In(domain.Beijing).Format("2006-01-02 15:04:05"),
 		Count:     bestCount,
 	}
 }
 
 // parseOccurrenceTime 兼容多种时间格式（RFC3339、MySQL 时间串、Unix epoch）。
 func parseOccurrenceTime(v string) time.Time {
-	v = strings.TrimSpace(v)
-	if v == "" {
-		return time.Time{}
-	}
-	for _, layout := range []string{time.RFC3339Nano, time.RFC3339, "2006-01-02 15:04:05", "2006-01-02T15:04:05"} {
-		if t, err := time.Parse(layout, v); err == nil {
-			return t
-		}
-	}
-	if sec, err := strconv.ParseInt(v, 10, 64); err == nil {
-		return time.Unix(sec, 0).UTC()
-	}
-	return time.Time{}
+	return domain.ParseEventTime(v)
 }
 
 // formatQuantStats 把量化统计渲染为可读 Markdown，供分析 prompt 注入。

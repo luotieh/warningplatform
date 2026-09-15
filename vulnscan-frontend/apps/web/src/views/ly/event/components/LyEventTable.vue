@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { computed, h, onMounted, reactive, ref, watch } from 'vue';
+import { computed, h, onMounted, reactive, ref } from 'vue';
 
 import { NButton, NDataTable, NModal, NSpace, NTag } from 'naive-ui';
 
@@ -122,10 +122,9 @@ function buildAnalysisPayload(row: Record<string, any>) {
     is_final: Boolean(row.isFinal),
     aggregation_status: row.isFinal ? 'closed' : 'active',
     analysis_only: true,
+    event_id: String(row.event_id || row.deepsoc_event_id || row.id),
     rule_desc: row.desc || '',
-    // 研判重推以 (threat_source|victim_target|event_type) 定位既有事件：
-    // 必须使用原始流向（src_ip/dst_ip，IOC 事件展示层已交换，但研判需真实方向），
-    // 否则指纹不命中会误建重复事件。
+    // 研判按 event_id 定位历史事件，源目地址仅作为分析信息。
     threat_source: row.src_ip || row.attackDevice || '',
     victim_target: row.dst_ip || row.victimDevice || '',
   };
@@ -265,10 +264,11 @@ const columns = computed(() => [
     key: 'flow',
     minWidth: 260,
     render: (row: Record<string, any>) =>
-      h('div', { style: 'display:flex;align-items:center;gap:8px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace' }, [
+      h('div', { style: 'display:flex;align-items:center;gap:8px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;flex-wrap:wrap' }, [
         h('span', { style: 'color:#d03050' }, row.attackDevice || '-'),
         h(IconifyIcon, { icon: 'lucide:move-right', style: 'font-size:15px;color:#909399;flex:none' }),
         h('span', { style: 'color:#2080f0' }, row.victimDevice || '-'),
+        row.heartbeat_detected ? h(NTag, { type: 'warning', size: 'small' }, { default: () => `心跳 ${row.heartbeat_period_sec || ''}s` }) : null,
       ]),
   },
   ...(props.showAsset
@@ -370,16 +370,17 @@ const columns = computed(() => [
     },
   },
   {
-    title: '发生时间',
+    title: '事件时间（北京时间）',
     key: 'startTimeText',
-    minWidth: 180,
-    render: (row: Record<string, any>) => {
-      const n = Number(row.eventCount || 1);
-      if (n > 1 && row.lastTimeText && row.lastTimeText !== row.firstTimeText) {
-        return h('span', `${row.firstTimeText} ~ ${row.lastTimeText}`);
-      }
-      return h('span', row.firstTimeText || row.startTimeText || '-');
-    },
+    minWidth: 255,
+    render: (row: Record<string, any>) => h('div', { style: 'line-height:1.7' }, [
+      h('div', `发生：${row.firstTimeText || row.startTimeText || '-'}`),
+      h('div', row.isFinal
+        ? `收敛：${row.convergedTimeText || row.lastTimeText || '-'}`
+        : `最近活动：${row.lastTimeText || '-'}`),
+      h('div', { style: 'font-size:12px;color:#64748b' },
+        `${row.isFinal ? '攻击持续' : '进行中'}：${row.durationText || '-'}`),
+    ]),
   },
   {
     title: '操作',

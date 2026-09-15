@@ -62,8 +62,8 @@ func LyEventToDeepSOC(ly map[string]any) domain.Event {
 	ruleDesc := firstNonEmpty(asString(ly["rule_desc"]), asString(ly["event_name"]), asString(ly["message"]))
 	eventType := firstNonEmpty(asString(ly["event_type"]), asString(ly["type"]), asString(ly["threat_type"]))
 	method := firstNonEmpty(asString(ly["method"]), asString(ly["protocol"]))
-	occ := firstNonEmpty(asString(ly["occurrence_time"]), asString(ly["time"]))
-	lastSeenAt := time.Now().UTC()
+	lastSeenAt := activityTime(ly)
+	occ := lastSeenAt.Format(time.RFC3339Nano)
 	occurrences := []any{}
 	if occ != "" {
 		occurrences = append(occurrences, buildOccurrence(ly))
@@ -75,7 +75,7 @@ func LyEventToDeepSOC(ly map[string]any) domain.Event {
 		"event_type":        ly["event_type"],
 		"detail_type":       ly["detail_type"],
 		"detection_method":  method,
-		"occurrence_time":   ly["occurrence_time"],
+		"occurrence_time":   occ,
 		"duration":          ly["duration"],
 		"is_active":         ly["is_active"],
 		"processing_status": ly["processing_status"],
@@ -88,7 +88,7 @@ func LyEventToDeepSOC(ly map[string]any) domain.Event {
 		"victim_target":     dst,
 		"system_ref":        firstNonEmpty(asString(ly["system_ref"]), asString(ly["source"]), "ta_node"),
 		// 聚合元数据：发生次数与首/末次时间，后续同类事件合并时累加（见 ProcessLyEvent）。
-		// last_seen_at 记录服务器最近一次收到该聚合命中的时刻，用于静默超时收敛判定
+		// last_seen_at 记录最近一次攻击活动的时刻，用于静默超时收敛判定
 		// （now − last_seen_at ≥ 收敛窗口 ⟹ 已收敛，occurrence_count 即最终频次）。
 		"occurrence_count": 1,
 		"first_time":       occ,

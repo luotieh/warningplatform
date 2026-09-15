@@ -2,15 +2,18 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 
 import { marked } from 'marked';
-import { NButton, NInput, NScrollbar, NSpin } from 'naive-ui';
+import { NAlert, NButton, NInput, NScrollbar, NSpin } from 'naive-ui';
 
 import {
   deepflowAskAI,
+  deepflowEstimateAI,
   deepflowGetChatRecords,
 } from '#/api/ly/deepflow';
 import { message } from '#/adapter/naive';
 import { getMessageDisplay, normalizeDeepflowMessage } from '#/utils/deepflow';
+import { formatTimestamp } from '#/utils/ly';
 import deepflowSocket from '#/utils/deepflow-socket';
+import { estimateWait, loadDurations, saveDuration, waitText } from './generation-wait';
 
 interface ChatMessage extends Record<string, any> {
   created_at?: string;
@@ -28,11 +31,35 @@ const props = defineProps<{
 }>();
 
 const loading = ref(false);
+const sendError = ref('');
 const messageInput = ref('');
 const messageRecord = ref<ChatMessage[]>([]);
 const chatRef = ref<InstanceType<typeof NScrollbar> | null>(null);
 const lastMessageDbId = ref(0);
 const aiThinkingId = ref('');
+const elapsedSeconds = ref(0);
+const generationEstimate = ref(estimateWait([]));
+const generationStatus = computed(() => waitText(elapsedSeconds.value, generationEstimate.value));
+let waitTimer: ReturnType<typeof setInterval> | undefined;
+let requestTimer: ReturnType<typeof setTimeout> | undefined;
+let requestController: AbortController | undefined;
+let requestGeneration = 0;
+
+function stopWaiting() {
+  if (waitTimer) clearInterval(waitTimer);
+  if (requestTimer) clearTimeout(requestTimer);
+  waitTimer = undefined;
+  requestTimer = undefined;
+}
+
+function cancelPendingRequest() {
+  requestGeneration++;
+  requestController?.abort();
+  requestController = undefined;
+  stopWaiting();
+  loading.value = false;
+  elapsedSeconds.value = 0;
+}
 
 const displayMessages = computed(() =>
   messageRecord.value.map((item) => ({
@@ -48,6 +75,7 @@ const chatMessages = computed(() =>
     .filter((item) => item.pending || String(item.display.ctx || '').trim() !== '')
     .map((item) => ({
       content: item.display.ctx || '',
+      thinking: Boolean(item.pending && isAiResultMessage(item)),
       from: item.display.from,
       isUser: item.isUser,
       messageClass: getMessageClass(item),
@@ -73,14 +101,7 @@ function getReportMarkdown() {
 defineExpose({ getReportMarkdown });
 
 function formatMessageTime(value?: string) {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value.replace('T', ' ').replace(/\.\d+Z?$/, '');
-
-  const pad = (num: number) => String(num).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(
-    date.getHours(),
-  )}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  return value ? formatTimestamp(value) : '';
 }
 
 
@@ -183,7 +204,7 @@ function upsertMessages(items: Record<string, any>[]) {
     .sort((a, b) => Number(Boolean(a?.pending)) - Number(Boolean(b?.pending)))
     .forEach((item) => {
     const normalized = normalizeDeepflowMessage(item, props.eventId) as ChatMessage;
-    if (isAiResultMessage(normalized) && !normalized.pending) removeThinkingMessage(existed);
+    if (isAiResultMessage(normalized) && !normalized.pending && !loading.value) removeThinkingMessage(existed);
     removeDuplicatedPendingUserMessage(existed, normalized);
 
     const key = getMessageKey(normalized);
@@ -195,6 +216,11 @@ function upsertMessages(items: Record<string, any>[]) {
   });
 
   messageRecord.value = Array.from(existed.values()).sort((a, b) => {
+    // Server-persisted user timestamps can be later than the local placeholder.
+    // Keep the in-flight AI indicator after the question it is answering.
+    const aThinking = Boolean(a.pending && isAiResultMessage(a));
+    const bThinking = Boolean(b.pending && isAiResultMessage(b));
+    if (aThinking !== bThinking) return aThinking ? 1 : -1;
     const ta = new Date(a.created_at || 0).getTime();
     const tb = new Date(b.created_at || 0).getTime();
     return ta - tb;
@@ -209,7 +235,7 @@ function addThinkingMessage() {
       created_at: new Date().toISOString(),
       event_id: props.eventId,
       message_category: 'engineer_chat',
-      message_content: { content: 'AI助手正在思考中...' },
+      message_content: { content: '请求已提交，等待模型返回。' },
       message_from: 'ai_assistant',
       message_id: aiThinkingId.value,
       pending: true,
@@ -231,10 +257,13 @@ function resetMessages() {
 
 async function fetchMessages() {
   if (!props.eventId) return;
+  const eventId = props.eventId;
+  const generation = requestGeneration;
   try {
-    const res = await deepflowGetChatRecords(props.eventId, {
+    const res = await deepflowGetChatRecords(eventId, {
       last_message_db_id: lastMessageDbId.value || 0,
     });
+    if (props.eventId !== eventId || requestGeneration !== generation) return;
     const list = Array.isArray(res)
       ? res
       : res?.messages || res?.data?.messages || res?.data || [];
@@ -248,9 +277,31 @@ async function fetchMessages() {
 }
 
 async function sendAIMessage(text: string) {
-  if (!text) return;
+  if (!text || loading.value || !props.eventId) return;
 
+  sendError.value = '';
   loading.value = true;
+  const generation = ++requestGeneration;
+  const eventId = props.eventId;
+  const startedAt = Date.now();
+  elapsedSeconds.value = 0;
+  generationEstimate.value = estimateWait([]);
+  const controller = new AbortController();
+  requestController = controller;
+  waitTimer = setInterval(() => { elapsedSeconds.value = (Date.now() - startedAt) / 1000; }, 1000);
+  // Preview failure must not prevent a real request. Its own short timeout
+  // bounds the extra wait; the model request has the configured longer limit.
+  let profile = '';
+  const previewController = new AbortController();
+  const abortPreview = () => previewController.abort();
+  controller.signal.addEventListener('abort', abortPreview, { once: true });
+  const previewTimer = setTimeout(() => previewController.abort(), 3000);
+  const preview = deepflowEstimateAI({ event_id: eventId, message: text }, previewController.signal)
+    .then((info) => {
+      if (generation !== requestGeneration) return;
+      profile = String(info.profile || '');
+      generationEstimate.value = estimateWait(loadDurations(profile), Number(info.timeout_seconds));
+    }).catch(() => {}).finally(() => { clearTimeout(previewTimer); controller.signal.removeEventListener('abort', abortPreview); });
   const tempId = `temp_${Date.now()}`;
   upsertMessages([
     {
@@ -270,27 +321,41 @@ async function sendAIMessage(text: string) {
   await scrollToBottom();
 
   try {
+    await preview;
+    if (generation !== requestGeneration) return;
+    requestTimer = setTimeout(() => controller.abort(), (generationEstimate.value.timeout + 15) * 1000);
     const res = await deepflowAskAI({
-      event_id: props.eventId,
+      event_id: eventId,
       message: text,
-    });
+    }, controller.signal);
+    if (generation !== requestGeneration) return;
+    if (res?.reply && String(res.reply).trim()) saveDuration(profile, (Date.now() - startedAt) / 1000);
     if (res?.user_message) {
       removeTempMessage(tempId);
       upsertMessages([res.user_message]);
     }
+    if (res?.message) upsertMessages([res.message]);
     await fetchMessages();
   } catch (error) {
-    message.error(error instanceof Error ? error.message : '发送消息失败');
+    if (generation !== requestGeneration) return;
+    sendError.value = controller.signal.aborted ? '等待模型结果超时，请稍后检查报告或重试。' : error instanceof Error ? error.message : '发送消息失败';
+    message.error('发送失败，请查看下方错误详情');
     messageRecord.value = messageRecord.value.filter((item) => item.temp_id !== aiThinkingId.value);
     aiThinkingId.value = '';
   } finally {
-    loading.value = false;
+    if (generation === requestGeneration) {
+      stopWaiting();
+      requestController = undefined;
+      messageRecord.value = messageRecord.value.filter((item) => item.temp_id !== aiThinkingId.value);
+      aiThinkingId.value = '';
+      loading.value = false;
+    }
   }
 }
 
 async function sendMessage() {
   const text = messageInput.value.trim();
-  if (!text || !props.eventId) return;
+  if (!text || !props.eventId || loading.value) return;
 
   messageInput.value = '';
   await sendAIMessage(text);
@@ -365,7 +430,9 @@ function startAnalysisPolling() {
 watch(
   () => props.eventId,
   async (value, oldValue) => {
+    cancelPendingRequest();
     if (oldValue) deepflowSocket.leave(oldValue);
+    sendError.value = '';
     resetMessages();
     stopAnalysisPolling();
     if (value) {
@@ -389,6 +456,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  cancelPendingRequest();
   stopAnalysisPolling();
   if (props.eventId) deepflowSocket.leave(props.eventId);
   deepflowSocket.off('connected', handleSocketConnected);
@@ -398,6 +466,10 @@ onUnmounted(() => {
 
 <template>
   <div class="chat-shell">
+    <div v-if="loading" class="generation-status" :class="{ 'generation-status-slow': generationStatus.slow }" role="status" aria-live="polite">
+      <div class="generation-status-heading"><strong>AI助手</strong><span>{{ generationStatus.title }}</span></div>
+      <div>{{ generationStatus.text }}</div>
+    </div>
     <NScrollbar ref="chatRef" class="chat-body">
       <div v-if="chatMessages.length" class="messages">
         <div
@@ -406,7 +478,7 @@ onUnmounted(() => {
           :class="['message', item.messageClass]"
         >
           <div class="message-header">
-            <span class="message-sender">{{ item.from }}</span>
+            <span class="message-sender">{{ item.thinking ? `AI助手 · ${generationStatus.title}` : item.from }}</span>
             <span class="message-time">{{ item.time }}</span>
           </div>
           <div
@@ -415,7 +487,7 @@ onUnmounted(() => {
               item.messageClass === 'message-ai-assistant' ? 'ai-response markdown-content' : '',
               item.messageClass === 'message-engineer-question' ? 'engineer-question' : '',
             ]"
-            v-html="renderMarkdown(item.content || '暂无内容')"
+            v-html="renderMarkdown(item.thinking ? generationStatus.text : item.content || '暂无内容')"
           ></div>
         </div>
       </div>
@@ -424,6 +496,9 @@ onUnmounted(() => {
         <div class="empty-subtitle">输入消息，与 DeepSOC 助手分析该安全事件</div>
       </div>
     </NScrollbar>
+    <NAlert v-if="sendError" type="error" title="模型调用失败" class="mx-3 my-2 shrink-0" style="overflow-wrap: anywhere; max-height: 220px; overflow-y: auto">
+      {{ sendError }}
+    </NAlert>
     <div class="chat-input-container">
       <div class="chat-input-wrapper">
         <NInput
@@ -439,7 +514,7 @@ onUnmounted(() => {
             class="send-button"
             type="primary"
             circle
-            :disabled="!messageInput.trim()"
+            :disabled="loading || !messageInput.trim()"
             aria-label="发送"
             @click="sendMessage"
           >
@@ -498,6 +573,18 @@ onUnmounted(() => {
   overflow: hidden;
   padding: 20px;
 }
+
+.generation-status {
+  flex-shrink: 0;
+  padding: 12px 20px;
+  border-bottom: 1px solid hsl(var(--border));
+  background: hsl(var(--primary) / 6%);
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+  line-height: 1.7;
+}
+.generation-status-heading { display: flex; align-items: center; gap: 10px; color: hsl(var(--foreground)); }
+.generation-status-slow { background: hsl(var(--warning) / 10%); }
 
 .messages {
   display: flex;

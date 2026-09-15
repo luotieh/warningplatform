@@ -1,9 +1,7 @@
+import { formatTimestamp } from './ly';
+
 export function formatDeepflowDate(isoDate?: string) {
-  if (!isoDate) return '';
-  const date = new Date(isoDate);
-  if (Number.isNaN(date.getTime())) return isoDate;
-  const pad = (value: number) => String(value).padStart(2, '0');
-  return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  return isoDate ? formatTimestamp(isoDate) : '';
 }
 
 export function mapSeverityToDisplay(severity?: string) {

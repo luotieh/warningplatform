@@ -20,8 +20,8 @@ type MemoryStore struct {
 	usersByUsername map[string]string
 	userSeq         int64
 
-	events   map[string]domain.Event
-	eventSeq int64
+	events        map[string]domain.Event
+	eventSeq      int64
 	archiveJobs   map[string]domain.ArchiveJob
 	archiveJobSeq int64
 
@@ -311,6 +311,10 @@ func (s *MemoryStore) UpdateEvent(eventID string, patch map[string]any) (domain.
 }
 
 func (s *MemoryStore) ListEventsPage(q EventQuery) (EventPage, error) {
+	from, to, err := q.ArchiveRange()
+	if err != nil {
+		return EventPage{}, err
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := []domain.Event{}
@@ -321,7 +325,11 @@ func (s *MemoryStore) ListEventsPage(q EventQuery) (EventPage, error) {
 				continue
 			}
 		case "archive":
-			if e.ArchiveDate == nil || e.ArchiveDate.Format("2006-01-02") != q.Date {
+			if e.ArchiveDate == nil {
+				continue
+			}
+			date := e.ArchiveDate.Format("2006-01-02")
+			if (from != "" && date < from) || (to != "" && date > to) {
 				continue
 			}
 		case "all":
@@ -471,7 +479,7 @@ func (s *MemoryStore) ArchiveConvergedEvents(threshold time.Time, batchSize int)
 	}
 	for _, id := range ids {
 		e := s.events[id]
-		last := eventLastSeenFromEvent(e)
+		last := eventLastSeenFromEvent(e).In(domain.Beijing)
 		d := time.Date(last.Year(), last.Month(), last.Day(), 0, 0, 0, 0, last.Location())
 		e.ArchiveDate = &d
 		e.UpdatedAt = time.Now().UTC()
@@ -521,7 +529,7 @@ func (s *MemoryStore) ListEventsConvergedDue(threshold time.Time) []domain.Event
 			continue
 		}
 		last := eventLastSeenFromEvent(e)
-		if last.Before(threshold) {
+		if !last.IsZero() && !last.After(threshold) {
 			out = append(out, e)
 		}
 	}
@@ -560,19 +568,7 @@ func (s *MemoryStore) ListEventsByTargetIP(ip string, from time.Time, to time.Ti
 // eventLastSeenFromEvent 取事件最近命中时刻：优先列值，其次 context.last_seen_at，
 // 最后退回 UpdatedAt（兼容升级前旧数据与测试用例）。
 func eventLastSeenFromEvent(e domain.Event) time.Time {
-	if e.LastSeenAt != nil {
-		return *e.LastSeenAt
-	}
-	ctxMap := map[string]any{}
-	if e.Context != "" {
-		_ = json.Unmarshal([]byte(e.Context), &ctxMap)
-	}
-	if v, ok := ctxMap["last_seen_at"].(string); ok && v != "" {
-		if t, err := time.Parse(time.RFC3339, v); err == nil {
-			return t
-		}
-	}
-	return e.UpdatedAt
+	return domain.LastActivity(e)
 }
 
 func (s *MemoryStore) AddMessage(m domain.Message) (domain.Message, error) {

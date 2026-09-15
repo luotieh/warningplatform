@@ -37,6 +37,11 @@ const (
 // CJK 字符按 ~0.7 token/字,其余按 rune/3.5,整体乘 1.1 保守系数并向上取整。
 // 宁可高估(提前截断)也不低估(溢出上下文窗口导致输出被挤掉)。
 func estimateTokens(s string) int {
+	return EstimatePromptTokens(s)
+}
+
+// EstimatePromptTokens is a heuristic, not the provider's tokenizer or billing usage.
+func EstimatePromptTokens(s string) int {
 	cjk := 0
 	other := 0
 	for _, r := range s {

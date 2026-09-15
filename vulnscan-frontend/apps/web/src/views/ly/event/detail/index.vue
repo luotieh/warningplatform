@@ -13,6 +13,7 @@ import {
 import { message } from "#/adapter/naive";
 import { useDeepflowStore } from "#/store";
 import { formatDeepflowDate, mapSeverityToDisplay } from "#/utils/deepflow";
+import { eventTimestampMs, formatDuration, formatTimestamp } from "#/utils/ly";
 import deepflowSocket from "#/utils/deepflow-socket";
 
 import ChatBox from "./components/ChatBox.vue";
@@ -46,11 +47,25 @@ const tabs = [
 const severityText = computed(() =>
   mapSeverityToDisplay(detail.value?.severity),
 );
-const createdAtText = computed(
-  () =>
-    formatDeepflowDate(detail.value?.created_at) ||
-    String(route.query.occurrence_time || "-"),
-);
+const activityContext = computed(() => {
+  try { return JSON.parse(detail.value?.context || '{}'); } catch { return {}; }
+});
+const firstActivity = computed(() => activityContext.value.first_time || activityContext.value.occurrence_time || detail.value?.created_at);
+const lastActivity = computed(() => activityContext.value.last_time || activityContext.value.occurrence_time || detail.value?.last_seen_at || activityContext.value.last_seen_at || firstActivity.value);
+const createdAtText = computed(() => formatTimestamp(firstActivity.value || String(route.query.occurrence_time || '')));
+const clockNow = ref(Date.now());
+const isConverged = computed(() => Boolean(detail.value?.aggregation_closed || detail.value?.archive_date) || clockNow.value - eventTimestampMs(lastActivity.value) >= 30 * 60 * 1000);
+const lifecycleText = computed(() => {
+  const end = isConverged.value ? eventTimestampMs(lastActivity.value) : clockNow.value;
+  const seconds = Math.max(0, Math.floor((end - eventTimestampMs(firstActivity.value)) / 1000));
+  const duration = seconds === 0 ? '0秒' : formatDuration(seconds);
+  return isConverged.value
+    ? `收敛时间：${formatTimestamp(lastActivity.value)}（北京时间），攻击持续：${duration}`
+    : `最近活动：${formatTimestamp(lastActivity.value)}（北京时间），进行中：${duration}`;
+});
+let lifecycleTimer: ReturnType<typeof setInterval> | undefined;
+onMounted(() => { lifecycleTimer = setInterval(() => { clockNow.value = Date.now(); }, 1000); });
+onUnmounted(() => { if (lifecycleTimer) clearInterval(lifecycleTimer); });
 const eventTitle = computed(() => {
   const type = String(
     route.query.event_type ||
@@ -298,7 +313,8 @@ watch(
           <div>轮次：{{ currentRound }}</div>
           <div>来源：{{ eventSource }}</div>
           <div>严重程度：{{ eventLevelText }}</div>
-          <div>创建时间：{{ createdAtText }}</div>
+          <div>发生时间：{{ createdAtText }}（北京时间）</div>
+          <div>{{ lifecycleText }}</div>
         </div>
         <NButton
           class="event-list-button"

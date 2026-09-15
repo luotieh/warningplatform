@@ -1,7 +1,6 @@
 <script lang="ts" setup>
 import { ref, watch } from 'vue';
 
-import { NTabPane, NTabs } from 'naive-ui';
 import { useRoute } from 'vue-router';
 
 import ModelView from './model/index.vue';
@@ -43,15 +42,20 @@ watch(
 
 <template>
   <div class="ly-workstation">
-    <NTabs
-      :value="activeTab"
-      type="line"
-      animated
-      class="ly-workstation-tabs"
-      @update:value="onTabChange"
-    >
-      <NTabPane v-for="tab in tabDefs" :key="tab.key" :name="tab.key" :tab="tab.label" />
-    </NTabs>
+    <div class="ly-workstation-tabs" role="tablist">
+      <button
+        v-for="tab in tabDefs"
+        :key="tab.key"
+        class="ly-workstation-tab"
+        :class="{ active: activeTab === tab.key }"
+        type="button"
+        role="tab"
+        :aria-selected="activeTab === tab.key"
+        @click="onTabChange(tab.key)"
+      >
+        {{ tab.label }}
+      </button>
+    </div>
     <RulesView v-if="activeTab === 'rules'" />
     <NodeView v-else-if="activeTab === 'node'" />
     <ModelView v-else-if="activeTab === 'model'" />
@@ -60,6 +64,24 @@ watch(
 
 <style scoped>
 .ly-workstation-tabs {
+  display: flex;
+  gap: 24px;
   padding: 8px 16px 0;
+  border-bottom: 1px solid var(--n-border-color, #e5e7eb);
+}
+
+.ly-workstation-tab {
+  padding: 10px 4px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: #666;
+  cursor: pointer;
+  font: inherit;
+}
+
+.ly-workstation-tab.active {
+  border-bottom-color: #2080f0;
+  color: #2080f0;
 }
 </style>

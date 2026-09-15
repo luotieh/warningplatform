@@ -26,6 +26,7 @@ import { countByKey, matchesEventKeyword } from '#/utils/ly';
 import { eventAssetNames } from '#/utils/ly-asset';
 
 import LyEventTable from '../components/LyEventTable.vue';
+import { archiveDateParams, type ArchivePeriod } from './archive-filter';
 
 defineOptions({ name: 'LyEventList' });
 
@@ -38,7 +39,8 @@ const state = reactive({
   endtime: null as null | number,
   keyword: '',
   scope: 'today' as 'today' | 'archive',
-  archiveDate: null as null | number,
+  archivePeriod: 'all' as ArchivePeriod,
+  archiveRange: null as [string, string] | null,
   page: 1,
   pageSize: 20,
   total: 0,
@@ -50,7 +52,7 @@ const state = reactive({
 });
 
 const sortOptions = [
-  { label: '时间', value: 'time' },
+  { label: '创建时间', value: 'time' },
   { label: '总载荷大小', value: 'payload' },
   { label: '命中频次', value: 'frequency' },
 ];
@@ -81,13 +83,6 @@ async function loadAssets() {
   }
 }
 
-function formatDay(ts: number | null | undefined) {
-  if (!ts) return '';
-  const d = new Date(ts);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
 async function loadEvents() {
   const params: Record<string, any> = {
     scope: state.scope,
@@ -97,9 +92,12 @@ async function loadEvents() {
   if (state.level) params.level = state.level;
   if (state.keyword.trim()) params.keyword = state.keyword.trim();
   if (selectedAsset.value) params.asset = selectedAsset.value;
-  if (state.starttime) params.starttime = Math.floor(state.starttime / 1000);
-  if (state.endtime) params.endtime = Math.floor(state.endtime / 1000);
-  if (state.scope === 'archive') params.date = formatDay(state.archiveDate) || formatDay(Date.now());
+  if (state.scope === 'archive') {
+    Object.assign(params, archiveDateParams(state.archivePeriod, state.archiveRange));
+  } else {
+    if (state.starttime) params.starttime = Math.floor(state.starttime / 1000);
+    if (state.endtime) params.endtime = Math.floor(state.endtime / 1000);
+  }
   // 服务端排序（分页前生效），默认 time/desc 与现状一致
   if (state.sort !== 'time' || state.order !== 'desc') {
     params.sort = state.sort;
@@ -115,7 +113,17 @@ async function loadEvents() {
 }
 
 function onScopeChange() {
+  state.archivePeriod = 'all';
+  state.archiveRange = null;
+  state.sort = 'time';
+  state.order = 'desc';
+  clearRankFilter();
+  onArchiveFilterChange();
+}
+
+function onArchiveFilterChange() {
   state.page = 1;
+  clearRankFilter();
   void loadEvents();
 }
 
@@ -135,7 +143,7 @@ function onSortChange() {
 const baseRows = computed(() => {
   const rows = (lyStore.events || []).filter((item) => {
     if (state.level && item.level !== state.level) return false;
-    if (state.starttime || state.endtime) {
+    if (state.scope !== 'archive' && (state.starttime || state.endtime)) {
       const t = Number(item.starttime ?? 0) * 1000;
       if (state.starttime && (!t || t < state.starttime)) return false;
       if (state.endtime && (!t || t > state.endtime)) return false;
@@ -243,18 +251,32 @@ onMounted(async () => {
             style="width: 130px"
             @update:value="onScopeChange"
           />
-          <NDatePicker
+          <NSelect
             v-if="state.scope === 'archive'"
-            v-model:value="state.archiveDate"
-            type="date"
+            v-model:value="state.archivePeriod"
+            :options="[
+              { label: '全部归档', value: 'all' },
+              { label: '过去三天', value: '3' },
+              { label: '过去七天', value: '7' },
+              { label: '自定义时间段', value: 'custom' },
+            ]"
+            style="width: 160px"
+            @update:value="onArchiveFilterChange"
+          />
+          <NDatePicker
+            v-if="state.scope === 'archive' && state.archivePeriod === 'custom'"
+            v-model:formatted-value="state.archiveRange"
+            type="daterange"
+            value-format="yyyy-MM-dd"
             clearable
-            placeholder="归档日期"
-            style="width: 150px"
-            @update:value="onScopeChange"
+            start-placeholder="归档开始日期"
+            end-placeholder="归档结束日期"
+            style="width: 280px"
+            @update:formatted-value="onArchiveFilterChange"
           />
           <NSelect v-model:value="state.level" clearable placeholder="严重级别" :options="levelOptions" style="width: 140px" />
-          <NDatePicker v-model:value="state.starttime" type="date" clearable placeholder="开始日期" style="width: 150px" />
-          <NDatePicker v-model:value="state.endtime" type="date" clearable placeholder="结束日期" style="width: 150px" />
+          <NDatePicker v-if="state.scope !== 'archive'" v-model:value="state.starttime" type="date" clearable placeholder="开始日期" style="width: 150px" />
+          <NDatePicker v-if="state.scope !== 'archive'" v-model:value="state.endtime" type="date" clearable placeholder="结束日期" style="width: 150px" />
           <NInput
             v-model:value="state.keyword"
             clearable
@@ -290,6 +312,9 @@ onMounted(async () => {
             {{ RANK_LABELS[state.rankKey] }}：{{ state.rankValue }}
           </NTag>
         </NSpace>
+        <div v-if="state.scope === 'archive'" class="mt-2 text-xs text-muted-foreground">
+          按归档日期筛选，范围包含起止日期；过去三天、七天包含今天（北京时间）。不选日期时显示全部归档。
+        </div>
       </NCard>
 
       <NCard size="small">
