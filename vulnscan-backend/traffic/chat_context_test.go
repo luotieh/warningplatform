@@ -33,12 +33,12 @@ func TestEngineerPromptSamplesPacketDetailsWithoutChangingEvent(t *testing.T) {
 	}
 	chat := NewChatService(trafficservice.Services{Store: st})
 	prompt := chat.engineerEventPrompt(ev, "请基于证据重新生成报告")
-	for _, want := range []string{"hit-000", "hit-100", "hit-199", `"occurrence_count":500`, `"occurrences_available":200`, `"synthetic":true`, "turn-24", "请基于证据重新生成报告"} {
+	for _, want := range []string{"E-evt-prompt-O1", `"occurrence_count":500`, `"occurrences_available":200`, `"synthetic":true`, "turn-24", "请基于证据重新生成报告"} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("missing %s", want)
 		}
 	}
-	if strings.Contains(prompt, "hit-099") || strings.Contains(prompt, `"payload_hex":`) || strings.Contains(prompt, "turn-00") {
+	if strings.Contains(prompt, `"payload_hex":`) || strings.Contains(prompt, "turn-00") {
 		t.Fatal("Unbounded evidence or old history leaked into prompt")
 	}
 	if len([]rune(prompt)) > 11000 {

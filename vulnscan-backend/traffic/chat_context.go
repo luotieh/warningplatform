@@ -2,6 +2,8 @@ package traffic
 
 import (
 	"encoding/json"
+	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -20,7 +22,11 @@ func limitEngineerText(value string, limit int) string {
 // event, its detail API, or the database. Preserve aggregate counts and bounds;
 // sample first/middle/last occurrences rather than sending every packet twice
 // (as both text and HEX). Synthetic-data provenance remains in the context.
-func compactEngineerContext(raw string) string {
+func compactEngineerContext(raw string) string { return buildEngineerEvidenceContext("event", raw) }
+
+// buildEngineerEvidenceContext scans every occurrence and creates a stable,
+// model-facing evidence index. Full packet/detail APIs remain untouched.
+func buildEngineerEvidenceContext(eventID, raw string) string {
 	if strings.TrimSpace(raw) == "" {
 		return "无上下文"
 	}
@@ -30,11 +36,9 @@ func compactEngineerContext(raw string) string {
 	}
 	if occurrences, ok := ctx["occurrences"].([]any); ok {
 		ctx["occurrences_available"] = len(occurrences)
-		if len(occurrences) > 3 {
-			ctx["occurrences"] = []any{occurrences[0], occurrences[len(occurrences)/2], occurrences[len(occurrences)-1]}
-			ctx["occurrences_sampled"] = true
-			ctx["occurrences_note"] = "仅提供首条、中间、末条明细样本；全局命中次数以 occurrence_count 为准，不能用样本数代替。"
-		}
+		ctx["evidence_index"] = makeEvidenceIndex(eventID, occurrences)
+		delete(ctx, "occurrences")
+		ctx["evidence_note"] = "已扫描全部明细；evidence_index 每项对应一条明细。重复载荷仅在模型上下文中压缩，原始明细仍可回溯。"
 	}
 	trimEngineerValue(ctx)
 	b, err := json.Marshal(ctx)
@@ -42,6 +46,45 @@ func compactEngineerContext(raw string) string {
 		return "上下文编码失败"
 	}
 	return limitEngineerText(string(b), engineerContextMaxRunes)
+}
+
+var hexOnlyRE = regexp.MustCompile(`^[0-9a-fA-F\s]+$`)
+
+func makeEvidenceIndex(eventID string, occurrences []any) []map[string]any {
+	out := make([]map[string]any, 0, len(occurrences))
+	seen := map[string]int{}
+	for i, item := range occurrences {
+		m, _ := item.(map[string]any)
+		e := map[string]any{"evidence_id": fmt.Sprintf("E-%s-O%d", eventID, i+1), "occurrence_index": i + 1}
+		for _, k := range []string{"time", "occurrence_time", "src_ip", "dst_ip", "source", "target", "protocol", "direction", "session_id", "rule_id", "ioc_type", "ioc_value", "parse_status", "field_path"} {
+			if v, ok := m[k]; ok && fmt.Sprint(v) != "" {
+				e[k] = v
+			}
+		}
+		text, _ := m["payload_text"].(string)
+		hx, _ := m["payload_hex"].(string)
+		if hx != "" && (strings.HasPrefix(strings.TrimSpace(hx), "16 03") || strings.HasPrefix(strings.TrimSpace(hx), "1603")) {
+			e["protocol_hint"] = "TLS"
+			e["parse_status"] = "encrypted_unparsed"
+		}
+		if text != "" {
+			e["payload_preview"] = limitEngineerText(text, 240)
+		} else if hx != "" && hexOnlyRE.MatchString(hx) {
+			e["payload_preview"] = limitEngineerText(strings.TrimSpace(hx), 160)
+			e["parse_status"] = firstNonEmpty(fmt.Sprint(e["parse_status"]), "hex_unparsed")
+		}
+		key := text + "|" + hx
+		first, exists := seen[key]
+		if !exists {
+			seen[key] = i + 1
+			e["selection_reason"] = "全量明细证据索引"
+		} else {
+			e["duplicate_of"] = fmt.Sprintf("E-%s-O%d", eventID, first)
+			e["selection_reason"] = "重复载荷，保留索引与计数"
+		}
+		out = append(out, e)
+	}
+	return out
 }
 
 func trimEngineerValue(value any) {

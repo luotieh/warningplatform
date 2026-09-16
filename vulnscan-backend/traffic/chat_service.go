@@ -121,7 +121,7 @@ func (s *ChatService) engineerPromptParts(event domain.Event, question string) [
 	b.WriteString(fmt.Sprintf("当前轮次: %d\n", event.CurrentRound))
 	b.WriteString(fmt.Sprintf("创建时间: %s\n\n", event.CreatedAt.Format("2006-01-02 15:04:05")))
 	flush("事件基本信息")
-	b.WriteString(fmt.Sprintf("事件上下文: %s\n\n", compactEngineerContext(event.Context)))
+	b.WriteString(fmt.Sprintf("事件上下文与全量证据摘要: %s\n\n", buildEngineerEvidenceContext(event.EventID, event.Context)))
 	flush("事件上下文与明细样本")
 
 	if len(event.Observables) > 0 {
@@ -158,13 +158,14 @@ func (s *ChatService) engineerPromptParts(event domain.Event, question string) [
 const deepSOCEngineerAnswerGuide = `# 回答要求
 你是 DeepSOC 安全运营中心的 AI 助手，专门协助安全工程师处理安全事件。必须基于上面的完整事件上下文回答，不要要求用户再次提供事件详情。
 
-回答时请像原版 DeepSOC 工程师助手一样体现分析深度：
+回答时请像原版 DeepSOC 工程师助手一样体现分析深度。模型可以对全量 evidence_index 做跨明细、跨会话、时间序列和协议语义推理；确定性统计由系统预先计算，不能把统计量当成攻击成功证据：
 1. 先判断事件本质：这是探测、漏洞利用尝试、有效入侵、误报，还是需要更多证据确认。
 2. 结合事件基本信息、可观察对象、自动驾驶任务/动作/执行结果、事件总结和历史对话。
 3. 给出证据链：攻击源、受害目标、端口协议、命中规则、payload/IOC、时间线、已有处置。
 4. 分析影响面：资产重要性、业务暴露面、是否可能成功、是否需要扩大排查。
 5. 输出可执行处置建议：查询哪些日志、验证哪些现象、是否封禁、是否通知、如何持续观察。
-6. 明确列出信息缺口，但即使信息不足，也要基于已有信息完成初步研判。
+6. 输出危险攻击概率（0-100%）及概率依据；关键证据必须引用 evidence_id，并指出该明细的具体问题。区分行为证据、成功性证据、排除性证据和背景统计。没有成功性证据时不得声称攻击成功；无法确认就明确写“无法确认”，不得编造。
+7. 明确列出信息缺口，但即使信息不足，也要基于已有信息完成初步研判。
 
 如果用户要求“分析该事件”或“形成报告”，请按以下结构直接生成报告：
 ## 事件概览

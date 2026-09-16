@@ -13,10 +13,11 @@ import (
 )
 
 type LLMClient struct {
-	BaseURL string
-	APIKey  string
-	Model   string
-	HTTP    *http.Client
+	BaseURL     string
+	APIKey      string
+	Model       string
+	Temperature float64
+	HTTP        *http.Client
 }
 
 type LLMHealth struct {
