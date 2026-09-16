@@ -38,7 +38,7 @@ const state = reactive({
   starttime: null as null | number,
   endtime: null as null | number,
   keyword: '',
-  scope: 'today' as 'today' | 'archive',
+  scope: 'all' as 'all' | 'today' | '3' | '7',
   archivePeriod: 'all' as ArchivePeriod,
   archiveRange: null as [string, string] | null,
   page: 1,
@@ -92,8 +92,14 @@ async function loadEvents() {
   if (state.level) params.level = state.level;
   if (state.keyword.trim()) params.keyword = state.keyword.trim();
   if (selectedAsset.value) params.asset = selectedAsset.value;
-  if (state.scope === 'archive') {
-    Object.assign(params, archiveDateParams(state.archivePeriod, state.archiveRange));
+  if (state.scope === 'today' || state.scope === '3' || state.scope === '7') {
+    const days = state.scope === 'today' ? 1 : Number(state.scope);
+    const end = new Date();
+    const start = new Date(end);
+    start.setDate(start.getDate() - (days - 1));
+    start.setHours(0, 0, 0, 0);
+    params.starttime = Math.floor(start.getTime() / 1000);
+    params.endtime = Math.floor(end.getTime() / 1000);
   } else {
     if (state.starttime) params.starttime = Math.floor(state.starttime / 1000);
     if (state.endtime) params.endtime = Math.floor(state.endtime / 1000);
@@ -148,7 +154,7 @@ function onSortChange() {
 const baseRows = computed(() => {
   const rows = (lyStore.events || []).filter((item) => {
     if (state.level && item.level !== state.level) return false;
-    if (state.scope !== 'archive' && (state.starttime || state.endtime)) {
+    if (true && (state.starttime || state.endtime)) {
       const t = Number(item.starttime ?? 0) * 1000;
       if (state.starttime && (!t || t < state.starttime)) return false;
       if (state.endtime && (!t || t > state.endtime)) return false;
@@ -250,14 +256,16 @@ onMounted(async () => {
           <NSelect
             v-model:value="state.scope"
             :options="[
-              { label: '今日视图', value: 'today' },
-              { label: '历史归档', value: 'archive' },
+              { label: '全部时间', value: 'all' },
+              { label: '仅看今日', value: 'today' },
+              { label: '近三天', value: '3' },
+              { label: '近七天', value: '7' },
             ]"
             style="width: 130px"
             @update:value="onScopeChange"
           />
           <NSelect
-            v-if="state.scope === 'archive'"
+            v-if="false"
             v-model:value="state.archivePeriod"
             :options="[
               { label: '全部归档', value: 'all' },
@@ -269,7 +277,7 @@ onMounted(async () => {
             @update:value="onArchiveFilterChange"
           />
           <NDatePicker
-            v-if="state.scope === 'archive' && state.archivePeriod === 'custom'"
+            v-if="false && state.archivePeriod === 'custom'"
             v-model:formatted-value="state.archiveRange"
             type="daterange"
             value-format="yyyy-MM-dd"
@@ -280,8 +288,8 @@ onMounted(async () => {
             @update:formatted-value="onArchiveFilterChange"
           />
           <NSelect v-model:value="state.level" clearable placeholder="严重级别" :options="levelOptions" style="width: 140px" />
-          <NDatePicker v-if="state.scope !== 'archive'" v-model:value="state.starttime" type="date" clearable placeholder="开始日期" style="width: 150px" />
-          <NDatePicker v-if="state.scope !== 'archive'" v-model:value="state.endtime" type="date" clearable placeholder="结束日期" style="width: 150px" />
+          <NDatePicker v-if="true" v-model:value="state.starttime" type="date" clearable placeholder="开始日期" style="width: 150px" />
+          <NDatePicker v-if="true" v-model:value="state.endtime" type="date" clearable placeholder="结束日期" style="width: 150px" />
           <NInput
             v-model:value="state.keyword"
             clearable
@@ -317,7 +325,7 @@ onMounted(async () => {
             {{ RANK_LABELS[state.rankKey] }}：{{ state.rankValue }}
           </NTag>
         </NSpace>
-        <div v-if="state.scope === 'archive'" class="mt-2 text-xs text-muted-foreground">
+        <div v-if="false" class="mt-2 text-xs text-muted-foreground">
           按归档日期筛选，范围包含起止日期；过去三天、七天包含今天（北京时间）。不选日期时显示全部归档。
         </div>
       </NCard>

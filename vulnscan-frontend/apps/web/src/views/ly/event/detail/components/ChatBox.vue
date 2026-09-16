@@ -61,6 +61,18 @@ function cancelPendingRequest() {
   elapsedSeconds.value = 0;
 }
 
+function stopGeneration() {
+  if (!loading.value) return;
+  requestGeneration++;
+  requestController?.abort();
+  requestController = undefined;
+  stopWaiting();
+  sendError.value = '已停止本次报告生成';
+  messageRecord.value = messageRecord.value.filter((item) => item.temp_id !== aiThinkingId.value);
+  aiThinkingId.value = '';
+  loading.value = false;
+}
+
 const displayMessages = computed(() =>
   messageRecord.value.map((item) => ({
     ...item,
@@ -514,14 +526,14 @@ onUnmounted(() => {
             class="send-button"
             type="primary"
             circle
-            :disabled="loading || !messageInput.trim()"
-            aria-label="发送"
-            @click="sendMessage"
+            :disabled="!loading && !messageInput.trim()"
+            :aria-label="loading ? '停止生成' : '发送'"
+            @click="loading ? stopGeneration() : sendMessage()"
           >
             <template #icon>
               <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
                 <path
-                  d="M12 19V5M5 12l7-7 7 7"
+                  :d="loading ? 'M7 7h10v10H7z' : 'M12 19V5M5 12l7-7 7 7'"
                   fill="none"
                   stroke="currentColor"
                   stroke-width="2.2"
