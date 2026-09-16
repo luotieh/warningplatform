@@ -45,7 +45,14 @@ func buildEngineerEvidenceContext(eventID, raw string) string {
 	if err != nil {
 		return "上下文编码失败"
 	}
-	return limitEngineerText(string(b), engineerContextMaxRunes)
+	// Put deterministic totals before the bounded evidence index so they cannot
+	// be lost when a very large event is clipped for the model window.
+	count := 0
+	if declared, ok := ctx["occurrence_count"].(float64); ok && declared > 0 {
+		count = int(declared)
+	}
+	prefix := fmt.Sprintf("全量扫描摘要：明细数=%d；统计量由系统计算，证据需回溯 evidence_id。\n", count)
+	return limitEngineerText(prefix+string(b), engineerContextMaxRunes)
 }
 
 var hexOnlyRE = regexp.MustCompile(`^[0-9a-fA-F\s]+$`)
