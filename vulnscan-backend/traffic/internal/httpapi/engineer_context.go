@@ -30,9 +30,9 @@ func (s *Server) engineerEventPrompt(event domain.Event, question string) string
 		b.WriteString("\n")
 	}
 
-	writeJSONSection(&b, "## 自动驾驶任务", s.services.Store.ListTasks(event.EventID))
-	writeJSONSection(&b, "## 自动驾驶动作", s.services.Store.ListActions(event.EventID))
-	writeJSONSection(&b, "## 自动驾驶命令", s.services.Store.ListCommands(event.EventID))
+	writeJSONSection(&b, "## 系统记录的任务", s.services.Store.ListTasks(event.EventID))
+	writeJSONSection(&b, "## 系统记录的动作", s.services.Store.ListActions(event.EventID))
+	writeJSONSection(&b, "## 系统记录的命令", s.services.Store.ListCommands(event.EventID))
 	writeJSONSection(&b, "## 执行结果", s.services.Store.ListExecutions(event.EventID))
 	writeJSONSection(&b, "## 事件总结", s.services.Store.ListSummaries(event.EventID))
 	writeEngineerHistory(&b, s.services.Store.ListMessages(event.EventID))
@@ -49,7 +49,7 @@ const deepSOCEngineerAnswerGuide = `# 回答要求
 
 回答时请像原版 DeepSOC 工程师助手一样体现分析深度：
 1. 先判断事件本质：这是探测、漏洞利用尝试、有效入侵、误报，还是需要更多证据确认。
-2. 结合事件基本信息、可观察对象、自动驾驶任务/动作/执行结果、事件总结和历史对话。
+2. 结合事件基本信息、可观察对象、系统实际记录的任务/动作/执行结果、事件总结和历史对话。
 3. 给出证据链：攻击源、受害目标、端口协议、命中规则、payload/IOC、时间线、已有处置。
 4. 分析影响面：资产重要性、业务暴露面、是否可能成功、是否需要扩大排查。
 5. 输出可执行处置建议：查询哪些日志、验证哪些现象、是否封禁、是否通知、如何持续观察。
@@ -60,10 +60,10 @@ const deepSOCEngineerAnswerGuide = `# 回答要求
 ## 关键证据
 ## 攻击源与受影响资产分析
 ## 攻击链与风险判断
-## 已执行处置/自动驾驶进展
+## 系统已记录的执行进展
 ## 后续处置建议
 ## 信息缺口
-## 可交付给安全团队的结论`
+## 最终结论`
 
 func cleanEngineerQuestion(question string) string {
 	question = strings.TrimSpace(question)

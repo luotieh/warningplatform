@@ -133,11 +133,11 @@ func (s *ChatService) engineerPromptParts(event domain.Event, question string) [
 	}
 	flush("可观察对象")
 
-	writeJSONSection(&b, "## 自动驾驶任务", s.core.Store.ListTasks(event.EventID))
+	writeJSONSection(&b, "## 系统记录的任务", s.core.Store.ListTasks(event.EventID))
 	flush("任务")
-	writeJSONSection(&b, "## 自动驾驶动作", s.core.Store.ListActions(event.EventID))
+	writeJSONSection(&b, "## 系统记录的动作", s.core.Store.ListActions(event.EventID))
 	flush("动作")
-	writeJSONSection(&b, "## 自动驾驶命令", s.core.Store.ListCommands(event.EventID))
+	writeJSONSection(&b, "## 系统记录的命令", s.core.Store.ListCommands(event.EventID))
 	flush("命令")
 	writeJSONSection(&b, "## 执行结果", s.core.Store.ListExecutions(event.EventID))
 	flush("执行结果")
@@ -160,11 +160,11 @@ const deepSOCEngineerAnswerGuide = `# 回答要求
 
 回答时请像原版 DeepSOC 工程师助手一样体现分析深度。模型可以对全量 evidence_index 做跨明细、跨会话、时间序列和协议语义推理；确定性统计由系统预先计算，不能把统计量当成攻击成功证据：
 1. 先判断事件本质：这是探测、漏洞利用尝试、有效入侵、误报，还是需要更多证据确认。
-2. 结合事件基本信息、可观察对象、自动驾驶任务/动作/执行结果、事件总结和历史对话。
+2. 结合事件基本信息、可观察对象、系统实际记录的任务/动作/执行结果、事件总结和历史对话。
 3. 给出证据链：攻击源、受害目标、端口协议、命中规则、payload/IOC、时间线、已有处置。
 4. 分析影响面：资产重要性、业务暴露面、是否可能成功、是否需要扩大排查。
 5. 输出可执行处置建议：查询哪些日志、验证哪些现象、是否封禁、是否通知、如何持续观察。
-6. 输出危险攻击概率（0-100%）及概率依据；关键证据必须引用 evidence_id，并指出该明细的具体问题。区分行为证据、成功性证据、排除性证据和背景统计。没有成功性证据时不得声称攻击成功；无法确认就明确写“无法确认”，不得编造。
+6. 输出危险攻击概率（0-100%）及概率依据；关键证据必须按 1、2、3… 编号，引用 evidence_id，并指出该明细的具体问题。区分行为证据、成功性证据、排除性证据和背景统计。无法确认就明确写“无法确认”，不得编造。
 7. 明确列出信息缺口，但即使信息不足，也要基于已有信息完成初步研判。
 
 如果用户要求“分析该事件”或“形成报告”，请按以下结构直接生成报告：
@@ -172,10 +172,10 @@ const deepSOCEngineerAnswerGuide = `# 回答要求
 ## 关键证据
 ## 攻击源与受影响资产分析
 ## 攻击链与风险判断
-## 已执行处置/自动驾驶进展
+## 系统已记录的执行进展
 ## 后续处置建议
 ## 信息缺口
-## 可交付给安全团队的结论`
+## 最终结论`
 
 func cleanEngineerQuestion(question string) string {
 	question = strings.TrimSpace(question)
