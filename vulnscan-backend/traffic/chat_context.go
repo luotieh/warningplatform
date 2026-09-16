@@ -34,7 +34,9 @@ func buildEngineerEvidenceContext(eventID, raw string) string {
 	if err := json.Unmarshal([]byte(raw), &ctx); err != nil || ctx == nil {
 		return limitEngineerText(raw, engineerContextMaxRunes)
 	}
+	available := 0
 	if occurrences, ok := ctx["occurrences"].([]any); ok {
+		available = len(occurrences)
 		ctx["occurrences_available"] = len(occurrences)
 		ctx["evidence_index"] = makeEvidenceIndex(eventID, occurrences)
 		delete(ctx, "occurrences")
@@ -51,7 +53,7 @@ func buildEngineerEvidenceContext(eventID, raw string) string {
 	if declared, ok := ctx["occurrence_count"].(float64); ok && declared > 0 {
 		count = int(declared)
 	}
-	prefix := fmt.Sprintf("全量扫描摘要：明细数=%d；统计量由系统计算，证据需回溯 evidence_id。\n", count)
+	prefix := fmt.Sprintf("全量扫描摘要：明细数=%d；可索引明细数=%d；统计量由系统计算，证据需回溯 evidence_id。\n", count, available)
 	return limitEngineerText(prefix+string(b), engineerContextMaxRunes)
 }
 
