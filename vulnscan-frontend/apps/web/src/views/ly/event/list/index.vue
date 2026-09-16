@@ -112,6 +112,11 @@ async function loadEvents() {
   }
 }
 
+async function refreshEvents() {
+  state.page = 1;
+  await loadEvents();
+}
+
 function onScopeChange() {
   state.archivePeriod = 'all';
   state.archiveRange = null;
@@ -307,7 +312,7 @@ onMounted(async () => {
             style="width: 100px"
             @update:value="onSortChange"
           />
-          <NButton type="primary" @click="loadEvents">刷新</NButton>
+          <NButton type="primary" :loading="lyStore.loading" @click="refreshEvents">刷新</NButton>
           <NTag v-if="state.rankKey" size="small" type="info" closable @close="clearRankFilter">
             {{ RANK_LABELS[state.rankKey] }}：{{ state.rankValue }}
           </NTag>

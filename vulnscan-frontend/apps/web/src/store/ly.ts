@@ -58,8 +58,8 @@ export const useLyStore = defineStore('ly', {
         return this.events;
       } catch (error) {
         console.error('[ly] 加载事件列表失败', error);
-        this.events = [];
-        this.eventTotal = 0;
+        // 刷新请求失败时保留上一次成功结果，避免瞬时网络/服务错误把列表清空，
+        // 用户会继续看到旧数据并可再次刷新。
         return this.events;
       } finally {
         this.loading = false;
