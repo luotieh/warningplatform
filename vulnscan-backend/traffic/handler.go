@@ -750,6 +750,11 @@ func (h *Handler) Ly(c *gin.Context) {
 
 func (h *Handler) Internal(c *gin.Context) {
 	path := c.Param("path")
+	// Gin 通配参数在不同路由挂载方式下可能带或不带前导斜杠。
+	// 统一后再匹配，避免合法的 /internal/event/push 被误报为路由不存在。
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
 	switch {
 	case c.Request.Method == http.MethodPost && path == "/event/push":
 		body, valid := readBody(c)

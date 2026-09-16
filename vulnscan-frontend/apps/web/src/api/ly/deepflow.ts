@@ -1,4 +1,19 @@
+import { useAccessStore } from '@vben/stores';
+
 const DEEPFLOW_BASE_URL = '/api/traffic';
+
+function redirectToLogin(clearToken = true) {
+  const accessStore = useAccessStore();
+  if (clearToken) {
+    accessStore.setAccessToken(null);
+    localStorage.removeItem('deepflow_token');
+    localStorage.removeItem('deepflow_userInfo');
+  }
+  if (!window.location.pathname.startsWith('/auth')) {
+    const redirect = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    window.location.assign(`/auth/login?redirect=${encodeURIComponent(redirect)}`);
+  }
+}
 
 interface DeepflowRequestOptions extends RequestInit {
   params?: Record<string, any>;
@@ -19,10 +34,18 @@ function buildUrl(url: string, params?: Record<string, any>) {
 async function parseResponse(response: Response) {
   if (!response.ok) {
     const error = await response.json().catch(() => null);
+    if (response.status === 401) {
+      redirectToLogin();
+    }
     throw new Error(error?.msg || error?.message || `HTTP error! status: ${response.status}`);
   }
 
   const data = await response.json();
+
+  if (data?.code === 401 || data?.status === 401 || data?.message === 'UNAUTHORIZED' || data?.msg === 'UNAUTHORIZED') {
+    redirectToLogin();
+    throw new Error('UNAUTHORIZED');
+  }
 
   if (data?.code !== undefined) {
     if (![200, 2000].includes(data.code)) throw new Error(data.message || 'Request failed');
@@ -50,7 +73,15 @@ function unwrapListResponse(data: any) {
 }
 
 async function request<T = any>(url: string, options: DeepflowRequestOptions = {}) {
-  const token = localStorage.getItem('deepflow_token');
+  // 流量分析路由由主应用 IAM 中间件保护，优先使用主应用 access token；
+  // deepflow_token 仅作为独立 DeepSOC 登录的兼容回退。
+  const accessStore = useAccessStore();
+  const token = accessStore.accessToken || localStorage.getItem('deepflow_token');
+  const isLoginRequest = url.includes('/deepsoc/auth/login');
+  if (!token && !isLoginRequest) {
+    redirectToLogin(false);
+    throw new Error('未登录，请先登录');
+  }
   const headers = new Headers(options.headers || {});
   headers.set('Content-Type', 'application/json');
   if (token) {

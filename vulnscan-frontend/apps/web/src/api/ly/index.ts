@@ -97,8 +97,12 @@ async function get<T = any>(
 async function postInternal<T = any>(url: string, data?: Record<string, any>) {
   const headers = new Headers();
   headers.set('Content-Type', 'application/json');
-  // Keep the local internal API key aligned with vulnscan-backend/config.toml.
-  headers.set('X-API-Key', 'local-test-key');
+  // Must match traffic.internal_api_key in the backend config. Allow local
+  // deployments to override it without changing source code.
+  headers.set(
+    'X-API-Key',
+    import.meta.env.VITE_TRAFFIC_INTERNAL_API_KEY || 'change-me-internal-key',
+  );
 
   const response = await fetch(`/api/traffic/internal${url}`, {
     body: JSON.stringify(data ?? {}),
