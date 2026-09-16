@@ -33,7 +33,7 @@ func TestEngineerPromptSamplesPacketDetailsWithoutChangingEvent(t *testing.T) {
 	}
 	chat := NewChatService(trafficservice.Services{Store: st})
 	prompt := chat.engineerEventPrompt(ev, "请基于证据重新生成报告")
-	for _, want := range []string{"E-evt-prompt-O1", "明细数=500", `"occurrences_available":200`, `"synthetic":true`, "turn-24", "请基于证据重新生成报告"} {
+	for _, want := range []string{"E-evt-prompt-O1", "明细数=500", "可索引明细数=200", `"synthetic":true`, "turn-24", "请基于证据重新生成报告"} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("missing %s", want)
 		}
