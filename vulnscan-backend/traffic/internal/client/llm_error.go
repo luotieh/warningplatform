@@ -13,10 +13,19 @@ import (
 type LLMCallError struct {
 	Endpoint, Model, Reason, Detail string
 	Status                          int
+	MaxTokens                       int
+	TokenParameter                  string
 }
 
 func (e *LLMCallError) Error() string {
-	return fmt.Sprintf("LLM调用失败：%s；URL=%s；model=%s；status=%d；max_tokens=%d；上游原因：%s", e.Reason, e.Endpoint, e.Model, e.Status, chatMaxTokens, e.Detail)
+	budget, parameter := e.MaxTokens, e.TokenParameter
+	if budget == 0 {
+		budget = chatMaxTokens
+	}
+	if parameter == "" {
+		parameter = "max_tokens"
+	}
+	return fmt.Sprintf("LLM调用失败：%s；URL=%s；model=%s；status=%d；%s=%d；上游原因：%s", e.Reason, e.Endpoint, e.Model, e.Status, parameter, budget, e.Detail)
 }
 
 var llmCredentialPattern = regexp.MustCompile(`(?i)(bearer\s+\S+|sk-[a-z0-9_-]+)`)

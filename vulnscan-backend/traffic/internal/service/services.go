@@ -42,75 +42,7 @@ func (s Services) ProcessLyEvent(ctx context.Context, ly map[string]any) (map[st
 		s.RunAgentWorkflowAsync(id)
 		return map[string]any{"aggregated": false, "reason": "analysis-only", "deepsoc_event_id": id}, nil
 	}
-	fp := Fingerprint(ly)
-	lock := lifecycleLock(&fingerprintLocks, fp)
-	lock.Lock()
-	defer lock.Unlock()
-	lyID := asString(ly["id"])
-	s.Store.ReserveFingerprint(fp)
-	row, _ := s.Store.GetEventMap(fp)
-	if row.DeepSOCEventID != "" {
-		eventLock := lifecycleLock(&eventLocks, row.DeepSOCEventID)
-		eventLock.Lock()
-		ev, found := s.Store.GetEvent(row.DeepSOCEventID)
-		if found {
-			// Also check at ingestion: a delayed scheduler must not join separate attacks.
-			closed := domain.IsConverged(ev, time.Now().UTC()) || domain.IsConverged(ev, activityTime(ly))
-			if !closed {
-				count := s.mergeOccurrenceLocked(ev.EventID, ly)
-				eventLock.Unlock()
-				if count == 0 {
-					return nil, errors.New("更新事件聚合失败")
-				}
-				return map[string]any{"aggregated": true, "reason": "merged-by-aggregate-key", "fingerprint": fp, "ly_id": lyID, "deepsoc_event_id": ev.EventID, "occurrence_count": count}, nil
-			}
-			if !s.closeEvent(ev) {
-				eventLock.Unlock()
-				return nil, errors.New("保存事件收敛状态失败")
-			}
-		}
-		eventLock.Unlock()
-	}
-
-	payload := LyEventToDeepSOC(ly)
-	// Source record IDs stay in context; each attack lifecycle has its own ID.
-	payload.EventID = newID("ly")
-	if s.DeepSOC.Enabled() {
-		resp, err := s.DeepSOC.CreateEvent(ctx, payload, payload.EventID)
-		if err != nil {
-			return nil, err
-		}
-		deepID := extractEventID(resp)
-		s.Store.BindEventMap(fp, lyID, deepID)
-		_ = s.publish(ctx, "event.ingested", deepID, "flowshadow", map[string]any{
-			"fingerprint": fp,
-			"ly_event_id": lyID,
-			"upstream":    resp,
-		})
-		return map[string]any{"success": true, "fingerprint": fp, "ly_event_id": lyID, "deepsoc_event_id": deepID, "upstream": resp}, nil
-	}
-
-	event, err := s.Store.CreateEvent(payload)
-	if err != nil {
-		return nil, err
-	}
-	s.Store.BindEventMap(fp, lyID, event.EventID)
-	_, _ = s.Store.AddMessage(domain.Message{
-		EventID:         event.EventID,
-		MessageFrom:     domain.RoleSystem,
-		MessageType:     "system_notification",
-		MessageContent:  StandardContent(responseText("系统创建了安全事件: "+firstNonEmpty(event.EventName, "未命名事件"), nil)),
-		RoundID:         1,
-		MessageCategory: "agent",
-		SenderType:      "system",
-	})
-	_ = s.publish(ctx, "event.ingested", event.EventID, "flowshadow", map[string]any{
-		"fingerprint": fp,
-		"ly_event_id": lyID,
-		"event":       event,
-	})
-	s.RunAgentWorkflowAsync(event.EventID)
-	return map[string]any{"success": true, "fingerprint": fp, "ly_event_id": lyID, "deepsoc_event_id": event.EventID}, nil
+	return s.ingestHit(ctx, ly)
 }
 
 // mergeOccurrence 把一条同聚合键的新事件合并进既有事件：累加发生次数、
@@ -242,12 +174,11 @@ func (s Services) RunSyncOnce(ctx context.Context, batchSize, lookbackSeconds, m
 		if recordID == "" {
 			recordID = "noid:" + idemKey
 		}
-		if s.Store.AlreadyPushed(recordID) {
-			continue
-		}
+		// The durable ingestion layer owns deduplication, including device scope
+		// and evidence revisions. The legacy pushed-ID cache cannot skip a hit.
 		pe := domain.PushedEvent{LyEventID: recordID, IdempotencyKey: idemKey, Status: "FAILED"}
 		var lastErr error
-		for i := 0; i < maxRetries; i++ {
+		for i := 0; i < max(1, maxRetries); i++ {
 			pe.Attempts = i + 1
 			res, err := s.ProcessLyEvent(ctx, ev)
 			if err == nil {
@@ -266,7 +197,11 @@ func (s Services) RunSyncOnce(ctx context.Context, batchSize, lookbackSeconds, m
 		}
 		s.Store.SavePushedEvent(pe)
 	}
-	s.Store.SaveCursor(domain.SyncCursor{Name: "flowshadow_events", LastTS: newestTS})
+	// Keep the previous cursor on a failed batch so an uncommitted record can
+	// be retried; successfully committed records are harmless duplicate inputs.
+	if failed == 0 {
+		s.Store.SaveCursor(domain.SyncCursor{Name: "flowshadow_events", LastTS: newestTS})
+	}
 	_ = s.publish(ctx, "sync.completed", "", "flowshadow", map[string]any{"since": since, "newest_ts": newestTS, "fetched": len(items), "pushed": pushed, "failed": failed})
 	return map[string]any{"since": since, "newest_ts": newestTS, "fetched": len(items), "pushed": pushed, "failed": failed}, nil
 }

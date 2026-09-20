@@ -165,6 +165,11 @@ func (s Services) runAnalysis(ctx context.Context, eventID string, kind string, 
 		return err
 	}
 
+	evidenceContext, err := s.EvidenceContext(ctx, event)
+	if err != nil {
+		return s.failAgentWorkflow(eventID, err)
+	}
+	event.Context = evidenceContext
 	reply, err := s.LLM.Chat(ctx, autoAnalysisSystemPrompt, autoAnalysisPrompt(event))
 	if err != nil {
 		err = fmt.Errorf("LLM自动分析失败，请检查LLM配置: %w", err)
@@ -191,7 +196,10 @@ func (s Services) runAnalysis(ctx context.Context, eventID string, kind string, 
 		llmExpertResponse(event, roundID, sm, reply)); err != nil {
 		return s.failAgentWorkflow(eventID, fmt.Errorf("保存专家分析消息失败: %w", err))
 	}
-now := time.Now().UTC().Format(time.RFC3339)
+	if err := s.MarkReportSnapshot(ctx, eventID, event.Context); err != nil {
+		return s.failAgentWorkflow(eventID, err)
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
 	_, _ = s.Store.UpdateEvent(eventID, map[string]any{
 		"event_status":     "round_finished",
 		"analysis_version": version,
@@ -219,7 +227,8 @@ func (s Services) addLLMConfigRequiredMessage(eventID string, roundID int, text 
 }
 
 // autoAnalysisSystemPrompt 是自动分析链路专用的精简 system(不复用工程师对话人格)。
-const autoAnalysisSystemPrompt = `你是 DeepSOC 安全运营自动分析引擎。仅基于给定的安全事件信息研判，不得编造未提供的日志、资产或情报事实。输出简体中文 Markdown。涉及证据附件/证据文件时只引用文件名，不得输出任何本地路径或下载路径。`
+const autoAnalysisSystemPrompt = `你是 DeepSOC 安全运营自动分析引擎。仅基于给定的安全事件信息研判，不得编造未提供的日志、资产或情报事实。输出简体中文 Markdown。涉及证据附件/证据文件时只引用文件名，不得输出任何本地路径或下载路径。
+统计量由系统计算；结合时间、协议、请求响应和不同证据之间的关联进行深入研判。给出危险攻击概率（0–100%）及依据，该概率是研判估计，不等于攻击成功概率。关键证据按 1、2、3 数字编号，引用输入中真实存在的完整 evidence_id/hit_id，并明确指出该条明细的具体问题。不得把模型样本称为全部原始明细；遵守 input_manifest 的扫描范围与缺失说明。没有证据支持的事实不写为确定结论。建议不写成已执行处置；未提供实际功能链接或执行记录时，标注“暂未实现”。最终结论面向安全团队，不输出面向模型的内部约束措辞，不使用“自动驾驶”。`
 
 func autoAnalysisPrompt(event domain.Event) string {
 	obsStr := formatObservables(event.Observables)
@@ -283,6 +292,10 @@ func formatAuxContext(raw string) string {
 		return "无"
 	}
 
+	if _, ok := ctx["snapshot_version"]; ok {
+		b, _ := json.Marshal(ctx)
+		return string(b)
+	}
 	var b strings.Builder
 	emit := func(indent, label string, v any) {
 		s := scalarString(v)
@@ -515,14 +528,16 @@ func formatObservables(items []domain.IOC) string {
 
 func llmExpertResponse(event domain.Event, roundID int, sm domain.Summary, reply string) map[string]any {
 	return map[string]any{
-		"type":          "llm_response",
-		"from":          domain.RoleExpert,
-		"to":            []string{domain.RoleCaptain},
-		"event_id":      event.EventID,
-		"round_id":      roundID,
-		"response_type": "SUMMARY",
-		"response_text": reply,
-		"suggestions":   []string{},
+		"snapshot_version": decodeEventContext(event.Context)["snapshot_version"],
+		"input_manifest":   decodeEventContext(event.Context)["input_manifest"],
+		"type":             "llm_response",
+		"from":             domain.RoleExpert,
+		"to":               []string{domain.RoleCaptain},
+		"event_id":         event.EventID,
+		"round_id":         roundID,
+		"response_type":    "SUMMARY",
+		"response_text":    reply,
+		"suggestions":      []string{},
 	}
 }
 

@@ -1,6 +1,8 @@
 package store
 
-const MySQLSchema = `
+const MySQLSchema = baseMySQLSchema + AggregationSchema
+
+const baseMySQLSchema = `
 CREATE TABLE IF NOT EXISTS users (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
     user_id VARCHAR(64) UNIQUE NOT NULL,

@@ -14,6 +14,7 @@ import { getMessageDisplay, normalizeDeepflowMessage } from '#/utils/deepflow';
 import { formatTimestamp } from '#/utils/ly';
 import deepflowSocket from '#/utils/deepflow-socket';
 import { estimateWait, loadDurations, saveDuration, waitText } from './generation-wait';
+import EvidenceDialog from './EvidenceDialog.vue';
 
 interface ChatMessage extends Record<string, any> {
   created_at?: string;
@@ -31,6 +32,21 @@ const props = defineProps<{
 }>();
 
 const loading = ref(false);
+const evidenceVisible = ref(false);
+const evidenceHitId = ref('');
+const evidenceVersion = ref(0);
+
+function onEvidenceClick(event: MouseEvent) {
+  const target = event.target as HTMLElement;
+  const anchor = target.closest('a[href^="#evidence-hit-"]');
+  if (!anchor) return;
+  const id = anchor.getAttribute('href')?.slice('#evidence-'.length) || '';
+  if (!/^hit-[a-f0-9]{64}$/.test(id)) return;
+  event.preventDefault();
+  evidenceHitId.value = id;
+  evidenceVersion.value = Number(target.closest('[data-snapshot-version]')?.getAttribute('data-snapshot-version') || 0);
+  evidenceVisible.value = true;
+}
 const sendError = ref('');
 const messageInput = ref('');
 const messageRecord = ref<ChatMessage[]>([]);
@@ -87,6 +103,7 @@ const chatMessages = computed(() =>
     .filter((item) => item.pending || String(item.display.ctx || '').trim() !== '')
     .map((item) => ({
       content: item.display.ctx || '',
+      snapshotVersion: Number(item.message_content?.data?.snapshot_version || 0),
       thinking: Boolean(item.pending && isAiResultMessage(item)),
       from: item.display.from,
       isUser: item.isUser,
@@ -395,7 +412,32 @@ function handleNewMessage(data: any) {
 function renderMarkdown(text?: string) {
   if (!text) return '';
   try {
-    return marked.parse(text, { async: false }) as string;
+    const html = marked.parse(text, { async: false }) as string;
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT);
+    const nodes: Text[] = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode as Text);
+    for (const node of nodes) {
+      if (node.parentElement?.closest('a,script,style')) continue;
+      const textValue = node.textContent || '';
+      const matches = [...textValue.matchAll(/\bhit-[a-f0-9]{64}\b/g)];
+      if (!matches.length) continue;
+      const fragment = doc.createDocumentFragment();
+      let offset = 0;
+      for (const match of matches) {
+        const index = match.index ?? 0;
+        fragment.append(doc.createTextNode(textValue.slice(offset, index)));
+        const link = doc.createElement('a');
+        link.href = `#evidence-${match[0]}`;
+        link.textContent = match[0];
+        link.title = '查看该条命中明细';
+        fragment.append(link);
+        offset = index + match[0].length;
+      }
+      fragment.append(doc.createTextNode(textValue.slice(offset)));
+      node.replaceWith(fragment);
+    }
+    return doc.body.innerHTML;
   } catch {
     return text;
   }
@@ -478,6 +520,7 @@ onUnmounted(() => {
 
 <template>
   <div class="chat-shell">
+    <EvidenceDialog v-model:visible="evidenceVisible" :event-id="eventId" :hit-id="evidenceHitId" :version="evidenceVersion" />
     <div v-if="loading" class="generation-status" :class="{ 'generation-status-slow': generationStatus.slow }" role="status" aria-live="polite">
       <div class="generation-status-heading"><strong>AI助手</strong><span>{{ generationStatus.title }}</span></div>
       <div>{{ generationStatus.text }}</div>
@@ -500,6 +543,8 @@ onUnmounted(() => {
               item.messageClass === 'message-engineer-question' ? 'engineer-question' : '',
             ]"
             v-html="renderMarkdown(item.thinking ? generationStatus.text : item.content || '暂无内容')"
+            @click="onEvidenceClick"
+            :data-snapshot-version="item.snapshotVersion"
           ></div>
         </div>
       </div>

@@ -20,6 +20,21 @@ func ParseEventTime(value any) time.Time {
 		return time.Time{}
 	}
 	v := strings.TrimSpace(fmt.Sprint(value))
+	if n, ok := value.(float64); ok {
+		// encoding/json uses float64; avoid exponent formatting that bypasses
+		// integer microsecond parsing even for exactly representable epochs.
+		v = strconv.FormatFloat(n, 'f', -1, 64)
+	}
+	// Preserve microsecond identities; float division can shift packet times.
+	if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+		if n >= 1e14 {
+			return time.Unix(n/1e6, (n%1e6)*1000).UTC()
+		}
+		if n >= 1e11 {
+			return time.Unix(n/1e3, (n%1e3)*1e6).UTC()
+		}
+		return time.Unix(n, 0).UTC()
+	}
 	if n, err := strconv.ParseFloat(v, 64); err == nil {
 		if n >= 1e14 {
 			n /= 1e6

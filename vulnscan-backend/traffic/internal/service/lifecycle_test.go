@@ -28,53 +28,35 @@ func seedLifecycle(t *testing.T, st store.Store, id string, last time.Time, clos
 
 func TestAttackLifecycleBoundary(t *testing.T) {
 	for _, tc := range []struct {
-		name   string
-		idle   time.Duration
-		closed bool
-		merge  bool
+		name  string
+		gap   time.Duration
+		merge bool
 	}{
-		{"within-29-minutes", 29 * time.Minute, false, true},
-		{"exactly-30-minutes", 30 * time.Minute, false, false},
-		{"scheduler-delayed", 31 * time.Minute, false, false},
-		{"already-closed", time.Minute, true, false},
+		{"below-window", 30*time.Minute - time.Microsecond, true},
+		{"exact-window", 30 * time.Minute, false},
+		{"after-window", 31 * time.Minute, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			st := store.NewMemoryStore()
-			svc := Services{Store: st}
-			last := time.Now().UTC().Add(-tc.idle)
-			ly := seedLifecycle(t, st, "old-"+tc.name, last, tc.closed)
-			before, _ := st.GetEvent("old-" + tc.name)
-			ly["time"] = last.Add(tc.idle).Format(time.RFC3339Nano)
-			ly["bytes"] = 20
-			res, err := svc.ProcessLyEvent(context.Background(), ly)
+			svc := Services{Store: store.NewMemoryStore()}
+			base := time.Now().UTC().Add(-48 * time.Hour).Truncate(time.Microsecond)
+			a := ingestTestHit(t, svc, "a", base)
+			b := ingestTestHit(t, svc, "b", base.Add(tc.gap))
+			if (a == b) != tc.merge {
+				t.Fatalf("event-time boundary: %s %s", a, b)
+			}
+			if err := svc.DrainAggregation(context.Background(), 20); err != nil {
+				t.Fatal(err)
+			}
+			snap, err := svc.EvidenceSnapshot(context.Background(), a, 0)
 			if err != nil {
 				t.Fatal(err)
 			}
-			id := asString(res["deepsoc_event_id"])
-			old, _ := st.GetEvent(before.EventID)
+			want := int64(1)
 			if tc.merge {
-				if id != old.EventID || toInt(decodeEventContext(old.Context)["occurrence_count"]) != 2 {
-					t.Fatalf("not merged: %v", res)
-				}
-			} else {
-				if id == old.EventID || !old.AggregationClosed {
-					t.Fatalf("reused old lifecycle: %v", res)
-				}
-				oldCtx := decodeEventContext(old.Context)
-				if toInt(oldCtx["occurrence_count"]) != 1 || quantStatsFromContext(oldCtx).TotalPayloadBytes != 10 {
-					t.Fatal("old statistics contaminated")
-				}
-				if !tc.closed && !domain.ParseEventTime(oldCtx["converged_at"]).Equal(last) {
-					t.Fatalf("convergence time is not last activity: %v", oldCtx["converged_at"])
-				}
-				fresh, _ := st.GetEvent(id)
-				if toInt(decodeEventContext(fresh.Context)["occurrence_count"]) != 1 || fresh.AggregationClosed {
-					t.Fatal("new lifecycle not initialized")
-				}
-				mapping, _ := st.GetEventMap(Fingerprint(ly))
-				if mapping.DeepSOCEventID != id {
-					t.Fatal("fingerprint not rebound")
-				}
+				want = 2
+			}
+			if snap.Count != want {
+				t.Fatalf("count=%d", snap.Count)
 			}
 		})
 	}
@@ -88,6 +70,7 @@ func TestArchivedLifecycleAndHistoricalAnalysis(t *testing.T) {
 	st.UpdateEvent("archived", map[string]any{"archive_date": "2026-09-12"})
 	before, _ := st.GetEvent("archived")
 	ly["time"] = time.Now().UTC().Format(time.RFC3339Nano)
+	ly["device_id"], ly["event_id"] = "test-node", "new-hit"
 	res, err := svc.ProcessLyEvent(context.Background(), ly)
 	if err != nil {
 		t.Fatal(err)
@@ -101,6 +84,9 @@ func TestArchivedLifecycleAndHistoricalAnalysis(t *testing.T) {
 	after, _ := st.GetEvent("archived")
 	if after.Context != before.Context || after.ArchiveDate == nil || !after.ArchiveDate.Equal(*before.ArchiveDate) {
 		t.Fatal("archived data changed")
+	}
+	if err := svc.DrainAggregation(context.Background(), 20); err != nil {
+		t.Fatal(err)
 	}
 	fresh, _ := st.GetEvent(latest)
 	if toInt(decodeEventContext(fresh.Context)["occurrence_count"]) != 1 {
@@ -126,7 +112,7 @@ func TestConcurrentIngestionAndScanner(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			ly := map[string]any{"id": fmt.Sprint(i), "src_ip": "192.0.2.1", "dst_ip": "192.0.2.2", "event_type": "scan", "time": time.Now().UTC().Format(time.RFC3339Nano)}
+			ly := map[string]any{"event_id": fmt.Sprint(i), "device_id": "test-node", "src_ip": "192.0.2.1", "dst_ip": "192.0.2.2", "event_type": "scan", "time": time.Now().UTC().Format(time.RFC3339Nano)}
 			res, err := svc.ProcessLyEvent(context.Background(), ly)
 			if err != nil {
 				t.Error(err)
@@ -154,6 +140,9 @@ func TestConcurrentIngestionAndScanner(t *testing.T) {
 	if len(st.ListEvents()) != 2 {
 		t.Fatalf("events=%d", len(st.ListEvents()))
 	}
+	if err := svc.DrainAggregation(context.Background(), 20); err != nil {
+		t.Fatal(err)
+	}
 	fresh, _ := st.GetEvent(id)
 	old, _ := st.GetEvent("old-concurrent")
 	if toInt(decodeEventContext(fresh.Context)["occurrence_count"]) != hits || !old.AggregationClosed || fresh.AggregationClosed {
@@ -162,17 +151,19 @@ func TestConcurrentIngestionAndScanner(t *testing.T) {
 }
 
 func TestOutOfOrderHitKeepsLatestActivity(t *testing.T) {
-	st := store.NewMemoryStore()
-	svc := Services{Store: st}
-	last := time.Now().UTC().Add(-time.Minute)
-	ly := seedLifecycle(t, st, "unordered", last, false)
-	ly["time"] = last.Add(-time.Minute).In(domain.Beijing).Format("2006-01-02 15:04:05")
-	if _, err := svc.ProcessLyEvent(context.Background(), ly); err != nil {
+	svc := Services{Store: store.NewMemoryStore()}
+	last := time.Now().UTC().Add(-time.Minute).Truncate(time.Microsecond)
+	id := ingestTestHit(t, svc, "first", last)
+	other := ingestTestHit(t, svc, "older", last.Add(-time.Minute))
+	if id != other {
+		t.Fatal("late hit split")
+	}
+	if err := svc.DrainAggregation(context.Background(), 20); err != nil {
 		t.Fatal(err)
 	}
-	e, _ := st.GetEvent("unordered")
+	e, _ := svc.Store.GetEvent(id)
 	if !domain.LastActivity(e).Equal(last) {
-		t.Fatalf("last activity moved: %v", domain.LastActivity(e))
+		t.Fatal("last activity moved backwards")
 	}
 }
 
@@ -188,10 +179,18 @@ func (s *failCreateStore) CreateEvent(e domain.Event) (domain.Event, error) {
 	}
 	return s.Store.CreateEvent(e)
 }
+func (s *failCreateStore) AggregationTransaction(ctx context.Context, key string, fn func(store.Store) error) error {
+	return s.Store.AggregationTransaction(ctx, key, func(tx store.Store) error {
+		wrapper := &failCreateStore{Store: tx, fail: s.fail}
+		err := fn(wrapper)
+		s.fail = wrapper.fail
+		return err
+	})
+}
 func TestFailedCreationDoesNotPoisonFingerprint(t *testing.T) {
 	st := &failCreateStore{Store: store.NewMemoryStore(), fail: true}
 	svc := Services{Store: st}
-	ly := map[string]any{"src_ip": "192.0.2.3", "dst_ip": "192.0.2.4", "event_type": "scan"}
+	ly := testHit("failure", time.Now().UTC().Add(-time.Minute))
 	if _, err := svc.ProcessLyEvent(context.Background(), ly); err == nil {
 		t.Fatal("expected create failure")
 	}

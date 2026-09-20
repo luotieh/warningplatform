@@ -88,16 +88,36 @@ func NewTraffic(moduleCfg Config) *Traffic {
 			HTTP:    httpClient,
 		},
 		LLM: &client.LLMClient{
-			BaseURL: cfg.LLMBaseURL,
-			APIKey:  cfg.LLMAPIKey,
-			Model:   cfg.LLMModel,
+			BaseURL:     cfg.LLMBaseURL,
+			APIKey:      cfg.LLMAPIKey,
+			Model:       cfg.LLMModel,
 			Temperature: cfg.LLMTemperature,
-			HTTP:    llmHTTPClient,
+			HTTP:        llmHTTPClient,
 		},
 		Queue: queue,
 	}
 
 	socketHub := socketio.NewHub()
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+			if err := services.DrainAggregation(ctx, 20); err != nil {
+				log.Printf("traffic: aggregation rebuild: %v", err)
+			}
+			cancel()
+		}
+	}()
+	go func() {
+		ticker := time.NewTicker(15 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			if err := services.DrainAggregationAnalysis(context.Background()); err != nil {
+				log.Printf("traffic: aggregation analysis: %v", err)
+			}
+		}
+	}()
 	// 收敛终报后台扫描：每 1 分钟检查一次未收敛事件。
 	go func() {
 		ticker := time.NewTicker(time.Minute)
@@ -312,6 +332,9 @@ func (m *Traffic) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
 				{Name: "事件动作", Path: "detail/:eventID/actions", Method: "GET", Handler: m.api.EventActions, Enabled: true},
 				{Name: "事件命令", Path: "detail/:eventID/commands", Method: "GET", Handler: m.api.EventCommands, Enabled: true},
 				{Name: "事件统计", Path: "detail/:eventID/stats", Method: "GET", Handler: m.api.EventStats, Enabled: true},
+				{Name: "命中明细", Path: "detail/:eventID/occurrences", Method: "GET", Handler: m.api.EventOccurrences, Enabled: true},
+				{Name: "命中证据", Path: "detail/:eventID/occurrences/:hitID", Method: "GET", Handler: m.api.EventOccurrences, Enabled: true},
+				{Name: "命中PCAP", Path: "detail/:eventID/occurrences/:hitID/evidence/:idx", Method: "GET", Handler: m.api.EventEvidence, Enabled: true},
 				{Name: "事件总结", Path: "detail/:eventID/summaries", Method: "GET", Handler: m.api.EventSummaries, Enabled: true},
 				{Name: "发送消息", Path: "detail/:eventID/messages", Method: "POST", Handler: m.api.SendEventMessage, Enabled: true},
 				{Name: "执行记录", Path: "detail/:eventID/executions", Method: "GET", Handler: m.api.EventExecutions, Enabled: true},

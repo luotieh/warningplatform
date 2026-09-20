@@ -354,6 +354,17 @@ func (h *Handler) EventMessages(c *gin.Context) {
 	ok(c, h.events.Messages(c.Request.Context(), c.Param("eventID")))
 }
 
+func (h *Handler) EventOccurrences(c *gin.Context) {
+	limit, _ := strconv.Atoi(c.Query("limit"))
+	version, _ := strconv.ParseInt(c.Query("snapshot_version"), 10, 64)
+	page, err := h.events.Occurrences(c.Request.Context(), c.Param("eventID"), c.Query("cursor"), c.Param("hitID"), limit, version, c.Query("from"), c.Query("to"))
+	if err != nil {
+		fail(c, 400, err.Error())
+		return
+	}
+	ok(c, page)
+}
+
 func (h *Handler) EventTasks(c *gin.Context) {
 	ok(c, h.events.Tasks(c.Request.Context(), c.Param("eventID")))
 }
@@ -437,7 +448,13 @@ func (h *Handler) EventEvidence(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "证据序号非法")
 		return
 	}
-	data, name, contentType, err := h.inner.EvidenceFile(c.Request.Context(), c.Param("eventID"), idx)
+	var data []byte
+	var name, contentType string
+	if c.Param("hitID") != "" {
+		data, name, contentType, err = h.inner.HitEvidenceFile(c.Request.Context(), c.Param("eventID"), c.Param("hitID"), idx)
+	} else {
+		data, name, contentType, err = h.inner.EvidenceFile(c.Request.Context(), c.Param("eventID"), idx)
+	}
 	if err != nil {
 		switch {
 		case errors.Is(err, errEventNotFound), errors.Is(err, errEvidenceNotFound):

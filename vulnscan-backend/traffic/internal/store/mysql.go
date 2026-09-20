@@ -13,7 +13,13 @@ import (
 )
 
 type MySQLStore struct {
-	db *sql.DB
+	db sqlRunner
+}
+
+type sqlRunner interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+	QueryRowContext(context.Context, string, ...any) *sql.Row
 }
 
 var _ Store = (*MySQLStore)(nil)
@@ -177,9 +183,13 @@ VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 }
 
 func (s *MySQLStore) GetEvent(eventID string) (domain.Event, bool) {
-	row := s.db.QueryRowContext(context.Background(), `
+	query := `
 SELECT id, event_id, event_name, title, message, context, source, severity, category, event_status, current_round, observables, created_at, updated_at, review_status, review_comment, reviewed_by, reviewed_at, circular_code, analysis_version, aggregation_closed, last_analysis_at, last_seen_at, archive_date
-FROM events WHERE event_id=?`, eventID)
+FROM events WHERE event_id=?`
+	if _, ok := s.db.(*sql.Tx); ok {
+		query += " FOR UPDATE"
+	}
+	row := s.db.QueryRowContext(context.Background(), query, eventID)
 	e, err := scanEvent(row)
 	return e, err == nil
 }
@@ -211,7 +221,7 @@ func (s *MySQLStore) ListEventsPage(q EventQuery) (EventPage, error) {
 	if err != nil {
 		return EventPage{}, err
 	}
-	where := []string{}
+	where := []string{"(CASE WHEN JSON_VALID(context) THEN COALESCE(JSON_UNQUOTE(JSON_EXTRACT(context, '$.canonical_event_id')), event_id) ELSE event_id END) = event_id"}
 	args := []any{}
 	switch strings.ToLower(strings.TrimSpace(q.Scope)) {
 	case "", "today":
@@ -245,11 +255,11 @@ func (s *MySQLStore) ListEventsPage(q EventQuery) (EventPage, error) {
 		args = append(args, asset, asset)
 	}
 	if q.StartTime != nil {
-		where = append(where, "created_at >= ?")
+		where = append(where, eventFilterTimeSQL()+" >= ?")
 		args = append(args, *q.StartTime)
 	}
 	if q.EndTime != nil {
-		where = append(where, "created_at < ?")
+		where = append(where, eventFilterTimeSQL()+" < ?")
 		args = append(args, *q.EndTime)
 	}
 	whereSQL := ""
@@ -313,7 +323,7 @@ func eventOrderBy(q EventQuery) string {
 	}
 	switch strings.ToLower(strings.TrimSpace(q.Sort)) {
 	case "payload":
-		return jsonNum("$.quant_stats.total_payload_bytes") + " " + dir +
+		return "CASE WHEN JSON_VALID(context) THEN CASE WHEN JSON_UNQUOTE(JSON_EXTRACT(context,'$.quant_stats.volume_quality'))='unverified' THEN 1 ELSE 0 END ELSE 0 END ASC, " + jsonNum("$.quant_stats.total_payload_bytes") + " " + dir +
 			", created_at DESC, id DESC"
 	case "frequency":
 		return jsonNum("$.occurrence_count") + " " + dir +
@@ -321,6 +331,10 @@ func eventOrderBy(q EventQuery) string {
 	default:
 		return "created_at " + dir + ", id DESC"
 	}
+}
+
+func eventFilterTimeSQL() string {
+	return "CASE WHEN JSON_VALID(context) AND JSON_UNQUOTE(JSON_EXTRACT(context,'$.aggregation_version'))='2' THEN COALESCE(STR_TO_DATE(REPLACE(SUBSTRING(JSON_UNQUOTE(JSON_EXTRACT(context,'$.first_time')),1,19),'T',' '),'%Y-%m-%d %H:%i:%s'),created_at) ELSE created_at END"
 }
 
 // ArchiveConvergedEvents 把已收敛且最后活跃早于阈值的未归档事件标记归档日
@@ -441,7 +455,9 @@ func (s *MySQLStore) UpdateEvent(eventID string, patch map[string]any) (domain.E
 		}
 	}
 	for _, key := range []string{"reviewed_at", "last_analysis_at", "last_seen_at"} {
-		if v, ok := stringPatch(patch, key); ok {
+		if v, ok := patch[key]; ok && v == nil {
+			add(key, nil)
+		} else if v, ok := stringPatch(patch, key); ok {
 			if t, err := time.Parse(time.RFC3339Nano, v); err == nil {
 				add(key, t.UTC())
 			}

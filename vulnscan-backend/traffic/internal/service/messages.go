@@ -24,6 +24,11 @@ func StandardContent(data any) string {
 	return string(b)
 }
 
+func EvidenceReplyContent(reply, raw string) string {
+	c := decodeEventContext(raw)
+	return StandardContent(map[string]any{"response_text": reply, "snapshot_version": c["snapshot_version"], "input_manifest": c["input_manifest"]})
+}
+
 func responseText(text string, extra map[string]any) map[string]any {
 	out := map[string]any{"response_text": text}
 	for k, v := range extra {

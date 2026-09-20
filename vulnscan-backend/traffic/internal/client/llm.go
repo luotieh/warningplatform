@@ -1,11 +1,8 @@
 package client
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -52,81 +49,22 @@ func chatCompletionsEndpoint(baseURL string) string {
 }
 
 func (c LLMClient) HealthCheck(ctx context.Context) LLMHealth {
-	h := LLMHealth{
-		Configured: c.Enabled(),
-		BaseURL:    strings.TrimRight(strings.TrimSpace(c.BaseURL), "/"),
-		Model:      strings.TrimSpace(c.Model),
-	}
-	if h.BaseURL != "" {
-		h.Endpoint = chatCompletionsEndpoint(h.BaseURL)
-	}
-	if h.Model == "" {
-		h.Model = "deepseek-chat"
-	}
+	h := LLMHealth{Configured: c.Enabled(), BaseURL: strings.TrimSpace(c.BaseURL), Model: strings.TrimSpace(c.Model)}
 	if !h.Configured {
 		h.Error = "LLM_BASE_URL is empty"
 		return h
 	}
-
-	payload := map[string]any{
-		"model": h.Model,
-		"messages": []map[string]string{
-			{"role": "system", "content": "Return only OK."},
-			{"role": "user", "content": "health"},
-		},
-		"stream":     false,
-		"max_tokens": 4,
-	}
-	b, err := json.Marshal(payload)
-	if err != nil {
-		h.Error = err.Error()
-		return h
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, h.Endpoint, bytes.NewReader(b))
-	if err != nil {
-		h.Error = err.Error()
-		return h
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if key := strings.TrimSpace(c.APIKey); key != "" {
-		req.Header.Set("Authorization", "Bearer "+key)
-	}
-
-	httpClient := c.HTTP
-	if httpClient == nil {
-		httpClient = &http.Client{Timeout: 15 * time.Second}
+	if h.Model == "" {
+		h.Model = "deepseek-chat"
+		c.Model = h.Model
 	}
 	start := time.Now()
-	resp, err := httpClient.Do(req)
-	h.LatencyMS = time.Since(start).Milliseconds()
+	result, err := c.complete(ctx, "Return only OK.", "health", healthTestMaxTokens)
+	h.Endpoint, h.LatencyMS = result.Endpoint, time.Since(start).Milliseconds()
+	h.OK = err == nil
 	if err != nil {
 		h.Error = err.Error()
-		return h
 	}
-	defer resp.Body.Close()
-
-	var out struct {
-		Choices []struct {
-			Message struct {
-				Content          string `json:"content"`
-				ReasoningContent string `json:"reasoning_content"`
-			} `json:"message"`
-		} `json:"choices"`
-		Error any `json:"error"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		h.Error = fmt.Sprintf("LLM响应解析失败（POST %s, status=%d）: %v", h.Endpoint, resp.StatusCode, err)
-		return h
-	}
-	if resp.StatusCode >= 400 {
-		h.Error = fmt.Sprintf("llm request failed: status=%d error=%v", resp.StatusCode, out.Error)
-		return h
-	}
-	if len(out.Choices) == 0 {
-		h.Error = "llm returned empty choices"
-		return h
-	}
-	h.OK = true
 	return h
 }
 
@@ -198,7 +136,7 @@ func missingV1Hint(baseURL string, statusCode int) string {
 
 // HealthTest 对 LLM 服务做两段式健康检查：
 // 1) 连通性：GET {base_url}/models，任何 HTTP 应答都说明服务可达；
-// 2) 对话测试：POST {base_url}/chat/completions 发送一条固定问题并回读回复。
+// 2) 对话测试：通过与报告相同的协议适配器发送固定问题并读取最终回复。
 // 与 Chat 使用相同的端点拼接约定，检查通过即代表自动分析链路可用。
 func (c LLMClient) HealthTest(ctx context.Context) LLMHealthReport {
 	report := LLMHealthReport{
@@ -224,7 +162,7 @@ func (c LLMClient) HealthTest(ctx context.Context) LLMHealthReport {
 }
 
 func (c LLMClient) connectivityCheck(ctx context.Context, httpClient *http.Client, baseURL string) LLMConnectivity {
-	conn := LLMConnectivity{Endpoint: baseURL + "/models"}
+	conn := LLMConnectivity{Endpoint: llmAPIBase(baseURL) + "/models"}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, conn.Endpoint, nil)
 	if err != nil {
 		conn.Error = err.Error()
@@ -249,80 +187,14 @@ func (c LLMClient) connectivityCheck(ctx context.Context, httpClient *http.Clien
 }
 
 func (c LLMClient) chatTest(ctx context.Context, httpClient *http.Client, baseURL, model string) LLMChatTest {
-	chat := LLMChatTest{
-		Endpoint: baseURL + "/chat/completions",
-		Question: healthTestQuestion,
-	}
-	payload := map[string]any{
-		"model": model,
-		"messages": []map[string]string{
-			{"role": "user", "content": healthTestQuestion},
-		},
-		"max_tokens": healthTestMaxTokens,
-		"stream":     false,
-	}
-	b, err := json.Marshal(payload)
-	if err != nil {
-		chat.Error = err.Error()
-		return chat
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, chat.Endpoint, bytes.NewReader(b))
-	if err != nil {
-		chat.Error = err.Error()
-		return chat
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if key := strings.TrimSpace(c.APIKey); key != "" {
-		req.Header.Set("Authorization", "Bearer "+key)
-	}
+	c.BaseURL, c.Model, c.HTTP = baseURL, model, httpClient
 	start := time.Now()
-	resp, err := httpClient.Do(req)
-	chat.LatencyMS = time.Since(start).Milliseconds()
+	result, err := c.complete(ctx, "", healthTestQuestion, healthTestMaxTokens)
+	chat := LLMChatTest{Endpoint: result.Endpoint, Question: healthTestQuestion, Reply: result.Reply, LatencyMS: time.Since(start).Milliseconds(), OK: err == nil}
 	if err != nil {
-		chat.Error = "对话请求失败: " + err.Error()
-		return chat
+		chat.Error = err.Error()
+		chat.Hint = missingV1Hint(baseURL, result.Status)
 	}
-	defer resp.Body.Close()
-
-	var out struct {
-		Choices []struct {
-			FinishReason string `json:"finish_reason"`
-			Message      struct {
-				Content          string `json:"content"`
-				ReasoningContent string `json:"reasoning_content"`
-			} `json:"message"`
-		} `json:"choices"`
-		Error any `json:"error"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		chat.Error = fmt.Sprintf("响应解析失败(status=%d): %v", resp.StatusCode, err)
-		chat.Hint = missingV1Hint(baseURL, resp.StatusCode)
-		return chat
-	}
-	if resp.StatusCode >= 400 {
-		chat.Error = fmt.Sprintf("对话请求失败: status=%d error=%v", resp.StatusCode, out.Error)
-		chat.Hint = missingV1Hint(baseURL, resp.StatusCode)
-		return chat
-	}
-	if len(out.Choices) == 0 {
-		chat.Error = "LLM未返回有效内容(choices为空)"
-		return chat
-	}
-	chat.Reply = strings.TrimSpace(out.Choices[0].Message.Content)
-	if out.Choices[0].FinishReason == "length" {
-		chat.Error = "模型输出达到 token 上限，未完成回答"
-		chat.Hint = "推理可能与正文共用输出预算，请增加输出上限或按模型服务说明关闭思考模式"
-		return chat
-	}
-	if chat.Reply == "" {
-		chat.Error = "模型未返回最终回答（content 为空）"
-		if strings.TrimSpace(out.Choices[0].Message.ReasoningContent) != "" {
-			chat.Hint = "模型仅返回推理内容，请检查输出预算及模型服务的思考模式配置"
-		}
-		return chat
-	}
-
-	chat.OK = chat.Reply != ""
 	return chat
 }
 
@@ -337,59 +209,9 @@ func (c LLMClient) Chat(ctx context.Context, systemPrompt, prompt string) (strin
 	if !c.Enabled() {
 		return "", errors.New("LLM未配置，请先在配置页面填写可用的LLM服务地址")
 	}
-	// 使用模型默认 temperature；部分推理模型只支持固定值，不能统一设置为 0.2。
-	payload := map[string]any{
-		"model": c.Model,
-		"messages": []map[string]string{
-			{"role": "system", "content": systemPrompt},
-			{"role": "user", "content": prompt},
-		},
-		"stream":     false,
-		"max_tokens": chatMaxTokens,
-	}
-	b, err := json.Marshal(payload)
+	result, err := c.complete(ctx, systemPrompt, prompt, chatMaxTokens)
 	if err != nil {
 		return "", err
 	}
-	endpoint := chatCompletionsEndpoint(c.BaseURL)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(b))
-	if err != nil {
-		return "", c.callError(endpoint, 0, err.Error())
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if key := strings.TrimSpace(c.APIKey); key != "" {
-		req.Header.Set("Authorization", "Bearer "+key)
-	}
-	httpClient := c.HTTP
-	if httpClient == nil {
-		httpClient = &http.Client{Timeout: 15 * time.Second}
-	}
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return "", c.callError(endpoint, 0, err.Error())
-	}
-	defer resp.Body.Close()
-	responseBody, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
-	if err != nil {
-		return "", c.callError(endpoint, resp.StatusCode, "读取上游响应失败: "+err.Error())
-	}
-	if resp.StatusCode >= 400 {
-		return "", c.callError(endpoint, resp.StatusCode, upstreamErrorDetail(responseBody))
-	}
-	var out struct {
-		Choices []struct {
-			Message struct {
-				Content          string `json:"content"`
-				ReasoningContent string `json:"reasoning_content"`
-			} `json:"message"`
-		} `json:"choices"`
-		Error any `json:"error"`
-	}
-	if err := json.Unmarshal(responseBody, &out); err != nil {
-		return "", c.callError(endpoint, resp.StatusCode, "上游响应不是有效的对话 JSON: "+err.Error())
-	}
-	if len(out.Choices) == 0 {
-		return "", c.callError(endpoint, resp.StatusCode, "choices为空；"+upstreamErrorDetail(responseBody))
-	}
-	return out.Choices[0].Message.Content, nil
+	return result.Reply, nil
 }

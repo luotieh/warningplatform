@@ -7,6 +7,7 @@ import (
 )
 
 type Store interface {
+	AggregationStore
 	CreateUser(u domain.User) (domain.User, error)
 	GetUserByUsername(username string) (domain.User, bool)
 	GetUser(userID string) (domain.User, bool)

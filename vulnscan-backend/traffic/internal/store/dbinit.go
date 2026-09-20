@@ -42,6 +42,7 @@ func InitMySQL(ctx context.Context, dsn string, autoMigrate bool, waitSeconds in
 		log.Printf("traffic: mysql DSN does not set parseTime=true, forcing it on (required to scan DATETIME columns)")
 		cfg.ParseTime = true
 	}
+	cfg.Loc = time.UTC
 	// Re-materialize the DSN so every derived connection uses the normalized form.
 	cfg, err = mysql.ParseDSN(cfg.FormatDSN())
 	if err != nil {

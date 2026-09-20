@@ -25,6 +25,12 @@ func (s Services) ScanConverged(ctx context.Context) (int, error) {
 	events := s.Store.ListEventsConvergedDue(now.Add(-ConvergenceIdleWindow))
 	scheduled := 0
 	for i := range events {
+		if toInt(decodeEventContext(events[i].Context)["aggregation_version"]) == AggregationVersion {
+			if err := s.convergeAggregation(ctx, events[i].EventID, now); err != nil {
+				return scheduled, err
+			}
+			continue
+		}
 		lock := lifecycleLock(&eventLocks, events[i].EventID)
 		lock.Lock()
 		// Re-read after acquiring the same lock used by ingestion.
@@ -123,6 +129,18 @@ func (s Services) GenerateAssetMonthlySummariesWithProgress(ctx context.Context,
 		}
 		total++
 		events := s.Store.ListEventsByTargetIP(asset.Address, start, end)
+		for i := range events {
+			c := decodeEventContext(events[i].Context)
+			if version := int64(toInt(c["stats_version"])); version > 0 {
+				snap, err := s.EvidenceSnapshot(ctx, events[i].EventID, version)
+				if err != nil {
+					return out, fmt.Errorf("读取月度统计快照: %w", err)
+				}
+				c["quant_stats"] = snap.Context["quant_stats"]
+				raw, _ := json.Marshal(c)
+				events[i].Context = string(raw)
+			}
+		}
 		summary := buildAssetMonthlySummary(asset, period, start, end, events, now)
 		summary.Narrative = s.monthlyNarrative(ctx, asset, period, summary)
 		summary.Status = "completed"

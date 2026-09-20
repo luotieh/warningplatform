@@ -14,7 +14,10 @@ import (
 )
 
 type MemoryStore struct {
-	mu sync.RWMutex
+	mu               sync.RWMutex
+	aggregateRecords map[string]AggregateRecord
+	aggregateHits    map[string]Hit
+	hitSeq           int64
 
 	usersByID       map[string]domain.User
 	usersByUsername map[string]string
@@ -52,6 +55,8 @@ type MemoryStore struct {
 
 func NewMemoryStore() *MemoryStore {
 	s := &MemoryStore{
+		aggregateRecords: map[string]AggregateRecord{},
+		aggregateHits:    map[string]Hit{},
 		usersByID:        map[string]domain.User{},
 		usersByUsername:  map[string]string{},
 		events:           map[string]domain.Event{},
@@ -287,7 +292,9 @@ func (s *MemoryStore) UpdateEvent(eventID string, patch map[string]any) (domain.
 			e.LastAnalysisAt = &tu
 		}
 	}
-	if v, ok := stringPatch(patch, "last_seen_at"); ok {
+	if v, ok := patch["last_seen_at"]; ok && v == nil {
+		e.LastSeenAt = nil
+	} else if v, ok := stringPatch(patch, "last_seen_at"); ok {
 		if t, err := time.Parse(time.RFC3339, v); err == nil {
 			tu := t.UTC()
 			e.LastSeenAt = &tu
@@ -319,6 +326,11 @@ func (s *MemoryStore) ListEventsPage(q EventQuery) (EventPage, error) {
 	defer s.mu.RUnlock()
 	out := []domain.Event{}
 	for _, e := range s.events {
+		var aggregation map[string]any
+		_ = json.Unmarshal([]byte(e.Context), &aggregation)
+		if canonical, _ := aggregation["canonical_event_id"].(string); canonical != "" && canonical != e.EventID {
+			continue
+		}
 		switch strings.ToLower(strings.TrimSpace(q.Scope)) {
 		case "", "today":
 			if e.ArchiveDate != nil {
@@ -354,10 +366,16 @@ func (s *MemoryStore) ListEventsPage(q EventQuery) (EventPage, error) {
 				continue
 			}
 		}
-		if q.StartTime != nil && e.CreatedAt.Before(*q.StartTime) {
+		filterTime := e.CreatedAt
+		if aggregation["aggregation_version"] == float64(2) {
+			if t := domain.ParseEventTime(aggregation["first_time"]); !t.IsZero() {
+				filterTime = t
+			}
+		}
+		if q.StartTime != nil && filterTime.Before(*q.StartTime) {
 			continue
 		}
-		if q.EndTime != nil && !e.CreatedAt.Before(*q.EndTime) {
+		if q.EndTime != nil && !filterTime.Before(*q.EndTime) {
 			continue
 		}
 		out = append(out, e)
@@ -422,6 +440,15 @@ func sortEvents(out []domain.Event, q EventQuery) {
 	switch strings.ToLower(strings.TrimSpace(q.Sort)) {
 	case "payload":
 		sort.SliceStable(out, func(i, j int) bool {
+			unknown := func(e domain.Event) bool {
+				var c map[string]any
+				_ = json.Unmarshal([]byte(e.Context), &c)
+				q, _ := c["quant_stats"].(map[string]any)
+				return q["volume_quality"] == "unverified"
+			}
+			if a, b := unknown(out[i]), unknown(out[j]); a != b {
+				return !a
+			}
 			a, b := ctxNum(out[i], "quant_stats.total_payload_bytes"), ctxNum(out[j], "quant_stats.total_payload_bytes")
 			if a == b {
 				return lessTime(i, j)

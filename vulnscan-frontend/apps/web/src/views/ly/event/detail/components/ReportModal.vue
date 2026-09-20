@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue';
 
 import { marked } from 'marked';
-import { NModal } from 'naive-ui';
+import { NAlert, NModal } from 'naive-ui';
 
 import {
   deepflowGetEventDetail,
@@ -375,6 +375,8 @@ watch(
       <div class="report-body">
         <div class="report-chat">
           <!-- DeepFlow API has its own token; mount only after automatic login. -->
+          <NAlert v-if="activityContext.report_stale" type="warning" style="margin-bottom:8px">事件证据已更新，已有报告可能基于旧数据版本；重新生成后请核对证据。</NAlert>
+          <NAlert v-if="activityContext.canonical_event_id && activityContext.canonical_event_id !== eventId" type="info" style="margin-bottom:8px">此事件已关联到 {{ activityContext.canonical_event_id }}，当前保留历史报告与审核记录。</NAlert>
           <ChatBox
             v-if="eventId && deepflowStore.accessToken"
             ref="chatBoxRef"

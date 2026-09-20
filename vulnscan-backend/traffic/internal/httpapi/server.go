@@ -100,6 +100,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/events/detail/{event_id}/actions", s.getActions)
 	s.mux.HandleFunc("GET /api/events/detail/{event_id}/commands", s.getCommands)
 	s.mux.HandleFunc("GET /api/events/detail/{event_id}/stats", s.getStats)
+	s.mux.HandleFunc("GET /api/events/detail/{event_id}/occurrences", s.getOccurrences)
+	s.mux.HandleFunc("GET /api/events/detail/{event_id}/occurrences/{hit_id}", s.getOccurrences)
 	s.mux.HandleFunc("GET /api/events/detail/{event_id}/summaries", s.getSummaries)
 	s.mux.HandleFunc("POST /api/events/detail/{event_id}/messages", s.withNewMessageBroadcast(s.sendEventMessage))
 	s.mux.HandleFunc("GET /api/events/detail/{event_id}/executions", s.getExecutions)
@@ -544,7 +546,7 @@ func (s *Server) getCommands(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) getStats(w http.ResponseWriter, r *http.Request) {
 	eventID := r.PathValue("event_id")
-	writeJSON(w, http.StatusOK, domain.APIResponse{Status: "success", Data: map[string]any{
+	data := map[string]any{
 		"event_id":     eventID,
 		"messages":     len(s.services.Store.ListMessages(eventID)),
 		"tasks":        len(s.services.Store.ListTasks(eventID)),
@@ -553,7 +555,23 @@ func (s *Server) getStats(w http.ResponseWriter, r *http.Request) {
 		"executions":   len(s.services.Store.ListExecutions(eventID)),
 		"summaries":    len(s.services.Store.ListSummaries(eventID)),
 		"generated_at": time.Now().UTC(),
-	}})
+	}
+	if ev, ok := s.services.Store.GetEvent(eventID); ok {
+		var c map[string]any
+		_ = json.Unmarshal([]byte(ev.Context), &c)
+		for _, key := range []string{"occurrence_count", "quant_stats", "stats_version", "data_version", "statistics_quality"} {
+			data[key] = c[key]
+		}
+		if version, ok := c["stats_version"].(float64); ok && version > 0 {
+			if snap, err := s.services.EvidenceSnapshot(r.Context(), eventID, int64(version)); err == nil {
+				data["quant_stats"] = snap.Context["quant_stats"]
+			} else {
+				data["quant_stats"] = nil
+				data["statistics_error"] = err.Error()
+			}
+		}
+	}
+	writeJSON(w, http.StatusOK, domain.APIResponse{Status: "success", Data: data})
 }
 
 func (s *Server) getSummaries(w http.ResponseWriter, r *http.Request) {
@@ -692,6 +710,12 @@ func (s *Server) engineerChatSend(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "事件不存在")
 		return
 	}
+	evidenceContext, evidenceErr := s.services.EvidenceContext(r.Context(), event)
+	if evidenceErr != nil {
+		writeError(w, http.StatusConflict, evidenceErr.Error())
+		return
+	}
+	event.Context = evidenceContext
 	_, _ = s.services.Store.AddMessage(domain.Message{EventID: eventID, MessageFrom: domain.RoleUser, MessageType: "user_message", MessageContent: message, RoundID: 1, MessageCategory: "engineer_chat", SenderType: "user"})
 	prompt := s.engineerEventPrompt(event, message)
 	reply, err := s.services.LLM.Chat(r.Context(), service.EngineerChatSystemPrompt, prompt)
@@ -699,7 +723,7 @@ func (s *Server) engineerChatSend(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadGateway, err.Error())
 		return
 	}
-	m, _ := s.services.Store.AddMessage(domain.Message{EventID: eventID, MessageFrom: domain.RoleAssistant, MessageType: "assistant_response", MessageContent: reply, RoundID: 1, MessageCategory: "engineer_chat", SenderType: "ai"})
+	m, _ := s.services.Store.AddMessage(domain.Message{EventID: eventID, MessageFrom: domain.RoleAssistant, MessageType: "assistant_response", MessageContent: service.EvidenceReplyContent(reply, event.Context), RoundID: 1, MessageCategory: "engineer_chat", SenderType: "ai"})
 	writeJSON(w, http.StatusOK, domain.APIResponse{Status: "success", Data: map[string]any{"reply": reply, "message": m}})
 }
 

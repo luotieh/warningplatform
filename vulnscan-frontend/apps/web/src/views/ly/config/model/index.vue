@@ -289,7 +289,7 @@ onMounted(loadStoreConfig);
               v-model:value="llmForm.timeout_seconds"
               class="full-input"
               :min="1"
-              :max="600"
+              :max="6000"
             />
           </NFormItem>
         </div>
