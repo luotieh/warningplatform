@@ -53,7 +53,8 @@ const evidenceHitId = ref('');
 let occRequest = 0;
 const occRows = ref<Array<{
   idx: number; hit_id: string; time: string; size: string; packets: string;
-  message_direction: string; payload_text: string; payload_hex: string;
+  message_direction: string; dns_role: string; dns_query: string;
+  payload_text: string; payload_hex: string;
   payload_hex_truncated: boolean; packet_sequence: any; captured_length: any;
   wire_length: any; capture_truncated: any; capture_time: string;
   session_start_time: string; request: any; response: any;

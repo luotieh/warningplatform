@@ -216,7 +216,9 @@ func (s *MemoryStore) CreateEvent(e domain.Event) (domain.Event, error) {
 	if e.CurrentRound == 0 {
 		e.CurrentRound = 1
 	}
-	e.CreatedAt = now
+	if e.CreatedAt.IsZero() {
+		e.CreatedAt = now
+	}
 	e.UpdatedAt = now
 	s.events[e.EventID] = e
 	return e, nil

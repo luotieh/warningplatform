@@ -102,7 +102,8 @@ async function loadEvents() {
     params.endtime = Math.floor(end.getTime() / 1000);
   } else {
     if (state.starttime) params.starttime = Math.floor(state.starttime / 1000);
-    if (state.endtime) params.endtime = Math.floor(state.endtime / 1000);
+    // 结束日期按整日包含：date 选择器返回当天 00:00，后端区间为上界开，需 +1 天。
+    if (state.endtime) params.endtime = Math.floor((state.endtime + 86400000) / 1000);
   }
   // 服务端排序（分页前生效），默认 time/desc 与现状一致
   if (state.sort !== 'time' || state.order !== 'desc') {
@@ -156,8 +157,10 @@ const baseRows = computed(() => {
     if (state.level && item.level !== state.level) return false;
     if (true && (state.starttime || state.endtime)) {
       const t = Number(item.starttime ?? 0) * 1000;
+      // 与服务端一致的半开区间：结束日期 +1 天作为上界（不含）。
+      const endExclusive = state.endtime ? state.endtime + 86400000 : 0;
       if (state.starttime && (!t || t < state.starttime)) return false;
-      if (state.endtime && (!t || t > state.endtime)) return false;
+      if (endExclusive && (!t || t >= endExclusive)) return false;
     }
     if (state.keyword.trim() && !matchesEventKeyword(item, state.keyword)) return false;
     if (selectedAsset.value) {
