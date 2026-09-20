@@ -20,6 +20,20 @@ import (
 // ConvergenceIdleWindow 保持一致（量化终报依赖同一窗口）。
 const aggregateIdleWindow = trafficservice.ConvergenceIdleWindow
 
+func eventVolumeQuality(ctx map[string]any) string {
+	if qs, ok := ctx["quant_stats"].(map[string]any); ok {
+		return firstNonEmpty(stringValue(qs["volume_quality"]), "unverified")
+	}
+	return "unverified"
+}
+
+func quantPayloadDisplay(ctx map[string]any) any {
+	if qs, ok := ctx["quant_stats"].(map[string]any); ok && qs["volume_quality"] == "unverified" {
+		return nil
+	}
+	return quantPayloadBytes(ctx)
+}
+
 type EventService struct {
 	core trafficservice.Services
 }
@@ -75,6 +89,10 @@ func (s *EventService) Detail(ctx context.Context, eventID string) (domain.Event
 	return s.core.Store.GetEvent(eventID)
 }
 
+func (s *EventService) Occurrences(ctx context.Context, eventID, cursor, hitID string, limit int, version int64, timeRange ...string) (trafficservice.OccurrencePage, error) {
+	return s.core.OccurrencesAt(ctx, eventID, cursor, hitID, limit, version, timeRange...)
+}
+
 func (s *EventService) Messages(ctx context.Context, eventID string) []domain.Message {
 	return s.core.Store.ListMessages(eventID)
 }
@@ -92,7 +110,7 @@ func (s *EventService) Commands(ctx context.Context, eventID string) []domain.Co
 }
 
 func (s *EventService) Stats(ctx context.Context, eventID string) map[string]any {
-	return map[string]any{
+	out := map[string]any{
 		"event_id":     eventID,
 		"messages":     len(s.core.Store.ListMessages(eventID)),
 		"tasks":        len(s.core.Store.ListTasks(eventID)),
@@ -102,6 +120,22 @@ func (s *EventService) Stats(ctx context.Context, eventID string) map[string]any
 		"summaries":    len(s.core.Store.ListSummaries(eventID)),
 		"generated_at": time.Now().UTC(),
 	}
+	if event, ok := s.core.Store.GetEvent(eventID); ok {
+		var c map[string]any
+		_ = json.Unmarshal([]byte(event.Context), &c)
+		for _, k := range []string{"occurrence_count", "quant_stats", "stats_version", "data_version", "statistics_quality"} {
+			out[k] = c[k]
+		}
+		if version, _ := strconv.ParseInt(stringValue(c["stats_version"]), 10, 64); version > 0 {
+			if snap, err := s.core.EvidenceSnapshot(ctx, eventID, version); err == nil {
+				out["quant_stats"] = snap.Context["quant_stats"]
+			} else {
+				out["quant_stats"] = nil
+				out["statistics_error"] = err.Error()
+			}
+		}
+	}
+	return out
 }
 
 func (s *EventService) Summaries(ctx context.Context, eventID string) []domain.Summary {
@@ -241,7 +275,7 @@ func lyCompatibleEvent(event domain.Event) map[string]any {
 		"heartbeat_detected":   heartbeat,
 		"heartbeat_period_sec": heartbeatPeriod,
 		// 事件总载荷（字节）：quant_stats.total_payload_bytes，列表「总载荷」列与排序口径。
-		"total_payload_bytes": quantPayloadBytes(context),
+		"total_payload_bytes": quantPayloadDisplay(context),
 		"type":                eventType,
 		"level":               level,
 		"desc":                firstNonEmpty(event.EventName, event.Title, event.Message),
@@ -261,9 +295,18 @@ func lyCompatibleEvent(event domain.Event) map[string]any {
 		"show_model":          firstNonEmpty(stringValue(context["detection_method"]), stringValue(context["protocol"])),
 		"source":              event.Source,
 		// 聚合信息：发生次数与首/末次时间（同来源+目标+类型、仅时间不同的事件已合并为一条）
-		"event_count": context["occurrence_count"],
-		"first_time":  first.In(domain.Beijing).Format(time.RFC3339Nano),
-		"last_time":   lastSeen.In(domain.Beijing).Format(time.RFC3339Nano),
+		"event_count":         context["occurrence_count"],
+		"aggregation_version": context["aggregation_version"],
+		"data_version":        context["data_version"],
+		"stats_version":       context["stats_version"],
+		"statistics_quality":  firstNonEmpty(stringValue(context["statistics_quality"]), "unverified"),
+		"volume_quality":      eventVolumeQuality(context),
+		"canonical_event_id":  context["canonical_event_id"],
+		"report_stale":        context["report_stale"],
+		"occurrences_total":   context["occurrences_total"],
+		"occurrences_preview": context["occurrences_preview"],
+		"first_time":          first.In(domain.Beijing).Format(time.RFC3339Nano),
+		"last_time":           lastSeen.In(domain.Beijing).Format(time.RFC3339Nano),
 		// 收敛状态：active=进行中(可能继续)，closed=已收敛(occurrence_count 即最终频次)
 		"aggregation_status": aggregationStatus,
 		"is_final":           isFinal,

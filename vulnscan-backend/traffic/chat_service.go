@@ -42,6 +42,11 @@ func (s *ChatService) Send(ctx context.Context, body map[string]any) (map[string
 	}
 
 	// Build before persisting the current question so it is not duplicated in history.
+	evidenceContext, err := s.core.EvidenceContext(ctx, event)
+	if err != nil {
+		return nil, err
+	}
+	event.Context = evidenceContext
 	prompt := s.engineerEventPrompt(event, message)
 	userMessage, _ := s.core.Store.AddMessage(domain.Message{
 		EventID:         eventID,
@@ -66,13 +71,16 @@ func (s *ChatService) Send(ctx context.Context, body map[string]any) (map[string
 		EventID:         eventID,
 		MessageFrom:     domain.RoleAssistant,
 		MessageType:     "assistant_response",
-		MessageContent:  reply,
+		MessageContent:  trafficservice.EvidenceReplyContent(reply, event.Context),
 		RoundID:         1,
 		MessageCategory: "engineer_chat",
 		SenderType:      "ai",
 		ChatSessionID:   stringValue(body["chat_session_id"]),
 	})
 	realtime.BroadcastMessage(eventID, assistantMessage)
+	if err := s.core.MarkReportSnapshot(ctx, eventID, event.Context); err != nil {
+		return nil, err
+	}
 
 	return map[string]any{
 		"reply":        reply,
@@ -121,7 +129,17 @@ func (s *ChatService) engineerPromptParts(event domain.Event, question string) [
 	b.WriteString(fmt.Sprintf("当前轮次: %d\n", event.CurrentRound))
 	b.WriteString(fmt.Sprintf("创建时间: %s\n\n", event.CreatedAt.Format("2006-01-02 15:04:05")))
 	flush("事件基本信息")
-	b.WriteString(fmt.Sprintf("事件上下文与全量证据摘要: %s\n\n", buildEngineerEvidenceContext(event.EventID, event.Context)))
+	evidenceContext := event.Context
+	var evidenceErr error
+	var prepared map[string]any
+	_ = json.Unmarshal([]byte(event.Context), &prepared)
+	if prepared["input_manifest"] == nil {
+		evidenceContext, evidenceErr = s.core.EvidenceContext(context.Background(), event)
+	}
+	if evidenceErr != nil {
+		evidenceContext = "证据快照暂不可用：" + evidenceErr.Error()
+	}
+	b.WriteString(fmt.Sprintf("事件上下文与证据摘要: %s\n\n", buildEngineerEvidenceContext(event.EventID, evidenceContext)))
 	flush("事件上下文与明细样本")
 
 	if len(event.Observables) > 0 {

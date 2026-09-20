@@ -7,11 +7,12 @@ import { IconifyIcon } from '@vben/icons';
 import { useUserStore } from '@vben/stores';
 
 import { lyEventPushToAi, lyEventReview } from '#/api/ly';
-import { deepflowEventArchiveUrl, deepflowEventEvidenceUrl } from '#/api/ly/deepflow';
+import { deepflowEventArchiveUrl, deepflowEventEvidenceUrl, deepflowGetOccurrences } from '#/api/ly/deepflow';
 import { message } from '#/adapter/naive';
 import { formatBoolText, formatBytes, formatDirection, formatHexTruncated, formatTimestamp } from '#/utils/ly';
 
 import ReportModal from '../detail/components/ReportModal.vue';
+import EvidenceDialog from '../detail/components/EvidenceDialog.vue';
 
 defineOptions({ name: 'LyEventTable' });
 
@@ -41,8 +42,17 @@ const state = reactive({
 const pagedRows = computed(() => props.rows);
 
 const occVisible = ref(false);
+const occLoading = ref(false);
+const occCursor = ref('');
+const occTotal = ref(0);
+const occQuality = ref('');
+const occDeclared = ref<number | undefined>();
+const occSnapshot = ref(0);
+const evidenceVisible = ref(false);
+const evidenceHitId = ref('');
+let occRequest = 0;
 const occRows = ref<Array<{
-  idx: number; time: string; size: string; packets: string;
+  idx: number; hit_id: string; time: string; size: string; packets: string;
   message_direction: string; payload_text: string; payload_hex: string;
   payload_hex_truncated: boolean; packet_sequence: any; captured_length: any;
   wire_length: any; capture_truncated: any; capture_time: string;
@@ -73,11 +83,12 @@ function toggleHex(key: string) {
   expandedHex.value = next;
 }
 
-function buildOccRows(occ: any[]) {
+function buildOccRows(occ: any[], offset = 0) {
   return (occ || []).map((o, i) => {
     const item = typeof o === 'string' ? { time: o } : (o ?? {});
     return {
-      idx: i + 1,
+      idx: offset + i + 1,
+      hit_id: item.hit_id || '',
       time: formatTimestamp(item.time) || '-',
       size: item.wire_bytes == null ? '-' : formatBytes(item.wire_bytes),
       packets: item.packets == null ? '-' : String(item.packets),
@@ -97,11 +108,39 @@ function buildOccRows(occ: any[]) {
   });
 }
 
-function openOccurrences(row: Record<string, any>) {
-  occRows.value = buildOccRows(row.occurrences || []);
+async function openOccurrences(row: Record<string, any>) {
+  occRows.value = [];
+  occCursor.value = '';
+  occTotal.value = 0;
+  occQuality.value = '';
+  occDeclared.value = undefined;
+  occSnapshot.value = 0;
+  evidenceVisible.value = false;
+  expandedHex.value = new Set();
   currentEventContext.value = row;
   expandedOccIndices.value = new Set();
   occVisible.value = true;
+  await loadOccurrencePage(true);
+}
+
+async function loadOccurrencePage(reset = false) {
+  if (occLoading.value && !reset) return;
+  const request = ++occRequest;
+  occLoading.value = true;
+  try {
+    const page = await deepflowGetOccurrences(String(currentEventContext.value.event_id || currentEventContext.value.id), occCursor.value);
+    if (request !== occRequest) return;
+    occRows.value.push(...buildOccRows(page.items, occRows.value.length));
+    occCursor.value = page.next_cursor || '';
+    occTotal.value = page.total;
+    occQuality.value = page.statistics_quality;
+    occDeclared.value = page.declared_count;
+    occSnapshot.value = page.snapshot_version;
+  } catch (error) {
+    if (request === occRequest) message.error(error instanceof Error ? error.message : '明细加载失败');
+  } finally {
+    if (request === occRequest) occLoading.value = false;
+  }
 }
 
 function buildAnalysisPayload(row: Record<string, any>) {
@@ -323,10 +362,13 @@ const columns = computed(() => [
           h(NTag, { size: 'small', round: true, type: row.isFinal ? 'success' : 'info', style: 'margin-left:4px' }, { default: () => row.aggregationStatusText }),
         );
       }
-      if (Array.isArray(row.occurrences) && row.occurrences.length > 0) {
+      if (row.aggregation_version === 2 || (Array.isArray(row.occurrences) && row.occurrences.length > 0)) {
         children.push(
           h(NButton, { text: true, size: 'small', type: 'primary', style: 'margin-left:8px', onClick: () => openOccurrences(row) }, { default: () => '明细' }),
         );
+      }
+      if (row.statistics_quality && row.statistics_quality !== 'verified') {
+        children.push(h(NTag, { size: 'small', type: 'warning' }, { default: () => row.statistics_quality === 'rebuilding' ? '统计更新中' : '历史统计未核验' }));
       }
       return h('div', { style: 'display:flex;flex-wrap:wrap;align-items:center;gap:4px' }, children);
     },
@@ -336,6 +378,7 @@ const columns = computed(() => [
     key: 'totalPayloadText',
     width: 110,
     render: (row: Record<string, any>) => {
+      if (row.volume_quality === 'unverified') return h('span', { title: '流累计观测值不能直接相加；实际载荷总量未核验' }, '未核验');
       const bytes = Number(row.total_payload_bytes ?? 0);
       return h(
         'span',
@@ -407,11 +450,18 @@ onMounted(() => {
 
 <template>
   <div>
+    <EvidenceDialog v-model:visible="evidenceVisible" :event-id="String(currentEventContext.event_id || currentEventContext.id || '')" :hit-id="evidenceHitId" :version="occSnapshot" />
     <NDataTable :columns="columns" :data="pagedRows" :loading="props.loading" :bordered="false" size="small" :row-class-name="rowClass" />
 
     <ReportModal v-model:visible="reportVisible" :event-id="reportEventId" :context="reportContext" />
 
     <NModal v-model:show="occVisible" preset="card" title="命中明细" style="width: 880px; max-width: 95vw">
+      <NSpace style="margin-bottom:12px" align="center">
+        <span>已加载 {{ occRows.length }} / {{ occTotal }} 条明细</span>
+        <NTag v-if="occQuality && occQuality !== 'verified'" type="warning">原记录 {{ occDeclared ?? '未知' }} 次；历史统计未核验</NTag>
+        <NButton v-if="occCursor" :loading="occLoading" :disabled="occLoading" @click="loadOccurrencePage()">加载下一页</NButton>
+        <span v-if="occLoading">正在加载明细…</span>
+      </NSpace>
       <div class="occ-container">
         <div v-if="currentEventContext.session_summary" class="occ-card">
           <div class="occ-card-title">双向会话统计</div>
@@ -545,6 +595,11 @@ onMounted(() => {
               </NTag>
             </div>
             <div v-if="expandedOccIndices.has(occ.idx)" class="occ-detail">
+              <div v-if="occ.hit_id" class="occ-detail-row">
+                <span class="occ-detail-label">明细 ID</span>
+                <span style="overflow-wrap:anywhere">{{ occ.hit_id }}</span>
+                <NButton text type="primary" size="small" @click="evidenceHitId = occ.hit_id; evidenceVisible = true">完整明细</NButton>
+              </div>
               <div class="occ-detail-row">
                 <span class="occ-detail-label">报文方向</span>
                 <span class="occ-detail-value">{{ formatDirection(occ.message_direction) }}</span>

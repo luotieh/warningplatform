@@ -167,6 +167,10 @@ export function normalizeLyEvent(item: Record<string, any>): NormalizedLyEvent {
   const hitCount = Math.max(1, Number(item.event_count ?? 1) || 1);
   const hitSpan = hitSpanSeconds(item.first_time, item.last_time);
   const hitFreq = describeHitFrequency(hitCount, hitSpan);
+  if (item.aggregation_version === 2 && item.event_count == null) {
+    hitFreq.text = '统计更新中';
+    hitFreq.level = 'default';
+  }
   const objText = String(item.obj || '').split(' ')[0] || '-';
   const attackDevice = item.attackDevice || objText.split('>')[0] || '-';
   const victimDevice = item.victimDevice || objText.split('>')[1] || '-';

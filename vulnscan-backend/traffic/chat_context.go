@@ -34,13 +34,16 @@ func buildEngineerEvidenceContext(eventID, raw string) string {
 	if err := json.Unmarshal([]byte(raw), &ctx); err != nil || ctx == nil {
 		return limitEngineerText(raw, engineerContextMaxRunes)
 	}
+	if _, ok := ctx["snapshot_version"]; ok {
+		return raw
+	}
 	available := 0
 	if occurrences, ok := ctx["occurrences"].([]any); ok {
 		available = len(occurrences)
 		ctx["occurrences_available"] = len(occurrences)
 		ctx["evidence_index"] = makeEvidenceIndex(eventID, occurrences)
 		delete(ctx, "occurrences")
-		ctx["evidence_note"] = "已扫描全部明细；evidence_index 每项对应一条明细。重复载荷仅在模型上下文中压缩，原始明细仍可回溯。"
+		ctx["evidence_note"] = "仅扫描当前已保存明细；历史频次未核验，不代表完整原始数据。旧数组索引引用需通过历史快照核验。"
 	}
 	trimEngineerValue(ctx)
 	b, err := json.Marshal(ctx)
@@ -53,7 +56,7 @@ func buildEngineerEvidenceContext(eventID, raw string) string {
 	if declared, ok := ctx["occurrence_count"].(float64); ok && declared > 0 {
 		count = int(declared)
 	}
-	prefix := fmt.Sprintf("全量扫描摘要：明细数=%d；可索引明细数=%d；统计量由系统计算，证据需回溯 evidence_id。\n", count, available)
+	prefix := fmt.Sprintf("证据摘要：声明命中数=%d；旧格式可索引明细数=%d；全量扫描范围以 input_manifest 为准；统计量由系统计算，证据需回溯 evidence_id。\n", count, available)
 	return limitEngineerText(prefix+string(b), engineerContextMaxRunes)
 }
 

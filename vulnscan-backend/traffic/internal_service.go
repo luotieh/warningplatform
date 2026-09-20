@@ -55,7 +55,7 @@ func (s *InternalService) PushEvent(ctx context.Context, body map[string]any, ap
 	}
 	// 分析异步执行、脱离请求上下文：推送/查看报告立即返回事件ID，分析结果经 websocket
 	// 增量回传，避免 LLM 较慢时请求被取消而报 "context canceled / i/o timeout"。
-	if eventID := internalString(res["deepsoc_event_id"]); eventID != "" {
+	if eventID := internalString(res["deepsoc_event_id"]); eventID != "" && res["reason"] == "analysis-only" {
 		s.core.RunAgentWorkflowAsync(eventID)
 	}
 	return res, nil
@@ -146,6 +146,21 @@ func (s *InternalService) EvidenceFile(ctx context.Context, eventID string, idx 
 	if !ok || idx < 0 || idx >= len(files) {
 		return nil, "", "", errEvidenceNotFound
 	}
+	return s.downloadEvidenceFile(ctx, ctxMap, files, idx)
+}
+
+func (s *InternalService) HitEvidenceFile(ctx context.Context, eventID, hitID string, idx int) ([]byte, string, string, error) {
+	files, err := s.core.HitEvidenceFiles(ctx, eventID, hitID)
+	if err != nil {
+		return nil, "", "", err
+	}
+	return s.downloadEvidenceFile(ctx, map[string]any{}, files, idx)
+}
+
+func (s *InternalService) downloadEvidenceFile(ctx context.Context, ctxMap map[string]any, files []any, idx int) ([]byte, string, string, error) {
+	if idx < 0 || idx >= len(files) {
+		return nil, "", "", errEvidenceNotFound
+	}
 	ef, ok := files[idx].(map[string]any)
 	if !ok {
 		return nil, "", "", errEvidenceNotFound
@@ -162,7 +177,11 @@ func (s *InternalService) EvidenceFile(ctx context.Context, eventID string, idx 
 	}
 	url := base + pathRef
 	client := &http.Client{Timeout: evidenceTimeout}
-	resp, err := client.Get(url)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, "", "", err
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, "", "", fmt.Errorf("节点证据下载失败: %w", err)
 	}
@@ -225,6 +244,14 @@ func (s *InternalService) EvidenceArchive(ctx context.Context, eventID string) (
 		_ = json.Unmarshal([]byte(event.Context), &ctxMap)
 	}
 	files, ok := ctxMap["evidence_files"].([]any)
+	if toIntAny(ctxMap["aggregation_version"]) == 2 {
+		var err error
+		files, err = s.core.HitEvidenceFiles(ctx, eventID, "")
+		if err != nil {
+			return "", result, err
+		}
+		ok = true
+	}
 	if !ok || len(files) == 0 {
 		return "", result, errEvidenceNotFound
 	}

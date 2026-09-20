@@ -142,6 +142,20 @@ export function deepflowGetEventDetail(eventId: string) {
   return deepflowGet(`/events/detail/${eventId}`);
 }
 
+export interface OccurrencePage {
+  items: Record<string, any>[];
+  total: number;
+  declared_count?: number;
+  snapshot_version: number;
+  next_cursor: string;
+  statistics_quality: string;
+}
+
+export function deepflowGetOccurrences(eventId: string, cursor = '', hitId = '', version = 0) {
+  const suffix = hitId ? `/${encodeURIComponent(hitId)}` : '';
+  return deepflowGet<OccurrencePage>(`/events/detail/${encodeURIComponent(eventId)}/occurrences${suffix}`, { cursor, limit: 100, snapshot_version: version });
+}
+
 export function deepflowGetEventStats(eventId: string) {
   return deepflowGet(`/events/detail/${eventId}/stats`);
 }
