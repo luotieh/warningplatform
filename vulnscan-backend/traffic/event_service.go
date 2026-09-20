@@ -275,6 +275,14 @@ func lyCompatibleEvent(event domain.Event) map[string]any {
 	startTime := first.Unix()
 	analysisStatus := analysisStatusForEvent(event.EventStatus)
 	heartbeat, heartbeatPeriod := detectHeartbeat(context["occurrences"])
+	// 心跳（固定周期的小包通信）是 C2 信标的强特征：命中时展示等级提升一档
+	// （low→middle→high），high/critical 不再上调；原始级别保留在 level_raw 供审计。
+	levelBoosted := false
+	if heartbeat {
+		if boosted := heartbeatBoostedLevel(level); boosted != level {
+			level, levelBoosted = boosted, true
+		}
+	}
 
 	return map[string]any{
 		"id":           firstNonEmpty(event.EventID, stringValue(event.ID)),
@@ -288,6 +296,8 @@ func lyCompatibleEvent(event domain.Event) map[string]any {
 		"domain":               domainName,
 		"heartbeat_detected":   heartbeat,
 		"heartbeat_period_sec": heartbeatPeriod,
+		"heartbeat_level_boost": levelBoosted,
+		"level_raw":             lyLevel(event.Severity),
 		// 事件总载荷（字节）：quant_stats.total_payload_bytes，列表「总载荷」列与排序口径。
 		"total_payload_bytes": quantPayloadDisplay(context),
 		"type":                eventType,
@@ -560,6 +570,19 @@ func lyLevel(severity string) string {
 		return "low"
 	default:
 		return "middle"
+	}
+}
+
+// heartbeatBoostedLevel 心跳命中时的展示等级提升：low→middle→high，
+// high/critical 不再上调。
+func heartbeatBoostedLevel(level string) string {
+	switch level {
+	case "low":
+		return "middle"
+	case "middle":
+		return "high"
+	default:
+		return level
 	}
 }
 

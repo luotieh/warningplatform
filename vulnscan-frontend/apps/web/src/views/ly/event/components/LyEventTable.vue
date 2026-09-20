@@ -270,6 +270,17 @@ function severityMeta(levelText?: string): { color: string; key: string } {
   }
 }
 
+// level_raw（心跳提升前的原始等级）的中文映射，用于提升标识的悬停提示。
+function levelRawText(levelRaw?: string): string {
+  switch (levelRaw) {
+    case 'critical': return '极高';
+    case 'high': return '高';
+    case 'middle': return '中';
+    case 'low': return '低';
+    default: return levelRaw || '-';
+  }
+}
+
 const TYPE_ICONS: Record<string, string> = {
   scan: 'lucide:radar', port_scan: 'lucide:radar', ip_scan: 'lucide:radar', mo: 'lucide:radar',
   dns: 'lucide:globe', dns_tun: 'lucide:globe',
@@ -340,6 +351,13 @@ const columns = computed(() => [
       return h('div', { style: 'display:flex;align-items:center;gap:6px' }, [
         h('span', { class: 'ly-dot', style: `background:${m.color}` }),
         h('span', row.levelText || '-'),
+        // 心跳信标命中时后端已将展示等级提升一档，用 ▲ 标识并悬停说明原始等级。
+        row.heartbeat_level_boost
+          ? h('span', {
+              title: `检测到心跳信标（约 ${row.heartbeat_period_sec || '?'}s 周期小包通信），严重程度由「${levelRawText(row.level_raw)}」提升一档`,
+              style: 'color:#d03050;font-size:12px;line-height:1;cursor:help',
+            }, '▲')
+          : null,
       ]);
     },
   },
