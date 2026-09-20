@@ -25,4 +25,7 @@ terminals/
 # 构建产物
 vulnscan-backend/server-arm64
 *.tar
+*.tar.gz
+/server-arm64
+/server-arm64-*
 vulnscan-frontend/apps/web/mock/
