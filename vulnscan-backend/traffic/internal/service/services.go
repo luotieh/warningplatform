@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -128,6 +129,11 @@ func toInt(v any) int {
 		return x
 	case int64:
 		return int(x)
+	case string:
+		// 兼容上游以字符串形式传端口/计数（如 "53"）。
+		if n, err := strconv.Atoi(strings.TrimSpace(x)); err == nil {
+			return n
+		}
 	}
 	return 0
 }
@@ -320,6 +326,18 @@ func buildOccurrence(ly map[string]any) map[string]any {
 	}
 	if v, ok := ly["packets"]; ok && v != nil {
 		occ["packets"] = toInt(v)
+	}
+	// DNS 命中：标注方向（query=查询/response=应答），供聚合事件的明细弹窗区分。
+	switch {
+	case toInt(ly["dst_port"]) == 53:
+		occ["dns_role"] = "query"
+	case toInt(ly["src_port"]) == 53:
+		occ["dns_role"] = "response"
+	}
+	if app := nestedMap(ly, "app"); app != nil {
+		if q := asString(app["dns_query"]); q != "" {
+			occ["dns_query"] = q
+		}
 	}
 	rp := nestedMap(ly, "raw_packet")
 	if rp == nil {

@@ -217,21 +217,35 @@ func lyCompatibleEvent(event domain.Event) map[string]any {
 	// ta_node captured one. Native IP traffic therefore remains IP-only.
 	domainName := eventDomain(context)
 	indicator := threatIndicator(context)
-	if indicator != "" {
-		// A domain/URL IOC is the threat source being accessed. Keep the
-		// protected host as the displayed destination, while src_ip/dst_ip
-		// below remain the original packet direction.
-		source, destination = indicator, source
-		domainName = indicator
-	}
-	// 原始流向不随 IOC 展示修正交换。
-	// IOC 规则地址修正：IP/CIDR 型 IOC 命中且目的地址即 IOC 值时，目的地址是威胁地址
-	// （如 C2），并非受害主机；交换展示源/目标，使「受害目标」列不出现 IOC 规则 IP。
-	if iocDestinationIsIOC(context, destination) {
-		source, destination = destination, source
-	}
-	if domainName != "" && indicator == "" {
-		destination = domainName
+	if _, client := dnsResolutionPeers(context); client != "" {
+		// DNS 解析流量：威胁侧是域名（IOC 或 dns_query），受害侧是发起查询的
+		// 内网主机；公共 DNS（如 218.2.2.2）不出现在受害列。
+		// src_ip/dst_ip 保持原始报文方向，供研判重推/AI 分析使用。
+		if threat := firstNonEmpty(indicator, domainName); threat != "" {
+			source, destination = threat, client
+			domainName = threat
+		} else {
+			// 无域名信息时无法归属威胁侧：置空攻击列，避免把公共 DNS 服务器
+			// （应答方向）或内网主机自身（查询方向）误标为攻击源。
+			source, destination = "", client
+		}
+	} else {
+		if indicator != "" {
+			// A domain/URL IOC is the threat source being accessed. Keep the
+			// protected host as the displayed destination, while src_ip/dst_ip
+			// below remain the original packet direction.
+			source, destination = indicator, source
+			domainName = indicator
+		}
+		// 原始流向不随 IOC 展示修正交换。
+		// IOC 规则地址修正：IP/CIDR 型 IOC 命中且目的地址即 IOC 值时，目的地址是威胁地址
+		// （如 C2），并非受害主机；交换展示源/目标，使「受害目标」列不出现 IOC 规则 IP。
+		if iocDestinationIsIOC(context, destination) {
+			source, destination = destination, source
+		}
+		if domainName != "" && indicator == "" {
+			destination = domainName
+		}
 	}
 	eventType := firstNonEmpty(stringValue(context["event_type"]), stringValue(context["type"]), "cap")
 	level := lyLevel(event.Severity)
@@ -343,6 +357,39 @@ func eventDomain(ctx map[string]any) string {
 	return ""
 }
 
+// dnsResolutionPeers 识别 DNS 解析流量，返回 (server, client)。
+// 端口优先：dst_port=53 为查询方向、src_port=53 为应答方向；
+// 端口缺失时要求存在 app.dns_query，并用内网地址兜底判定客户端。
+// 无法可靠判定（双内网/双外网、无端口且无域名）时返回空，展示保持原样。
+func dnsResolutionPeers(ctx map[string]any) (server, client string) {
+	src := stringValue(ctx["src_ip"])
+	dst := stringValue(ctx["dst_ip"])
+	switch {
+	case numberValue(ctx["dst_port"]) == 53:
+		return dst, src
+	case numberValue(ctx["src_port"]) == 53:
+		return src, dst
+	}
+	app, _ := ctx["app"].(map[string]any)
+	if stringValue(app["dns_query"]) == "" {
+		return "", ""
+	}
+	srcPrivate, dstPrivate := false, false
+	if ip, err := netip.ParseAddr(src); err == nil {
+		srcPrivate = ip.Unmap().IsPrivate()
+	}
+	if ip, err := netip.ParseAddr(dst); err == nil {
+		dstPrivate = ip.Unmap().IsPrivate()
+	}
+	// 仅当恰好一侧为内网地址时才可可靠判定客户端；双内网/双外网不干预。
+	switch {
+	case srcPrivate && !dstPrivate:
+		return dst, src
+	case dstPrivate && !srcPrivate:
+		return src, dst
+	}
+	return "", ""
+}
 func threatIndicator(ctx map[string]any) string {
 	ioc, ok := ctx["ioc"].(map[string]any)
 	if !ok {
@@ -418,6 +465,11 @@ func numberValue(v any) float64 {
 		return float64(x)
 	case uint64:
 		return float64(x)
+	case string:
+		// 兼容上游以字符串形式传端口/计数（如 "53"）。
+		if f, err := strconv.ParseFloat(strings.TrimSpace(x), 64); err == nil {
+			return f
+		}
 	}
 	return 0
 }

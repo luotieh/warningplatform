@@ -93,6 +93,8 @@ function buildOccRows(occ: any[], offset = 0) {
       size: item.wire_bytes == null ? '-' : formatBytes(item.wire_bytes),
       packets: item.packets == null ? '-' : String(item.packets),
       message_direction: item.message_direction || '',
+      dns_role: item.dns_role || '',
+      dns_query: item.dns_query || '',
       payload_text: item.payload_text || '',
       payload_hex: item.payload_hex || '',
       payload_hex_truncated: Boolean(item.payload_hex_truncated),
@@ -593,6 +595,9 @@ onMounted(() => {
               <NTag v-if="occ.message_direction" size="tiny" round :type="occ.message_direction === 'request' ? 'info' : 'warning'">
                 {{ formatDirection(occ.message_direction) }}
               </NTag>
+              <NTag v-if="occ.dns_role" size="tiny" round type="success" :bordered="false">
+                DNS·{{ occ.dns_role === 'query' ? '查询' : '应答' }}
+              </NTag>
             </div>
             <div v-if="expandedOccIndices.has(occ.idx)" class="occ-detail">
               <div v-if="occ.hit_id" class="occ-detail-row">
@@ -603,6 +608,10 @@ onMounted(() => {
               <div class="occ-detail-row">
                 <span class="occ-detail-label">报文方向</span>
                 <span class="occ-detail-value">{{ formatDirection(occ.message_direction) }}</span>
+              </div>
+              <div v-if="occ.dns_query" class="occ-detail-row">
+                <span class="occ-detail-label">查询域名</span>
+                <span class="occ-detail-value">{{ occ.dns_query }}</span>
               </div>
               <div v-if="occ.capture_time" class="occ-detail-row">
                 <span class="occ-detail-label">捕获时间</span>
