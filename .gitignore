@@ -28,4 +28,5 @@ vulnscan-backend/server-arm64
 *.tar.gz
 /server-arm64
 /server-arm64-*
+/*-arm64
 vulnscan-frontend/apps/web/mock/
