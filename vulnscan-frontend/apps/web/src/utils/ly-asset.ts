@@ -98,6 +98,35 @@ export function eventAssetNames(
   return names;
 }
 
+/**
+ * eventVictimAssets 被攻击资产：仅目标侧（victimDevice）命中启用（status=1）资产，
+ * 返回「名称（地址）」标签列表；无命中返回空数组。
+ * 与 eventAssetNames 的区别：来源侧命中不计入——威胁情报卡片关心的是受害者。
+ */
+export function eventVictimAssets(
+  event: EventLike,
+  assets: AssetNameLike[],
+): string[] {
+  const victim = normalizeAddr(event.victimDevice);
+  if (!victim) return [];
+  const out: string[] = [];
+  for (const a of assets || []) {
+    if (a.status !== 1) continue;
+    const addr = normalizeAddr(a.address);
+    if (!addr) continue;
+    const hit =
+      a.asset_type === 'ip_segment' || addr.includes('/')
+        ? ipInSegment(victim, addr)
+        : victim === addr;
+    if (!hit) continue;
+    const label = a.name ? `${a.name}（${a.address}）` : String(a.address);
+    if (!out.includes(label)) {
+      out.push(label);
+    }
+  }
+  return out;
+}
+
 // assetOptionFilter 资产下拉模糊匹配：按名称/地址包含匹配，大小写不敏感。
 // 例如输入 "徐工" 可匹配 "徐工集团-58.218.196.193"。
 export function assetOptionFilter(

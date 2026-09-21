@@ -10,6 +10,7 @@ import { lyEventPushToAi, lyEventReview } from '#/api/ly';
 import { deepflowEventArchiveUrl, deepflowEventEvidenceUrl, deepflowGetOccurrences } from '#/api/ly/deepflow';
 import { message } from '#/adapter/naive';
 import { formatBoolText, formatBytes, formatDirection, formatHexTruncated, formatTimestamp } from '#/utils/ly';
+import { eventVictimAssets } from '#/utils/ly-asset';
 
 import ReportModal from '../detail/components/ReportModal.vue';
 import EvidenceDialog from '../detail/components/EvidenceDialog.vue';
@@ -24,8 +25,10 @@ const props = withDefaults(
     loading?: boolean;
     /** 是否展示「资产」列（行内 assetText：资产名或「未登记」）。 */
     showAsset?: boolean;
+    /** 资产清单：明细弹窗的「被攻击资产」按目标侧匹配展示。 */
+    assets?: Record<string, any>[];
   }>(),
-  { showDesc: false, autoAnalyze: false, loading: false, showAsset: false },
+  { showDesc: false, autoAnalyze: false, loading: false, showAsset: false, assets: () => [] },
 );
 
 const userStore = useUserStore();
@@ -63,6 +66,17 @@ const occRows = ref<Array<{
 const expandedOccIndices = ref<Set<number>>(new Set());
 const expandedHex = ref<Set<string>>(new Set());
 const currentEventContext = ref<Record<string, any>>({});
+
+// 明细弹窗「威胁情报」卡片的被攻击资产：目标侧命中启用资产则显示
+// 「名称（地址）」，否则回退受害地址；未传资产清单时不做「未登记」断言。
+const victimAssetText = computed(() => {
+  const ev = currentEventContext.value;
+  const victim = String(ev?.victimDevice || '');
+  if (!victim) return '';
+  const matched = eventVictimAssets(ev, props.assets || []);
+  if (matched.length > 0) return matched.join('、');
+  return (props.assets || []).length > 0 ? `未登记（${victim}）` : victim;
+});
 
 function toggleOccExpand(idx: number) {
   const next = new Set(expandedOccIndices.value);
@@ -517,6 +531,10 @@ onMounted(() => {
         <div v-if="currentEventContext.ioc" class="occ-card">
           <div class="occ-card-title">威胁情报</div>
           <div class="occ-card-grid">
+            <div v-if="victimAssetText" class="occ-field occ-field-full">
+              <span class="occ-label">被攻击资产</span>
+              <span class="occ-value">{{ victimAssetText }}</span>
+            </div>
             <div v-if="currentEventContext.ioc.ioc_type" class="occ-field">
               <span class="occ-label">IOC 类型</span>
               <span class="occ-value">{{ currentEventContext.ioc.ioc_type }}</span>

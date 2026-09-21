@@ -362,6 +362,7 @@ onMounted(async () => {
           :auto-analyze="true"
           :loading="lyStore.loading"
           :show-asset="true"
+          :assets="assets"
         />
         <div class="pager-wrap">
           <NPagination
