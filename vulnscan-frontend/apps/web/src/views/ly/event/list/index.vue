@@ -26,7 +26,7 @@ import { countByKey, matchesEventKeyword } from '#/utils/ly';
 import { eventAssetNames } from '#/utils/ly-asset';
 
 import LyEventTable from '../components/LyEventTable.vue';
-import { archiveDateParams, type ArchivePeriod } from './archive-filter';
+import { type ArchivePeriod } from './archive-filter';
 
 defineOptions({ name: 'LyEventList' });
 
@@ -92,7 +92,14 @@ async function loadEvents() {
   if (state.level) params.level = state.level;
   if (state.keyword.trim()) params.keyword = state.keyword.trim();
   if (selectedAsset.value) params.asset = selectedAsset.value;
-  if (state.scope === 'today' || state.scope === '3' || state.scope === '7') {
+  if (state.starttime || state.endtime) {
+    // 自定义日期按归档日期过滤（双端包含、可只选一端）：
+    // 只选开始=列出该日及以后归档的事件，只选结束=列出该日及之前归档的事件。
+    // 与快捷范围互斥，由 onCustomDateChange 保证 scope 已复位为默认值。
+    params.scope = 'archive';
+    if (state.starttime) params.archive_from = msToDateStr(state.starttime);
+    if (state.endtime) params.archive_to = msToDateStr(state.endtime);
+  } else if (state.scope === 'today' || state.scope === '3' || state.scope === '7') {
     const days = state.scope === 'today' ? 1 : Number(state.scope);
     const end = new Date();
     const start = new Date(end);
@@ -100,10 +107,6 @@ async function loadEvents() {
     start.setHours(0, 0, 0, 0);
     params.starttime = Math.floor(start.getTime() / 1000);
     params.endtime = Math.floor(end.getTime() / 1000);
-  } else {
-    if (state.starttime) params.starttime = Math.floor(state.starttime / 1000);
-    // 结束日期按整日包含：date 选择器返回当天 00:00，后端区间为上界开，需 +1 天。
-    if (state.endtime) params.endtime = Math.floor((state.endtime + 86400000) / 1000);
   }
   // 服务端排序（分页前生效），默认 time/desc 与现状一致
   if (state.sort !== 'time' || state.order !== 'desc') {
@@ -125,12 +128,31 @@ async function refreshEvents() {
 }
 
 function onScopeChange() {
+  // 快捷范围与自定义日期互斥：选快捷范围时清空自定义日期。
+  state.starttime = null;
+  state.endtime = null;
   state.archivePeriod = 'all';
   state.archiveRange = null;
   state.sort = 'time';
   state.order = 'desc';
   clearRankFilter();
   onArchiveFilterChange();
+}
+
+// 自定义日期（按归档日期过滤）与快捷范围互斥：
+// 选了日期就把快捷范围复位为默认（全部时间），清空（clear）则保持现状。
+function onCustomDateChange() {
+  if (state.starttime || state.endtime) {
+    state.scope = 'all';
+  }
+  onArchiveFilterChange();
+}
+
+// 日期选择器毫秒值 → 本地 YYYY-MM-DD（归档日期口径与北京时间自然日一致）。
+function msToDateStr(ms: number): string {
+  const d = new Date(ms);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 function onArchiveFilterChange() {
@@ -156,11 +178,12 @@ const baseRows = computed(() => {
   const rows = (lyStore.events || []).filter((item) => {
     if (state.level && item.level !== state.level) return false;
     if (true && (state.starttime || state.endtime)) {
-      const t = Number(item.starttime ?? 0) * 1000;
-      // 与服务端一致的半开区间：结束日期 +1 天作为上界（不含）。
-      const endExclusive = state.endtime ? state.endtime + 86400000 : 0;
-      if (state.starttime && (!t || t < state.starttime)) return false;
-      if (endExclusive && (!t || t >= endExclusive)) return false;
+      // 与服务端一致：按归档日期（YYYY-MM-DD）双端包含过滤；
+      // 无归档日期的事件不属于归档视图，直接排除。
+      const d = String(item.archive_date || '').slice(0, 10);
+      if (!d) return false;
+      if (state.starttime && d < msToDateStr(state.starttime)) return false;
+      if (state.endtime && d > msToDateStr(state.endtime)) return false;
     }
     if (state.keyword.trim() && !matchesEventKeyword(item, state.keyword)) return false;
     if (selectedAsset.value) {
@@ -291,8 +314,8 @@ onMounted(async () => {
             @update:formatted-value="onArchiveFilterChange"
           />
           <NSelect v-model:value="state.level" clearable placeholder="严重级别" :options="levelOptions" style="width: 140px" />
-          <NDatePicker v-if="true" v-model:value="state.starttime" type="date" clearable placeholder="开始日期" style="width: 150px" />
-          <NDatePicker v-if="true" v-model:value="state.endtime" type="date" clearable placeholder="结束日期" style="width: 150px" />
+          <NDatePicker v-if="true" v-model:value="state.starttime" type="date" clearable placeholder="归档开始日期" style="width: 150px" @update:value="onCustomDateChange" />
+          <NDatePicker v-if="true" v-model:value="state.endtime" type="date" clearable placeholder="归档结束日期" style="width: 150px" @update:value="onCustomDateChange" />
           <NInput
             v-model:value="state.keyword"
             clearable
