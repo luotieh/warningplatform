@@ -68,6 +68,27 @@ func readSegment(ctx context.Context, st store.Store, id string) (seg EventSegme
 	return seg, ok, err
 }
 
+// iocSpecialUseAddress 报告命中携带的 IP 型 IOC 是否为特殊用途地址
+// （回环/链路本地/未指定/组播，IPv4 映射的 IPv6 已归一）。
+// 不排除 RFC1918 内网地址——内网 C2/横向移动是真实威胁场景。
+func iocSpecialUseAddress(m map[string]any) bool {
+	typ := strings.TrimSpace(asString(m["ioc_type"]))
+	val := strings.TrimSpace(asString(m["ioc_value"]))
+	if ioc := nestedMap(m, "ioc"); ioc != nil {
+		typ = strings.TrimSpace(firstNonEmpty(typ, asString(ioc["ioc_type"])))
+		val = strings.TrimSpace(firstNonEmpty(val, asString(ioc["ioc_value"])))
+	}
+	if !strings.EqualFold(typ, "ip") {
+		return false
+	}
+	ip, err := netip.ParseAddr(val)
+	if err != nil {
+		return false
+	}
+	ip = ip.Unmap()
+	return ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsUnspecified() || ip.IsMulticast()
+}
+
 // Numeric fields are normalized through JSON before hashing. Transport-only
 // metadata is excluded from the immutable identity, while evidence is retained.
 func normalizeHit(ly map[string]any, now time.Time) (store.Hit, map[string]any, string) {
@@ -141,6 +162,16 @@ func (s Services) ingestHit(ctx context.Context, ly map[string]any) (map[string]
 			return putRecord(ctx, tx, "receipt", key, "pending", map[string]any{"status": "pending_verification", "reason": reason, "received_at": now, "raw": ly})
 		})
 		return map[string]any{"success": err == nil, "ingest_status": "pending_verification", "reason": reason}, err
+	}
+	// 聚合前过滤：IP 型 IOC 为特殊用途地址（如 DNS 应答 A 记录 127.0.0.1）的
+	// 命中几乎总是噪声（域名停放/运营商拦截/sinkhole——回环地址不可能跨网络
+	// 成为攻击源）。写入 filtered 收据留审计痕迹，但不进入聚合、不产生事件。
+	if iocSpecialUseAddress(m) {
+		key := digest(ly)
+		err := s.Store.AggregationTransaction(ctx, "receipt-"+key, func(tx store.Store) error {
+			return putRecord(ctx, tx, "receipt", key, "filtered", map[string]any{"status": "filtered_special_use_ioc", "reason": "ioc_special_use_address", "received_at": now, "raw": ly})
+		})
+		return map[string]any{"success": err == nil, "ingest_status": "filtered", "reason": "ioc_special_use_address"}, err
 	}
 	var result map[string]any
 	err := s.Store.AggregationTransaction(ctx, "hit-"+hit.DedupKey, func(tx store.Store) error {
