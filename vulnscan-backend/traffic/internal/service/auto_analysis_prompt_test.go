@@ -30,7 +30,8 @@ func TestAutoAnalysisPromptStructure(t *testing.T) {
 	p := autoAnalysisPrompt(ev)
 
 	for _, want := range []string{
-		"【结论】", "## 研判结论", "## 关键证据", "## 影响与风险", "## 建议处置", "## 信息缺口",
+		"【结论】", "## 事件概览", "## 关键证据", "## 攻击源与受影响资产分析", "## 攻击链与风险判断",
+		"## 已执行处置/自动驾驶进展", "## 后续处置建议", "## 信息缺口", "## 可交付给安全团队的结论",
 	} {
 		if !strings.Contains(p, want) {
 			t.Fatalf("missing template marker %q", want)
