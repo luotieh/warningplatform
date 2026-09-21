@@ -322,6 +322,14 @@ const columns = computed(() => [
         h(IconifyIcon, { icon: 'lucide:move-right', style: 'font-size:15px;color:#909399;flex:none' }),
         h('span', { style: 'color:#2080f0' }, row.victimDevice || '-'),
         row.heartbeat_detected ? h(NTag, { type: 'warning', size: 'small' }, { default: () => `心跳 ${row.heartbeat_period_sec || ''}s` }) : null,
+        // 聚合事件含多个查询域名时提示，悬停列出采样到的域名，避免单域名误导。
+        row.dns_domain_count > 1
+          ? h(NTag, { size: 'small', round: true, type: 'info', bordered: false, title: (row.dns_queries || []).join('\n') }, { default: () => `等${row.dns_domain_count}个域名` })
+          : null,
+        // 列表直接展示命中的 IOC（如 DNS 应答中的 127.0.0.1），此前只在详情弹窗可见。
+        row.ioc?.ioc_value
+          ? h(NTag, { size: 'small', round: true, type: 'error', bordered: false, title: `${row.ioc.ioc_type || 'IOC'} 命中` }, { default: () => `IOC ${row.ioc.ioc_value}` })
+          : null,
       ]),
   },
   ...(props.showAsset

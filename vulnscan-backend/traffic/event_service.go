@@ -283,6 +283,8 @@ func lyCompatibleEvent(event domain.Event) map[string]any {
 			level, levelBoosted = boosted, true
 		}
 	}
+	// 多域名聚合标注：采样命中明细里的去重查询域名，供列表避免单域名误导。
+	dnsQueries, dnsDomainCount := dnsQuerySet(context)
 
 	return map[string]any{
 		"id":           firstNonEmpty(event.EventID, stringValue(event.ID)),
@@ -298,6 +300,8 @@ func lyCompatibleEvent(event domain.Event) map[string]any {
 		"heartbeat_period_sec": heartbeatPeriod,
 		"heartbeat_level_boost": levelBoosted,
 		"level_raw":             lyLevel(event.Severity),
+		"dns_queries":           dnsQueries,
+		"dns_domain_count":      dnsDomainCount,
 		// 事件总载荷（字节）：quant_stats.total_payload_bytes，列表「总载荷」列与排序口径。
 		"total_payload_bytes": quantPayloadDisplay(context),
 		"type":                eventType,
@@ -365,6 +369,40 @@ func eventDomain(ctx map[string]any) string {
 		return stringValue(ioc["ioc_value"])
 	}
 	return ""
+}
+
+// dnsQuerySet 汇总事件已采样命中明细里的去重查询域名：v1 读 context.occurrences
+// （buildOccurrence 存平铺 dns_query），v2 读 context.occurrences_preview
+// （previewOccurrence 保留嵌套 app.dns_query）。聚合事件的 128 次命中可能查询
+// 多个不同域名（如停放域名都解析到 127.0.0.1），列表仅凭首条命中的单域名展示
+// 会误导研判。返回去重列表（最多 10 个）与采样内去重总数。
+func dnsQuerySet(ctx map[string]any) (queries []string, total int) {
+	seen := map[string]bool{}
+	add := func(q string) {
+		q = strings.TrimSpace(q)
+		if q == "" || seen[q] {
+			return
+		}
+		seen[q] = true
+		total++
+		if len(queries) < 10 {
+			queries = append(queries, q)
+		}
+	}
+	for _, raw := range []any{ctx["occurrences"], ctx["occurrences_preview"]} {
+		items, _ := raw.([]any)
+		for _, item := range items {
+			m, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			add(stringValue(m["dns_query"]))
+			if app, ok := m["app"].(map[string]any); ok {
+				add(stringValue(app["dns_query"]))
+			}
+		}
+	}
+	return queries, total
 }
 
 // dnsResolutionPeers 识别 DNS 解析流量，返回 (server, client)。

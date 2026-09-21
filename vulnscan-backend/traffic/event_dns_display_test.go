@@ -182,3 +182,61 @@ func TestLyCompatibleEventDNSDisplay(t *testing.T) {
 		})
 	}
 }
+
+func TestLyCompatibleEventDNSDomainSet(t *testing.T) {
+	cases := []struct {
+		name       string
+		ctx        map[string]any
+		wantCount  int
+		wantFirst  string
+	}{
+		{
+			name: "v1平铺occurrences多域名去重",
+			ctx: map[string]any{
+				"src_ip": "218.2.2.2", "dst_ip": "180.104.100.118",
+				"src_port": 53, "dst_port": 51234,
+				"app": map[string]any{"dns_query": "yinxing8.com"},
+				"occurrences": []any{
+					map[string]any{"time": "2026-09-20T08:24:37Z", "dns_query": "yinxing8.com"},
+					map[string]any{"time": "2026-09-20T08:34:06Z", "dns_query": "atcumt.com"},
+					map[string]any{"time": "2026-09-20T08:40:00Z", "dns_query": "atcumt.com"},
+				},
+			},
+			wantCount: 2, wantFirst: "yinxing8.com",
+		},
+		{
+			name: "v2嵌套preview多域名去重",
+			ctx: map[string]any{
+				"src_ip": "218.2.2.2", "dst_ip": "180.104.100.118",
+				"src_port": 53, "dst_port": 51234,
+				"occurrences_preview": []any{
+					map[string]any{"time": "2026-09-20T08:24:37Z", "app": map[string]any{"dns_query": "yinxing8.com"}},
+					map[string]any{"time": "2026-09-20T08:34:06Z", "app": map[string]any{"dns_query": "atcumt.com"}},
+				},
+			},
+			wantCount: 2, wantFirst: "yinxing8.com",
+		},
+		{
+			name: "无命中明细计数为零",
+			ctx: map[string]any{
+				"src_ip": "218.2.2.2", "dst_ip": "180.104.100.118",
+				"src_port": 53, "dst_port": 51234,
+			},
+			wantCount: 0,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			row := lyCompatibleEvent(domain.Event{Severity: "high", Context: ctxJSON(t, tc.ctx)})
+			if got := row["dns_domain_count"]; got != tc.wantCount {
+				t.Errorf("dns_domain_count = %v, want %d", got, tc.wantCount)
+			}
+			if tc.wantFirst != "" {
+				queries, _ := row["dns_queries"].([]string)
+				if len(queries) == 0 || queries[0] != tc.wantFirst {
+					t.Errorf("dns_queries = %v, want first %q", row["dns_queries"], tc.wantFirst)
+				}
+			}
+		})
+	}
+}
