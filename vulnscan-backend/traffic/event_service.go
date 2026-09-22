@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/netip"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -274,7 +273,12 @@ func lyCompatibleEvent(event domain.Event) map[string]any {
 	}
 	startTime := first.Unix()
 	analysisStatus := analysisStatusForEvent(event.EventStatus)
-	heartbeat, heartbeatPeriod := detectHeartbeat(context["occurrences"])
+	// 聚合快照基于全量命中计算的心跳结论优先；旧数据（无快照字段）回退到
+	// 用 context 里的 occurrences（可能仅是最近 10 条 UI 预览）本地判定。
+	heartbeat, heartbeatPeriod, persisted := persistedHeartbeat(context)
+	if !persisted {
+		heartbeat, heartbeatPeriod = detectHeartbeat(context["occurrences"])
+	}
 	// 心跳（固定周期的小包通信）是 C2 信标的强特征：命中时展示等级提升一档
 	// （low→middle→high），high/critical 不再上调；原始级别保留在 level_raw 供审计。
 	levelBoosted := false
@@ -306,6 +310,9 @@ func lyCompatibleEvent(event domain.Event) map[string]any {
 		"total_payload_bytes": quantPayloadDisplay(context),
 		"type":                eventType,
 		"level":               level,
+		// 原始威胁等级（high/medium/low）：level 是展示级（medium→middle，且可能被心跳提升），
+		// 前端级别筛选须按本字段，避免中/低危被展示级误杀。
+		"severity":            event.Severity,
 		"desc":                firstNonEmpty(event.EventName, event.Title, event.Message),
 		"rule_desc":           firstNonEmpty(event.EventName, event.Title, event.Message),
 		"proc_status":         "unprocessed",
@@ -450,57 +457,35 @@ func threatIndicator(ctx map[string]any) string {
 	return stringValue(ioc["ioc_value"])
 }
 
-// detectHeartbeat is intentionally strict: >=8 observations, 5s..24h period,
-// coefficient of variation <=15%, at least three periods, and <=5 packets per
-// observation. Ordinary or insufficient traffic returns false.
+// persistedHeartbeat 读取聚合快照在全量命中上预计算的心跳结论。
+// 第三个返回值表示快照结论是否存在（false 也是有效结论，不能用零值判断）。
+func persistedHeartbeat(context map[string]any) (bool, int64, bool) {
+	detected, ok := context["heartbeat_detected"].(bool)
+	if !ok {
+		return false, 0, false
+	}
+	return detected, int64(numberValue(context["heartbeat_period_sec"])), true
+}
+
+// detectHeartbeat 把 context["occurrences"] 明细转为观测并委托 domain 判定；
+// 仅作为无快照心跳结论时的回退路径。
 func detectHeartbeat(raw any) (bool, int64) {
 	items, ok := raw.([]any)
 	if !ok || len(items) < 8 {
 		return false, 0
 	}
-	var ts []time.Time
+	obs := make([]domain.HeartbeatObservation, 0, len(items))
 	for _, item := range items {
 		m, ok := item.(map[string]any)
 		if !ok {
 			continue
 		}
-		if numberValue(m["packets"]) > 5 {
-			return false, 0
-		}
-		if t := domain.ParseEventTime(stringValue(m["time"])); !t.IsZero() {
-			ts = append(ts, t)
-		}
+		obs = append(obs, domain.HeartbeatObservation{
+			At:      domain.ParseEventTime(stringValue(m["time"])),
+			Packets: numberValue(m["packets"]),
+		})
 	}
-	if len(ts) < 8 {
-		return false, 0
-	}
-	sort.Slice(ts, func(i, j int) bool { return ts[i].Before(ts[j]) })
-	intervals := make([]float64, 0, len(ts)-1)
-	for i := 1; i < len(ts); i++ {
-		d := ts[i].Sub(ts[i-1]).Seconds()
-		if d < 5 || d > 86400 {
-			return false, 0
-		}
-		intervals = append(intervals, d)
-	}
-	mean := 0.0
-	for _, d := range intervals {
-		mean += d
-	}
-	mean /= float64(len(intervals))
-	if ts[len(ts)-1].Sub(ts[0]).Seconds() < mean*3 {
-		return false, 0
-	}
-	variance := 0.0
-	for _, d := range intervals {
-		x := d - mean
-		variance += x * x
-	}
-	variance /= float64(len(intervals))
-	if variance > (mean*0.15)*(mean*0.15) {
-		return false, 0
-	}
-	return true, int64(mean + 0.5)
+	return domain.DetectHeartbeat(obs)
 }
 
 func numberValue(v any) float64 {

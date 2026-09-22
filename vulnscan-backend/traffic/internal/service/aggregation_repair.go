@@ -284,6 +284,9 @@ func (s Services) ApplyAggregationRepair(ctx context.Context, plan RepairPlan) e
 				c["occurrence_count"] = nil
 				c["quant_stats"] = map[string]any{}
 				c["occurrences"] = []any{}
+				// 旧快照的全量心跳结论一并作废，等待重建重新计算。
+				delete(c, "heartbeat_detected")
+				delete(c, "heartbeat_period_sec")
 				b, _ := json.Marshal(c)
 				if _, ok := tx.UpdateEvent(id, map[string]any{"context": string(b), "last_seen_at": seg.Last.Format(time.RFC3339Nano), "aggregation_closed": true, "archive_date": seg.Last.In(domain.Beijing).Format("2006-01-02"), "review_status": "pending"}); !ok {
 					return errors.New("save historical rebuilt event failed")

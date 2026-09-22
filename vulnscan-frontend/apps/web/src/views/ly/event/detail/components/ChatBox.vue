@@ -1,7 +1,6 @@
 <script lang="ts" setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 
-import { marked } from 'marked';
 import { NAlert, NButton, NInput, NScrollbar, NSpin } from 'naive-ui';
 
 import {
@@ -11,8 +10,9 @@ import {
 } from '#/api/ly/deepflow';
 import { message } from '#/adapter/naive';
 import { getMessageDisplay, normalizeDeepflowMessage } from '#/utils/deepflow';
-import { formatTimestamp } from '#/utils/ly';
 import deepflowSocket from '#/utils/deepflow-socket';
+import { formatTimestamp } from '#/utils/ly';
+import { markdownToHtml, sanitizeHtml } from '#/utils/markdown';
 import { estimateWait, loadDurations, saveDuration, waitText } from './generation-wait';
 import EvidenceDialog from './EvidenceDialog.vue';
 
@@ -22,7 +22,9 @@ interface ChatMessage extends Record<string, any> {
   message_content?: Record<string, any>;
   message_from?: string;
   message_id?: number | string | null;
+  message_type?: string;
   pending?: boolean;
+  streaming?: boolean;
   temp_id?: string | null;
 }
 
@@ -51,11 +53,22 @@ const sendError = ref('');
 const messageInput = ref('');
 const messageRecord = ref<ChatMessage[]>([]);
 const chatRef = ref<InstanceType<typeof NScrollbar> | null>(null);
+const chatWrapRef = ref<HTMLElement | null>(null);
+// 用户上翻历史时不跟随新消息强制滚动到底部
+const nearBottom = ref(true);
+let chatScrollEl: Element | null = null;
+
+function handleChatScroll() {
+  const el = chatScrollEl;
+  if (!el) return;
+  nearBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+}
 const lastMessageDbId = ref(0);
 const aiThinkingId = ref('');
 const elapsedSeconds = ref(0);
 const generationEstimate = ref(estimateWait([]));
 const generationStatus = computed(() => waitText(elapsedSeconds.value, generationEstimate.value));
+const streamingActive = computed(() => chatMessages.value.some((item) => item.streaming));
 let waitTimer: ReturnType<typeof setInterval> | undefined;
 let requestTimer: ReturnType<typeof setTimeout> | undefined;
 let requestController: AbortController | undefined;
@@ -101,25 +114,41 @@ const chatMessages = computed(() =>
   displayMessages.value
     // 过滤掉无实际内容的消息（如被剔除系统提示后的空消息），保持对话简洁
     .filter((item) => item.pending || String(item.display.ctx || '').trim() !== '')
-    .map((item) => ({
-      content: item.display.ctx || '',
-      snapshotVersion: Number(item.message_content?.data?.snapshot_version || 0),
-      thinking: Boolean(item.pending && isAiResultMessage(item)),
-      from: item.display.from,
-      isUser: item.isUser,
-      messageClass: getMessageClass(item),
-      time: formatMessageTime(item.display.time),
-    })),
+    .map((item) => {
+      const pendingAi = Boolean(item.pending && isAiResultMessage(item));
+      // 收到正文增量后转为流式渲染（像 DeepSeek 一样实时输出），
+      // 之前保持“思考中”占位。
+      const streaming = pendingAi && Boolean(item.streaming);
+      return {
+        key: getMessageKey(item),
+        content: item.display.ctx || '',
+        messageType: String(item.message_type || ''),
+        snapshotVersion: Number(item.message_content?.data?.snapshot_version || 0),
+        thinking: pendingAi && !streaming,
+        streaming,
+        from: item.display.from,
+        isUser: item.isUser,
+        messageClass: streaming ? 'message-ai-assistant' : getMessageClass(item),
+        time: formatMessageTime(item.display.time),
+      };
+    }),
 );
 
 // 供父组件（报告弹窗）导出 PDF：把当前对话拼成报告 Markdown
 function getReportMarkdown() {
-  return chatMessages.value
-    .filter(
-      (m) =>
-        !String(m.messageClass || '').includes('thinking') &&
-        String(m.content || '').trim() !== '',
-    )
+  const msgs = chatMessages.value.filter(
+    (m) =>
+      !String(m.messageClass || '').includes('thinking') &&
+      String(m.content || '').trim() !== '',
+  );
+  // 多轮自动分析会留下多条专家复盘（event_summary）消息；导出报告只保留最新一轮，
+  // 避免同一事件的不同轮次结论重复出现在报告里。
+  let lastSummaryIndex = -1;
+  msgs.forEach((m, index) => {
+    if (m.messageType === 'event_summary') lastSummaryIndex = index;
+  });
+  return msgs
+    .filter((m, index) => m.messageType !== 'event_summary' || index === lastSummaryIndex)
     .map((m) => {
       const head = m.time ? `**${m.from}** · ${m.time}` : `**${m.from}**`;
       return `${head}\n\n${m.content}`;
@@ -143,7 +172,12 @@ function isUserMessage(item: ChatMessage) {
     return senderType !== 'ai';
   }
 
-  return from === 'user' || from.includes('-');
+  if (senderType === 'user') return true;
+  if (senderType === 'ai' || senderType === 'system') return false;
+  if (from === 'user') return true;
+  const systemRoles = ['system', 'ai_assistant', '_captain', '_manager', '_operator', '_executor', '_expert'];
+  if (systemRoles.includes(from.toLowerCase())) return false;
+  return from.includes('-');
 }
 
 async function scrollToBottom() {
@@ -156,7 +190,7 @@ function getMessageKey(item: ChatMessage) {
     item.temp_id ||
       item.message_id ||
       item.id ||
-      `${item.message_from || 'msg'}-${item.created_at || ''}`,
+      `${item.message_from || 'msg'}-${item.created_at || ''}-${getMessageText(item).slice(0, 64)}`,
   );
 }
 
@@ -250,6 +284,13 @@ function upsertMessages(items: Record<string, any>[]) {
     const aThinking = Boolean(a.pending && isAiResultMessage(a));
     const bThinking = Boolean(b.pending && isAiResultMessage(b));
     if (aThinking !== bThinking) return aThinking ? 1 : -1;
+    // 后端持久化消息的数据库 id 单调递增，是权威顺序；时间戳精度/时区不一致时
+    // 仅按 created_at 排序会出现气泡乱序，故优先按 id 排序。
+    const aId = Number(a.id || a.message_id || 0);
+    const bId = Number(b.id || b.message_id || 0);
+    const aHasId = Number.isFinite(aId) && aId > 0;
+    const bHasId = Number.isFinite(bId) && bId > 0;
+    if (aHasId && bHasId && aId !== bId) return aId - bId;
     const ta = new Date(a.created_at || 0).getTime();
     const tb = new Date(b.created_at || 0).getTime();
     return ta - tb;
@@ -282,9 +323,10 @@ function resetMessages() {
   messageRecord.value = [];
   lastMessageDbId.value = 0;
   aiThinkingId.value = '';
+  nearBottom.value = true;
 }
 
-async function fetchMessages() {
+async function fetchMessages(scrollToEnd = false) {
   if (!props.eventId) return;
   const eventId = props.eventId;
   const generation = requestGeneration;
@@ -298,7 +340,7 @@ async function fetchMessages() {
       : res?.messages || res?.data?.messages || res?.data || [];
     if (Array.isArray(list) && list.length > 0) {
       upsertMessages(list);
-      await scrollToBottom();
+      if (scrollToEnd) await scrollToBottom();
     }
   } catch {
     // 历史消息接口不可用时保留当前会话内容。
@@ -364,7 +406,7 @@ async function sendAIMessage(text: string) {
       upsertMessages([res.user_message]);
     }
     if (res?.message) upsertMessages([res.message]);
-    await fetchMessages();
+    await fetchMessages(true);
   } catch (error) {
     if (generation !== requestGeneration) return;
     sendError.value = controller.signal.aborted ? '等待模型结果超时，请稍后检查报告或重试。' : error instanceof Error ? error.message : '发送消息失败';
@@ -409,10 +451,26 @@ function handleNewMessage(data: any) {
   scrollToBottom();
 }
 
+// 模型正文增量（后端流式转发，不含推理过程）：
+// 追加到当前思考占位消息，实时渲染；首帧到达后占位文案被正文替换。
+function handleChatDelta(data: any) {
+  if (!data || String(data.event_id || '') !== String(props.eventId || '')) return;
+  const delta = String(data.delta || '');
+  if (!delta || !aiThinkingId.value) return;
+  const target = messageRecord.value.find((item) => item.temp_id === aiThinkingId.value);
+  if (!target) return;
+  const content = (target.message_content ||= {});
+  content.content = target.streaming ? String(content.content || '') + delta : delta;
+  target.streaming = true;
+  messageRecord.value = [...messageRecord.value];
+  // 用户上翻历史时不强制回底
+  if (nearBottom.value) scrollToBottom();
+}
+
 function renderMarkdown(text?: string) {
   if (!text) return '';
   try {
-    const html = marked.parse(text, { async: false }) as string;
+    const html = markdownToHtml(text);
     const doc = new DOMParser().parseFromString(html, 'text/html');
     const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT);
     const nodes: Text[] = [];
@@ -437,9 +495,9 @@ function renderMarkdown(text?: string) {
       fragment.append(doc.createTextNode(textValue.slice(offset)));
       node.replaceWith(fragment);
     }
-    return doc.body.innerHTML;
+    return sanitizeHtml(doc.body.innerHTML);
   } catch {
-    return text;
+    return sanitizeHtml(text);
   }
 }
 
@@ -491,7 +549,7 @@ watch(
     stopAnalysisPolling();
     if (value) {
       deepflowSocket.join(value);
-      await fetchMessages();
+      await fetchMessages(true);
       startAnalysisPolling();
     }
   },
@@ -499,14 +557,14 @@ watch(
 );
 
 onMounted(async () => {
-  if (props.eventId) {
-    deepflowSocket.join(props.eventId);
-    await fetchMessages();
-    startAnalysisPolling();
-  }
+  // 初始化加载由上方的 watch(immediate) 负责，避免挂载时重复 join/fetch
   deepflowSocket.on('connected', handleSocketConnected);
   deepflowSocket.on('new_message', handleNewMessage);
+  deepflowSocket.on('chat_delta', handleChatDelta);
   deepflowSocket.connect();
+  await nextTick();
+  chatScrollEl = chatWrapRef.value?.querySelector('.n-scrollbar-container') ?? null;
+  chatScrollEl?.addEventListener('scroll', handleChatScroll, { passive: true });
 });
 
 onUnmounted(() => {
@@ -515,25 +573,29 @@ onUnmounted(() => {
   if (props.eventId) deepflowSocket.leave(props.eventId);
   deepflowSocket.off('connected', handleSocketConnected);
   deepflowSocket.off('new_message', handleNewMessage);
+  deepflowSocket.off('chat_delta', handleChatDelta);
+  chatScrollEl?.removeEventListener('scroll', handleChatScroll);
+  chatScrollEl = null;
 });
 </script>
 
 <template>
   <div class="chat-shell">
     <EvidenceDialog v-model:visible="evidenceVisible" :event-id="eventId" :hit-id="evidenceHitId" :version="evidenceVersion" />
-    <div v-if="loading" class="generation-status" :class="{ 'generation-status-slow': generationStatus.slow }" role="status" aria-live="polite">
+    <div v-if="loading && !streamingActive" class="generation-status" :class="{ 'generation-status-slow': generationStatus.slow }" role="status" aria-live="polite">
       <div class="generation-status-heading"><strong>AI助手</strong><span>{{ generationStatus.title }}</span></div>
       <div>{{ generationStatus.text }}</div>
     </div>
+    <div ref="chatWrapRef" class="chat-body-wrap">
     <NScrollbar ref="chatRef" class="chat-body">
       <div v-if="chatMessages.length" class="messages">
         <div
-          v-for="(item, index) in chatMessages"
-          :key="`${item.from}-${item.time}-${index}`"
+          v-for="item in chatMessages"
+          :key="item.key"
           :class="['message', item.messageClass]"
         >
           <div class="message-header">
-            <span class="message-sender">{{ item.thinking ? `AI助手 · ${generationStatus.title}` : item.from }}</span>
+            <span class="message-sender">{{ item.thinking ? `AI助手 · ${generationStatus.title}` : item.streaming ? 'AI助手 · 正在输出' : item.from }}</span>
             <span class="message-time">{{ item.time }}</span>
           </div>
           <div
@@ -541,6 +603,7 @@ onUnmounted(() => {
               'message-content',
               item.messageClass === 'message-ai-assistant' ? 'ai-response markdown-content' : '',
               item.messageClass === 'message-engineer-question' ? 'engineer-question' : '',
+              item.streaming ? 'message-streaming' : '',
             ]"
             v-html="renderMarkdown(item.thinking ? generationStatus.text : item.content || '暂无内容')"
             @click="onEvidenceClick"
@@ -553,6 +616,7 @@ onUnmounted(() => {
         <div class="empty-subtitle">输入消息，与 DeepSOC 助手分析该安全事件</div>
       </div>
     </NScrollbar>
+    </div>
     <NAlert v-if="sendError" type="error" title="模型调用失败" class="mx-3 my-2 shrink-0" style="overflow-wrap: anywhere; max-height: 220px; overflow-y: auto">
       {{ sendError }}
     </NAlert>
@@ -623,6 +687,13 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
+.chat-body-wrap {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
 .chat-body {
   flex: 1;
   height: 0;
@@ -684,6 +755,13 @@ onUnmounted(() => {
 
 .message-thinking {
   animation: thinking-pulse 1.5s ease-in-out infinite;
+}
+
+/* 流式输出中在正文末尾显示闪烁光标（DeepSeek 风格） */
+.message-streaming :deep(*:last-child)::after {
+  content: '▍';
+  color: var(--primary-color);
+  animation: thinking-pulse 1s ease-in-out infinite;
 }
 
 .message-header {

@@ -7,6 +7,37 @@ import (
 	"vulnscan-backend/traffic/internal/domain"
 )
 
+// 快照持久化的心跳结论优先于 occurrences 本地判定：预览窗口只有最近 10 条，
+// 本地判定只是无快照字段的旧数据回退路径。
+func TestLyCompatibleEventHeartbeatPersistedPrecedence(t *testing.T) {
+	t.Run("快照命中但无明细仍提升", func(t *testing.T) {
+		ctx := map[string]any{
+			"src_ip": "1.2.3.4", "dst_ip": "10.0.0.8",
+			"src_port": 4444, "dst_port": 443, "event_type": "c2",
+			"heartbeat_detected": true, "heartbeat_period_sec": 30,
+		}
+		row := lyCompatibleEvent(domain.Event{Severity: "low", Context: ctxJSON(t, ctx)})
+		if row["level"] != "middle" || row["heartbeat_level_boost"] != true {
+			t.Fatalf("persisted heartbeat ignored: level=%v boost=%v", row["level"], row["heartbeat_level_boost"])
+		}
+		if row["heartbeat_period_sec"] != int64(30) {
+			t.Fatalf("heartbeat_period_sec = %v, want 30", row["heartbeat_period_sec"])
+		}
+	})
+	t.Run("快照否定时不被预览明细翻盘", func(t *testing.T) {
+		ctx := map[string]any{
+			"src_ip": "1.2.3.4", "dst_ip": "10.0.0.8",
+			"src_port": 4444, "dst_port": 443, "event_type": "c2",
+			"heartbeat_detected": false, "heartbeat_period_sec": 0,
+			"occurrences":        regularOccurrences(10, 30, 2),
+		}
+		row := lyCompatibleEvent(domain.Event{Severity: "low", Context: ctxJSON(t, ctx)})
+		if row["level"] != "low" || row["heartbeat_detected"] != false {
+			t.Fatalf("persisted negative heartbeat overridden: level=%v detected=%v", row["level"], row["heartbeat_detected"])
+		}
+	})
+}
+
 // regularOccurrences 构造 count 条固定间隔 periodSec 秒的命中记录。
 func regularOccurrences(count, periodSec, packets int) []any {
 	base := time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC)

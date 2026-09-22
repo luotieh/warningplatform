@@ -28,6 +28,8 @@ func (s *ChatService) UpdateLLM(settings trafficconfig.LLMSettings) {
 	s.core.LLM.APIKey = settings.APIKey
 	s.core.LLM.Model = settings.Model
 	s.core.LLM.HTTP = &http.Client{Timeout: time.Duration(settings.TimeoutSeconds) * time.Second}
+	s.core.LLM.MaxTokens = settings.MaxTokens
+	s.core.LLM.DisableThinking = settings.DisableThinking
 }
 
 func (s *ChatService) Send(ctx context.Context, body map[string]any) (map[string]any, error) {
@@ -62,7 +64,11 @@ func (s *ChatService) Send(ctx context.Context, body map[string]any) (map[string
 	})
 	realtime.BroadcastMessage(eventID, userMessage)
 
-	reply, err := s.core.LLM.Chat(ctx, trafficservice.EngineerChatSystemPrompt, prompt)
+	// 流式输出：正文增量（不含推理过程）经 socket 实时广播给事件房间，
+	// 前端对话弹窗边生成边渲染，不再干等最终报告；返回值仍是完整回答。
+	reply, err := s.core.LLM.ChatStream(ctx, trafficservice.EngineerChatSystemPrompt, prompt, func(delta string) {
+		realtime.Broadcast(eventID, "chat_delta", map[string]any{"event_id": eventID, "delta": delta})
+	})
 	if err != nil {
 		return nil, err
 	}

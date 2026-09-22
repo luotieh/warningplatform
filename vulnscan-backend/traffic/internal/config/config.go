@@ -12,6 +12,8 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/pelletier/go-toml/v2"
+
+	"vulnscan-backend/traffic/internal/client"
 )
 
 type Config struct {
@@ -33,6 +35,8 @@ type Config struct {
 	LLMModel                string
 	LLMTemperature          float64
 	LLMTimeout              time.Duration
+	LLMMaxTokens            int
+	LLMDisableThinking      bool
 	SyncBatchSize           int
 	SyncLookbackSeconds     int
 	SyncMaxRetries          int
@@ -54,7 +58,11 @@ type LLMSettings struct {
 	APIKeyMasked     string `json:"api_key_masked,omitempty"`
 	Model            string `json:"model"`
 	TimeoutSeconds   int    `json:"timeout_seconds"`
-	ConfigPath       string `json:"config_path,omitempty"`
+	// MaxTokens 输出 token 预算，0 表示沿用客户端默认值(client.ChatMaxTokens)。
+	MaxTokens int `json:"max_tokens"`
+	// DisableThinking 关闭 Qwen 系模型的思考链，避免推理过程占用输出预算。
+	DisableThinking bool   `json:"disable_thinking"`
+	ConfigPath      string `json:"config_path,omitempty"`
 }
 
 // StoreSettings 流量存储配置（配置页读写与健康测试使用）。
@@ -121,6 +129,10 @@ func SettingsFromConfig(cfg Config) LLMSettings {
 	if timeoutSeconds <= 0 {
 		timeoutSeconds = 60
 	}
+	maxTokens := cfg.LLMMaxTokens
+	if maxTokens <= 0 {
+		maxTokens = client.ChatMaxTokens
+	}
 	return LLMSettings{
 		BaseURL:          strings.TrimSpace(cfg.LLMBaseURL),
 		APIKey:           strings.TrimSpace(cfg.LLMAPIKey),
@@ -128,6 +140,8 @@ func SettingsFromConfig(cfg Config) LLMSettings {
 		APIKeyMasked:     maskSecret(cfg.LLMAPIKey),
 		Model:            firstNonEmpty(strings.TrimSpace(cfg.LLMModel), "deepseek-chat"),
 		TimeoutSeconds:   timeoutSeconds,
+		MaxTokens:        maxTokens,
+		DisableThinking:  cfg.LLMDisableThinking,
 		ConfigPath:       findConfigFile(),
 	}
 }
@@ -150,6 +164,14 @@ func SettingsFromStoreConfig(cfg Config) StoreSettings {
 	return s
 }
 
+// normalizeMaxTokens 0/负值回落到客户端默认输出预算，保证页面展示与实际生效一致。
+func normalizeMaxTokens(v int) int {
+	if v <= 0 {
+		return client.ChatMaxTokens
+	}
+	return v
+}
+
 func WriteTrafficLLMSettings(settings LLMSettings, updateAPIKey bool) (LLMSettings, error) {
 	path := findConfigFile()
 	if path == "" {
@@ -166,21 +188,24 @@ func WriteTrafficLLMSettings(settings LLMSettings, updateAPIKey bool) (LLMSettin
 	}
 	content := string(raw)
 	replacements := map[string]string{
-		"llm_base_url":        quoteTOMLString(strings.TrimSpace(settings.BaseURL)),
-		"llm_model":           quoteTOMLString(firstNonEmpty(strings.TrimSpace(settings.Model), "deepseek-chat")),
-		"llm_timeout_seconds": strconv.Itoa(normalizeTimeout(settings.TimeoutSeconds)),
+		"llm_base_url":         quoteTOMLString(strings.TrimSpace(settings.BaseURL)),
+		"llm_model":            quoteTOMLString(firstNonEmpty(strings.TrimSpace(settings.Model), "deepseek-chat")),
+		"llm_timeout_seconds":  strconv.Itoa(normalizeTimeout(settings.TimeoutSeconds)),
+		"llm_max_tokens":       strconv.Itoa(normalizeMaxTokens(settings.MaxTokens)),
+		"llm_disable_thinking": strconv.FormatBool(settings.DisableThinking),
 	}
 	if updateAPIKey {
 		replacements["llm_api_key"] = quoteTOMLString(strings.TrimSpace(settings.APIKey))
 	}
 
-	next := upsertTOMLSectionValues(content, "traffic", replacements, []string{"llm_base_url", "llm_api_key", "llm_model", "llm_timeout_seconds"})
+	next := upsertTOMLSectionValues(content, "traffic", replacements, []string{"llm_base_url", "llm_api_key", "llm_model", "llm_timeout_seconds", "llm_max_tokens", "llm_disable_thinking"})
 	if err := os.WriteFile(path, []byte(next), 0o600); err != nil {
 		return LLMSettings{}, friendlyConfigWriteError(path, err)
 	}
 	out := settings
 	out.Model = firstNonEmpty(strings.TrimSpace(out.Model), "deepseek-chat")
 	out.TimeoutSeconds = normalizeTimeout(out.TimeoutSeconds)
+	out.MaxTokens = normalizeMaxTokens(out.MaxTokens)
 	out.ConfigPath = path
 	out.APIKeyConfigured = strings.TrimSpace(out.APIKey) != ""
 	out.APIKeyMasked = maskSecret(out.APIKey)
@@ -371,14 +396,16 @@ func applyTrafficFileConfig(cfg *Config) {
 
 	var fileCfg struct {
 		Traffic struct {
-			StoreBackend      string `toml:"store_backend"`
-			DatabaseURL       string `toml:"database_url"`
-			AutoMigrate       *bool  `toml:"auto_migrate"`
-			DBWaitSeconds     int    `toml:"db_wait_seconds"`
-			LLMBaseURL        string `toml:"llm_base_url"`
-			LLMAPIKey         string `toml:"llm_api_key"`
-			LLMModel          string `toml:"llm_model"`
-			LLMTimeoutSeconds int    `toml:"llm_timeout_seconds"`
+			StoreBackend       string `toml:"store_backend"`
+			DatabaseURL        string `toml:"database_url"`
+			AutoMigrate        *bool  `toml:"auto_migrate"`
+			DBWaitSeconds      int    `toml:"db_wait_seconds"`
+			LLMBaseURL         string `toml:"llm_base_url"`
+			LLMAPIKey          string `toml:"llm_api_key"`
+			LLMModel           string `toml:"llm_model"`
+			LLMTimeoutSeconds  int    `toml:"llm_timeout_seconds"`
+			LLMMaxTokens       int    `toml:"llm_max_tokens"`
+			LLMDisableThinking bool   `toml:"llm_disable_thinking"`
 		} `toml:"traffic"`
 	}
 	raw, err := os.ReadFile(path)
@@ -412,6 +439,12 @@ func applyTrafficFileConfig(cfg *Config) {
 	}
 	if os.Getenv("LLM_TIMEOUT_SECONDS") == "" && fileCfg.Traffic.LLMTimeoutSeconds > 0 {
 		cfg.LLMTimeout = time.Duration(fileCfg.Traffic.LLMTimeoutSeconds) * time.Second
+	}
+	if os.Getenv("LLM_MAX_TOKENS") == "" && fileCfg.Traffic.LLMMaxTokens > 0 {
+		cfg.LLMMaxTokens = fileCfg.Traffic.LLMMaxTokens
+	}
+	if os.Getenv("LLM_DISABLE_THINKING") == "" && fileCfg.Traffic.LLMDisableThinking {
+		cfg.LLMDisableThinking = true
 	}
 }
 

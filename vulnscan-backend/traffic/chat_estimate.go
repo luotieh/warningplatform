@@ -27,18 +27,19 @@ func (s *ChatService) Estimate(eventID, question string) (map[string]any, error)
 		sections = append(sections, map[string]any{"name": part.name, "characters": len([]rune(part.text)), "estimated_tokens": trafficservice.EstimatePromptTokens(part.text)})
 		whole.WriteString(part.text)
 	}
-	model, profile, timeout := "", "", 15
+	model, profile, timeout, outputMaxTokens := "", "", 15, client.ChatMaxTokens
 	if llm := s.core.LLM; llm != nil {
 		model = llm.Model
 		profile = fmt.Sprintf("%x", sha256.Sum256([]byte(llm.BaseURL+"|"+llm.Model)))
 		if llm.HTTP != nil && llm.HTTP.Timeout > 0 {
 			timeout = int(llm.HTTP.Timeout.Seconds())
 		}
+		outputMaxTokens = llm.MaxOutputTokens()
 	}
 	return map[string]any{
 		"model": model, "profile": profile, "timeout_seconds": timeout,
 		"estimated_input_tokens":    trafficservice.EstimatePromptTokens(whole.String()) + 12,
-		"message_overhead_estimate": 12, "output_max_tokens": client.ChatMaxTokens,
+		"message_overhead_estimate": 12, "output_max_tokens": outputMaxTokens,
 		"sections": sections, "is_estimate": true,
 		"estimate_method": "CJK字符×0.7，其余字符÷3.5，合计×1.1并向上取整；另估计12个消息封装token。实际以模型usage为准。",
 	}, nil

@@ -88,6 +88,10 @@ func (s *SystemService) SetLLMConfig(settings trafficconfig.LLMSettings, updateA
 	s.core.LLM.APIKey = updated.APIKey
 	s.core.LLM.Model = updated.Model
 	s.core.LLM.HTTP = &http.Client{Timeout: s.cfg.LLMTimeout}
+	s.cfg.LLMMaxTokens = updated.MaxTokens
+	s.cfg.LLMDisableThinking = updated.DisableThinking
+	s.core.LLM.MaxTokens = updated.MaxTokens
+	s.core.LLM.DisableThinking = updated.DisableThinking
 	return updated, nil
 }
 

@@ -39,6 +39,7 @@
     "@vueuse/core": "catalog:",
     "dayjs": "catalog:",
     "docx": "^9.7.1",
+    "dompurify": "catalog:",
     "echarts": "catalog:",
     "element-plus": "catalog:",
     "file-saver": "^2.0.5",

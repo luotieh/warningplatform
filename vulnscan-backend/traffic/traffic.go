@@ -88,11 +88,13 @@ func NewTraffic(moduleCfg Config) *Traffic {
 			HTTP:    httpClient,
 		},
 		LLM: &client.LLMClient{
-			BaseURL:     cfg.LLMBaseURL,
-			APIKey:      cfg.LLMAPIKey,
-			Model:       cfg.LLMModel,
-			Temperature: cfg.LLMTemperature,
-			HTTP:        llmHTTPClient,
+			BaseURL:         cfg.LLMBaseURL,
+			APIKey:          cfg.LLMAPIKey,
+			Model:           cfg.LLMModel,
+			Temperature:     cfg.LLMTemperature,
+			HTTP:            llmHTTPClient,
+			MaxTokens:       cfg.LLMMaxTokens,
+			DisableThinking: cfg.LLMDisableThinking,
 		},
 		Queue: queue,
 	}

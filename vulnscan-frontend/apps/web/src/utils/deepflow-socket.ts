@@ -104,6 +104,11 @@ class DeepflowSocketManager {
       });
     });
 
+    // 模型正文流式增量（不含推理过程），后端在生成期间持续推送
+    this.socket.on("chat_delta", (data) => {
+      this.emit("chat_delta", data);
+    });
+
     this.socket.connect();
   }
 

@@ -15,7 +15,25 @@ type LLMClient struct {
 	Model       string
 	Temperature float64
 	HTTP        *http.Client
+	// MaxTokens 覆盖默认输出预算(chatMaxTokens)，0 表示用默认值。
+	// 本地部署窗口/性能受限时可通过配置降低。
+	MaxTokens int
+	// DisableThinking 为 Qwen 系模型关闭思考链(chat_template_kwargs.enable_thinking=false)，
+	// 避免推理过程耗尽输出预算导致报告被截断。
+	DisableThinking bool
 }
+
+// effectiveMaxTokens 返回本次调用实际使用的输出 token 预算。
+func (c LLMClient) effectiveMaxTokens() int {
+	if c.MaxTokens > 0 {
+		return c.MaxTokens
+	}
+	return chatMaxTokens
+}
+
+// MaxOutputTokens 返回当前生效的输出 token 预算（配置页/估算接口展示用），
+// 与 complete 实际使用的值保持一致。
+func (c LLMClient) MaxOutputTokens() int { return c.effectiveMaxTokens() }
 
 type LLMHealth struct {
 	Configured bool   `json:"configured"`
@@ -59,7 +77,7 @@ func (c LLMClient) HealthCheck(ctx context.Context) LLMHealth {
 		c.Model = h.Model
 	}
 	start := time.Now()
-	result, err := c.complete(ctx, "Return only OK.", "health", healthTestMaxTokens)
+	result, err := c.complete(ctx, "Return only OK.", "health", healthTestMaxTokens, nil)
 	h.Endpoint, h.LatencyMS = result.Endpoint, time.Since(start).Milliseconds()
 	h.OK = err == nil
 	if err != nil {
@@ -189,7 +207,7 @@ func (c LLMClient) connectivityCheck(ctx context.Context, httpClient *http.Clien
 func (c LLMClient) chatTest(ctx context.Context, httpClient *http.Client, baseURL, model string) LLMChatTest {
 	c.BaseURL, c.Model, c.HTTP = baseURL, model, httpClient
 	start := time.Now()
-	result, err := c.complete(ctx, "", healthTestQuestion, healthTestMaxTokens)
+	result, err := c.complete(ctx, "", healthTestQuestion, healthTestMaxTokens, nil)
 	chat := LLMChatTest{Endpoint: result.Endpoint, Question: healthTestQuestion, Reply: result.Reply, LatencyMS: time.Since(start).Milliseconds(), OK: err == nil}
 	if err != nil {
 		chat.Error = err.Error()
@@ -209,7 +227,21 @@ func (c LLMClient) Chat(ctx context.Context, systemPrompt, prompt string) (strin
 	if !c.Enabled() {
 		return "", errors.New("LLM未配置，请先在配置页面填写可用的LLM服务地址")
 	}
-	result, err := c.complete(ctx, systemPrompt, prompt, chatMaxTokens)
+	result, err := c.complete(ctx, systemPrompt, prompt, c.effectiveMaxTokens(), nil)
+	if err != nil {
+		return "", err
+	}
+	return result.Reply, nil
+}
+
+// ChatStream 与 Chat 语义相同，但把正文增量（不含推理过程）通过 onDelta
+// 实时回调：调用方（工程师对话）可边生成边推给前端，像 DeepSeek 一样
+// 实时渲染，最终返回值仍是完整回答。
+func (c LLMClient) ChatStream(ctx context.Context, systemPrompt, prompt string, onDelta func(string)) (string, error) {
+	if !c.Enabled() {
+		return "", errors.New("LLM未配置，请先在配置页面填写可用的LLM服务地址")
+	}
+	result, err := c.complete(ctx, systemPrompt, prompt, c.effectiveMaxTokens(), onDelta)
 	if err != nil {
 		return "", err
 	}

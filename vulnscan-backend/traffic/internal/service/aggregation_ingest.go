@@ -68,6 +68,48 @@ func readSegment(ctx context.Context, st store.Store, id string) (seg EventSegme
 	return seg, ok, err
 }
 
+// mergeSessionSummary 将新命中的双向会话统计并入事件上下文。
+// 同一会话（session_id 一致或缺失）：时间窗口取并集，包/字节/命中计数取较大值
+// （探针上报的是该会话的累计值）；不同会话保留 last_time 较新的一份，
+// 避免把多个会话的计数混在一起。incoming 为空返回 nil（保持原值）。
+func mergeSessionSummary(existing, incoming any) any {
+	inc, ok := incoming.(map[string]any)
+	if !ok || len(inc) == 0 {
+		return nil
+	}
+	cur, ok := existing.(map[string]any)
+	if !ok || len(cur) == 0 {
+		return inc
+	}
+	usec := func(m map[string]any, k string) int64 { return int64(toInt(m[k])) }
+	curSID, incSID := asString(cur["session_id"]), asString(inc["session_id"])
+	if curSID != "" && incSID != "" && curSID != incSID {
+		if usec(inc, "last_time_usec") >= usec(cur, "last_time_usec") {
+			return inc
+		}
+		return nil
+	}
+	merged := make(map[string]any, len(cur)+1)
+	for k, v := range cur {
+		merged[k] = v
+	}
+	if first := usec(inc, "first_time_usec"); first > 0 && (usec(cur, "first_time_usec") == 0 || first < usec(cur, "first_time_usec")) {
+		merged["first_time_usec"] = first
+	}
+	if last := usec(inc, "last_time_usec"); last > usec(cur, "last_time_usec") {
+		merged["last_time_usec"] = last
+	}
+	for _, k := range []string{"client_packets", "server_packets", "client_wire_bytes", "server_wire_bytes", "hit_count"} {
+		if usec(inc, k) > usec(cur, k) {
+			merged[k] = inc[k]
+		}
+	}
+	if asString(merged["session_id"]) == "" && incSID != "" {
+		merged["session_id"] = incSID
+	}
+	return merged
+}
+
 // iocSpecialUseAddress 报告命中携带的 IP 型 IOC 是否为特殊用途地址
 // （回环/链路本地/未指定/组播，IPv4 映射的 IPv6 已归一）。
 // 不排除 RFC1918 内网地址——内网 C2/横向移动是真实威胁场景。
@@ -317,8 +359,8 @@ func (s Services) ingestHit(ctx context.Context, ly map[string]any) (map[string]
 		c["report_stale"] = true
 		c["canonical_event_id"] = seg.EventID
 		c["aggregation_key"] = seg.AggregateKey
+		base := decodeEventContext(LyEventToDeepSOC(m).Context)
 		if fresh {
-			base := decodeEventContext(LyEventToDeepSOC(m).Context)
 			for k, v := range base {
 				if k != "occurrence_count" && k != "quant_stats" && k != "occurrences" {
 					if k == "app" || k == "session_summary" || k == "ioc" || k == "ioc_evidence" || k == "recommended_action" {
@@ -333,6 +375,10 @@ func (s Services) ingestHit(ctx context.Context, ly map[string]any) (map[string]
 					c[k] = v
 				}
 			}
+		} else if merged := mergeSessionSummary(c["session_summary"], base["session_summary"]); merged != nil {
+			// 聚合事件：会话统计随新命中滚动更新，避免明细弹窗
+			// 「双向会话统计」的会话时间停留在首次命中的值。
+			c["session_summary"] = merged
 		}
 		if len(related) > 1 {
 			c["merged_event_ids"] = seg.Sources

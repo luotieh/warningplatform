@@ -82,6 +82,12 @@ func (h *Handler) LLMConfig(c *gin.Context) {
 		if timeout := intFromBody(body["timeout_seconds"]); timeout > 0 {
 			settings.TimeoutSeconds = timeout
 		}
+		if _, ok := body["max_tokens"]; ok {
+			settings.MaxTokens = intFromBody(body["max_tokens"])
+		}
+		if _, ok := body["disable_thinking"]; ok {
+			settings.DisableThinking = boolFromBody(body["disable_thinking"])
+		}
 		apiKey := strings.TrimSpace(stringValue(body["api_key"]))
 		updateAPIKey := apiKey != ""
 		if updateAPIKey {

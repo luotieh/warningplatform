@@ -46,6 +46,8 @@ const storeBackend = ref('mysql');
 
 const llmForm = reactive({
   api_key: '',
+  disable_thinking: false,
+  max_tokens: 6000,
   base_url: '',
   model: 'deepseek-chat',
   timeout_seconds: 60,
@@ -68,6 +70,8 @@ async function loadLLMConfig() {
     llmForm.base_url = String(data?.base_url || '');
     llmForm.model = String(data?.model || 'deepseek-chat');
     llmForm.timeout_seconds = Number(data?.timeout_seconds || 60);
+    llmForm.max_tokens = Number(data?.max_tokens || 6000);
+    llmForm.disable_thinking = Boolean(data?.disable_thinking);
     llmForm.api_key = '';
     llmKeyMasked.value = String(data?.api_key_masked || '');
     llmConfigPath.value = String(data?.config_path || '');
@@ -97,6 +101,8 @@ async function saveLLMConfig() {
     if (llmForm.api_key.trim()) {
       payload.api_key = llmForm.api_key.trim();
     }
+    payload.max_tokens = llmForm.max_tokens || 6000;
+    payload.disable_thinking = llmForm.disable_thinking;
     const data = await lyLLMConfigSave(payload);
     llmForm.api_key = '';
     llmKeyMasked.value = String(data?.api_key_masked || llmKeyMasked.value || '');
@@ -291,6 +297,21 @@ onMounted(loadStoreConfig);
               :min="1"
               :max="6000"
             />
+          </NFormItem>
+          <NFormItem label="最大输出Token">
+            <NInputNumber
+              v-model:value="llmForm.max_tokens"
+              class="full-input"
+              :min="256"
+              :max="262144"
+              :step="1024"
+              placeholder="6000"
+            />
+          </NFormItem>
+          <NFormItem label="思考模式">
+            <NCheckbox v-model:checked="llmForm.disable_thinking">
+              关闭思考（推理链会占用输出额度，本地Qwen模型建议开启）
+            </NCheckbox>
           </NFormItem>
         </div>
       </NForm>

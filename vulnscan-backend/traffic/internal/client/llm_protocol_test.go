@@ -170,6 +170,49 @@ func TestReportRejectsTruncatedChat(t *testing.T) {
 	}
 }
 
+// DisableThinking 时 chat completions 请求必须带 enable_thinking=false，
+// 避免思考链耗尽输出预算；未开启时不得携带该字段（兼容非 Qwen 服务）。
+func TestChatDisableThinkingSendsTemplateKwargs(t *testing.T) {
+	for _, disable := range []bool{true, false} {
+		t.Run(fmt.Sprintf("disable=%v", disable), func(t *testing.T) {
+			var captured map[string]any
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var body map[string]any
+				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+					t.Errorf("decode request: %v", err)
+				}
+				captured = body
+				fmt.Fprint(w, `{"choices":[{"finish_reason":"stop","message":{"content":"ok"}}]}`)
+			}))
+			defer srv.Close()
+			c := LLMClient{BaseURL: srv.URL, Model: "qwen", DisableThinking: disable}
+			if _, err := c.Chat(context.Background(), "s", "u"); err != nil {
+				t.Fatalf("chat: %v", err)
+			}
+			kwargs, present := captured["chat_template_kwargs"].(map[string]any)
+			if disable {
+				if !present || kwargs["enable_thinking"] != false {
+					t.Fatalf("missing enable_thinking=false: %v", captured)
+				}
+			} else if present {
+				t.Fatalf("unexpected chat_template_kwargs: %v", captured)
+			}
+		})
+	}
+}
+
+// 截断错误必须带上真实 completion_tokens，便于区分思考链耗尽与输出过长。
+func TestChatTruncatedErrorIncludesUsage(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"choices":[{"finish_reason":"length","message":{"content":"partial"}}],"usage":{"prompt_tokens":1234,"completion_tokens":6000,"total_tokens":7234}}`)
+	}))
+	defer srv.Close()
+	_, err := (LLMClient{BaseURL: srv.URL}).Chat(context.Background(), "s", "u")
+	if err == nil || !strings.Contains(err.Error(), "completion_tokens=6000") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
 func TestResponsesCancellation(t *testing.T) {
 	started := make(chan struct{})
 	canceled := make(chan struct{})

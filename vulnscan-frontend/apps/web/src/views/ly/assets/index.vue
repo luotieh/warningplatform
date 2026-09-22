@@ -38,6 +38,7 @@ import {
 import { useLyStore } from '#/store/ly';
 import { countAssetEvents } from '#/utils/ly-asset';
 import { paginate } from '#/utils/ly';
+import { markdownToHtml } from '#/utils/markdown';
 
 defineOptions({ name: 'LyAssets' });
 
@@ -82,7 +83,7 @@ const summaryModalVisible = ref(false);
 const summaryContent = ref<AssetReportSummary | null>(null);
 const summaryHtml = computed(() => {
   const narrative = summaryContent.value?.narrative || '（暂无内容）';
-  return marked.parse(narrative, { async: false }) as string;
+  return markdownToHtml(narrative);
 });
 
 async function load() {

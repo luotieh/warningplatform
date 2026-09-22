@@ -116,6 +116,10 @@ func (s Services) buildSnapshot(ctx context.Context, seg EventSegment) (Evidence
 	selected := map[string]map[string]any{}
 	selectedKeys := []string{}
 	var observationBytes, observationWire, observationPackets int64
+	// 心跳判定基于全量命中（UI 预览只保留最近 10 条，不足以判定）；
+	// 一旦出现 >5 包的观测即可排除，提前释放样本避免大事件占内存。
+	heartbeatObs := []domain.HeartbeatObservation{}
+	heartbeatPossible := true
 	q := store.HitQuery{Sources: seg.Sources, Watermark: seg.Watermark, Limit: 500}
 	volume := newVolumeAccumulator(seg.First)
 	for {
@@ -178,6 +182,14 @@ func (s Services) buildSnapshot(ctx context.Context, seg EventSegment) (Evidence
 			observationBytes += int64(toInt(m["bytes"]))
 			observationWire += int64(toInt(m["wire_bytes"]))
 			observationPackets += int64(toInt(m["packets"]))
+			if heartbeatPossible {
+				if packets := toInt(m["packets"]); packets > 5 {
+					heartbeatPossible = false
+					heartbeatObs = nil
+				} else {
+					heartbeatObs = append(heartbeatObs, domain.HeartbeatObservation{At: h.OccurredAt, Packets: float64(packets)})
+				}
+			}
 			p := previewOccurrence(o)
 			ui := map[string]any{}
 			for _, key := range []string{"hit_id", "evidence_id", "time", "device_id", "rule_id", "ioc_value", "src_ip", "dst_ip", "src_port", "dst_port", "protocol", "packet_sequence", "captured_length", "wire_length", "capture_truncated"} {
@@ -220,6 +232,12 @@ func (s Services) buildSnapshot(ctx context.Context, seg EventSegment) (Evidence
 	if snap.Count != seg.Count {
 		return snap, fmt.Errorf("membership count mismatch: expected %d got %d", seg.Count, snap.Count)
 	}
+	heartbeatDetected, heartbeatPeriod := false, int64(0)
+	if heartbeatPossible {
+		heartbeatDetected, heartbeatPeriod = domain.DetectHeartbeat(heartbeatObs)
+	}
+	snap.Context["heartbeat_detected"] = heartbeatDetected
+	snap.Context["heartbeat_period_sec"] = heartbeatPeriod
 	for _, k := range selectedKeys {
 		snap.Evidence = append(snap.Evidence, selected[k])
 	}
@@ -304,7 +322,7 @@ func (s Services) RebuildAggregation(ctx context.Context, id string) error {
 		c := decodeEventContext(ev.Context)
 		// Copy only aggregate-owned fields; reports and review changes may have been
 		// written while the snapshot was scanning.
-		for _, k := range []string{"quant_stats", "occurrence_count", "first_time", "last_time", "last_seen_at", "occurrences", "occurrences_preview", "occurrences_total", "occurrences_has_more"} {
+		for _, k := range []string{"quant_stats", "occurrence_count", "first_time", "last_time", "last_seen_at", "occurrences", "occurrences_preview", "occurrences_total", "occurrences_has_more", "heartbeat_detected", "heartbeat_period_sec"} {
 			c[k] = snap.Context[k]
 		}
 		// events.context remains a small compatibility projection. Full IOC/rule
