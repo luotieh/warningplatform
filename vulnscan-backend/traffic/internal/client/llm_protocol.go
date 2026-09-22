@@ -206,7 +206,7 @@ func readChatReply(b []byte) (string, string, chatUsage, error) {
 		return "", "", out.Usage, fmt.Errorf("choices为空；%s", upstreamErrorDetail(b))
 	}
 	choice := out.Choices[0]
-	reply := strings.TrimSpace(choice.Message.Content)
+	reply := strings.TrimSpace(stripThinkBlocks(choice.Message.Content))
 	if choice.Finish == "length" {
 		return reply, choice.Finish, out.Usage, fmt.Errorf("模型输出达到 token 上限（completion_tokens=%d），未完成回答；若模型开启了思考模式(thinking)，推理链会占用输出预算，建议配置 llm_disable_thinking=true 或调大 llm_max_tokens", out.Usage.CompletionTokens)
 	}
@@ -219,6 +219,92 @@ func readChatReply(b []byte) (string, string, chatUsage, error) {
 	return reply, choice.Finish, out.Usage, nil
 }
 
+// stripThinkBlocks 移除正文 content 中内联的 <think>...</think> 推理块。
+// 部分部署（如未将推理拆分到 reasoning_content 的 vLLM/Qwen 模板）会把思考链
+// 直接混在正文里返回，直接展示会暴露 <think> 标签；剥离后只保留最终回答。
+func stripThinkBlocks(s string) string {
+	for {
+		start := strings.Index(s, "<think>")
+		if start < 0 {
+			return s
+		}
+		end := strings.Index(s[start+len("<think>"):], "</think>")
+		if end < 0 {
+			// 未闭合的思考块：认为其后全是推理内容，整体丢弃
+			return s[:start]
+		}
+		s = s[:start] + s[start+len("<think>")+end+len("</think>"):]
+	}
+}
+
+// tagSuffix 返回 s 尾部与 tag 前缀重合的最大长度：流式增量边界可能恰好
+// 切开标签（如结尾 "<thi"），这部分必须暂存等待下一个增量再判定。
+func tagSuffix(s, tag string) int {
+	for n := len(tag) - 1; n > 0; n-- {
+		if len(s) >= n && strings.HasSuffix(s, tag[:n]) {
+			return n
+		}
+	}
+	return 0
+}
+
+// thinkDeltaFilter 对流式增量做与 stripThinkBlocks 相同的过滤：跟踪是否处于
+// <think> 块内部，块内文本与标签本身都不转发给前端，避免实时输出暴露思考链。
+type thinkDeltaFilter struct {
+	onDelta func(string)
+	inThink bool
+	pending string
+}
+
+func newThinkDeltaFilter(onDelta func(string)) *thinkDeltaFilter {
+	return &thinkDeltaFilter{onDelta: onDelta}
+}
+
+func (f *thinkDeltaFilter) push(delta string) {
+	if f.onDelta == nil {
+		return
+	}
+	f.pending += delta
+	var out strings.Builder
+	for len(f.pending) > 0 {
+		if f.inThink {
+			end := strings.Index(f.pending, "</think>")
+			if end < 0 {
+				f.pending = f.pending[len(f.pending)-tagSuffix(f.pending, "</think>"):]
+				break
+			}
+			f.pending = f.pending[end+len("</think>"):]
+			f.inThink = false
+			continue
+		}
+		start := strings.Index(f.pending, "<think>")
+		if start < 0 {
+			keep := tagSuffix(f.pending, "<think>")
+			out.WriteString(f.pending[:len(f.pending)-keep])
+			f.pending = f.pending[len(f.pending)-keep:]
+			break
+		}
+		out.WriteString(f.pending[:start])
+		f.pending = f.pending[start+len("<think>"):]
+		f.inThink = true
+	}
+	if s := out.String(); s != "" {
+		f.onDelta(s)
+	}
+}
+
+// flush 处理流结束时的残留：思考块内或未闭合标签的内容丢弃，
+// 正文侧因疑似标签前缀而暂存的纯文本照常转发。
+func (f *thinkDeltaFilter) flush() {
+	if f.onDelta == nil {
+		return
+	}
+	if f.pending != "" && !f.inThink {
+		f.onDelta(f.pending)
+	}
+	f.pending = ""
+}
+
 // readChatStream 解析 chat/completions 的 SSE 流：只累计并回调正文增量
 // （delta.content），推理内容（delta.reasoning_content 等）不转发、不保存，
 // 前端因此能实时看到回答而不暴露思考过程。
@@ -229,6 +315,7 @@ func readChatStream(resp *http.Response, onDelta func(string)) (string, string, 
 	var usage chatUsage
 	finish := ""
 	var data []string
+	filter := newThinkDeltaFilter(onDelta)
 	for scanner.Scan() {
 		line := scanner.Text()
 		if strings.HasPrefix(line, "data:") {
@@ -267,9 +354,7 @@ func readChatStream(resp *http.Response, onDelta func(string)) (string, string, 
 		choice := chunk.Choices[0]
 		if choice.Delta.Content != "" {
 			sb.WriteString(choice.Delta.Content)
-			if onDelta != nil {
-				onDelta(choice.Delta.Content)
-			}
+			filter.push(choice.Delta.Content)
 		}
 		if choice.Finish != "" {
 			finish = choice.Finish
@@ -278,7 +363,8 @@ func readChatStream(resp *http.Response, onDelta func(string)) (string, string, 
 	if err := scanner.Err(); err != nil {
 		return "", finish, usage, fmt.Errorf("对话流读取失败: %w", err)
 	}
-	reply := strings.TrimSpace(sb.String())
+	filter.flush()
+	reply := strings.TrimSpace(stripThinkBlocks(sb.String()))
 	if finish == "length" {
 		return reply, finish, usage, fmt.Errorf("模型输出达到 token 上限（completion_tokens=%d），未完成回答；若模型开启了思考模式(thinking)，推理链会占用输出预算，建议配置 llm_disable_thinking=true 或调大 llm_max_tokens", usage.CompletionTokens)
 	}
@@ -333,7 +419,7 @@ func (r responsesOutput) finalText() (string, error) {
 			}
 		}
 	}
-	reply := strings.TrimSpace(strings.Join(text, "\n"))
+	reply := strings.TrimSpace(stripThinkBlocks(strings.Join(text, "\n")))
 	if reply == "" {
 		return "", fmt.Errorf("Responses未返回最终回答（output_text 为空）")
 	}
@@ -360,6 +446,7 @@ func readResponsesReply(resp *http.Response, onDelta func(string)) (string, erro
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 4096), maxLLMResponseBytes)
 	var data []string
+	filter := newThinkDeltaFilter(onDelta)
 	for scanner.Scan() {
 		line := scanner.Text()
 		if strings.HasPrefix(line, "data:") {
@@ -384,10 +471,11 @@ func readResponsesReply(resp *http.Response, onDelta func(string)) (string, erro
 		switch event.Type {
 		case "response.output_text.delta":
 			// 只转发正文增量；推理摘要（reasoning_summary）等事件不转发。
-			if event.Delta != "" && onDelta != nil {
-				onDelta(event.Delta)
+			if event.Delta != "" {
+				filter.push(event.Delta)
 			}
 		case "response.completed", "response.failed", "response.incomplete":
+			filter.flush()
 			return event.Response.finalText()
 		case "error":
 			return "", fmt.Errorf("Responses流错误: %s", upstreamErrorDetail(b))

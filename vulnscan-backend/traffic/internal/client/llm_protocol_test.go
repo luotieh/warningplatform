@@ -248,3 +248,74 @@ func TestResponsesCancellation(t *testing.T) {
 		t.Fatal("upstream connection not canceled")
 	}
 }
+
+func TestStripThinkBlocks(t *testing.T) {
+	for _, tc := range []struct{ name, in, want string }{
+		{"无标签", "直接回答", "直接回答"},
+		{"完整思考块", "<think>推理过程</think>最终回答", "最终回答"},
+		{"思考块前后有文本", "前言<think>推理</think>回答", "前言回答"},
+		{"多个思考块", "<think>一</think>中<think>二</think>尾", "中尾"},
+		{"未闭合思考块", "<think>推理到一半", ""},
+		{"未闭合前有正文", "部分回答<think>推理到一半", "部分回答"},
+		{"空字符串", "", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := stripThinkBlocks(tc.in); got != tc.want {
+				t.Fatalf("stripThinkBlocks(%q)=%q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+// 健康检查的对话测试展示模型原始回复：思考链混在 content 里的部署
+// 不能让用户看到 <think> 标签。
+func TestHealthTestStripsInlineThinkTags(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/models":
+			fmt.Fprint(w, `{"data":[]}`)
+		case "/v1/chat/completions":
+			fmt.Fprint(w, `{"choices":[{"finish_reason":"stop","message":{"content":"<think>用户问我好，我应自我介绍</think>你好，我是本地助手。"}}],"usage":{"prompt_tokens":10,"completion_tokens":20,"total_tokens":30}}`)
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	h := (LLMClient{BaseURL: srv.URL + "/v1", Model: "qwen3"}).HealthTest(context.Background())
+	if !h.OK {
+		t.Fatalf("%+v", h)
+	}
+	if h.Chat.Reply != "你好，我是本地助手。" || strings.Contains(h.Chat.Reply, "think") {
+		t.Fatalf("reply=%q", h.Chat.Reply)
+	}
+}
+
+// 流式链路（工程师对话）同样要过滤内联思考块，且标签可能被拆到多个增量中。
+func TestChatStreamStripsInlineThinkTags(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher, _ := w.(http.Flusher)
+		for _, delta := range []string{"<thi", "nk>推理", "过程</thi", "nk>", "你好", "，我是本地助手。"} {
+			fmt.Fprintf(w, "data: {\"choices\":[{\"delta\":{\"content\":%q},\"finish_reason\":null}]}\n\n", delta)
+			if flusher != nil {
+				flusher.Flush()
+			}
+		}
+		fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n")
+	}))
+	defer srv.Close()
+	var deltas []string
+	reply, err := (LLMClient{BaseURL: srv.URL + "/v1", Model: "qwen3"}).ChatStream(context.Background(), "", "你好", func(d string) {
+		deltas = append(deltas, d)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reply != "你好，我是本地助手。" || strings.Contains(reply, "think") {
+		t.Fatalf("reply=%q", reply)
+	}
+	if got := strings.Join(deltas, ""); got != "你好，我是本地助手。" || strings.Contains(got, "think") {
+		t.Fatalf("deltas=%q", got)
+	}
+}
