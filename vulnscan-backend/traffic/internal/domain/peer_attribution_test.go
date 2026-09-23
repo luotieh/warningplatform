@@ -60,6 +60,14 @@ func TestAttributePeersDNSClientDetection(t *testing.T) {
 			wantThreat: "", wantAsset: "",
 		},
 		{
+			name: "DoT 应答方向 src_port=853",
+			in: PeerAttributionInput{
+				SrcIP: "218.2.2.2", DstIP: "10.0.0.8",
+				SrcPort: 853, DstPort: 51234,
+				DNSQuery: "x.com",
+			},
+			wantThreat: "x.com", wantAsset: "10.0.0.8",
+		}, {
 			name: "恶意解析器：IP IOC 命中侧优先于查询域名",
 			in: PeerAttributionInput{
 				SrcIP: "10.0.0.5", DstIP: "198.51.100.53",
@@ -115,6 +123,32 @@ func TestAttributePeersPriority(t *testing.T) {
 			wantThreat: "evil.example.com", wantAsset: "10.0.0.5",
 		},
 		{
+			name: "域名 IOC 应答方向：资产是发起方 dst 而非 DNS 服务器",
+			in: PeerAttributionInput{
+				SrcIP: "223.5.5.5", DstIP: "10.0.0.8",
+				Direction: "inbound",
+				IOCType:   "domain", IOCValue: "evil.example.com",
+			},
+			wantThreat: "evil.example.com", wantAsset: "10.0.0.8",
+		},
+		{
+			name: "ioc_type=dns 不穿透到方向兜底误标 DNS 服务器",
+			in: PeerAttributionInput{
+				SrcIP: "223.5.5.5", DstIP: "10.0.0.8",
+				Direction: "inbound",
+				IOCType:   "dns", IOCValue: "evil.example.com",
+			},
+			wantThreat: "evil.example.com", wantAsset: "10.0.0.8",
+		},
+		{
+			name: "域名 IOC 无方向标注：按内外网判定发起方",
+			in: PeerAttributionInput{
+				SrcIP: "93.184.216.34", DstIP: "10.0.0.8",
+				SrcPort: 443, DstPort: 51000,
+				IOCType: "domain", IOCValue: "evil.example.com",
+			},
+			wantThreat: "evil.example.com", wantAsset: "10.0.0.8",
+		}, {
 			name: "无 IOC 方向兜底 outbound",
 			in: PeerAttributionInput{
 				SrcIP: "10.0.0.5", DstIP: "93.184.216.34",

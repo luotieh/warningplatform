@@ -34,7 +34,7 @@ func AttributePeers(in PeerAttributionInput) (threat, asset string) {
 	// DNS 解析流量：威胁侧是域名（IOC 或查询名），受害侧是发起查询的主机；
 	// 公共 DNS 服务器（应答方向）既不是威胁侧也不是受害资产。
 	if client, isDNS := dnsQueryClient(in.SrcPort, in.DstPort, src, dst, dnsQuery); isDNS {
-		if iocValue != "" && (iocType == "domain" || iocType == "url" || iocType == "dns") {
+		if iocValue != "" && isDomainIOCType(iocType) {
 			return iocValue, client
 		}
 		// IP/CIDR 型 IOC 命中报文一侧时按命中侧归属：此时威胁在解析链路本身
@@ -54,9 +54,11 @@ func AttributePeers(in PeerAttributionInput) (threat, asset string) {
 		return threat, asset
 	}
 
-	// 域名/URL 型 IOC（HTTP/TLS 等访问恶意域名）：域名是威胁侧，访问发起方(src)是资产侧。
-	if iocValue != "" && (iocType == "domain" || iocType == "url") {
-		return iocValue, src
+	// 域名/URL 型 IOC（HTTP/TLS 等访问恶意域名）：域名是威胁侧，受影响资产是
+	// 访问发起方。响应方向的报文 src 是服务端（DNS 应答中的 DNS 服务器、HTTP
+	// 应答中的远端服务器），不能按报文 src 取资产，需按方向/内外网判定发起方。
+	if iocValue != "" && isDomainIOCType(iocType) {
+		return iocValue, accessInitiator(in.Direction, src, dst)
 	}
 
 	// 无 IOC（载荷/行为规则命中）：借 ta_node 方向字段辅助判定，仍不足则留空。
@@ -69,14 +71,44 @@ func AttributePeers(in PeerAttributionInput) (threat, asset string) {
 	return "", ""
 }
 
+// isDomainIOCType 判定域名型 IOC 类别：domain/url/dns/hostname/fqdn 均按
+// “域名是威胁侧”处理，避免 dns/hostname 等类别穿透到方向兜底误标报文 src。
+func isDomainIOCType(iocType string) bool {
+	switch iocType {
+	case "domain", "url", "dns", "hostname", "fqdn":
+		return true
+	}
+	return false
+}
+
+// accessInitiator 判定域名访问的发起方（受影响资产侧）：
+// outbound 由 src 发起，inbound 应答流量的发起方是 dst；无方向标注时按内外网
+// 位置兜底（内网侧通常是访问发起方），仍无法区分时退回报文 src。
+func accessInitiator(direction, src, dst string) string {
+	switch strings.ToLower(strings.TrimSpace(direction)) {
+	case "outbound":
+		return src
+	case "inbound":
+		return dst
+	}
+	srcPrivate, dstPrivate := isPrivateIP(src), isPrivateIP(dst)
+	switch {
+	case srcPrivate && !dstPrivate:
+		return src
+	case dstPrivate && !srcPrivate:
+		return dst
+	}
+	return src
+}
+
 // dnsQueryClient 识别 DNS 解析流量并返回发起查询的主机（客户端）。
-// 端口优先：dst_port=53 为查询方向、src_port=53 为应答方向；
+// 端口优先：dst_port=53 为查询方向、src_port=53 为应答方向（853 为 DoT，同语义）；
 // 端口缺失时要求存在查询域名，并用内网地址兜底判定；双内网/双外网无法判定时客户端留空。
 func dnsQueryClient(srcPort, dstPort int, src, dst, dnsQuery string) (client string, isDNS bool) {
-	if dstPort == 53 {
+	if dstPort == 53 || dstPort == 853 {
 		return src, true
 	}
-	if srcPort == 53 {
+	if srcPort == 53 || srcPort == 853 {
 		return dst, true
 	}
 	if dnsQuery == "" {
@@ -98,9 +130,9 @@ func isPrivateIP(ip string) bool {
 }
 
 // ipIOCPeers 返回 IP/CIDR 型 IOC 的命中侧归属：命中侧为威胁侧，另一侧为受影响资产。
-// 域名/URL 型 IOC 与空值不参与，交由调用方按各自语义处理。
+// 域名型 IOC 与空值不参与，交由调用方按各自语义处理。
 func ipIOCPeers(iocValue, iocType, src, dst string) (threat, asset string, ok bool) {
-	if iocValue == "" || iocType == "domain" || iocType == "url" {
+	if iocValue == "" || isDomainIOCType(iocType) {
 		return "", "", false
 	}
 	if ipIOCMatch(iocValue, dst) {
