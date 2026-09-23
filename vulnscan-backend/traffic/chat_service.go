@@ -157,6 +157,15 @@ func (s *ChatService) engineerPromptParts(event domain.Event, question string) [
 	}
 	flush("可观察对象")
 
+	// 资产清单匹配：被攻击资产的名称/角色以登记清单为准；
+	// 威胁侧命中登记资产（如内部 DNS 服务器）时提示复核方向误标。
+	if section := s.core.AssetMatchContext(event); section != "" {
+		b.WriteString("## 资产清单匹配（系统权威资产库）\n")
+		b.WriteString(section)
+		b.WriteString("\n")
+	}
+	flush("资产清单匹配")
+
 	writeJSONSection(&b, "## 系统记录的任务", s.core.Store.ListTasks(event.EventID))
 	flush("任务")
 	writeJSONSection(&b, "## 系统记录的动作", s.core.Store.ListActions(event.EventID))

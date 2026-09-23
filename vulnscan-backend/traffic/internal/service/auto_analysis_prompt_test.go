@@ -20,14 +20,14 @@ func makeObservables(n int) []domain.IOC {
 // autoAnalysisPrompt 必须采用结论前置的强制模板 + 硬指令,并移除原始 context JSON。
 func TestAutoAnalysisPromptStructure(t *testing.T) {
 	ev := domain.Event{
-		EventID:  "evt-1",
+		EventID:   "evt-1",
 		EventName: "13.248.169.48",
-		Severity: "high",
-		Source:   "ta node",
-		Message:  "malware-ip 命中",
-		Context:  `{"direction":"outbound","recommended_action":"block_and_report"}`,
+		Severity:  "high",
+		Source:    "ta node",
+		Message:   "malware-ip 命中",
+		Context:   `{"direction":"outbound","recommended_action":"block_and_report"}`,
 	}
-	p := autoAnalysisPrompt(ev)
+	p := autoAnalysisPrompt(ev, "")
 
 	for _, want := range []string{
 		"【结论】", "## 事件概览", "## 关键证据", "## 攻击源与受影响资产分析", "## 攻击链与风险判断",
@@ -53,7 +53,7 @@ func TestAutoAnalysisPromptStructure(t *testing.T) {
 // 可观察对象超过上限时,只渲染前 maxObservables 条并给出省略提示。
 func TestAutoAnalysisPromptCapsObservables(t *testing.T) {
 	ev := domain.Event{EventID: "e", Observables: makeObservables(100)}
-	p := autoAnalysisPrompt(ev)
+	p := autoAnalysisPrompt(ev, "")
 
 	if c := strings.Count(p, "role=attacker"); c != maxObservables {
 		t.Fatalf("rendered observables = %d, want %d", c, maxObservables)
@@ -75,7 +75,7 @@ func TestAutoAnalysisPromptWithinBudget(t *testing.T) {
 		Context: fmt.Sprintf(`{"app":{"http_headers":%s}}`,
 			mustJSONString(headers)),
 	}
-	p := autoAnalysisPrompt(ev)
+	p := autoAnalysisPrompt(ev, "")
 	if est := estimateTokens(p); est > promptBudgetTokens {
 		t.Fatalf("prompt exceeds budget: est=%d budget=%d", est, promptBudgetTokens)
 	}

@@ -170,7 +170,7 @@ func (s Services) runAnalysis(ctx context.Context, eventID string, kind string, 
 		return s.failAgentWorkflow(eventID, err)
 	}
 	event.Context = evidenceContext
-	reply, err := s.LLM.Chat(ctx, autoAnalysisSystemPrompt, autoAnalysisPrompt(event))
+	reply, err := s.LLM.Chat(ctx, autoAnalysisSystemPrompt, autoAnalysisPrompt(event, s.AssetMatchContext(event)))
 	if err != nil {
 		err = fmt.Errorf("LLM自动分析失败，请检查LLM配置: %w", err)
 		_ = s.addLLMConfigRequiredMessage(eventID, roundID, err.Error())
@@ -231,9 +231,12 @@ const autoAnalysisSystemPrompt = `你是 DeepSOC 安全运营自动分析引擎�
 统计量由系统计算；结合时间、协议、请求响应和不同证据之间的关联进行深入研判。给出危险攻击概率（0–100%）及依据，该概率是研判估计，不等于攻击成功概率。关键证据按 1、2、3 数字编号，引用输入中真实存在的完整 evidence_id/hit_id，并明确指出该条明细的具体问题。不得把模型样本称为全部原始明细；遵守 input_manifest 的扫描范围与缺失说明。没有证据支持的事实不写为确定结论。建议不写成已执行处置；未提供实际功能链接或执行记录时，标注“暂未实现”。最终结论面向安全团队，不输出面向模型的内部约束措辞，不使用“自动驾驶”。
 报告以被攻击资产为论述主线：概览与结论必须点名被攻击资产，影响与建议围绕该资产展开。关键证据必须落到“证据→威胁特征”的对应关系（符合即指出符合哪类威胁特征，不符合则说明排除依据）。论述简明扼要：每个章节只承担自己的职责，同一判断不在多个章节重复展开。`
 
-func autoAnalysisPrompt(event domain.Event) string {
+func autoAnalysisPrompt(event domain.Event, assetSection string) string {
 	obsStr := formatObservables(event.Observables)
 	auxStr := formatAuxContext(event.Context)
+	if strings.TrimSpace(assetSection) == "" {
+		assetSection = "无登记信息"
+	}
 
 	// 兜底:事件数据(可观察对象 + 辅助研判信息)整体不超预算;超了先压缩体量更大、
 	// 更可变的辅助信息块(逐字段截断已在 formatAuxContext 内做,此处是最后一道防线)。
@@ -254,8 +257,15 @@ func autoAnalysisPrompt(event domain.Event) string {
 ## 辅助研判信息（融合采集节点 ta_node 解析的应用层与情报上下文）
 %s
 
+## 资产清单匹配（系统权威资产库）
+%s
+
 # 分析要求
 结合上方证据完成研判：威胁真假（是否误报）、攻击手法定性、影响面与横向风险、处置建议。
+- IOC 语义铁律：命中情报 IOC 的一侧永远是威胁侧，另一端永远是被攻击资产；可观察对象 role=threat_source/affected_asset 已按此标注，直接采用，不得互换，禁止把 IOC 写成被攻击资产；
+- 被攻击资产若命中「资产清单匹配」，必须写“资产名（地址）”，资产角色以清单登记为准，禁止只写裸 IP 或臆测角色；未命中则写“未登记（地址）”；
+- 威胁侧命中资产清单中的登记资产（尤其 DNS/基础服务）时，先按清单身份复核方向与 DNS 语义再定性，禁止未经复核直接断言其为攻击发起方；
+- role=source/destination 只是报文原始方向，不代表攻击发起方；direction/通联方向未知时不得断言谁发起攻击，写“方向待研判”；
 - 利用「通联方向」（to_ioc=数据外传、from_ioc=载荷下载）与流量体量判断外传/下载/beacon；
 - local_hit_count 仅为节点近似分诊提示，权威全局频次以 occurrence_count 为准，勿重复计数；
 - 若事件带「建议处置(情报侧)」，需明确采纳或修正并说明理由；
@@ -290,6 +300,7 @@ func autoAnalysisPrompt(event domain.Event) string {
 		firstNonEmpty(event.Message, "无"),
 		obsStr,
 		auxStr,
+		assetSection,
 	)
 }
 

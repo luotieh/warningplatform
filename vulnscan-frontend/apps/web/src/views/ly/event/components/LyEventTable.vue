@@ -687,8 +687,12 @@ onMounted(() => {
                 <div class="occ-hex-wrap">
                   <code class="occ-hex-text">{{ expandedHex.has('payload-' + occ.idx) ? occ.payload_hex : formatHexTruncated(occ.payload_hex).text }}</code>
                   <NButton v-if="occ.payload_hex_truncated || occ.payload_hex.length > 128" text size="tiny" type="primary" @click.stop="toggleHex('payload-' + occ.idx)">
-                    {{ expandedHex.has('payload-' + occ.idx) ? '收起' : '展开完整报文' }}
+                    {{ expandedHex.has('payload-' + occ.idx) ? '收起' : (occ.payload_hex_truncated ? '展开（仍为截断内容）' : '展开完整报文') }}
                   </NButton>
+                  <span v-if="occ.payload_hex_truncated" class="occ-hex-hint">
+                    该记录为历史入库预览，HEX 已截断（仅保留前 512 字节），完整报文请
+                    <a :href="deepflowEventArchiveUrl(String(currentEventContext.event_id || currentEventContext.id || ''))" target="_blank" rel="noopener">下载 PCAP 证据</a>
+                  </span>
                 </div>
               </div>
               <template v-if="occ.request">
@@ -802,6 +806,7 @@ onMounted(() => {
 .occ-detail-value { color: var(--n-text-color); word-break: break-all; }
 .occ-detail-divider { font-size: 11px; color: var(--n-text-color-3); border-top: 1px dashed var(--n-border-color); padding-top: 6px; margin-top: 2px; font-weight: 600; }
 .occ-code-block { display: block; background: var(--n-color-embedded-modal); padding: 6px 10px; border-radius: 4px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all; max-height: 200px; overflow-y: auto; }
+.occ-hex-hint { font-size: 12px; color: #f0a020; line-height: 1.4; }
 .occ-hex-wrap { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
 .occ-hex-text { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; word-break: break-all; white-space: pre-wrap; background: var(--n-color-embedded-modal); padding: 6px 10px; border-radius: 4px; max-height: 150px; overflow-y: auto; line-height: 1.5; }
 </style>
