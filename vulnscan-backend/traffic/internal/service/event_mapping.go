@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net/netip"
 	"strings"
 	"time"
 
@@ -62,6 +63,10 @@ func LyEventToDeepSOC(ly map[string]any) domain.Event {
 	ruleDesc := firstNonEmpty(asString(ly["rule_desc"]), asString(ly["event_name"]), asString(ly["message"]))
 	eventType := firstNonEmpty(asString(ly["event_type"]), asString(ly["type"]), asString(ly["threat_type"]))
 	method := firstNonEmpty(asString(ly["method"]), asString(ly["protocol"]))
+	// 威胁侧/资产侧语义归属：报文原始方向(src→dst)不代表攻击方向——命中 IOC 的
+	// 一侧永远是威胁侧，另一侧为受影响资产（如内网主机外连 C2：dst==IOC 时攻击源
+	// 是 IOC 而非内网主机）。判据不足时留空，message/observables 不断言发起方。
+	threat, asset := semanticPeers(ly, src, dst)
 	lastSeenAt := activityTime(ly)
 	occ := lastSeenAt.Format(time.RFC3339Nano)
 	occurrences := []any{}
@@ -84,8 +89,8 @@ func LyEventToDeepSOC(ly map[string]any) domain.Event {
 		"dst_ip":            ly["dst_ip"],
 		"src_port":          ly["src_port"],
 		"dst_port":          ly["dst_port"],
-		"threat_source":     src,
-		"victim_target":     dst,
+		"threat_source":     threat,
+		"victim_target":     asset,
 		"system_ref":        firstNonEmpty(asString(ly["system_ref"]), asString(ly["source"]), "ta_node"),
 		// 聚合元数据：发生次数与首/末次时间，后续同类事件合并时累加（见 ProcessLyEvent）。
 		// last_seen_at 记录最近一次攻击活动的时刻，用于静默超时收敛判定
@@ -113,6 +118,8 @@ func LyEventToDeepSOC(ly map[string]any) domain.Event {
 	putIfPresent(context, "session_summary", ly["session_summary"])
 	// 应用层上下文（HTTP/DNS/payload/icmp），ta_node 以嵌套对象 app 下发，整体透传。
 	putIfPresent(context, "app", ly["app"])
+	// 平铺 dns_query 一并落库：展示层重算归属时与 ingest 输入保持一致。
+	putIfPresent(context, "dns_query", ly["dns_query"])
 	// 流统计：流首次时间、持续时长、流/包/字节数（派生字段，零成本）。
 	// v1.2 新增通联数据量：wire_bytes 为在线字节(含 L2-L4 头)，与 payload 字节(bytes)并存；
 	// volume_role 标识本单向流相对命中 IOC 的方向（to_ioc=数据外传 / from_ioc=载荷下载）。
@@ -146,11 +153,33 @@ func LyEventToDeepSOC(ly map[string]any) domain.Event {
 	}
 	// 标题只用规则描述（规则描述为空时退回事件类型），不再冗余拼接英文类型码
 	title := firstNonEmpty(ruleDesc, eventType)
-	message := fmt.Sprintf("SIEM告警：检测到 %s 对 %s 发起 %s 攻击，检测方式：%s",
-		src, dst, ruleDesc, method)
+	// message 按语义归属措辞：避免"X 对 Y 发起攻击"的方向先验误导 AI 研判。
+	var message string
+	switch {
+	case threat != "" && asset != "":
+		message = fmt.Sprintf("SIEM告警：检测到受影响资产 %s 与威胁地址 %s 的通讯（%s），检测方式：%s",
+			asset, threat, ruleDesc, method)
+	case asset != "":
+		message = fmt.Sprintf("SIEM告警：检测到 %s 的可疑通讯（%s，威胁侧待研判），检测方式：%s",
+			asset, ruleDesc, method)
+	case threat != "":
+		message = fmt.Sprintf("SIEM告警：检测到与威胁地址 %s 相关的可疑通讯（%s，受影响资产待研判），检测方式：%s",
+			threat, ruleDesc, method)
+	default:
+		message = fmt.Sprintf("SIEM告警：检测到 %s 与 %s 之间命中规则的可疑通讯（%s，通讯方向待研判），检测方式：%s",
+			src, dst, ruleDesc, method)
+	}
 	observables := []domain.IOC{
 		{Type: "ip", Value: src, Role: "source"},
 		{Type: "ip", Value: dst, Role: "destination"},
+	}
+	// role=source/destination 保留报文原始方向（研判回传/指纹用）；
+	// 威胁侧/资产侧语义单独标注，供 AI 直接采用，不得互换。
+	if threat != "" {
+		observables = append(observables, domain.IOC{Type: observableAddrType(threat), Value: threat, Role: "threat_source"})
+	}
+	if asset != "" {
+		observables = append(observables, domain.IOC{Type: "ip", Value: asset, Role: "affected_asset"})
 	}
 	// 威胁情报命中值（如恶意域名/IP/URL）作为可观察对象补充，供 AI 关联研判。
 	if iocVal := asString(ly["ioc_value"]); iocVal != "" {
@@ -194,4 +223,30 @@ func collectPresent(src map[string]any, keys ...string) map[string]any {
 		putIfPresent(out, k, src[k])
 	}
 	return out
+}
+
+// semanticPeers 判定事件的威胁侧与受影响资产侧（ingest 适配器）。
+// 判定逻辑与列表展示层共用 domain.AttributePeers 一份实现，保证
+// AI 研判输入的语义标注与列表「攻击源/受害目标」列始终一致。
+// 返回空字符串表示无法可靠判定，调用方不得据此断言攻击发起方。
+func semanticPeers(ly map[string]any, src, dst string) (threat, asset string) {
+	app, _ := ly["app"].(map[string]any)
+	return domain.AttributePeers(domain.PeerAttributionInput{
+		SrcIP:     src,
+		DstIP:     dst,
+		SrcPort:   toInt(ly["src_port"]),
+		DstPort:   toInt(ly["dst_port"]),
+		DNSQuery:  firstNonEmpty(asString(app["dns_query"]), asString(ly["dns_query"])),
+		IOCType:   asString(ly["ioc_type"]),
+		IOCValue:  asString(ly["ioc_value"]),
+		Direction: asString(ly["direction"]),
+	})
+}
+
+// observableAddrType 按可观察值形态给出类型：可解析为 IP 则为 ip，否则按域名处理。
+func observableAddrType(v string) string {
+	if _, err := netip.ParseAddr(strings.TrimSpace(v)); err == nil {
+		return "ip"
+	}
+	return "domain"
 }

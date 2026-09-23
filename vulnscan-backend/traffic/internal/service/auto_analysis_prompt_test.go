@@ -85,3 +85,35 @@ func mustJSONString(v any) string {
 	b, _ := json.Marshal(v)
 	return string(b)
 }
+
+// 快照 context 注入 prompt 前必须脱敏 hit_id/evidence_id 等内部标识，样本补 sample_no。
+func TestSanitizeEvidenceForPrompt(t *testing.T) {
+	ctx := map[string]any{
+		"snapshot_version": 3,
+		"occurrences_preview": []any{
+			map[string]any{"hit_id": "ab68charhash", "evidence_id": "ab68charhash", "time": "2026-09-01T00:00:00Z", "src_ip": "10.0.0.5"},
+			map[string]any{"hit_id": "cd68charhash", "time": "2026-09-01T00:01:00Z"},
+		},
+		"input_manifest": map[string]any{
+			"selected_hit_ids": []any{"ab68charhash", "cd68charhash"},
+			"scan_scope":       "all",
+		},
+	}
+	raw, _ := json.Marshal(ctx)
+	out := formatAuxContext(string(raw))
+	// 首行是脱敏说明（本身会提及 hit_id），脱敏校验只针对其后的 JSON 部分。
+	jsonPart := out
+	if idx := strings.Index(out, "\n"); idx >= 0 {
+		jsonPart = out[idx+1:]
+	}
+	for _, banned := range []string{"hit_id", "evidence_id", "selected_hit_ids", "ab68charhash", "cd68charhash"} {
+		if strings.Contains(jsonPart, banned) {
+			t.Fatalf("prompt aux contains banned internal id %q", banned)
+		}
+	}
+	for _, want := range []string{`"sample_no":1`, `"sample_no":2`, "10.0.0.5", "scan_scope"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("prompt aux missing %q", want)
+		}
+	}
+}

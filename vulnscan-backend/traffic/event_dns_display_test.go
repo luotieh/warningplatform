@@ -16,86 +16,21 @@ func ctxJSON(t *testing.T, m map[string]any) string {
 	return string(b)
 }
 
-func TestDNSResolutionPeers(t *testing.T) {
+func TestLyCompatibleEventDNSDisplay(t *testing.T) {
 	cases := []struct {
 		name       string
 		ctx        map[string]any
-		wantServer string
-		wantClient string
-	}{
-		{
-			name: "查询方向 dst_port=53",
-			ctx: map[string]any{
-				"src_ip": "10.0.0.8", "dst_ip": "218.2.2.2",
-				"src_port": 51234, "dst_port": 53,
-			},
-			wantServer: "218.2.2.2", wantClient: "10.0.0.8",
-		},
-		{
-			name: "应答方向 src_port=53",
-			ctx: map[string]any{
-				"src_ip": "218.2.2.2", "dst_ip": "10.0.0.8",
-				"src_port": 53, "dst_port": 51234,
-			},
-			wantServer: "218.2.2.2", wantClient: "10.0.0.8",
-		},
-		{
-			name: "无端口、dns_query+内网兜底",
-			ctx: map[string]any{
-				"src_ip": "10.0.0.8", "dst_ip": "218.2.2.2",
-				"app": map[string]any{"dns_query": "xzasket.com"},
-			},
-			wantServer: "218.2.2.2", wantClient: "10.0.0.8",
-		},
-		{
-			name: "无端口且无 dns_query 不干预",
-			ctx: map[string]any{
-				"src_ip": "10.0.0.8", "dst_ip": "218.2.2.2",
-			},
-			wantServer: "", wantClient: "",
-		},
-		{
-			name: "双内网不干预",
-			ctx: map[string]any{
-				"src_ip": "10.0.0.8", "dst_ip": "10.0.0.9",
-				"app": map[string]any{"dns_query": "x.com"},
-			},
-			wantServer: "", wantClient: "",
-		},
-		{
-			name: "非 DNS 不干预",
-			ctx: map[string]any{
-				"src_ip": "1.2.3.4", "dst_ip": "10.0.0.8",
-				"src_port": 12345, "dst_port": 443,
-			},
-			wantServer: "", wantClient: "",
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			server, client := dnsResolutionPeers(tc.ctx)
-			if server != tc.wantServer || client != tc.wantClient {
-				t.Fatalf("got (%q, %q), want (%q, %q)", server, client, tc.wantServer, tc.wantClient)
-			}
-		})
-	}
-}
-
-func TestLyCompatibleEventDNSDisplay(t *testing.T) {
-	cases := []struct {
-		name         string
-		ctx          map[string]any
-		wantAttack   string
-		wantVictim   string
-		wantDomain   string
+		wantAttack string
+		wantVictim string
+		wantDomain string
 	}{
 		{
 			name: "应答方向+域名IOC：受害列是内网主机而非DNS服务器",
 			ctx: map[string]any{
 				"src_ip": "218.2.2.2", "dst_ip": "10.0.0.8",
 				"src_port": 53, "dst_port": 51234,
-				"app": map[string]any{"dns_query": "lsax.org"},
-				"ioc": map[string]any{"ioc_type": "domain", "ioc_value": "lsax.org"},
+				"app":        map[string]any{"dns_query": "lsax.org"},
+				"ioc":        map[string]any{"ioc_type": "domain", "ioc_value": "lsax.org"},
 				"event_type": "network_activity",
 			},
 			wantAttack: "lsax.org", wantVictim: "10.0.0.8", wantDomain: "lsax.org",
@@ -105,8 +40,8 @@ func TestLyCompatibleEventDNSDisplay(t *testing.T) {
 			ctx: map[string]any{
 				"src_ip": "10.0.0.8", "dst_ip": "218.2.2.2",
 				"src_port": 51234, "dst_port": 53,
-				"app": map[string]any{"dns_query": "lsax.org"},
-				"ioc": map[string]any{"ioc_type": "domain", "ioc_value": "lsax.org"},
+				"app":        map[string]any{"dns_query": "lsax.org"},
+				"ioc":        map[string]any{"ioc_type": "domain", "ioc_value": "lsax.org"},
 				"event_type": "network_activity",
 			},
 			wantAttack: "lsax.org", wantVictim: "10.0.0.8", wantDomain: "lsax.org",
@@ -116,7 +51,7 @@ func TestLyCompatibleEventDNSDisplay(t *testing.T) {
 			ctx: map[string]any{
 				"src_ip": "218.2.2.2", "dst_ip": "10.0.0.8",
 				"src_port": 53, "dst_port": 51234,
-				"app": map[string]any{"dns_query": "xzasket.com"},
+				"app":        map[string]any{"dns_query": "xzasket.com"},
 				"event_type": "c2",
 			},
 			wantAttack: "xzasket.com", wantVictim: "10.0.0.8", wantDomain: "xzasket.com",
@@ -153,7 +88,7 @@ func TestLyCompatibleEventDNSDisplay(t *testing.T) {
 			ctx: map[string]any{
 				"src_ip": "218.2.2.2", "dst_ip": "10.0.0.8",
 				"src_port": "53", "dst_port": "51234",
-				"app": map[string]any{"dns_query": "lsax.org"},
+				"app":        map[string]any{"dns_query": "lsax.org"},
 				"event_type": "network_activity",
 			},
 			wantAttack: "lsax.org", wantVictim: "10.0.0.8", wantDomain: "lsax.org",
@@ -185,10 +120,10 @@ func TestLyCompatibleEventDNSDisplay(t *testing.T) {
 
 func TestLyCompatibleEventDNSDomainSet(t *testing.T) {
 	cases := []struct {
-		name       string
-		ctx        map[string]any
-		wantCount  int
-		wantFirst  string
+		name      string
+		ctx       map[string]any
+		wantCount int
+		wantFirst string
 	}{
 		{
 			name: "v1平铺occurrences多域名去重",

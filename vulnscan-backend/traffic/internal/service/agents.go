@@ -200,11 +200,25 @@ func (s Services) runAnalysis(ctx context.Context, eventID string, kind string, 
 		return s.failAgentWorkflow(eventID, err)
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
-	_, _ = s.Store.UpdateEvent(eventID, map[string]any{
+	patch := map[string]any{
 		"event_status":     "round_finished",
 		"analysis_version": version,
 		"last_analysis_at": now,
-	})
+	}
+	// 提取模型输出的威胁概率并入事件 context 持久化（ai_probability，0-100），
+	// 供列表「研判概率」列展示与排序。注意合并进存储 context 而非 event.Context
+	// （后者是 EvidenceContext 生成的模型输入精简版，不含 src_ip 等入库字段）。
+	// 提取失败不写：保留历史值，且与 0% 区分「未研判」。
+	if probability, ok := parseThreatProbability(reply); ok {
+		if stored, found := s.Store.GetEvent(eventID); found {
+			ctxMap := decodeEventContext(stored.Context)
+			ctxMap["ai_probability"] = probability
+			if raw, err := json.Marshal(ctxMap); err == nil {
+				patch["context"] = string(raw)
+			}
+		}
+	}
+	_, _ = s.Store.UpdateEvent(eventID, patch)
 	realtime.BroadcastStatus(eventID, map[string]any{"event_id": eventID, "status": "round_finished"})
 	return nil
 }
@@ -228,8 +242,8 @@ func (s Services) addLLMConfigRequiredMessage(eventID string, roundID int, text 
 
 // autoAnalysisSystemPrompt 是自动分析链路专用的精简 system(不复用工程师对话人格)。
 const autoAnalysisSystemPrompt = `你是 DeepSOC 安全运营自动分析引擎。仅基于给定的安全事件信息研判，不得编造未提供的日志、资产或情报事实。输出简体中文 Markdown。涉及证据附件/证据文件时只引用文件名，不得输出任何本地路径或下载路径。
-统计量由系统计算；结合时间、协议、请求响应和不同证据之间的关联进行深入研判。给出危险攻击概率（0–100%）及依据，该概率是研判估计，不等于攻击成功概率。关键证据按 1、2、3 数字编号，引用输入中真实存在的完整 evidence_id/hit_id，并明确指出该条明细的具体问题。不得把模型样本称为全部原始明细；遵守 input_manifest 的扫描范围与缺失说明。没有证据支持的事实不写为确定结论。建议不写成已执行处置；未提供实际功能链接或执行记录时，标注“暂未实现”。最终结论面向安全团队，不输出面向模型的内部约束措辞，不使用“自动驾驶”。
-报告以被攻击资产为论述主线：概览与结论必须点名被攻击资产，影响与建议围绕该资产展开。关键证据必须落到“证据→威胁特征”的对应关系（符合即指出符合哪类威胁特征，不符合则说明排除依据）。论述简明扼要：每个章节只承担自己的职责，同一判断不在多个章节重复展开。`
+统计量由系统计算；结合时间、协议、请求响应和不同证据之间的关联进行深入研判。全报告只使用一个概率指标：威胁事件概率（0–100%，即该事件是真实威胁的可信度），在开头【结论】与结尾结论各给出一次，两处数值必须一致。关键证据按 1、2、3 数字编号，以样本编号（sample_no）或时间+五元组+特征定位证据，报告禁止输出 hit_id/evidence_id 等哈希标识串。不得把模型样本称为全部原始明细；遵守 input_manifest 的扫描范围与缺失说明。没有证据支持的事实不写为确定结论。建议不写成已执行处置；未提供实际功能链接或执行记录时，标注“暂未实现”。最终结论面向安全团队，不输出面向模型的内部约束措辞，不使用“自动驾驶”。
+报告以被攻击资产为论述主线：概览与结论必须点名被攻击资产，影响与建议围绕该资产展开。关键证据必须落到“证据→威胁特征”的对应关系（符合即指出符合哪类威胁特征，不符合则说明排除依据）。论述简明扼要：每个章节只承担自己的职责，同一判断不在多个章节重复展开。研判流程固定为三步：先定性威胁类型（具体网络攻击类型，如 C2 通信/botnet/phishing/DNS 隧道/端口扫描/挖矿/数据外传等；证据不支持攻击时定性为误报或正常业务），再逐条列出符合该攻击类型的证据并标注权重（高/中/低），最后给出威胁事件概率。只写有证据支撑的确定内容：没有证据支撑的判断不写进正文，移入信息缺口；正文禁止出现“可能/疑似/或许/大概”等模糊词。`
 
 func autoAnalysisPrompt(event domain.Event, assetSection string) string {
 	obsStr := formatObservables(event.Observables)
@@ -273,18 +287,18 @@ func autoAnalysisPrompt(event domain.Event, assetSection string) string {
 
 # 输出格式（严格遵守）
 第一行必须输出以【结论】开头的一句话总结，先给结论再展开；禁止复述输入信息、禁止第一人称思考过程、禁止输出模板外内容。
-简明要求：【结论】给出的定性后文只摆依据、不再重复下结论；各章节内容不交叉重复；最终结论压缩为决策要点，不复制前文段落。
+简明要求：事实字段只在事件概览表格出现一次；【结论】给出的定性后文只摆依据、不再重复下结论；各章节内容不交叉重复；证据编号与结论互相引用，不重复粘贴内容；最终结论压缩为决策要点，不复制前文段落。
 
-【结论】<一句话：研判定性(误报/探测/利用尝试/有效入侵) + 被攻击资产 + 核心依据 + 建议动作>
+【结论】<一句话：威胁类型定性(C2通信/botnet/phishing/DNS隧道等具体攻击类型，或误报/正常业务) + 威胁事件概率X%% + 被攻击资产 + 核心依据 + 建议动作>
 
 ## 事件概览
 （用表格概括：事件ID、事件类型、检测方式、严重程度、当前状态、时间窗口、攻击源、被攻击资产、协议/端口、命中特征；被攻击资产必须单独一行并标注资产角色(如内网终端/服务器/DNS客户端，未知则写“未知”)）
 ## 关键证据
-（按 1、2、3 编号，引用真实 evidence_id/hit_id；每条按“证据内容 → 符合/不符合某类威胁特征”的句式给出判断，如“…符合 C2 beacon 心跳特征”或“…符合域名停放解析特征，非攻击载荷”；区分行为证据、成功性证据、排除性证据和背景统计）
+（按 1、2、3 编号，以 sample_no/时间+特征定位证据，禁止出现哈希标识串；每条格式：证据要点 → 符合/不符合哪类威胁特征 → 权重（高/中/低），如“样本3：固定周期间隔 60s 小包通讯 → 符合 C2 beacon 心跳特征 → 权重高”；覆盖行为异常、协议/指纹、心跳周期性、情报命中、成功性证据、排除性证据中实际存在的类别；无成功性证据时必须明确写“无成功性证据”）
 ## 攻击源与受影响资产分析
 （以被攻击资产为中心：资产角色与重要性、暴露面、受影响程度与后续排查重点；攻击源性质与情报可信度；横向风险只写一段）
 ## 攻击链与风险判断
-（攻击链阶段定位、危险攻击概率0–100%%及依据；没有成功性证据不得声称攻击成功，无法确认就明确写“无法确认”；概率依据引用关键证据编号，不重复粘贴证据内容）
+（三段式：威胁类型定性（具体攻击类型，如 C2 通信/botnet/phishing/DNS 隧道等，一句话明确不含糊）→ 攻击链阶段定位与证据权重汇总（引用关键证据编号及权重，不重复粘贴证据内容）→ 威胁事件概率0–100%%及依据（全报告唯一概率指标，与【结论】数值一致）；没有成功性证据不得声称攻击成功，证据不足的判断不写，移入信息缺口）
 ## 已执行处置/自动驾驶进展
 （仅列系统有记录的任务/动作/执行结果；无记录写“暂无”；建议不得写成已执行）
 ## 后续处置建议
@@ -292,7 +306,7 @@ func autoAnalysisPrompt(event domain.Event, assetSection string) string {
 ## 信息缺口
 （每条缺口一行：为什么要查、由谁查询、查到后能改变什么判断）
 ## 可交付给安全团队的结论
-（3–5 条决策要点，每条一行：定性结论、被攻击资产及当前状态、应立即执行的动作、后续观察项；不重复前文详细论述）`,
+（3–5 条决策要点，每条一行：威胁类型定性与威胁事件概率（与开头【结论】一致）、被攻击资产及当前状态、应立即执行的动作、后续观察项；不重复前文详细论述）`,
 		event.EventID,
 		firstNonEmpty(event.EventName, event.Title, "未命名事件"),
 		firstNonEmpty(event.Severity, "unknown"),
@@ -317,8 +331,9 @@ func formatAuxContext(raw string) string {
 	}
 
 	if _, ok := ctx["snapshot_version"]; ok {
-		b, _ := json.Marshal(ctx)
-		return string(b)
+		// 注入前脱敏证据内部标识（68 位哈希），避免模型把无意义长串抄进报告。
+		b, _ := json.Marshal(sanitizeEvidenceForPrompt(ctx))
+		return "- 证据说明：hit_id 等内部标识已脱敏，命中样本按 sample_no 编号；引用证据用样本N/时间/特征，禁止输出哈希标识串。\n" + string(b)
 	}
 	var b strings.Builder
 	emit := func(indent, label string, v any) {
@@ -352,9 +367,9 @@ func formatAuxContext(raw string) string {
 		}
 		switch asString(fs["volume_role"]) {
 		case "to_ioc":
-			emit("", "通联方向", "to_ioc（数据流向 IOC，疑似数据外传/上传）")
+			emit("", "通联方向", "to_ioc（数据流向 IOC，外传/上传特征）")
 		case "from_ioc":
-			emit("", "通联方向", "from_ioc（数据来自 IOC，疑似载荷下载）")
+			emit("", "通联方向", "from_ioc（数据来自 IOC，下载特征）")
 		default:
 			emit("", "通联方向", fs["volume_role"])
 		}
@@ -591,4 +606,47 @@ func (s Services) addAgentMessage(eventID, from, messageType string, roundID int
 		_ = s.publish(context.Background(), "notifications.frontend."+eventID+"."+from+"."+messageType, eventID, from, m)
 	}
 	return err
+}
+
+// promptInternalIDKeys 注入 LLM 前需脱敏的证据内部标识字段：
+// 68 位哈希对研判没有信息量，模型抄进报告只会稀释关键证据的可读性。
+var promptInternalIDKeys = map[string]bool{
+	"hit_id":          true,
+	"evidence_id":     true,
+	"origin_event_id": true,
+	"dedup_key":       true,
+	"identity_digest": true,
+	"aggregate_key":   true,
+}
+
+// sanitizeEvidenceForPrompt 递归清理注入 prompt 的 context：
+// 删除 hit_id/evidence_id 等内部标识；原含 hit_id 的样本条目按数组顺序补
+// sample_no（从 1 起），供模型以“样本N”定位证据。
+func sanitizeEvidenceForPrompt(v any) any {
+	switch t := v.(type) {
+	case map[string]any:
+		for k, val := range t {
+			if promptInternalIDKeys[k] || k == "selected_hit_ids" {
+				delete(t, k)
+				continue
+			}
+			t[k] = sanitizeEvidenceForPrompt(val)
+		}
+		return t
+	case []any:
+		for i, item := range t {
+			m, isMap := item.(map[string]any)
+			_, hadHitID := m["hit_id"]
+			item = sanitizeEvidenceForPrompt(item)
+			if isMap && hadHitID {
+				if mm, ok := item.(map[string]any); ok {
+					mm["sample_no"] = i + 1
+				}
+			}
+			t[i] = item
+		}
+		return t
+	default:
+		return v
+	}
 }

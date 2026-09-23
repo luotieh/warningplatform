@@ -207,44 +207,25 @@ func lyCompatibleEvent(event domain.Event) map[string]any {
 		_ = json.Unmarshal([]byte(event.Context), &context)
 	}
 
-	source, destination := observablePair(event.Observables)
-	source = firstNonEmpty(source, stringValue(context["threat_source"]), stringValue(context["src_ip"]))
-	destination = firstNonEmpty(destination, stringValue(context["victim_target"]), stringValue(context["dst_ip"]))
-	// Preserve the original packet direction for correlation and AI analysis.
-	srcIP, dstIP := source, destination
+	obsSource, obsDestination := observablePair(event.Observables)
+	// srcIP/dstIP 保持原始报文方向，供研判回传/指纹/AI 分析使用，不代表攻击方向。
+	srcIP := firstNonEmpty(obsSource, stringValue(context["src_ip"]), stringValue(context["threat_source"]))
+	dstIP := firstNonEmpty(obsDestination, stringValue(context["dst_ip"]), stringValue(context["victim_target"]))
+	// 威胁侧/资产侧归属与 ingest 共用 domain.AttributePeers 一份实现：
+	// 列表「攻击源/受害目标」列与 AI 研判输入的语义标注始终一致。
+	source, destination := srcIP, dstIP
 	// Keep the packet IPs below for correlation, but display the hostname when
 	// ta_node captured one. Native IP traffic therefore remains IP-only.
 	domainName := eventDomain(context)
-	indicator := threatIndicator(context)
-	if _, client := dnsResolutionPeers(context); client != "" {
-		// DNS 解析流量：威胁侧是域名（IOC 或 dns_query），受害侧是发起查询的
-		// 内网主机；公共 DNS（如 218.2.2.2）不出现在受害列。
-		// src_ip/dst_ip 保持原始报文方向，供研判重推/AI 分析使用。
-		if threat := firstNonEmpty(indicator, domainName); threat != "" {
-			source, destination = threat, client
+	threat, asset := domain.AttributePeers(peerAttributionInput(context, srcIP, dstIP))
+	if threat != "" || asset != "" {
+		source, destination = threat, asset
+		if threat != "" && !isIPLiteral(threat) {
 			domainName = threat
-		} else {
-			// 无域名信息时无法归属威胁侧：置空攻击列，避免把公共 DNS 服务器
-			// （应答方向）或内网主机自身（查询方向）误标为攻击源。
-			source, destination = "", client
 		}
-	} else {
-		if indicator != "" {
-			// A domain/URL IOC is the threat source being accessed. Keep the
-			// protected host as the displayed destination, while src_ip/dst_ip
-			// below remain the original packet direction.
-			source, destination = indicator, source
-			domainName = indicator
-		}
-		// 原始流向不随 IOC 展示修正交换。
-		// IOC 规则地址修正：IP/CIDR 型 IOC 命中且目的地址即 IOC 值时，目的地址是威胁地址
-		// （如 C2），并非受害主机；交换展示源/目标，使「受害目标」列不出现 IOC 规则 IP。
-		if iocDestinationIsIOC(context, destination) {
-			source, destination = destination, source
-		}
-		if domainName != "" && indicator == "" {
-			destination = domainName
-		}
+	} else if domainName != "" {
+		// 归属未判定但有捕获域名：目标列展示域名（仅展示用途，不代表受害结论）。
+		destination = domainName
 	}
 	eventType := firstNonEmpty(stringValue(context["event_type"]), stringValue(context["type"]), "cap")
 	level := lyLevel(event.Severity)
@@ -297,11 +278,11 @@ func lyCompatibleEvent(event domain.Event) map[string]any {
 		"victimDevice": destination,
 		"obj":          source + ">" + destination,
 		// 原始流向（不随 IOC 修正交换）：研判重推/AI 分析使用，保证指纹稳定。
-		"src_ip":               srcIP,
-		"dst_ip":               dstIP,
-		"domain":               domainName,
-		"heartbeat_detected":   heartbeat,
-		"heartbeat_period_sec": heartbeatPeriod,
+		"src_ip":                srcIP,
+		"dst_ip":                dstIP,
+		"domain":                domainName,
+		"heartbeat_detected":    heartbeat,
+		"heartbeat_period_sec":  heartbeatPeriod,
 		"heartbeat_level_boost": levelBoosted,
 		"level_raw":             lyLevel(event.Severity),
 		"dns_queries":           dnsQueries,
@@ -312,23 +293,23 @@ func lyCompatibleEvent(event domain.Event) map[string]any {
 		"level":               level,
 		// 原始威胁等级（high/medium/low）：level 是展示级（medium→middle，且可能被心跳提升），
 		// 前端级别筛选须按本字段，避免中/低危被展示级误杀。
-		"severity":            event.Severity,
-		"desc":                firstNonEmpty(event.EventName, event.Title, event.Message),
-		"rule_desc":           firstNonEmpty(event.EventName, event.Title, event.Message),
-		"proc_status":         "unprocessed",
-		"processing_status":   "unprocessed",
-		"analysis_status":     analysisStatus,
-		"analysisStatus":      analysisStatus,
-		"starttime":           startTime,
-		"time":                startTime,
-		"duration":            duration,
-		"converged_at":        convergedAt,
-		"last_seen_at":        lastSeen.In(domain.Beijing).Format(time.RFC3339Nano),
-		"timezone":            "Asia/Shanghai",
-		"is_alive":            !isFinal,
-		"is_active":           !isFinal,
-		"show_model":          firstNonEmpty(stringValue(context["detection_method"]), stringValue(context["protocol"])),
-		"source":              event.Source,
+		"severity":          event.Severity,
+		"desc":              firstNonEmpty(event.EventName, event.Title, event.Message),
+		"rule_desc":         firstNonEmpty(event.EventName, event.Title, event.Message),
+		"proc_status":       "unprocessed",
+		"processing_status": "unprocessed",
+		"analysis_status":   analysisStatus,
+		"analysisStatus":    analysisStatus,
+		"starttime":         startTime,
+		"time":              startTime,
+		"duration":          duration,
+		"converged_at":      convergedAt,
+		"last_seen_at":      lastSeen.In(domain.Beijing).Format(time.RFC3339Nano),
+		"timezone":          "Asia/Shanghai",
+		"is_alive":          !isFinal,
+		"is_active":         !isFinal,
+		"show_model":        firstNonEmpty(stringValue(context["detection_method"]), stringValue(context["protocol"])),
+		"source":            event.Source,
 		// 聚合信息：发生次数与首/末次时间（同来源+目标+类型、仅时间不同的事件已合并为一条）
 		"event_count":         context["occurrence_count"],
 		"aggregation_version": context["aggregation_version"],
@@ -362,6 +343,9 @@ func lyCompatibleEvent(event domain.Event) map[string]any {
 		"aggregation_closed": isFinal,
 		"last_analysis_at":   event.LastAnalysisAt,
 		"archive_date":       event.ArchiveDate,
+		// 研判概率：LLM 报告提取的威胁概率（0-100）；未研判/提取失败为 nil，
+		// 前端「研判概率」列据此显示百分比或「-」。
+		"ai_probability": context["ai_probability"],
 	}
 }
 
@@ -410,51 +394,6 @@ func dnsQuerySet(ctx map[string]any) (queries []string, total int) {
 		}
 	}
 	return queries, total
-}
-
-// dnsResolutionPeers 识别 DNS 解析流量，返回 (server, client)。
-// 端口优先：dst_port=53 为查询方向、src_port=53 为应答方向；
-// 端口缺失时要求存在 app.dns_query，并用内网地址兜底判定客户端。
-// 无法可靠判定（双内网/双外网、无端口且无域名）时返回空，展示保持原样。
-func dnsResolutionPeers(ctx map[string]any) (server, client string) {
-	src := stringValue(ctx["src_ip"])
-	dst := stringValue(ctx["dst_ip"])
-	switch {
-	case numberValue(ctx["dst_port"]) == 53:
-		return dst, src
-	case numberValue(ctx["src_port"]) == 53:
-		return src, dst
-	}
-	app, _ := ctx["app"].(map[string]any)
-	if stringValue(app["dns_query"]) == "" {
-		return "", ""
-	}
-	srcPrivate, dstPrivate := false, false
-	if ip, err := netip.ParseAddr(src); err == nil {
-		srcPrivate = ip.Unmap().IsPrivate()
-	}
-	if ip, err := netip.ParseAddr(dst); err == nil {
-		dstPrivate = ip.Unmap().IsPrivate()
-	}
-	// 仅当恰好一侧为内网地址时才可可靠判定客户端；双内网/双外网不干预。
-	switch {
-	case srcPrivate && !dstPrivate:
-		return dst, src
-	case dstPrivate && !srcPrivate:
-		return src, dst
-	}
-	return "", ""
-}
-func threatIndicator(ctx map[string]any) string {
-	ioc, ok := ctx["ioc"].(map[string]any)
-	if !ok {
-		return ""
-	}
-	typ := strings.ToLower(strings.TrimSpace(stringValue(ioc["ioc_type"])))
-	if typ != "domain" && typ != "url" {
-		return ""
-	}
-	return stringValue(ioc["ioc_value"])
 }
 
 // persistedHeartbeat 读取聚合快照在全量命中上预计算的心跳结论。
@@ -535,29 +474,26 @@ func observablePair(items []domain.IOC) (string, string) {
 	return source, destination
 }
 
-// iocDestinationIsIOC 判定展示目标地址是否为 IP/CIDR 型 IOC 规则地址。
-// ioc_type ∈ {ip, cidr} 且 destination 命中 ioc_value（cidr 按网段包含匹配）时返回 true。
-func iocDestinationIsIOC(ctx map[string]any, destination string) bool {
-	ioc, _ := ctx["ioc"].(map[string]any)
-	iocType := strings.ToLower(strings.TrimSpace(stringValue(ioc["ioc_type"])))
-	iocValue := strings.TrimSpace(stringValue(ioc["ioc_value"]))
-	if iocType == "" || iocValue == "" || strings.TrimSpace(destination) == "" {
-		return false
+// peerAttributionInput 把已存事件 context 适配为归属判定输入：
+// 字段与 ingest 侧（LyEventToDeepSOC）写入的保持一致，确保重算结果相同。
+func peerAttributionInput(context map[string]any, srcIP, dstIP string) domain.PeerAttributionInput {
+	app, _ := context["app"].(map[string]any)
+	ioc, _ := context["ioc"].(map[string]any)
+	return domain.PeerAttributionInput{
+		SrcIP:     srcIP,
+		DstIP:     dstIP,
+		SrcPort:   int(numberValue(context["src_port"])),
+		DstPort:   int(numberValue(context["dst_port"])),
+		DNSQuery:  firstNonEmpty(stringValue(app["dns_query"]), stringValue(context["dns_query"])),
+		IOCType:   stringValue(ioc["ioc_type"]),
+		IOCValue:  stringValue(ioc["ioc_value"]),
+		Direction: stringValue(context["direction"]),
 	}
-	dst := strings.ToLower(strings.TrimSpace(destination))
-	switch iocType {
-	case "ip":
-		return dst == strings.ToLower(iocValue)
-	case "cidr":
-		if network, err := netip.ParsePrefix(strings.ToLower(iocValue)); err == nil {
-			if addr, err := netip.ParseAddr(dst); err == nil {
-				return network.Contains(addr)
-			}
-		}
-		return false
-	default:
-		return false
-	}
+}
+
+func isIPLiteral(v string) bool {
+	_, err := netip.ParseAddr(strings.TrimSpace(v))
+	return err == nil
 }
 
 // quantPayloadBytes 读取 context.quant_stats.total_payload_bytes（旧事件缺失返回 0）。
