@@ -9,6 +9,10 @@ func TestParseThreatProbability(t *testing.T) {
 		want   float64
 		ok     bool
 	}{
+		{"event wording", "【结论】C2通信，威胁事件概率85%，被攻击资产…", 85, true},
+		{"event wording bold", "**威胁事件概率**：72%", 72, true},
+		{"event wording range echo", "威胁事件概率0–100%及依据：综合判定为60%", 60, true},
+		{"event wording zero range", "威胁事件概率0–100%", 0, false},
 		{"colon percent", "## 攻击链与风险判断\n威胁概率：75%，依据：……", 75, true},
 		{"approx", "威胁概率约 80%", 80, true},
 		{"bold label", "**威胁概率**：65%", 65, true},

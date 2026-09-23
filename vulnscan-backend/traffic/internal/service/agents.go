@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -217,6 +218,8 @@ func (s Services) runAnalysis(ctx context.Context, eventID string, kind string, 
 				patch["context"] = string(raw)
 			}
 		}
+	} else {
+		log.Printf("[traffic] 事件 %s 研判报告未提取到威胁概率，ai_probability 不更新", eventID)
 	}
 	_, _ = s.Store.UpdateEvent(eventID, patch)
 	realtime.BroadcastStatus(eventID, map[string]any{"event_id": eventID, "status": "round_finished"})
