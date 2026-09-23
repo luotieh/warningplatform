@@ -471,6 +471,41 @@ func sortEvents(out []domain.Event, q EventQuery) {
 			}
 			return a > b
 		})
+	case "probability":
+		// 研判概率（context.ai_probability，LLM 输出提取，可为小数）：
+		// 有概率的事件排前（未研判沉底，与升降序无关），同值以时间倒序兜底。
+		ctxProb := func(e domain.Event) (float64, bool) {
+			m := map[string]any{}
+			if e.Context != "" {
+				_ = json.Unmarshal([]byte(e.Context), &m)
+			}
+			v, ok := m["ai_probability"]
+			if !ok {
+				return 0, false
+			}
+			switch n := v.(type) {
+			case float64:
+				return n, true
+			case string:
+				f, err := strconv.ParseFloat(n, 64)
+				return f, err == nil
+			}
+			return 0, false
+		}
+		sort.SliceStable(out, func(i, j int) bool {
+			ai, aok := ctxProb(out[i])
+			bi, bok := ctxProb(out[j])
+			if aok != bok {
+				return aok
+			}
+			if ai == bi {
+				return lessTime(i, j)
+			}
+			if dir == "asc" {
+				return ai < bi
+			}
+			return ai > bi
+		})
 	default:
 		if dir == "asc" {
 			sort.SliceStable(out, func(i, j int) bool {

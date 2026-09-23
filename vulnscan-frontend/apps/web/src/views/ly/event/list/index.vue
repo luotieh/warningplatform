@@ -47,7 +47,8 @@ const state = reactive({
   rankKey: '' as '' | 'attackDevice' | 'victimDevice' | 'typeText',
   rankValue: '',
   // 排序：time=时间倒序（默认）/ payload=总载荷大小 / frequency=命中频次
-  sort: 'time' as 'time' | 'payload' | 'frequency',
+  // 排序：time=时间倒序（默认）/ payload=总载荷大小 / frequency=命中频次 / probability=研判概率
+  sort: 'time' as 'time' | 'payload' | 'frequency' | 'probability',
   order: 'desc' as 'desc' | 'asc',
 });
 
@@ -55,6 +56,7 @@ const sortOptions = [
   { label: '创建时间', value: 'time' },
   { label: '总载荷大小', value: 'payload' },
   { label: '命中频次', value: 'frequency' },
+  { label: '研判概率', value: 'probability' },
 ];
 const orderOptions = [
   { label: '降序', value: 'desc' },

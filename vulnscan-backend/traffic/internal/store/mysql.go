@@ -328,6 +328,13 @@ func eventOrderBy(q EventQuery) string {
 	case "frequency":
 		return jsonNum("$.occurrence_count") + " " + dir +
 			", created_at DESC, id DESC"
+	case "probability":
+		// 研判概率（context.ai_probability，LLM 输出提取）：有概率的事件排前
+		// （未研判沉底，与升降序无关），再按概率值排序，同值以时间倒序兜底。
+		probPresent := "CASE WHEN JSON_VALID(context) AND JSON_UNQUOTE(JSON_EXTRACT(context,'$.ai_probability')) IS NOT NULL " +
+			"AND JSON_UNQUOTE(JSON_EXTRACT(context,'$.ai_probability')) <> '' THEN 0 ELSE 1 END"
+		probNum := "CASE WHEN JSON_VALID(context) THEN CAST(JSON_UNQUOTE(JSON_EXTRACT(context,'$.ai_probability')) AS DECIMAL(6,2)) ELSE 0 END"
+		return probPresent + " ASC, " + probNum + " " + dir + ", created_at DESC, id DESC"
 	default:
 		return "created_at " + dir + ", id DESC"
 	}

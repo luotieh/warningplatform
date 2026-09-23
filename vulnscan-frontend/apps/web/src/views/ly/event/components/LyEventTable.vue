@@ -335,7 +335,9 @@ const columns = computed(() => [
         h('span', { style: 'color:#d03050' }, row.attackDevice || '-'),
         h(IconifyIcon, { icon: 'lucide:move-right', style: 'font-size:15px;color:#909399;flex:none' }),
         h('span', { style: 'color:#2080f0' }, row.victimDevice || '-'),
-        row.heartbeat_detected ? h(NTag, { type: 'warning', size: 'small' }, { default: () => `心跳 ${row.heartbeat_period_sec || ''}s` }) : null,
+        row.heartbeat_detected
+          ? h(NTag, { type: 'error', size: 'small', round: true, bordered: false, title: `检测到 C2 信标心跳：约 ${row.heartbeat_period_sec || '?'}s 周期的固定小包通信` }, { default: () => 'C2心跳' })
+          : null,
         // 聚合事件含多个查询域名时提示，悬停列出采样到的域名，避免单域名误导。
         row.dns_domain_count > 1
           ? h(NTag, { size: 'small', round: true, type: 'info', bordered: false, title: (row.dns_queries || []).join('\n') }, { default: () => `等${row.dns_domain_count}个域名` })
@@ -440,6 +442,25 @@ const columns = computed(() => [
       const type = status === 'completed' ? 'success' : status === 'failed' || status === 'llm_config_required' ? 'error' : status === 'processing' ? 'warning' : 'default';
       const text = analyzing ? '分析中' : row.analysisStatusText || '待分析';
       return h(NTag, { size: 'small', round: true, bordered: true, type }, { default: () => text });
+    },
+  },
+  {
+    title: '研判概率',
+    key: 'ai_probability',
+    width: 100,
+    render: (row: Record<string, any>) => {
+      const value = row.ai_probability;
+      if (value === null || value === undefined || value === '' || Number.isNaN(Number(value))) {
+        return h('span', { style: 'color:#909399' }, '-');
+      }
+      const prob = Number(value);
+      const text = `${prob % 1 === 0 ? prob : prob.toFixed(1)}%`;
+      const type = prob >= 80 ? 'error' : prob >= 50 ? 'warning' : 'info';
+      return h(
+        NTag,
+        { size: 'small', round: true, bordered: false, type, title: '大模型研判的威胁概率（非攻击成功概率）' },
+        { default: () => text },
+      );
     },
   },
   {
