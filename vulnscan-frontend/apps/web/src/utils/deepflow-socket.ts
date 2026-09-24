@@ -1,7 +1,7 @@
 import { io, type Socket } from "socket.io-client";
 
 type Listener = (data?: any) => void;
-type SocketEvent = "connected" | "disconnected" | "error" | "new_message";
+type SocketEvent = "connected" | "disconnected" | "error" | "new_message" | "chat_delta" | "event_list_update";
 type SocketStatus = "connected" | "connecting" | "disconnected";
 
 const MESSAGE_EVENTS = [
@@ -107,6 +107,11 @@ class DeepflowSocketManager {
     // 模型正文流式增量（不含推理过程），后端在生成期间持续推送
     this.socket.on("chat_delta", (data) => {
       this.emit("chat_delta", data);
+    });
+
+    // 事件列表行级状态变化（分析完成/失败等），后端广播到全局 events 房间
+    this.socket.on("event_list_update", (data) => {
+      this.emit("event_list_update", data);
     });
 
     this.socket.connect();

@@ -171,7 +171,7 @@ func (s Services) runAnalysis(ctx context.Context, eventID string, kind string, 
 		return s.failAgentWorkflow(eventID, err)
 	}
 	event.Context = evidenceContext
-	reply, err := s.LLM.Chat(ctx, autoAnalysisSystemPrompt, autoAnalysisPrompt(event, s.AssetMatchContext(event)))
+	reply, err := s.LLM.Chat(ctx, autoAnalysisSystemPrompt, autoAnalysisPromptWithDialogue(event, s.AssetMatchContext(event), s.dialogueEvidenceSection(eventID)))
 	if err != nil {
 		err = fmt.Errorf("LLM自动分析失败，请检查LLM配置: %w", err)
 		_ = s.addLLMConfigRequiredMessage(eventID, roundID, err.Error())
@@ -223,6 +223,7 @@ func (s Services) runAnalysis(ctx context.Context, eventID string, kind string, 
 	}
 	_, _ = s.Store.UpdateEvent(eventID, patch)
 	realtime.BroadcastStatus(eventID, map[string]any{"event_id": eventID, "status": "round_finished"})
+	realtime.BroadcastEventListUpdate(map[string]any{"event_id": eventID, "status": "round_finished"})
 	return nil
 }
 
@@ -231,6 +232,7 @@ func (s Services) runAnalysis(ctx context.Context, eventID string, kind string, 
 func (s Services) failAgentWorkflow(eventID string, err error) error {
 	_, _ = s.Store.UpdateEvent(eventID, map[string]any{"event_status": "failed"})
 	realtime.BroadcastStatus(eventID, map[string]any{"event_id": eventID, "status": "failed", "message": err.Error()})
+	realtime.BroadcastEventListUpdate(map[string]any{"event_id": eventID, "status": "failed"})
 	return err
 }
 
@@ -248,17 +250,28 @@ const autoAnalysisSystemPrompt = `你是 DeepSOC 安全运营自动分析引擎�
 统计量由系统计算；结合时间、协议、请求响应和不同证据之间的关联进行深入研判。全报告只使用一个概率指标：威胁事件概率（0–100%，即该事件是真实威胁的可信度），在开头【结论】与结尾结论各给出一次，两处数值必须一致。关键证据按 1、2、3 数字编号，以样本编号（sample_no）或时间+五元组+特征定位证据，报告禁止输出 hit_id/evidence_id 等哈希标识串。不得把模型样本称为全部原始明细；遵守 input_manifest 的扫描范围与缺失说明。没有证据支持的事实不写为确定结论。建议不写成已执行处置；未提供实际功能链接或执行记录时，标注“暂未实现”。最终结论面向安全团队，不输出面向模型的内部约束措辞，不使用“自动驾驶”。
 报告以被攻击资产为论述主线：概览与结论必须点名被攻击资产，影响与建议围绕该资产展开。关键证据必须落到“证据→威胁特征”的对应关系（符合即指出符合哪类威胁特征，不符合则说明排除依据）。论述简明扼要：每个章节只承担自己的职责，同一判断不在多个章节重复展开。研判流程固定为三步：先定性威胁类型（具体网络攻击类型，如 C2 通信/botnet/phishing/DNS 隧道/端口扫描/挖矿/数据外传等；证据不支持攻击时定性为误报或正常业务），再逐条列出符合该攻击类型的证据并标注权重（高/中/低），最后给出威胁事件概率。只写有证据支撑的确定内容：没有证据支撑的判断不写进正文，移入信息缺口；正文禁止出现“可能/疑似/或许/大概”等模糊词。`
 
+// autoAnalysisPrompt 保持原签名，供测试与无对话场景使用。
 func autoAnalysisPrompt(event domain.Event, assetSection string) string {
+	return autoAnalysisPromptWithDialogue(event, assetSection, "无")
+}
+
+// autoAnalysisPromptWithDialogue 在标准研判输入之上追加「分析师对话补充」章节：
+// 分析师在研判对话中补充的证据与历史结论纳入研判，威胁事件概率结合全部证据重新评估。
+func autoAnalysisPromptWithDialogue(event domain.Event, assetSection, dialogueSection string) string {
 	obsStr := formatObservables(event.Observables)
 	auxStr := formatAuxContext(event.Context)
 	if strings.TrimSpace(assetSection) == "" {
 		assetSection = "无登记信息"
 	}
+	if strings.TrimSpace(dialogueSection) == "" {
+		dialogueSection = "无"
+	}
 
 	// 兜底:事件数据(可观察对象 + 辅助研判信息)整体不超预算;超了先压缩体量更大、
 	// 更可变的辅助信息块(逐字段截断已在 formatAuxContext 内做,此处是最后一道防线)。
-	if estimateTokens(obsStr)+estimateTokens(auxStr) > eventDataBudgetTokens {
-		auxStr = fitToTokenBudget(auxStr, eventDataBudgetTokens-estimateTokens(obsStr))
+	// 对话补充计入事件数据预算：超出时压缩辅助信息块，保证总量不超预算。
+	if estimateTokens(obsStr)+estimateTokens(auxStr)+estimateTokens(dialogueSection) > eventDataBudgetTokens {
+		auxStr = fitToTokenBudget(auxStr, eventDataBudgetTokens-estimateTokens(obsStr)-estimateTokens(dialogueSection))
 	}
 
 	return fmt.Sprintf(`# 安全事件
@@ -277,6 +290,9 @@ func autoAnalysisPrompt(event domain.Event, assetSection string) string {
 ## 资产清单匹配（系统权威资产库）
 %s
 
+## 分析师对话补充（分析师在研判对话中提供的补充证据与结论，按时间排列）
+%s
+
 # 分析要求
 结合上方证据完成研判：威胁真假（是否误报）、攻击手法定性、影响面与横向风险、处置建议。
 - IOC 语义铁律：命中情报 IOC 的一侧永远是威胁侧，另一端永远是被攻击资产；可观察对象 role=threat_source/affected_asset 已按此标注，直接采用，不得互换，禁止把 IOC 写成被攻击资产；
@@ -287,6 +303,7 @@ func autoAnalysisPrompt(event domain.Event, assetSection string) string {
 - local_hit_count 仅为节点近似分诊提示，权威全局频次以 occurrence_count 为准，勿重复计数；
 - 若事件带「建议处置(情报侧)」，需明确采纳或修正并说明理由；
 - 信息不足时写清缺口与下一步应查询的数据；不要把未执行的剧本结果写成已完成。
+- 「分析师对话补充」是分析师提供的补充证据与历史研判结论，视为可信输入纳入研判，威胁事件概率须结合事件证据与补充证据重新评估；
 
 # 输出格式（严格遵守）
 第一行必须输出以【结论】开头的一句话总结，先给结论再展开；禁止复述输入信息、禁止第一人称思考过程、禁止输出模板外内容。
@@ -318,7 +335,65 @@ func autoAnalysisPrompt(event domain.Event, assetSection string) string {
 		obsStr,
 		auxStr,
 		assetSection,
+		dialogueSection,
 	)
+}
+
+const (
+	dialogueEvidenceMaxMessages  = 12
+	dialogueEvidenceBudgetTokens = 2000
+	dialogueEvidenceMaxRunes     = 600
+)
+
+// dialogueEvidenceSection 抽取事件的工程师对话记录（分析师补充证据与模型结论），
+// 作为自动研判报告的补充输入。只取最近若干条并做总量截断，避免对话挤占事件证据预算。
+func (s Services) dialogueEvidenceSection(eventID string) string {
+	lines := []string{}
+	for _, m := range s.Store.ListMessages(eventID) {
+		if m.MessageCategory != "engineer_chat" {
+			continue
+		}
+		text := dialogueMessageText(m)
+		if text == "" {
+			continue
+		}
+		label := "分析师"
+		if m.MessageFrom == domain.RoleAssistant {
+			label = "模型"
+		}
+		lines = append(lines, fmt.Sprintf("[%s] %s", label, truncateRunes(text, dialogueEvidenceMaxRunes)))
+	}
+	if len(lines) == 0 {
+		return "无"
+	}
+	if len(lines) > dialogueEvidenceMaxMessages {
+		lines = lines[len(lines)-dialogueEvidenceMaxMessages:]
+	}
+	// 总量预算：超出时从最早的开始丢弃，保留最新证据与结论。
+	for len(lines) > 1 && estimateTokens(strings.Join(lines, "\n")) > dialogueEvidenceBudgetTokens {
+		lines = lines[1:]
+	}
+	return strings.Join(lines, "\n")
+}
+
+// dialogueMessageText 提取对话消息的可读正文：模型回复是 StandardContent JSON
+// （data.response_text），分析师消息是纯文本。
+func dialogueMessageText(m domain.Message) string {
+	raw := strings.TrimSpace(m.MessageContent)
+	if raw == "" {
+		return ""
+	}
+	if strings.HasPrefix(raw, "{") {
+		var content struct {
+			Data map[string]any `json:"data"`
+		}
+		if json.Unmarshal([]byte(raw), &content) == nil {
+			if text, ok := content.Data["response_text"].(string); ok && strings.TrimSpace(text) != "" {
+				return strings.TrimSpace(text)
+			}
+		}
+	}
+	return raw
 }
 
 // formatAuxContext 将事件 context(JSON) 中来自 ta_node 的辅助信息抽取为

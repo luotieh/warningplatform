@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
 import { useRoute } from 'vue-router';
 
 import {
@@ -15,6 +15,7 @@ import {
 } from 'naive-ui';
 
 import { lyAssetList, type LyAsset } from '#/api/ly/assets';
+import deepflowSocket from '#/utils/deepflow-socket';
 import {
   assetMatchesEvent,
   assetOptionFilter,
@@ -238,9 +239,26 @@ function clearRankFilter() {
   state.rankValue = '';
 }
 
+// 订阅事件列表广播：分析完成/失败等行级状态变化时防抖刷新当前页，
+// 研判概率、分析状态等列无需手动刷新即可看到最新值。
+let listUpdateTimer: ReturnType<typeof setTimeout> | undefined;
+const handleEventListUpdate = () => {
+  clearTimeout(listUpdateTimer);
+  listUpdateTimer = setTimeout(() => void loadEvents(), 800);
+};
+
 onMounted(async () => {
+  deepflowSocket.connect();
+  deepflowSocket.join('events');
+  deepflowSocket.on('event_list_update', handleEventListUpdate);
   await loadEvents();
   void loadAssets();
+});
+
+onUnmounted(() => {
+  clearTimeout(listUpdateTimer);
+  deepflowSocket.off('event_list_update', handleEventListUpdate);
+  deepflowSocket.leave('events');
 });
 </script>
 
