@@ -63,6 +63,109 @@ func TestAggregationConcurrentRetryAndEvidenceConflict(t *testing.T) {
 	}
 }
 
+// 方向无关聚合：同一次通联的请求/应答（端点对互换、同事件类型）必须合并为
+// 一条事件，occurrences 按命中时间排序（请求在前、应答在后）。
+func TestAggregationRequestResponseMerge(t *testing.T) {
+	svc := Services{Store: store.NewMemoryStore()}
+	ctx := context.Background()
+	base := time.Now().UTC().Add(-time.Hour).Truncate(time.Microsecond)
+
+	request := testHit("req-1", base)
+	event := ingestTestHit(t, svc, "req-1", base)
+
+	response := testHit("resp-1", base.Add(time.Second))
+	response["src_ip"], response["dst_ip"] = request["dst_ip"], request["src_ip"]
+	response["src_port"], response["dst_port"] = request["dst_port"], request["src_port"]
+	r, err := svc.ProcessLyEvent(ctx, response)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := asString(r["deepsoc_event_id"]); got != event {
+		t.Fatalf("response hit split into separate event: %q != %q", got, event)
+	}
+	if r["aggregated"] != true {
+		t.Fatalf("response hit not aggregated: %v", r)
+	}
+	if len(svc.Store.ListEvents()) != 1 {
+		t.Fatal("request/response must stay one event")
+	}
+	if err = svc.DrainAggregation(ctx, 20); err != nil {
+		t.Fatal(err)
+	}
+	snap, err := svc.EvidenceSnapshot(ctx, event, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.Count != 2 {
+		t.Fatalf("count=%d, want 2", snap.Count)
+	}
+	occs, _ := snap.Context["occurrences"].([]any)
+	if len(occs) != 2 {
+		t.Fatalf("occurrences=%d, want 2", len(occs))
+	}
+	first, _ := occs[0].(map[string]any)
+	second, _ := occs[1].(map[string]any)
+	if asString(first["time"]) != base.Format(time.RFC3339Nano) {
+		t.Fatalf("first occurrence is not the request: %v", first["time"])
+	}
+	if asString(second["time"]) != base.Add(time.Second).Format(time.RFC3339Nano) {
+		t.Fatalf("second occurrence is not the response: %v", second["time"])
+	}
+}
+
+// 乱序摄入：应答先到、请求后到。合并后事件朝向必须校正为时间最早的请求方向，
+// occurrences 仍为请求在前、应答在后。
+func TestAggregationResponseFirstOrientation(t *testing.T) {
+	svc := Services{Store: store.NewMemoryStore()}
+	ctx := context.Background()
+	base := time.Now().UTC().Add(-time.Hour).Truncate(time.Microsecond)
+
+	response := testHit("resp-1", base.Add(time.Second))
+	response["src_ip"], response["dst_ip"] = "192.0.2.2", "192.0.2.1"
+	response["src_port"], response["dst_port"] = 53, 1234
+	r0, err := svc.ProcessLyEvent(ctx, response)
+	if err != nil {
+		t.Fatal(err)
+	}
+	event := asString(r0["deepsoc_event_id"])
+	if event == "" {
+		t.Fatalf("not accepted: %v", r0)
+	}
+
+	ev, _ := svc.Store.GetEvent(event)
+	ctxMap := decodeEventContext(ev.Context)
+	if asString(ctxMap["src_ip"]) != "192.0.2.2" {
+		t.Fatalf("setup: response-oriented event expected, got src=%v", ctxMap["src_ip"])
+	}
+
+	r, err := svc.ProcessLyEvent(ctx, testHit("req-1", base))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := asString(r["deepsoc_event_id"]); got != event {
+		t.Fatalf("earlier request hit split into separate event: %q != %q", got, event)
+	}
+	ev, _ = svc.Store.GetEvent(event)
+	ctxMap = decodeEventContext(ev.Context)
+	if asString(ctxMap["src_ip"]) != "192.0.2.1" || asString(ctxMap["dst_ip"]) != "192.0.2.2" {
+		t.Fatalf("orientation not corrected to request direction: %v -> %v", ctxMap["src_ip"], ctxMap["dst_ip"])
+	}
+	if err = svc.DrainAggregation(ctx, 20); err != nil {
+		t.Fatal(err)
+	}
+	snap, err := svc.EvidenceSnapshot(ctx, event, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	occs, _ := snap.Context["occurrences"].([]any)
+	if len(occs) != 2 {
+		t.Fatalf("occurrences=%d, want 2", len(occs))
+	}
+	first, _ := occs[0].(map[string]any)
+	if asString(first["time"]) != base.Format(time.RFC3339Nano) {
+		t.Fatalf("occurrences not chronologically ordered: %v", first["time"])
+	}
+}
 func TestAggregationLateBridgePreservesSnapshots(t *testing.T) {
 	svc := Services{Store: store.NewMemoryStore()}
 	ctx := context.Background()

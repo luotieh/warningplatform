@@ -113,6 +113,33 @@ func mergeSessionSummary(existing, incoming any) any {
 // iocSpecialUseAddress 报告命中携带的 IP 型 IOC 是否为特殊用途地址
 // （回环/链路本地/未指定/组播，IPv4 映射的 IPv6 已归一）。
 // 不排除 RFC1918 内网地址——内网 C2/横向移动是真实威胁场景。
+// orientContextToEarliestHit 方向无关聚合后，请求/应答命中同键合并：
+// 事件朝向固定为时间最早的命中（请求方向）。当后到但时间更早的命中
+// 到达时，用其端点/归属字段校正 context，避免事件停留在应答方向。
+// 统计字段（occurrences/quant_stats）由快照工作器按命中时间重建，不在此处理。
+func orientContextToEarliestHit(c, base map[string]any) {
+	incoming := asString(base["occurrence_time"])
+	current := firstNonEmpty(asString(c["first_time"]), asString(c["occurrence_time"]))
+	if incoming == "" || current == "" {
+		return
+	}
+	if !parseOccurrenceTime(incoming).Before(parseOccurrenceTime(current)) {
+		return
+	}
+	for _, k := range []string{"src_ip", "dst_ip", "src_port", "dst_port", "threat_source", "victim_target", "occurrence_time"} {
+		if v, ok := base[k]; ok {
+			c[k] = v
+		}
+	}
+	// 方向相关字段：新朝向缺失时清除旧值，避免残留反方向标注。
+	for _, k := range []string{"direction", "flow_stats"} {
+		if v, ok := base[k]; ok {
+			c[k] = v
+		} else {
+			delete(c, k)
+		}
+	}
+}
 func iocSpecialUseAddress(m map[string]any) bool {
 	typ := strings.TrimSpace(asString(m["ioc_type"]))
 	val := strings.TrimSpace(asString(m["ioc_value"]))
@@ -186,7 +213,7 @@ func normalizeHit(ly map[string]any, now time.Time) (store.Hit, map[string]any, 
 		return h, m, "insufficient_hit_identity"
 	}
 	h.ID = "hit-" + h.DedupKey
-	h.AggregateKey = Fingerprint(m)
+	h.AggregateKey = DirectionAgnosticFingerprint(m) // 方向无关聚合键：同一次通联的请求/应答（端点对互换）合并为一条事件，不再按报文方向拆分；旧方向键仅用于查找存量段（见 ingestHit）
 	h.Identity = digest([]any{h.AggregateKey, at, m["src_port"], m["dst_port"], firstNonEmpty(asString(m["protocol"]), asString(m["proto"])), rule, rp["packet_sequence"], rp["capture_time"], rp["payload_hex"], rp["payload_text"]})
 	h.Raw, _ = json.Marshal(m)
 	return h, m, ""
@@ -251,18 +278,43 @@ func (s Services) ingestHit(ctx context.Context, ly map[string]any) (map[string]
 		if err = tx.LockAggregationKey(ctx, "group-"+hit.AggregateKey); err != nil {
 			return err
 		}
-		records, err := tx.AggregateRecords(ctx, "segment", hit.AggregateKey, 0)
+		collectRelated := func(group string) ([]EventSegment, error) {
+			records, e := tx.AggregateRecords(ctx, "segment", group, 0)
+			if e != nil {
+				return nil, e
+			}
+			out := []EventSegment{}
+			for _, r := range records {
+				var seg EventSegment
+				if e = json.Unmarshal(r.Value, &seg); e != nil {
+					return nil, e
+				}
+				if !seg.Disabled && seg.CanonicalID == seg.EventID && hit.OccurredAt.After(seg.First.Add(-domain.ConvergenceIdleWindow)) && hit.OccurredAt.Before(seg.Last.Add(domain.ConvergenceIdleWindow)) {
+					out = append(out, seg)
+				}
+			}
+			return out, nil
+		}
+		related, err := collectRelated(hit.AggregateKey)
 		if err != nil {
 			return err
 		}
-		related := []EventSegment{}
-		for _, r := range records {
-			var seg EventSegment
-			if err = json.Unmarshal(r.Value, &seg); err != nil {
-				return err
-			}
-			if !seg.Disabled && seg.CanonicalID == seg.EventID && hit.OccurredAt.After(seg.First.Add(-domain.ConvergenceIdleWindow)) && hit.OccurredAt.Before(seg.Last.Add(domain.ConvergenceIdleWindow)) {
-				related = append(related, seg)
+		// 兼容方向敏感的旧聚合键：旧数据按 src|dst|type 把同一次通联的请求/应答
+		// 拆成两条事件，段记录仍挂在旧键下。方向无关键查不到时按旧键找回并迁移
+		// 到新键，此后两个方向的命中都汇入同一事件，不会再裂出第三条事件。
+		if len(related) == 0 {
+			if legacyKey := Fingerprint(m); legacyKey != hit.AggregateKey {
+				if related, err = collectRelated(legacyKey); err != nil {
+					return err
+				}
+				if len(related) > 0 {
+					seg := related[0]
+					seg.AggregateKey = hit.AggregateKey
+					if err = putRecord(ctx, tx, "segment", seg.EventID, seg.AggregateKey, seg); err != nil {
+						return err
+					}
+					related[0] = seg
+				}
 			}
 		}
 		sort.Slice(related, func(i, j int) bool {
@@ -375,10 +427,16 @@ func (s Services) ingestHit(ctx context.Context, ly map[string]any) (map[string]
 					c[k] = v
 				}
 			}
-		} else if merged := mergeSessionSummary(c["session_summary"], base["session_summary"]); merged != nil {
-			// 聚合事件：会话统计随新命中滚动更新，避免明细弹窗
-			// 「双向会话统计」的会话时间停留在首次命中的值。
-			c["session_summary"] = merged
+		} else {
+			// 方向无关聚合后请求/应答同键合并：事件朝向固定为时间最早的命中
+			// （请求方向）。后到但时间更早的命中到达时校正端点与归属字段，
+			// 保证列表与 AI 输入的流向是请求→响应，而非停留在先到的应答方向。
+			orientContextToEarliestHit(c, base)
+			if merged := mergeSessionSummary(c["session_summary"], base["session_summary"]); merged != nil {
+				// 聚合事件：会话统计随新命中滚动更新，避免明细弹窗
+				// 「双向会话统计」的会话时间停留在首次命中的值。
+				c["session_summary"] = merged
+			}
 		}
 		if len(related) > 1 {
 			c["merged_event_ids"] = seg.Sources

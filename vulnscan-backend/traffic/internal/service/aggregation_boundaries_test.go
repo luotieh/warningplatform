@@ -127,18 +127,22 @@ func TestAggregationPacketIdentityDeviceScopeAndDirection(t *testing.T) {
 	m["src_ip"], m["dst_ip"] = m["dst_ip"], m["src_ip"]
 	m["event_id"] = "reverse"
 	reverse, err := svc.ProcessLyEvent(ctx, m)
-	if err != nil || reverse["deepsoc_event_id"] == id {
-		t.Fatalf("reverse merged: %v %v", reverse, err)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 方向无关聚合：请求/应答（端点互换）同键合并为同一事件。
+	if asString(reverse["deepsoc_event_id"]) != id {
+		t.Fatalf("reverse direction not merged: %v", reverse)
 	}
 	if err = svc.RebuildAggregation(ctx, id); err != nil {
 		t.Fatal(err)
 	}
 	snap, err = svc.EvidenceSnapshot(ctx, id, 0)
-	if err != nil || snap.Count != 3 {
+	if err != nil || snap.Count != 4 {
 		t.Fatalf("device scoped identity: %d %v", snap.Count, err)
 	}
-	if _, err = svc.Occurrences(ctx, id, "", asString(reverse["hit_id"]), 1); err == nil {
-		t.Fatal("cross-event hit leaked")
+	if _, err = svc.Occurrences(ctx, id, "", asString(reverse["hit_id"]), 1); err != nil {
+		t.Fatal("reverse hit must be queryable within the merged event")
 	}
 }
 

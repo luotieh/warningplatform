@@ -42,6 +42,21 @@ func Fingerprint(event map[string]any) string {
 	return hex.EncodeToString(sum[:])
 }
 
+// DirectionAgnosticFingerprint 方向无关聚合指纹：同一对端点之间的同类型告警
+// （请求与应答两个方向）共用同一聚合键、合并为一条事件——报文方向不代表
+// 攻击方向，按方向拆分会把同一次通联的请求/响应撕成两条事件。
+// 与 Fingerprint 的唯一区别是端点对按字典序排序。
+func DirectionAgnosticFingerprint(event map[string]any) string {
+	etype := strings.ToLower(strings.TrimSpace(
+		firstNonEmpty(asString(event["event_type"]), asString(event["type"]), asString(event["threat_type"]))))
+	a := strings.TrimSpace(firstNonEmpty(asString(event["src_ip"]), asString(event["threat_source"])))
+	b := strings.TrimSpace(firstNonEmpty(asString(event["dst_ip"]), asString(event["victim_target"])))
+	if b < a {
+		a, b = b, a
+	}
+	sum := sha256.Sum256([]byte(fmt.Sprintf("%v|%v|%v", a, b, etype)))
+	return hex.EncodeToString(sum[:])
+}
 func MakeIdempotencyKey(ev map[string]any) string {
 	if id := asString(ev["event_id"]); id != "" {
 		sum := sha256.Sum256([]byte(id))
