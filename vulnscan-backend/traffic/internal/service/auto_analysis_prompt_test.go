@@ -31,7 +31,7 @@ func TestAutoAnalysisPromptStructure(t *testing.T) {
 
 	for _, want := range []string{
 		"【结论】", "## 事件概览", "## 关键证据", "## 攻击源与受影响资产分析", "## 攻击链与风险判断",
-		"## 已执行处置/自动驾驶进展", "## 后续处置建议", "## 信息缺口", "## 可交付给安全团队的结论",
+		"## 后续处置建议", "## 信息缺口", "## 可交付给安全团队的结论",
 	} {
 		if !strings.Contains(p, want) {
 			t.Fatalf("missing template marker %q", want)
@@ -39,6 +39,9 @@ func TestAutoAnalysisPromptStructure(t *testing.T) {
 	}
 	if !strings.Contains(p, "禁止复述") {
 		t.Fatalf("missing hard instruction against restating input")
+	}
+	if strings.Contains(p, "## 已执行处置") {
+		t.Fatalf("automatic report must not request an empty execution section")
 	}
 	// 原始 context JSON 不再注入(去掉"塞两遍"的那份)。
 	if strings.Contains(p, "原始上下文") {

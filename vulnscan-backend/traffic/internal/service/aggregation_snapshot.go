@@ -533,6 +533,14 @@ func (s Services) EvidenceContext(ctx context.Context, event domain.Event) (stri
 		return string(b), nil
 	}
 	c := map[string]any{"event_id": event.EventID, "snapshot_version": snap.Version, "quant_stats": snap.Context["quant_stats"], "occurrence_count": snap.Count, "input_manifest": snap.Manifest, "evidence_index": snap.Evidence, "statistics_quality": "verified"}
+	// The aggregate model input is a projection of the snapshot. Preserve the
+	// bounded IOC description and enrichment evidence (especially cross_check),
+	// which otherwise disappear when the original event context is replaced.
+	for _, key := range []string{"ioc", "ioc_evidence", "recommended_action"} {
+		if value, ok := snap.Context[key]; ok {
+			c[key] = boundedEvidenceValue(value, 0)
+		}
+	}
 	stats, omitted := modelStatistics(snap.Context["quant_stats"])
 	c["quant_stats"] = stats
 	snap.Manifest["distribution_compression"] = omitted
