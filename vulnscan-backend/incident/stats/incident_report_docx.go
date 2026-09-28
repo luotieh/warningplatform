@@ -85,14 +85,33 @@ func docxAddMetaRow4Col(tbl *godocxdocx.Table, k1, v1, k2, v2 string) {
 	}
 }
 
+// cellCT 访问 godocx v0.1.5 未导出的 Cell.ct 字段（该版本没有公开的
+// GridSpan/Width API）。做完整的反射校验：库内部结构一旦变化则返回 nil
+// 优雅降级（跳过单元格属性设置），而不是直接 panic。
 func cellCT(cell *godocxdocx.Cell) *ctypes.Cell {
-	rv := reflect.ValueOf(cell).Elem()
+	rv := reflect.ValueOf(cell)
+	if rv.Kind() != reflect.Ptr || rv.IsNil() {
+		return nil
+	}
+	rv = rv.Elem()
+	if rv.Kind() != reflect.Struct {
+		return nil
+	}
 	ctField := rv.FieldByName("ct")
+	if !ctField.IsValid() || !ctField.CanAddr() {
+		return nil
+	}
+	if ctField.Type() != reflect.TypeOf(ctypes.Cell{}) {
+		return nil
+	}
 	return (*ctypes.Cell)(unsafe.Pointer(ctField.UnsafeAddr()))
 }
 
 func setCellGridSpan(cell *godocxdocx.Cell, span int) {
 	ct := cellCT(cell)
+	if ct == nil {
+		return
+	}
 	if ct.Property == nil {
 		ct.Property = &ctypes.CellProperty{}
 	}
@@ -101,6 +120,9 @@ func setCellGridSpan(cell *godocxdocx.Cell, span int) {
 
 func setCellWidth(cell *godocxdocx.Cell, w int, wType stypes.TableWidth) {
 	ct := cellCT(cell)
+	if ct == nil {
+		return
+	}
 	if ct.Property == nil {
 		ct.Property = &ctypes.CellProperty{}
 	}

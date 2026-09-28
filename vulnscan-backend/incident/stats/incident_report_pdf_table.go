@@ -176,12 +176,60 @@ func (t *pdfReportTable) drawShortRow2Col(label, value string, rowH float64) {
 	t.pdf.SetXY(t.x0, y+needH)
 }
 
+// drawShortRow4Col 绘制 4 列行（标签/值/标签/值），两个值列等宽，
+// 长文本按值列宽度自动换行，行高取两列中较多的行数。
+func (t *pdfReportTable) drawShortRow4Col(k1, v1, k2, v2 string, rowH float64) {
+	t.pdf.SetFont("report-font", "", 10)
+	valW := (t.totalW() - 2*t.labelW) / 2
+	lineH := 5.0
+	w1 := t.pdf.SplitText(dashIfEmpty(v1), valW-4)
+	w2 := t.pdf.SplitText(dashIfEmpty(v2), valW-4)
+	n := len(w1)
+	if len(w2) > n {
+		n = len(w2)
+	}
+	if n < 1 {
+		n = 1
+	}
+	needH := rowH
+	if n > 1 {
+		needH = float64(n)*lineH + 4
+	}
+	if t.pageBottom-t.pdf.GetY() < needH+1 {
+		t.newPage()
+	}
+	x := t.x0
+	y := t.pdf.GetY()
+	t.pdf.Rect(x, y, t.totalW(), needH, "D")
+	t.pdf.Line(x+t.labelW, y, x+t.labelW, y+needH)
+	t.pdf.Line(x+t.labelW+valW, y, x+t.labelW+valW, y+needH)
+	t.pdf.Line(x+2*t.labelW+valW, y, x+2*t.labelW+valW, y+needH)
+	t.pdf.SetXY(x+2, y+2)
+	t.pdf.CellFormat(t.labelW-4, needH-4, k1, "", 0, "L", false, 0, "")
+	t.pdf.SetXY(x+t.labelW+valW+2, y+2)
+	t.pdf.CellFormat(t.labelW-4, needH-4, k2, "", 0, "L", false, 0, "")
+	t.drawColumnText(x+t.labelW, y, valW, w1, lineH, 2)
+	t.drawColumnText(x+2*t.labelW+valW, y, valW, w2, lineH, 2)
+	t.pdf.SetXY(x, y+needH)
+}
+
+// drawColumnText 在指定列区域按行绘制文本。
+func (t *pdfReportTable) drawColumnText(x, y, w float64, lines []string, lineH, pad float64) {
+	if len(lines) == 0 {
+		lines = []string{"-"}
+	}
+	t.pdf.SetXY(x+pad, y+pad)
+	for _, line := range lines {
+		t.pdf.SetX(x + pad)
+		t.pdf.CellFormat(w-pad*2, lineH, line, "", 1, "L", false, 0, "")
+	}
+}
+
 func (t *pdfReportTable) drawMetaRows(data *statsContract.IncidentReportData) {
 	t.pdf.SetFont("report-font", "", 10)
 	for _, row := range incidentReportMetaRows(data) {
 		if row[2] != "" {
-			t.drawShortRow2Col(row[0], row[1], 7)
-			t.drawShortRow2Col(row[2], row[3], 7)
+			t.drawShortRow4Col(row[0], row[1], row[2], row[3], 7)
 		} else {
 			t.drawShortRow2Col(row[0], row[1], 7)
 		}
