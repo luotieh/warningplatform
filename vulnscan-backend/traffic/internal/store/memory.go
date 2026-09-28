@@ -346,6 +346,8 @@ func (s *MemoryStore) ListEventsPage(q EventQuery) (EventPage, error) {
 			if (from != "" && date < from) || (to != "" && date > to) {
 				continue
 			}
+		case "3", "7":
+			// 近 N 天快捷范围：纯时间窗过滤，不按归档状态排除（语义同 MySQL 实现）。
 		case "all":
 		default:
 			if e.ArchiveDate != nil {

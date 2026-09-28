@@ -226,6 +226,10 @@ func (s *MySQLStore) ListEventsPage(q EventQuery) (EventPage, error) {
 	switch strings.ToLower(strings.TrimSpace(q.Scope)) {
 	case "", "today":
 		where = append(where, "archive_date IS NULL")
+	case "3", "7":
+		// 近三天/近七天是纯时间范围筛选（StartTime/EndTime 由调用方给出），不按归档
+		// 状态排除：已归档但活跃在窗口内的事件仍应可见，否则归档任务（启动回填/
+		// 每日 00:10）运行后这些范围会错误地显示为空。
 	case "archive":
 		where = append(where, "archive_date IS NOT NULL")
 		if from != "" {

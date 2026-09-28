@@ -34,6 +34,12 @@ func TestArchiveListRangesAndPagination(t *testing.T) {
 		{"scope=archive", 200, 3},
 		{"scope=today", 200, 1},
 		{"scope=all", 200, 4},
+		// 近三天/近七天按时间窗过滤，不按归档状态排除（窗口内 3 条事件均已归档，
+		// 归档过滤会把它们全部隐藏——这正是线上"近三天/近七天为空"的根因）。
+		{"scope=3&starttime=1785542400&endtime=1785801600", 200, 3},
+		{"scope=7&starttime=1785542400&endtime=1785801600", 200, 3},
+		// 仅今日保持「未归档视图」语义：窗口内无未归档事件。
+		{"scope=today&starttime=1785542400&endtime=1785801600", 200, 0},
 		{"scope=archive&archive_from=2026-09-12&archive_to=2026-09-14", 200, 2},
 		{"scope=archive&archive_from=2026-09-14&archive_to=2026-09-14", 200, 1},
 		{"scope=archive&date=2026-09-12", 200, 1},
