@@ -1,6 +1,7 @@
 package service
 
 import (
+	"strings"
 	"testing"
 
 	"vulnscan-backend/traffic/internal/store"
@@ -34,6 +35,23 @@ func TestBuildOccurrenceOmitsMissing(t *testing.T) {
 	}
 	if _, ok := occ["packets"]; ok {
 		t.Fatal("packets should be omitted when missing")
+	}
+}
+
+func TestBuildOccurrencePassesPacketHexComplete(t *testing.T) {
+	long := strings.Repeat("ab", 2048)
+	occ := buildOccurrence(map[string]any{
+		"time": "2026-06-30T10:00:00Z",
+		"raw_packet": map[string]any{
+			"packet_hex":  long,
+			"payload_hex": long,
+		},
+	})
+	if occ["packet_hex"] != long {
+		t.Fatalf("packet_hex must pass through untruncated, got len=%d", len(asString(occ["packet_hex"])))
+	}
+	if asString(occ["payload_hex"]) != long[:1024] || occ["payload_hex_truncated"] != true {
+		t.Fatalf("payload_hex preview bound changed: len=%d truncated=%v", len(asString(occ["payload_hex"])), occ["payload_hex_truncated"])
 	}
 }
 

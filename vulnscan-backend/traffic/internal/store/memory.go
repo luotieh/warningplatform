@@ -320,12 +320,45 @@ func (s *MemoryStore) UpdateEvent(eventID string, patch map[string]any) (domain.
 }
 
 func (s *MemoryStore) ListEventsPage(q EventQuery) (EventPage, error) {
-	from, to, err := q.ArchiveRange()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out, err := s.filterEventsLocked(q)
 	if err != nil {
 		return EventPage{}, err
 	}
+	sortEvents(out, q)
+	total := len(out)
+	page, pageSize := normalizePage(q.Page, q.PageSize)
+	start := (page - 1) * pageSize
+	if start > len(out) {
+		start = len(out)
+	}
+	end := start + pageSize
+	if end > len(out) {
+		end = len(out)
+	}
+	return EventPage{Items: out[start:end], Total: total}, nil
+}
+
+// ListEventsMatching 返回命中过滤条件的全部事件（不分页，按查询排序），
+// 供排行统计与排行筛选在 service 层按展示口径二次过滤。
+func (s *MemoryStore) ListEventsMatching(q EventQuery) ([]domain.Event, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	out, err := s.filterEventsLocked(q)
+	if err != nil {
+		return nil, err
+	}
+	sortEvents(out, q)
+	return out, nil
+}
+
+// filterEventsLocked 应用除分页/排序外的全部过滤条件（调用方须持读锁）。
+func (s *MemoryStore) filterEventsLocked(q EventQuery) ([]domain.Event, error) {
+	from, to, err := q.ArchiveRange()
+	if err != nil {
+		return nil, err
+	}
 	out := []domain.Event{}
 	for _, e := range s.events {
 		var aggregation map[string]any
@@ -347,6 +380,8 @@ func (s *MemoryStore) ListEventsPage(q EventQuery) (EventPage, error) {
 				continue
 			}
 		case "all":
+		case "3", "7":
+			// 近三天/近七天快捷范围：归档与否都可见，由 StartTime/EndTime 限定窗口。
 		default:
 			if e.ArchiveDate != nil {
 				continue
@@ -382,18 +417,7 @@ func (s *MemoryStore) ListEventsPage(q EventQuery) (EventPage, error) {
 		}
 		out = append(out, e)
 	}
-	sortEvents(out, q)
-	total := len(out)
-	page, pageSize := normalizePage(q.Page, q.PageSize)
-	start := (page - 1) * pageSize
-	if start > len(out) {
-		start = len(out)
-	}
-	end := start + pageSize
-	if end > len(out) {
-		end = len(out)
-	}
-	return EventPage{Items: out[start:end], Total: total}, nil
+	return out, nil
 }
 
 // sortEvents 按 EventQuery.Sort/Order 排序（与 MySQL eventOrderBy 口径一致）：

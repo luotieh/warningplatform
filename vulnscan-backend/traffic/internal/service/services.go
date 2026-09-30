@@ -357,6 +357,11 @@ func buildOccurrence(ly map[string]any) map[string]any {
 			occ["payload_hex"] = v
 		}
 	}
+	// 完整帧（含链路/IP/传输头）十六进制原样透传，供明细弹窗展示完整报文；
+	// 不做截断——截断的帧 hex 无法用于分析。原始命中在聚合存储中本就全量保留。
+	if v := asString(rp["packet_hex"]); v != "" {
+		occ["packet_hex"] = v
+	}
 	if v, ok := rp["packet_sequence"]; ok && v != nil {
 		occ["packet_sequence"] = toInt(v)
 	}

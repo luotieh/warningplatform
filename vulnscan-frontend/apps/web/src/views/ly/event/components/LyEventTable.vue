@@ -9,7 +9,7 @@ import { useUserStore } from '@vben/stores';
 import { lyEventPushToAi, lyEventReview } from '#/api/ly';
 import { deepflowEventArchiveUrl, deepflowEventEvidenceUrl, deepflowGetOccurrences } from '#/api/ly/deepflow';
 import { message } from '#/adapter/naive';
-import { formatBoolText, formatBytes, formatDirection, formatHexTruncated, formatTimestamp } from '#/utils/ly';
+import { formatBoolText, formatBytes, formatDirection, formatTimestamp } from '#/utils/ly';
 import { eventVictimAssets } from '#/utils/ly-asset';
 
 import ReportModal from '../detail/components/ReportModal.vue';
@@ -58,13 +58,12 @@ const occRows = ref<Array<{
   idx: number; hit_id: string; time: string; size: string; packets: string;
   message_direction: string; dns_role: string; dns_query: string;
   payload_text: string; payload_hex: string;
-  payload_hex_truncated: boolean; packet_sequence: any; captured_length: any;
+  packet_sequence: any; captured_length: any;
   wire_length: any; capture_truncated: any; capture_time: string;
   session_start_time: string; request: any; response: any;
 }>>([]);
 
 const expandedOccIndices = ref<Set<number>>(new Set());
-const expandedHex = ref<Set<string>>(new Set());
 const currentEventContext = ref<Record<string, any>>({});
 
 // 明细弹窗「威胁情报」卡片的被攻击资产：目标侧命中启用资产则显示
@@ -88,14 +87,38 @@ function toggleOccExpand(idx: number) {
   expandedOccIndices.value = next;
 }
 
-function toggleHex(key: string) {
-  const next = new Set(expandedHex.value);
-  if (next.has(key)) {
-    next.delete(key);
-  } else {
-    next.add(key);
+interface PayloadContentView {
+  kind: 'text' | 'unparsed';
+  text: string;
+  reason: string;
+}
+
+const payloadContentCache = new Map<number, PayloadContentView>();
+
+// 明细弹窗「报文内容」：只展示探针上送的载荷明文（payload_text）；明文
+// 缺失时按载荷头部分类不可解析原因（TLS 加密 / 二进制），不展示 hex。
+// 完整报文（packet_hex）在「完整明细」弹窗展示。
+function analyzePayloadContent(occ: { payload_text: string; payload_hex: string }): PayloadContentView {
+  if (occ.payload_text && occ.payload_text.trim() !== '') {
+    return { kind: 'text', text: occ.payload_text, reason: '' };
   }
-  expandedHex.value = next;
+  const head = (occ.payload_hex || '').replace(/[^0-9a-fA-F]/g, '');
+  const b0 = Number.parseInt(head.slice(0, 2) || 'ff', 16);
+  const b1 = Number.parseInt(head.slice(2, 4) || 'ff', 16);
+  // TLS 记录层：0x16 握手 / 0x17 应用数据 / 0x15 告警，次字节 0x03（TLS 1.x 版本号高字节）。
+  if ((b0 === 0x15 || b0 === 0x16 || b0 === 0x17) && b1 === 0x03) {
+    return { kind: 'unparsed', text: '', reason: 'TLS 加密载荷（HTTPS），内容在传输层已加密' };
+  }
+  return { kind: 'unparsed', text: '', reason: '加密或二进制载荷，探针未提取到明文' };
+}
+
+function payloadContent(occ: { idx: number; payload_text: string; payload_hex: string }): PayloadContentView {
+  let view = payloadContentCache.get(occ.idx);
+  if (!view) {
+    view = analyzePayloadContent(occ);
+    payloadContentCache.set(occ.idx, view);
+  }
+  return view;
 }
 
 function buildOccRows(occ: any[], offset = 0) {
@@ -112,7 +135,6 @@ function buildOccRows(occ: any[], offset = 0) {
       dns_query: item.dns_query || '',
       payload_text: item.payload_text || '',
       payload_hex: item.payload_hex || '',
-      payload_hex_truncated: Boolean(item.payload_hex_truncated),
       packet_sequence: item.packet_sequence,
       captured_length: item.captured_length,
       wire_length: item.wire_length,
@@ -133,7 +155,7 @@ async function openOccurrences(row: Record<string, any>) {
   occDeclared.value = undefined;
   occSnapshot.value = 0;
   evidenceVisible.value = false;
-  expandedHex.value = new Set();
+  payloadContentCache.clear();
   currentEventContext.value = row;
   expandedOccIndices.value = new Set();
   occVisible.value = true;
@@ -181,9 +203,21 @@ function buildAnalysisPayload(row: Record<string, any>) {
     event_id: String(row.event_id || row.deepsoc_event_id || row.id),
     rule_desc: row.desc || '',
     // 研判按 event_id 定位历史事件，源目地址仅作为分析信息。
-    threat_source: row.src_ip || row.attackDevice || '',
-    victim_target: row.dst_ip || row.victimDevice || '',
+    // 威胁侧/资产侧语义归属优先：原始报文 src/dst 不代表攻击方向——
+    // DNS 应答的源是 DNS 服务器、HTTP 应答的源是远端服务器，按报文方向
+    // 取通信源会让报告把 DNS 服务器当攻击方分析。
+    threat_source: firstMeaningful(row.attackDevice, row.src_ip),
+    victim_target: firstMeaningful(row.victimDevice, row.dst_ip),
   };
+}
+
+// firstMeaningful 取第一个非空且非占位符（'-'）的值。
+function firstMeaningful(...values: unknown[]): string {
+  for (const value of values) {
+    const text = String(value ?? '').trim();
+    if (text && text !== '-') return text;
+  }
+  return '';
 }
 
 async function ensureAnalysis(row: Record<string, any>) {
@@ -699,21 +733,11 @@ onMounted(() => {
                 <span class="occ-detail-label">截断标记</span>
                 <NTag size="tiny" type="error" round>已截断</NTag>
               </div>
-              <div v-if="occ.payload_text" class="occ-detail-row">
-                <span class="occ-detail-label">载荷明文</span>
-                <code class="occ-code-block">{{ occ.payload_text }}</code>
-              </div>
-              <div v-if="occ.payload_hex" class="occ-detail-row">
-                <span class="occ-detail-label">载荷 HEX</span>
+              <div v-if="occ.payload_text || occ.payload_hex" class="occ-detail-row">
+                <span class="occ-detail-label">报文内容</span>
                 <div class="occ-hex-wrap">
-                  <code class="occ-hex-text">{{ expandedHex.has('payload-' + occ.idx) ? occ.payload_hex : formatHexTruncated(occ.payload_hex).text }}</code>
-                  <NButton v-if="occ.payload_hex_truncated || occ.payload_hex.length > 128" text size="tiny" type="primary" @click.stop="toggleHex('payload-' + occ.idx)">
-                    {{ expandedHex.has('payload-' + occ.idx) ? '收起' : (occ.payload_hex_truncated ? '展开（仍为截断内容）' : '展开完整报文') }}
-                  </NButton>
-                  <span v-if="occ.payload_hex_truncated" class="occ-hex-hint">
-                    该记录为历史入库预览，HEX 已截断（仅保留前 512 字节），完整报文请
-                    <a :href="deepflowEventArchiveUrl(String(currentEventContext.event_id || currentEventContext.id || ''))" target="_blank" rel="noopener">下载 PCAP 证据</a>
-                  </span>
+                  <code v-if="payloadContent(occ).kind === 'text'" class="occ-code-block">{{ payloadContent(occ).text }}</code>
+                  <span v-else class="occ-hex-hint">无法解析明文：{{ payloadContent(occ).reason }}，完整报文见「完整明细」</span>
                 </div>
               </div>
               <template v-if="occ.request">

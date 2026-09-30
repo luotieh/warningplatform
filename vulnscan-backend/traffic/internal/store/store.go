@@ -19,6 +19,7 @@ type Store interface {
 	GetEvent(eventID string) (domain.Event, bool)
 	ListEvents() []domain.Event
 	ListEventsPage(q EventQuery) (EventPage, error)
+	ListEventsMatching(q EventQuery) ([]domain.Event, error)
 	ListEventsConvergedDue(threshold time.Time) []domain.Event
 	ListEventsByTargetIP(ip string, from time.Time, to time.Time) []domain.Event
 	ArchiveConvergedEvents(threshold time.Time, batchSize int) (int, error)
@@ -84,6 +85,10 @@ type EventQuery struct {
 	Asset       string
 	StartTime   *time.Time
 	EndTime     *time.Time
+	// RankKey/RankValue 排行维度筛选（attackDevice/victimDevice/typeText）：
+	// 按列表展示口径的派生值精确匹配，在 service 层应用（SQL 无法表达 IOC 归属修正）。
+	RankKey   string
+	RankValue string
 	// Sort 排序依据：time（默认，created_at 倒序）/ payload（总载荷）/ frequency（命中频次）/ probability（研判概率）。
 	Sort string
 	// Order 排序方向：desc（默认）/ asc。

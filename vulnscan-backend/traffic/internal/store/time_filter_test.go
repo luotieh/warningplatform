@@ -68,3 +68,46 @@ func TestListEventsPageTimeRangeFilter(t *testing.T) {
 		t.Fatalf("total=%d want %d", page.Total, len(want))
 	}
 }
+
+// ListEventsMatching 应忽略分页参数返回全部命中事件，并保留 [StartTime, EndTime) 时间窗过滤。
+func TestListEventsMatchingIgnoresPagination(t *testing.T) {
+	st := NewMemoryStore()
+	at := func(day, hour int) time.Time {
+		return time.Date(2026, 9, day, hour, 0, 0, 0, time.UTC)
+	}
+	// 25 条区间内事件 + 2 条区间外，远超默认分页大小。
+	for i := 0; i < 25; i++ {
+		if _, err := st.CreateEvent(domain.Event{
+			EventID:   "evt-match-" + string(rune('a'+i)),
+			EventName: "区间内",
+			CreatedAt: at(19, 12),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, e := range []domain.Event{
+		{EventID: "evt-out-before", EventName: "早于下界", CreatedAt: at(18, 12)},
+		{EventID: "evt-out-at-end", EventName: "结束边界不含", CreatedAt: at(20, 0)},
+	} {
+		if _, err := st.CreateEvent(e); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	start, end := at(19, 0), at(20, 0)
+	got, err := st.ListEventsMatching(EventQuery{
+		Scope: "all", Page: 2, PageSize: 5,
+		StartTime: &start, EndTime: &end,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 25 {
+		t.Fatalf("len=%d want 25", len(got))
+	}
+	for _, e := range got {
+		if e.CreatedAt.Before(start) || !e.CreatedAt.Before(end) {
+			t.Fatalf("event %s outside [start,end)", e.EventID)
+		}
+	}
+}

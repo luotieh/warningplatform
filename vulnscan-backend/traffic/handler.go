@@ -288,6 +288,38 @@ func (h *Handler) CreateEvent(c *gin.Context) {
 
 func (h *Handler) ListEvents(c *gin.Context) {
 	// 服务端分页/过滤：scope=today（未归档）/ archive（日期范围可选）/ all（全局搜索）。
+	q, err := eventQueryFromRequest(c)
+	if err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	items, total, err := h.events.ListPage(c.Request.Context(), q)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	ok(c, map[string]any{"items": items, "total": total, "page": q.Page, "page_size": q.PageSize})
+}
+
+// EventRank 事件排行统计（GET /events/rank）：与列表相同的基础过滤条件
+// （scope/时间窗/级别/关键字/资产），返回 attackDevice/victimDevice/typeText
+// 三个维度的 Top 值及命中数，供事件排行筛选卡片展示。
+func (h *Handler) EventRank(c *gin.Context) {
+	q, err := eventQueryFromRequest(c)
+	if err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	ranks, err := h.events.RankCounts(c.Request.Context(), q)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	ok(c, ranks)
+}
+
+// eventQueryFromRequest 解析事件列表/排行共用的过滤条件。
+func eventQueryFromRequest(c *gin.Context) (store.EventQuery, error) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	if page < 1 {
 		page = 1
@@ -309,6 +341,9 @@ func (h *Handler) ListEvents(c *gin.Context) {
 		Level:       c.Query("level"),
 		Keyword:     c.Query("keyword"),
 		Asset:       c.Query("asset"),
+		// 排行维度筛选：rank_key=attackDevice|victimDevice|typeText，rank_value=展示值。
+		RankKey:   c.Query("rank_key"),
+		RankValue: c.Query("rank_value"),
 		// 排序：sort=time|payload|frequency|probability，order=desc|asc（非法值由 store 兜底默认）。
 		Sort:  c.Query("sort"),
 		Order: c.Query("order"),
@@ -326,15 +361,9 @@ func (h *Handler) ListEvents(c *gin.Context) {
 		}
 	}
 	if _, _, err := q.ArchiveRange(); err != nil {
-		fail(c, http.StatusBadRequest, err.Error())
-		return
+		return q, err
 	}
-	items, total, err := h.events.ListPage(c.Request.Context(), q)
-	if err != nil {
-		fail(c, http.StatusInternalServerError, err.Error())
-		return
-	}
-	ok(c, map[string]any{"items": items, "total": total, "page": page, "page_size": pageSize})
+	return q, nil
 }
 
 // GetArchiveJob 查询每日归档任务（GET /events/archive/jobs/:jobID）。

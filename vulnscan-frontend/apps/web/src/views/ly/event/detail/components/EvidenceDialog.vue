@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { NAlert, NModal, NSpin } from 'naive-ui';
 import { deepflowGetOccurrences } from '#/api/ly/deepflow';
 
@@ -24,6 +24,29 @@ watch(() => [props.visible, props.eventId, props.hitId, props.version], async ()
     if (current === request) loading.value = false;
   }
 });
+
+// 完整报文（packet_hex，含链路/IP/传输头的完整帧）以 hexdump 形式展示，
+// 与抓包工具一致：偏移 + 十六进制 + ASCII。
+const packetBytes = computed(() => {
+  const clean = String(evidence.value.packet_hex || '').replace(/[^0-9a-fA-F]/g, '');
+  return Math.floor(clean.length / 2);
+});
+
+const packetDump = computed(() => {
+  const clean = String(evidence.value.packet_hex || '').replace(/[^0-9a-fA-F]/g, '');
+  const bytes: number[] = [];
+  for (let i = 0; i + 1 < clean.length; i += 2) {
+    bytes.push(Number.parseInt(clean.slice(i, i + 2), 16));
+  }
+  const lines: string[] = [];
+  for (let off = 0; off < bytes.length; off += 16) {
+    const chunk = bytes.slice(off, off + 16);
+    const hexPart = chunk.map((b) => b.toString(16).padStart(2, '0')).join(' ').padEnd(47, ' ');
+    const ascii = chunk.map((b) => (b >= 0x20 && b <= 0x7e ? String.fromCharCode(b) : '.')).join('');
+    lines.push(`${off.toString(16).padStart(8, '0')}  ${hexPart}  ${ascii}`);
+  }
+  return lines.join('\n');
+});
 </script>
 
 <template>
@@ -33,8 +56,49 @@ watch(() => [props.visible, props.eventId, props.hitId, props.version], async ()
       <template v-else>
         <div>事件：{{ eventId }}</div>
         <div style="overflow-wrap:anywhere">明细 ID：{{ hitId }}</div>
+        <div v-if="evidence.payload_text" class="evidence-section">
+          <div class="evidence-section-title">报文明文</div>
+          <pre class="evidence-block">{{ evidence.payload_text }}</pre>
+        </div>
+        <div v-if="evidence.packet_hex" class="evidence-section">
+          <div class="evidence-section-title">完整报文（packet_hex · {{ packetBytes }} 字节）</div>
+          <pre class="evidence-block evidence-hex">{{ packetDump }}</pre>
+        </div>
+        <div class="evidence-section-title">原始明细 JSON</div>
         <pre style="max-height:65vh;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere">{{ JSON.stringify(evidence, null, 2) }}</pre>
       </template>
     </NSpin>
   </NModal>
 </template>
+
+<style scoped>
+.evidence-section {
+  margin: 12px 0;
+}
+
+.evidence-section-title {
+  margin: 12px 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+}
+
+.evidence-block {
+  max-height: 40vh;
+  padding: 8px 10px;
+  margin: 0;
+  overflow: auto;
+  font-family: Consolas, Monaco, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: #f7f8fa;
+  border-radius: 6px;
+}
+
+.evidence-hex {
+  white-space: pre;
+  overflow-wrap: normal;
+}
+</style>

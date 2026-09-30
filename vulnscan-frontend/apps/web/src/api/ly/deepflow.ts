@@ -138,6 +138,22 @@ export function deepflowGetEventsPage(params?: Record<string, any>) {
   }));
 }
 
+export interface EventRankItem {
+  name: string;
+  value: number;
+}
+
+export interface EventRankResult {
+  attackDevice: EventRankItem[];
+  victimDevice: EventRankItem[];
+  typeText: EventRankItem[];
+}
+
+// 事件排行统计（服务端按基础过滤条件在全量结果上计数，与列表筛选同口径）。
+export function deepflowGetEventRank(params?: Record<string, any>) {
+  return deepflowGet<EventRankResult>('/events/rank', params);
+}
+
 export function deepflowGetEventDetail(eventId: string) {
   return deepflowGet(`/events/detail/${eventId}`);
 }

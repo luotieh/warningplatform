@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/netip"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -68,6 +69,11 @@ func (s *EventService) LyCompatibleList(ctx context.Context) []map[string]any {
 
 // ListPage 服务端分页/过滤的事件列表（LY 兼容结构），供今日/归档视图与全局搜索使用。
 func (s *EventService) ListPage(ctx context.Context, q store.EventQuery) ([]map[string]any, int, error) {
+	// 排行筛选（attackDevice/victimDevice/typeText）按列表展示口径的派生值匹配，
+	// IOC 归属修正与类型展示名无法用 SQL 表达，走内存过滤分页。
+	if strings.TrimSpace(q.RankKey) != "" && strings.TrimSpace(q.RankValue) != "" {
+		return s.listPageRanked(ctx, q)
+	}
 	page, err := s.core.Store.ListEventsPage(q)
 	if err != nil {
 		return nil, 0, err
@@ -77,6 +83,152 @@ func (s *EventService) ListPage(ctx context.Context, q store.EventQuery) ([]map[
 		rows = append(rows, lyCompatibleEvent(event))
 	}
 	return rows, page.Total, nil
+}
+
+// listPageRanked 排行筛选路径：store 层按基础条件过滤并排序（不分页），
+// service 层按展示口径精确匹配排行值后再分页，保证总数/页大小与筛选一致。
+func (s *EventService) listPageRanked(ctx context.Context, q store.EventQuery) ([]map[string]any, int, error) {
+	key := strings.TrimSpace(q.RankKey)
+	if key != "attackDevice" && key != "victimDevice" && key != "typeText" {
+		return nil, 0, errors.New("invalid rank key")
+	}
+	want := strings.TrimSpace(q.RankValue)
+	matching, err := s.core.Store.ListEventsMatching(q)
+	if err != nil {
+		return nil, 0, err
+	}
+	rows := []map[string]any{}
+	for _, event := range matching {
+		row := lyCompatibleEvent(event)
+		if eventRankDimensions(event, row)[key] != want {
+			continue
+		}
+		rows = append(rows, row)
+	}
+	total := len(rows)
+	page, pageSize := q.Page, q.PageSize
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 20
+	}
+	if pageSize > 200 {
+		pageSize = 200
+	}
+	start := (page - 1) * pageSize
+	if start > total {
+		start = total
+	}
+	end := start + pageSize
+	if end > total {
+		end = total
+	}
+	return rows[start:end], total, nil
+}
+
+// RankItem 单个排行值及命中数。
+type RankItem struct {
+	Name  string `json:"name"`
+	Value int    `json:"value"`
+}
+
+// RankCounts 事件排行统计：在基础过滤结果全集上（不分页、不含排行筛选本身）
+// 按展示口径统计 attackDevice/victimDevice/typeText 三个维度的 Top 8，
+// 与列表筛选同源，保证点击排行标签后的列表总数与计数一致。
+func (s *EventService) RankCounts(ctx context.Context, q store.EventQuery) (map[string][]RankItem, error) {
+	q.RankKey, q.RankValue = "", ""
+	matching, err := s.core.Store.ListEventsMatching(q)
+	if err != nil {
+		return nil, err
+	}
+	counts := map[string]map[string]int{
+		"attackDevice": {},
+		"victimDevice": {},
+		"typeText":     {},
+	}
+	for _, event := range matching {
+		row := lyCompatibleEvent(event)
+		for key, value := range eventRankDimensions(event, row) {
+			if value = strings.TrimSpace(value); value != "" {
+				counts[key][value]++
+			}
+		}
+	}
+	out := map[string][]RankItem{}
+	for key, m := range counts {
+		items := make([]RankItem, 0, len(m))
+		for name, value := range m {
+			items = append(items, RankItem{Name: name, Value: value})
+		}
+		sort.Slice(items, func(i, j int) bool {
+			if items[i].Value != items[j].Value {
+				return items[i].Value > items[j].Value
+			}
+			return items[i].Name < items[j].Name
+		})
+		if len(items) > 8 {
+			items = items[:8]
+		}
+		out[key] = items
+	}
+	return out, nil
+}
+
+// eventRankDimensions 三个排行维度的展示值：attackDevice/victimDevice 直接取
+// LY 兼容行（含 IOC 归属修正），typeText 按前端同口径的类型映射推导。
+func eventRankDimensions(event domain.Event, row map[string]any) map[string]string {
+	ctx := map[string]any{}
+	if event.Context != "" {
+		_ = json.Unmarshal([]byte(event.Context), &ctx)
+	}
+	return map[string]string{
+		"attackDevice": stringValue(row["attackDevice"]),
+		"victimDevice": stringValue(row["victimDevice"]),
+		"typeText":     lyTypeText(ctx),
+	}
+}
+
+// lyTypeText 事件类型展示名，与前端 utils/ly.ts EVENT_TYPE_MAP 口径一致：
+// 未知类型回退原始值，空类型回退「-」。
+func lyTypeText(context map[string]any) string {
+	eventType := firstNonEmpty(stringValue(context["event_type"]), stringValue(context["type"]), "cap")
+	switch eventType {
+	case "black":
+		return "黑名单"
+	case "sus":
+		return "风险通讯"
+	case "scan":
+		return "扫描"
+	case "port_scan":
+		return "端口扫描"
+	case "ip_scan":
+		return "IP扫描"
+	case "dns":
+		return "DNS"
+	case "dns_tun":
+		return "DNS隧道"
+	case "frn_trip":
+		return "服务器外连"
+	case "mining":
+		return "挖矿"
+	case "icmp_tun":
+		return "ICMP隧道"
+	case "mo":
+		return "追踪"
+	case "ti":
+		return "情报"
+	case "cap":
+		return "包检测"
+	case "dga":
+		return "DGA"
+	case "srv":
+		return "异常服务"
+	}
+	if eventType == "" {
+		return "-"
+	}
+	return eventType
 }
 
 // GetArchiveJob 查询每日归档任务状态。

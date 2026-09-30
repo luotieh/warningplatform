@@ -80,6 +80,58 @@ func TestArchiveConvergedEventsAndPageScopes(t *testing.T) {
 	}
 }
 
+// 近三天/近七天（scope=3/7）是时间窗快捷筛选：不再回退到「仅看未归档」，
+// 已归档但开始时间落在窗口内的事件必须可见；today 语义保持不变。
+func TestRecentWindowScopesIncludeArchived(t *testing.T) {
+	st := NewMemoryStore()
+	at := func(day, hour int) time.Time { return time.Date(2026, 9, day, hour, 0, 0, 0, time.UTC) }
+	last28 := at(28, 12)
+	last20 := at(20, 12)
+	seed := []domain.Event{
+		{EventID: "evt-archived-in", EventName: "归档-窗口内", CreatedAt: at(28, 8), AggregationClosed: true, LastSeenAt: &last28},
+		{EventID: "evt-archived-out", EventName: "归档-窗口外", CreatedAt: at(20, 8), AggregationClosed: true, LastSeenAt: &last20},
+		{EventID: "evt-live-in", EventName: "未归档-窗口内", CreatedAt: at(29, 8)},
+		{EventID: "evt-live-out", EventName: "未归档-窗口外", CreatedAt: at(20, 9)},
+	}
+	for _, e := range seed {
+		if _, err := st.CreateEvent(e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := st.ArchiveConvergedEvents(at(29, 0), 10); err != nil {
+		t.Fatal(err)
+	}
+	start, end := at(28, 0), at(30, 0)
+	for _, scope := range []string{"3", "7"} {
+		page, err := st.ListEventsPage(EventQuery{Scope: scope, Page: 1, PageSize: 100, StartTime: &start, EndTime: &end})
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := map[string]bool{}
+		for _, e := range page.Items {
+			got[e.EventID] = true
+		}
+		for _, want := range []string{"evt-archived-in", "evt-live-in"} {
+			if !got[want] {
+				t.Fatalf("scope=%s missing %s: %v", scope, want, got)
+			}
+		}
+		for _, unwanted := range []string{"evt-archived-out", "evt-live-out"} {
+			if got[unwanted] {
+				t.Fatalf("scope=%s unexpected %s", scope, unwanted)
+			}
+		}
+	}
+	// today 语义：仍只看未归档。
+	today, err := st.ListEventsPage(EventQuery{Scope: "today", Page: 1, PageSize: 100, StartTime: &start, EndTime: &end})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if today.Total != 1 || today.Items[0].EventID != "evt-live-in" {
+		t.Fatalf("today items=%v want only evt-live-in", today.Items)
+	}
+}
+
 func TestSaveGetArchiveJob(t *testing.T) {
 	st := NewMemoryStore()
 	job, err := st.SaveArchiveJob(domain.ArchiveJob{Period: "2026-08-12", Status: "running"})

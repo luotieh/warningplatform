@@ -217,9 +217,63 @@ const eventSelectCols = `id, event_id, event_name, title, message, context, sour
 
 // ListEventsPage 服务端分页/过滤查询：today=未归档、archive=归档日期范围（可选）、all=全量。
 func (s *MySQLStore) ListEventsPage(q EventQuery) (EventPage, error) {
-	from, to, err := q.ArchiveRange()
+	whereSQL, args, err := eventListWhere(q)
 	if err != nil {
 		return EventPage{}, err
+	}
+	var total int
+	if err := s.db.QueryRowContext(context.Background(),
+		"SELECT COUNT(*) FROM events"+whereSQL, args...).Scan(&total); err != nil {
+		return EventPage{}, err
+	}
+	page, pageSize := normalizePage(q.Page, q.PageSize)
+	orderBy := eventOrderBy(q)
+	rows, err := s.db.QueryContext(context.Background(),
+		"SELECT "+eventSelectCols+" FROM events"+whereSQL+
+			" ORDER BY "+orderBy+" LIMIT ? OFFSET ?",
+		append(args, pageSize, (page-1)*pageSize)...)
+	if err != nil {
+		return EventPage{}, err
+	}
+	defer rows.Close()
+	out := make([]domain.Event, 0, pageSize)
+	for rows.Next() {
+		e, err := scanEvent(rows)
+		if err == nil {
+			out = append(out, e)
+		}
+	}
+	return EventPage{Items: out, Total: total}, nil
+}
+
+// ListEventsMatching 返回命中过滤条件的全部事件（不分页，按查询排序），
+// 供排行统计与排行筛选在 service 层按展示口径二次过滤。
+func (s *MySQLStore) ListEventsMatching(q EventQuery) ([]domain.Event, error) {
+	whereSQL, args, err := eventListWhere(q)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.db.QueryContext(context.Background(),
+		"SELECT "+eventSelectCols+" FROM events"+whereSQL+" ORDER BY "+eventOrderBy(q), args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []domain.Event{}
+	for rows.Next() {
+		e, err := scanEvent(rows)
+		if err == nil {
+			out = append(out, e)
+		}
+	}
+	return out, rows.Err()
+}
+
+// eventListWhere 构造事件列表查询的 WHERE 子句与参数（分页/排行统计共用口径）。
+func eventListWhere(q EventQuery) (string, []any, error) {
+	from, to, err := q.ArchiveRange()
+	if err != nil {
+		return "", nil, err
 	}
 	where := []string{"(CASE WHEN JSON_VALID(context) THEN COALESCE(JSON_UNQUOTE(JSON_EXTRACT(context, '$.canonical_event_id')), event_id) ELSE event_id END) = event_id"}
 	args := []any{}
@@ -237,6 +291,9 @@ func (s *MySQLStore) ListEventsPage(q EventQuery) (EventPage, error) {
 			args = append(args, to)
 		}
 	case "all":
+	case "3", "7":
+		// 近三天/近七天快捷范围：归档与否都可见，由 StartTime/EndTime 限定窗口；
+		// 落到 default 会被强制 archive_date IS NULL，退化成「仅看今日」。
 	default:
 		where = append(where, "archive_date IS NULL")
 	}
@@ -266,29 +323,7 @@ func (s *MySQLStore) ListEventsPage(q EventQuery) (EventPage, error) {
 	if len(where) > 0 {
 		whereSQL = " WHERE " + strings.Join(where, " AND ")
 	}
-	var total int
-	if err := s.db.QueryRowContext(context.Background(),
-		"SELECT COUNT(*) FROM events"+whereSQL, args...).Scan(&total); err != nil {
-		return EventPage{}, err
-	}
-	page, pageSize := normalizePage(q.Page, q.PageSize)
-	orderBy := eventOrderBy(q)
-	rows, err := s.db.QueryContext(context.Background(),
-		"SELECT "+eventSelectCols+" FROM events"+whereSQL+
-			" ORDER BY "+orderBy+" LIMIT ? OFFSET ?",
-		append(args, pageSize, (page-1)*pageSize)...)
-	if err != nil {
-		return EventPage{}, err
-	}
-	defer rows.Close()
-	out := make([]domain.Event, 0, pageSize)
-	for rows.Next() {
-		e, err := scanEvent(rows)
-		if err == nil {
-			out = append(out, e)
-		}
-	}
-	return EventPage{Items: out, Total: total}, nil
+	return whereSQL, args, nil
 }
 
 func escapeLike(s string) string {

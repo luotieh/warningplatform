@@ -23,8 +23,9 @@ import {
 } from '#/utils/ly-asset';
 
 import { useLyStore } from '#/store/ly';
-import { countByKey, matchesEventKeyword } from '#/utils/ly';
+import { matchesEventKeyword } from '#/utils/ly';
 import { eventAssetNames } from '#/utils/ly-asset';
+import { deepflowGetEventRank, type EventRankResult } from '#/api/ly/deepflow';
 
 import LyEventTable from '../components/LyEventTable.vue';
 import { type ArchivePeriod } from './archive-filter';
@@ -33,6 +34,9 @@ defineOptions({ name: 'LyEventList' });
 
 const route = useRoute();
 const lyStore = useLyStore();
+
+// 事件排行统计（服务端按基础过滤条件在全量结果上计数，与列表筛选同口径）。
+const ranks = ref<EventRankResult>({ attackDevice: [], victimDevice: [], typeText: [] });
 
 const state = reactive({
   level: '',
@@ -116,7 +120,28 @@ async function loadEvents() {
     params.sort = state.sort;
     params.order = state.order;
   }
-  await lyStore.loadEvents(params);
+  // 排行维度筛选随查询下发，由服务端按展示口径过滤分页。
+  if (state.rankKey && state.rankValue) {
+    params.rank_key = state.rankKey;
+    params.rank_value = state.rankValue;
+  }
+  // 排行统计与列表共用基础过滤条件（不含分页/排序/排行筛选本身），
+  // 服务端在全量结果上计数，标签数字与点击后的列表总数一致。
+  const rankParams: Record<string, any> = { ...params };
+  for (const key of ['page', 'page_size', 'sort', 'order', 'rank_key', 'rank_value']) {
+    delete rankParams[key];
+  }
+  const [, rankResult] = await Promise.all([
+    lyStore.loadEvents(params),
+    deepflowGetEventRank(rankParams).catch(() => null),
+  ]);
+  if (rankResult) {
+    ranks.value = {
+      attackDevice: rankResult.attackDevice || [],
+      victimDevice: rankResult.victimDevice || [],
+      typeText: rankResult.typeText || [],
+    };
+  }
   state.total = lyStore.eventTotal;
   const maxPage = Math.max(1, Math.ceil(state.total / state.pageSize));
   if (state.page > maxPage) {
@@ -201,16 +226,12 @@ const baseRows = computed(() => {
     }),
   );
 });
-// 叠加"事件排行筛选"后的最终列表（表格与分页用）。
-const filteredRows = computed(() => {
-  if (!state.rankKey || !state.rankValue) return baseRows.value;
-  return baseRows.value.filter(
-    (item) => String(item[state.rankKey] ?? '') === state.rankValue,
-  );
-});
-const attackRank = computed(() => countByKey(baseRows.value, 'attackDevice').slice(0, 8));
-const victimRank = computed(() => countByKey(baseRows.value, 'victimDevice').slice(0, 8));
-const typeRank = computed(() => countByKey(baseRows.value, 'typeText').slice(0, 8));
+// 排行筛选已由服务端完成（rank_key/rank_value 随查询下发），前端不再二次过滤。
+const filteredRows = computed(() => baseRows.value);
+// 排行统计来自服务端全量计数（与列表筛选同口径），不再按当前页估算。
+const attackRank = computed(() => ranks.value.attackDevice);
+const victimRank = computed(() => ranks.value.victimDevice);
+const typeRank = computed(() => ranks.value.typeText);
 
 const RANK_LABELS: Record<string, string> = {
   attackDevice: '威胁来源',
@@ -224,19 +245,27 @@ function isRankActive(key: RankKey, value: string) {
   return state.rankKey === key && state.rankValue === value;
 }
 
-// 点击排行标签：在当前列表内筛选（不跳转）；再次点同一标签则取消。
+// 点击排行标签：按服务端筛选并回到第 1 页（不跳转）；再次点同一标签则取消。
 function rankFilter(key: RankKey, value: string) {
   if (isRankActive(key, value)) {
     clearRankFilter();
-    return;
+  } else {
+    state.rankKey = key;
+    state.rankValue = value;
   }
-  state.rankKey = key;
-  state.rankValue = value;
+  state.page = 1;
+  void loadEvents();
 }
 
 function clearRankFilter() {
   state.rankKey = '';
   state.rankValue = '';
+}
+
+function onRankTagClose() {
+  clearRankFilter();
+  state.page = 1;
+  void loadEvents();
 }
 
 // 订阅事件列表广播：分析完成/失败等行级状态变化时防抖刷新当前页，
@@ -364,7 +393,7 @@ onUnmounted(() => {
             @update:value="onSortChange"
           />
           <NButton type="primary" :loading="lyStore.loading" @click="refreshEvents">刷新</NButton>
-          <NTag v-if="state.rankKey" size="small" type="info" closable @close="clearRankFilter">
+          <NTag v-if="state.rankKey" size="small" type="info" closable @close="onRankTagClose">
             {{ RANK_LABELS[state.rankKey] }}：{{ state.rankValue }}
           </NTag>
         </NSpace>
