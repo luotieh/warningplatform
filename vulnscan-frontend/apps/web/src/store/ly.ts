@@ -23,6 +23,7 @@ import { normalizeLyEvents } from '#/utils/ly';
 export const useLyStore = defineStore('ly', {
   state: () => ({
     loading: false,
+    eventRequestId: 0,
     events: [] as Record<string, any>[],
     eventTotal: 0,
     internal: [] as Record<string, any>[],
@@ -42,6 +43,7 @@ export const useLyStore = defineStore('ly', {
   }),
   actions: {
     async loadEvents(params: Record<string, any> = {}) {
+      const requestId = ++this.eventRequestId;
       this.loading = true;
       try {
         // 事件数据源统一为 /api/traffic/events/list（服务端分页）。
@@ -52,6 +54,7 @@ export const useLyStore = defineStore('ly', {
           page_size: 200,
           ...params,
         });
+        if (requestId !== this.eventRequestId) return this.events;
         const items = Array.isArray(data?.items) ? data.items : [];
         this.events = normalizeLyEvents(items);
         this.eventTotal = Number(data?.total || 0);
@@ -62,7 +65,7 @@ export const useLyStore = defineStore('ly', {
         // 用户会继续看到旧数据并可再次刷新。
         return this.events;
       } finally {
-        this.loading = false;
+        if (requestId === this.eventRequestId) this.loading = false;
       }
     },
     async loadConfigs() {

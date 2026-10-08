@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 
 import {
@@ -23,7 +23,6 @@ import {
 } from '#/utils/ly-asset';
 
 import { useLyStore } from '#/store/ly';
-import { matchesEventKeyword } from '#/utils/ly';
 import { eventAssetNames } from '#/utils/ly-asset';
 import { deepflowGetEventRank, type EventRankResult } from '#/api/ly/deepflow';
 
@@ -90,7 +89,10 @@ async function loadAssets() {
   }
 }
 
+let listRequestId = 0;
+
 async function loadEvents() {
+  const requestId = ++listRequestId;
   const params: Record<string, any> = {
     scope: state.scope,
     page: state.page,
@@ -135,6 +137,7 @@ async function loadEvents() {
     lyStore.loadEvents(params),
     deepflowGetEventRank(rankParams).catch(() => null),
   ]);
+  if (requestId !== listRequestId) return;
   if (rankResult) {
     ranks.value = {
       attackDevice: rankResult.attackDevice || [],
@@ -147,8 +150,17 @@ async function loadEvents() {
   if (state.page > maxPage) {
     state.page = maxPage;
     await lyStore.loadEvents({ ...params, page: state.page });
+    if (requestId !== listRequestId) return;
+    state.total = lyStore.eventTotal;
   }
 }
+
+// 关键字变化时查询全量命中结果并重置页码，列表与分页总数使用同一次服务端筛选。
+watch(() => state.keyword.trim(), () => {
+  state.page = 1;
+  clearRankFilter();
+  void loadEvents();
+});
 
 async function refreshEvents() {
   state.page = 1;
@@ -210,7 +222,6 @@ const baseRows = computed(() => {
       if (state.starttime && (!t || t < state.starttime)) return false;
       if (endExclusive && (!t || t >= endExclusive)) return false;
     }
-    if (state.keyword.trim() && !matchesEventKeyword(item, state.keyword)) return false;
     if (selectedAsset.value) {
       if (!assetMatchesEvent({ address: selectedAsset.value }, item)) return false;
     } else if (onlyAssetRelated.value) {
