@@ -69,10 +69,10 @@ func (s *EventService) LyCompatibleList(ctx context.Context) []map[string]any {
 
 // ListPage 服务端分页/过滤的事件列表（LY 兼容结构），供今日/归档视图与全局搜索使用。
 func (s *EventService) ListPage(ctx context.Context, q store.EventQuery) ([]map[string]any, int, error) {
-	// 排行筛选（attackDevice/victimDevice/typeText）按列表展示口径的派生值匹配，
-	// IOC 归属修正与类型展示名无法用 SQL 表达，走内存过滤分页。
-	if strings.TrimSpace(q.RankKey) != "" && strings.TrimSpace(q.RankValue) != "" {
-		return s.listPageRanked(ctx, q)
+	// 排行、关键字和资产筛选共用展示口径，先匹配全量结果再分页。
+	// 未使用展示字段筛选时保留数据库直接分页路径。
+	if (strings.TrimSpace(q.RankKey) != "" && strings.TrimSpace(q.RankValue) != "") || strings.TrimSpace(q.Keyword) != "" || strings.TrimSpace(q.Asset) != "" || q.OnlyAssetRelated || q.IOCValue != "" || q.IOCType != "" || q.Victim != "" {
+		return s.listPageDisplayFiltered(ctx, q)
 	}
 	page, err := s.core.Store.ListEventsPage(q)
 	if err != nil {
@@ -85,22 +85,21 @@ func (s *EventService) ListPage(ctx context.Context, q store.EventQuery) ([]map[
 	return rows, page.Total, nil
 }
 
-// listPageRanked 排行筛选路径：store 层按基础条件过滤并排序（不分页），
-// service 层按展示口径精确匹配排行值后再分页，保证总数/页大小与筛选一致。
-func (s *EventService) listPageRanked(ctx context.Context, q store.EventQuery) ([]map[string]any, int, error) {
+// listPageDisplayFiltered 在展示口径的关键字/资产/排行过滤完成后分页。
+func (s *EventService) listPageDisplayFiltered(ctx context.Context, q store.EventQuery) ([]map[string]any, int, error) {
 	key := strings.TrimSpace(q.RankKey)
-	if key != "attackDevice" && key != "victimDevice" && key != "typeText" {
+	if key != "" && key != "attackDevice" && key != "victimDevice" && key != "typeText" {
 		return nil, 0, errors.New("invalid rank key")
 	}
 	want := strings.TrimSpace(q.RankValue)
-	matching, err := s.core.Store.ListEventsMatching(q)
+	matching, err := s.matchingDisplayEvents(q)
 	if err != nil {
 		return nil, 0, err
 	}
 	rows := []map[string]any{}
 	for _, event := range matching {
 		row := lyCompatibleEvent(event)
-		if eventRankDimensions(event, row)[key] != want {
+		if key != "" && want != "" && eventRankDimensions(event, row)[key] != want {
 			continue
 		}
 		rows = append(rows, row)
@@ -138,7 +137,7 @@ type RankItem struct {
 // 与列表筛选同源，保证点击排行标签后的列表总数与计数一致。
 func (s *EventService) RankCounts(ctx context.Context, q store.EventQuery) (map[string][]RankItem, error) {
 	q.RankKey, q.RankValue = "", ""
-	matching, err := s.core.Store.ListEventsMatching(q)
+	matching, err := s.matchingDisplayEvents(q)
 	if err != nil {
 		return nil, err
 	}

@@ -40,7 +40,7 @@ const page = evaluate(source, {
   useRoute: () => ({ query: {} }), useLyStore: () => store,
   eventAssetNames: () => [],
   deepflowGetEventRank: async () => ({ attackDevice: [], victimDevice: [], typeText: [] }),
-}, '({ state, loadEvents, onPageChange, filteredRows })');
+}, '({ state, loadEvents, onPageChange, filteredRows, selectedAsset, onlyAssetRelated })');
 const settle = async () => { await vue.nextTick(); await new Promise((resolve) => setImmediate(resolve)); };
 const reply = (request, total, id) => request.resolve({ total, items: [{ event_id: id }] });
 
@@ -91,5 +91,23 @@ const reply = (request, total, id) => request.resolve({ total, items: [{ event_i
   reply(cleared, 2140, 'cleared');
   await settle();
   assert.equal(page.state.total, 2140);
-  console.log('PASS: 107 -> 7 pages on keyword change, paging, clear, and stale response protection');
+  page.selectedAsset.value = '10.0.0.0/24';
+  await vue.nextTick();
+  const asset = pending.shift();
+  assert.equal(asset.params.asset, '10.0.0.0/24');
+  assert.equal(asset.params.page, 1);
+  reply(asset, 40, 'subnet-result');
+  await settle();
+  assert.equal(page.filteredRows.value.length, 1);
+  assert.equal(page.state.total, 40);
+  page.selectedAsset.value = '';
+  page.onlyAssetRelated.value = true;
+  await vue.nextTick();
+  const related = pending.shift();
+  assert.equal(related.params.only_asset_related, true);
+  assert.equal(related.params.asset, undefined);
+  reply(related, 20, 'registered-result');
+  await settle();
+  assert.equal(page.state.total, 20);
+  console.log('PASS: keyword and asset pagination, registered assets, clear, and stale response protection');
 })().catch((error) => { console.error(error); process.exitCode = 1; });

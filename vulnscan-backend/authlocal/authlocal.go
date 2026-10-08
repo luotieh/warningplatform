@@ -518,8 +518,9 @@ func defaultMenus() []menuGroup {
 			{ID: "traffic", Name: "traffic-analysis", Title: "流量分析", Path: "/traffic-analysis", MenuType: 1, Sort: 40, Children: []MenuNode{
 				{ID: "ly-overview", Name: "ly-overview", Title: "总览", Path: "/ly/overview", MenuType: 1, Sort: 1},
 				{ID: "ly-event", Name: "ly-event", Title: "事件列表", Path: "/ly/event/list", MenuType: 1, Sort: 2},
-				{ID: "ly-assets", Name: "ly-assets", Title: "资产管理", Path: "/ly/assets", MenuType: 1, Sort: 3},
-				{ID: "ly-config", Name: "ly-config", Title: "配置", Path: "/ly/config", MenuType: 1, Sort: 4},
+				{ID: "ly-history", Name: "ly-history", Title: "历史事件查询", Path: "/ly/event/history", MenuType: 1, Sort: 3},
+				{ID: "ly-assets", Name: "ly-assets", Title: "资产管理", Path: "/ly/assets", MenuType: 1, Sort: 4},
+				{ID: "ly-config", Name: "ly-config", Title: "配置", Path: "/ly/config", MenuType: 1, Sort: 5},
 			}},
 			{ID: "system", Name: "system", Title: "系统设置", Path: "/system/settings", MenuType: 1, Sort: 90},
 			{ID: "cluster", Name: "cluster", Title: "节点管理", Path: "/cluster/nodes", MenuType: 1, Sort: 95},

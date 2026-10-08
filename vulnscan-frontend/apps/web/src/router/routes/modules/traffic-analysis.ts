@@ -42,6 +42,16 @@ const routes: RouteRecordRaw[] = [
         },
       },
       {
+        name: 'LyEventHistory',
+        path: '/ly/event/history',
+        component: () => import('#/views/ly/event/history/index.vue'),
+        meta: {
+          icon: 'lucide:history',
+          order: 22,
+          title: '历史事件查询',
+        },
+      },
+      {
         name: 'LyAssets',
         path: '/ly/assets',
         component: () => import('#/views/ly/assets/index.vue'),

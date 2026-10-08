@@ -1,7 +1,8 @@
 <script lang="ts" setup>
 import { computed, h, onMounted, reactive, ref } from 'vue';
+import { useRouter } from 'vue-router';
 
-import { NButton, NDataTable, NModal, NSpace, NTag } from 'naive-ui';
+import { NButton, NDataTable, NDropdown, NModal, NSpace, NTag } from 'naive-ui';
 
 import { IconifyIcon } from '@vben/icons';
 import { useUserStore } from '@vben/stores';
@@ -32,6 +33,31 @@ const props = withDefaults(
 );
 
 const userStore = useUserStore();
+const router = useRouter();
+const iocMenu = reactive({ show: false, x: 0, y: 0, row: null as Record<string, any> | null });
+
+function openIOCMenu(event: MouseEvent, row: Record<string, any>) {
+  event.preventDefault();
+  event.stopPropagation();
+  iocMenu.row = row;
+  iocMenu.x = event.clientX;
+  iocMenu.y = event.clientY;
+  iocMenu.show = true;
+}
+
+function viewIOCHistory() {
+  iocMenu.show = false;
+  const row = iocMenu.row;
+  if (!row?.ioc?.ioc_value) return;
+  void router.push({
+    path: '/ly/event/history',
+    query: {
+      ioc_value: String(row.ioc.ioc_value),
+      ioc_type: String(row.ioc.ioc_type || ''),
+      victim: String(row.victimDevice === '-' ? '' : row.victimDevice || ''),
+    },
+  });
+}
 
 const reportVisible = ref(false);
 const reportEventId = ref('');
@@ -378,7 +404,7 @@ const columns = computed(() => [
           : null,
         // 列表直接展示命中的 IOC（如 DNS 应答中的 127.0.0.1），此前只在详情弹窗可见。
         row.ioc?.ioc_value
-          ? h(NTag, { size: 'small', round: true, type: 'error', bordered: false, title: `${row.ioc.ioc_type || 'IOC'} 命中` }, { default: () => `IOC ${row.ioc.ioc_value}` })
+          ? h(NTag, { size: 'small', round: true, type: 'error', bordered: false, title: `${row.ioc.ioc_type || 'IOC'} 命中，右键查看历史事件`, onContextmenu: (event: MouseEvent) => openIOCMenu(event, row) }, { default: () => `IOC ${row.ioc.ioc_value}` })
           : null,
       ]),
   },
@@ -547,6 +573,16 @@ onMounted(() => {
 </script>
 
 <template>
+  <NDropdown
+    trigger="manual"
+    placement="bottom-start"
+    :show="iocMenu.show"
+    :x="iocMenu.x"
+    :y="iocMenu.y"
+    :options="[{ label: '查看历史事件', key: 'history' }]"
+    @select="viewIOCHistory"
+    @clickoutside="iocMenu.show = false"
+  />
   <div>
     <EvidenceDialog v-model:visible="evidenceVisible" :event-id="String(currentEventContext.event_id || currentEventContext.id || '')" :hit-id="evidenceHitId" :version="occSnapshot" />
     <NDataTable :columns="columns" :data="pagedRows" :loading="props.loading" :bordered="false" size="small" :row-class-name="rowClass" />

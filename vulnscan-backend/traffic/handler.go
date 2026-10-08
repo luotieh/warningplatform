@@ -332,15 +332,19 @@ func eventQueryFromRequest(c *gin.Context) (store.EventQuery, error) {
 		pageSize = 200
 	}
 	q := store.EventQuery{
-		Scope:       c.DefaultQuery("scope", "today"),
-		Date:        c.Query("date"),
-		ArchiveFrom: c.Query("archive_from"),
-		ArchiveTo:   c.Query("archive_to"),
-		Page:        page,
-		PageSize:    pageSize,
-		Level:       c.Query("level"),
-		Keyword:     c.Query("keyword"),
-		Asset:       c.Query("asset"),
+		Scope:            c.DefaultQuery("scope", "today"),
+		Date:             c.Query("date"),
+		ArchiveFrom:      c.Query("archive_from"),
+		ArchiveTo:        c.Query("archive_to"),
+		Page:             page,
+		PageSize:         pageSize,
+		Level:            c.Query("level"),
+		Keyword:          c.Query("keyword"),
+		Asset:            c.Query("asset"),
+		OnlyAssetRelated: c.Query("only_asset_related") == "true" || c.Query("only_asset_related") == "1",
+		IOCValue:         c.Query("ioc_value"),
+		IOCType:          c.Query("ioc_type"),
+		Victim:           c.Query("victim"),
 		// 排行维度筛选：rank_key=attackDevice|victimDevice|typeText，rank_value=展示值。
 		RankKey:   c.Query("rank_key"),
 		RankValue: c.Query("rank_value"),

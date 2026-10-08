@@ -74,17 +74,21 @@ type Store interface {
 // EventQuery 事件列表服务端分页/过滤条件。
 // Scope: today（默认，未归档）/ archive（全部归档，可按归档日期范围筛选）/ all（全量）。
 type EventQuery struct {
-	Scope       string
-	Date        string // YYYY-MM-DD，兼容旧单日筛选，可选
-	ArchiveFrom string // YYYY-MM-DD，归档日期下界（包含）
-	ArchiveTo   string // YYYY-MM-DD，归档日期上界（包含）
-	Page        int
-	PageSize    int
-	Level       string
-	Keyword     string
-	Asset       string
-	StartTime   *time.Time
-	EndTime     *time.Time
+	Scope            string
+	Date             string // YYYY-MM-DD，兼容旧单日筛选，可选
+	ArchiveFrom      string // YYYY-MM-DD，归档日期下界（包含）
+	ArchiveTo        string // YYYY-MM-DD，归档日期上界（包含）
+	Page             int
+	PageSize         int
+	Level            string
+	Keyword          string
+	Asset            string
+	OnlyAssetRelated bool
+	IOCValue         string // 精确匹配 IOC 命中值（历史活动查询）
+	IOCType          string
+	Victim           string // 展示口径的被攻击方，精确匹配
+	StartTime        *time.Time
+	EndTime          *time.Time
 	// RankKey/RankValue 排行维度筛选（attackDevice/victimDevice/typeText）：
 	// 按列表展示口径的派生值精确匹配，在 service 层应用（SQL 无法表达 IOC 归属修正）。
 	RankKey   string

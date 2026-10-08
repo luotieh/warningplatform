@@ -16,11 +16,7 @@ import {
 
 import { lyAssetList, type LyAsset } from '#/api/ly/assets';
 import deepflowSocket from '#/utils/deepflow-socket';
-import {
-  assetMatchesEvent,
-  assetOptionFilter,
-  eventMatchesAnyAsset,
-} from '#/utils/ly-asset';
+import { assetOptionFilter } from '#/utils/ly-asset';
 
 import { useLyStore } from '#/store/ly';
 import { eventAssetNames } from '#/utils/ly-asset';
@@ -101,6 +97,7 @@ async function loadEvents() {
   if (state.level) params.level = state.level;
   if (state.keyword.trim()) params.keyword = state.keyword.trim();
   if (selectedAsset.value) params.asset = selectedAsset.value;
+  else if (onlyAssetRelated.value) params.only_asset_related = true;
   if (state.starttime || state.endtime) {
     // 自定义日期按事件开始时间过滤（可只选一端）：
     // 只选开始=列出该日及以后开始的事件，只选结束=列出该日及之前开始的事件
@@ -155,8 +152,8 @@ async function loadEvents() {
   }
 }
 
-// 关键字变化时查询全量命中结果并重置页码，列表与分页总数使用同一次服务端筛选。
-watch(() => state.keyword.trim(), () => {
+// 基础筛选变化时重置页码和排行条件，列表与总数使用同一次服务端筛选。
+watch([() => state.keyword.trim(), () => state.level, selectedAsset, onlyAssetRelated], () => {
   state.page = 1;
   clearRankFilter();
   void loadEvents();
@@ -205,30 +202,10 @@ function onSortChange() {
   void loadEvents();
 }
 
-// 基础筛选（处理状态/活跃/资产）——排行标签基于此计算，
-// 保证选中某排行值后其它标签依然可见、可再切换。
+// 基础筛选由服务端完成；这里只补充资产名称供表格展示。
 const baseRows = computed(() => {
-  const rows = (lyStore.events || []).filter((item) => {
-    // 级别筛选按原始 severity（high/medium/low）：level 是展示级
-    // （medium→middle，且心跳命中会提升一档），直接比较会把中/低危误杀。
-    if (state.level) {
-      const severity = String(item.severity || (item.level === 'middle' ? 'medium' : item.level));
-      if (severity !== state.level) return false;
-    }
-    if (state.starttime || state.endtime) {
-      const t = Number(item.starttime ?? 0) * 1000;
-      // 与服务端一致的半开区间：结束日期 +1 天作为上界（不含）。
-      const endExclusive = state.endtime ? state.endtime + 86400000 : 0;
-      if (state.starttime && (!t || t < state.starttime)) return false;
-      if (endExclusive && (!t || t >= endExclusive)) return false;
-    }
-    if (selectedAsset.value) {
-      if (!assetMatchesEvent({ address: selectedAsset.value }, item)) return false;
-    } else if (onlyAssetRelated.value) {
-      if (!eventMatchesAnyAsset(item, assets.value)) return false;
-    }
-    return true;
-  });
+  // 所有查询筛选在服务端分页前完成，当前页不再删行，以免总数与展示不一致。
+  const rows = lyStore.events || [];
   // 资产归属：来源/目标命中启用资产显示资产名，否则「未登记」（新增行字段供表格展示）
   return rows.map(
     (item): Record<string, any> => ({
