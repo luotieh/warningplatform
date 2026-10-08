@@ -46,9 +46,9 @@ const routes: RouteRecordRaw[] = [
         path: '/ly/event/history',
         component: () => import('#/views/ly/event/history/index.vue'),
         meta: {
-          icon: 'lucide:history',
-          order: 22,
+          hideInMenu: true,
           title: '历史事件查询',
+          activePath: '/ly/event/list',
         },
       },
       {
