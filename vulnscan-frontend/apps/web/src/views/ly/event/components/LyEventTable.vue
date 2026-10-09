@@ -123,7 +123,7 @@ const payloadContentCache = new Map<number, PayloadContentView>();
 
 // 明细弹窗「报文内容」：只展示探针上送的载荷明文（payload_text）；明文
 // 缺失时按载荷头部分类不可解析原因（TLS 加密 / 二进制），不展示 hex。
-// 完整报文（packet_hex）在「完整明细」弹窗展示。
+// 抓获报文（packet_hex）在「完整明细」弹窗展示；完整性需检查截断/缺口。
 function analyzePayloadContent(occ: { payload_text: string; payload_hex: string }): PayloadContentView {
   if (occ.payload_text && occ.payload_text.trim() !== '') {
     return { kind: 'text', text: occ.payload_text, reason: '' };
@@ -773,7 +773,7 @@ onMounted(() => {
                 <span class="occ-detail-label">报文内容</span>
                 <div class="occ-hex-wrap">
                   <code v-if="payloadContent(occ).kind === 'text'" class="occ-code-block">{{ payloadContent(occ).text }}</code>
-                  <span v-else class="occ-hex-hint">无法解析明文：{{ payloadContent(occ).reason }}，完整报文见「完整明细」</span>
+                  <span v-else class="occ-hex-hint">无法解析明文：{{ payloadContent(occ).reason }}，抓获报文见「完整明细」</span>
                 </div>
               </div>
               <template v-if="occ.request">

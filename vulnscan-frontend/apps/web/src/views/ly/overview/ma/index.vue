@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import { computed, h, onMounted, reactive, watch } from 'vue';
 
-import { NCard, NDataTable, NPagination, NStatistic, NTag } from 'naive-ui';
+import { NAlert, NCard, NDataTable, NPagination, NStatistic, NTag } from 'naive-ui';
 
 import { useLyStore } from '#/store/ly';
 import { paginate } from '#/utils/ly';
@@ -12,11 +12,11 @@ const lyStore = useLyStore();
 const devicePager = reactive({ page: 1, pageSize: 10 });
 const eventPager = reactive({ page: 1, pageSize: 10 });
 
-// 告警规则统计与「事件列表」同源：按事件类型聚合 lyStore.events 的命中数量，
+// 告警规则统计与「事件列表」同源：按事件类型聚合 lyStore.overviewEvents 的命中数量，
 // 而非读 lyStore.eventRules(/config?type=event 通用 KV) 或 /rules(管理端常无规则文件)。
 const eventSummary = computed(() => {
   const map = new Map<string, number>();
-  (lyStore.events || []).forEach((item) => {
+  (lyStore.overviewEvents || []).forEach((item) => {
     const key = String(item.typeText || item.type || 'unknown');
     map.set(key, (map.get(key) || 0) + 1);
   });
@@ -78,7 +78,7 @@ const eventColumns = [
 onMounted(async () => {
   await Promise.all([
     lyStore.device.length ? Promise.resolve() : lyStore.loadConfigs(),
-    lyStore.events.length ? Promise.resolve() : lyStore.loadEvents(),
+    lyStore.loadOverviewEvents(),
   ]);
 });
 
@@ -116,6 +116,7 @@ function statusTag(value: any) {
 
 <template>
   <div class="ly-page">
+    <NAlert v-if="lyStore.overviewError" type="error">{{ lyStore.overviewError }}</NAlert>
     <div class="overview-stack">
       <div class="stats-grid">
         <NCard class="stat-card" size="small">

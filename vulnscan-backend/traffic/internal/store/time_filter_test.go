@@ -9,7 +9,7 @@ import (
 )
 
 // 事件列表按时间筛选：[StartTime, EndTime) 半开区间；
-// 聚合 v2 事件以 context.first_time 为准，其余以 created_at 为准。
+// 与展示共用 first_time -> occurrence_time -> created_at。
 func TestListEventsPageTimeRangeFilter(t *testing.T) {
 	st := NewMemoryStore()
 	at := func(day, hour int) time.Time {
@@ -29,7 +29,7 @@ func TestListEventsPageTimeRangeFilter(t *testing.T) {
 			Context: ctxJSON(2, "2026-09-19T08:00:00Z")},
 		{EventID: "evt-v2-first-out", EventName: "v2首命中在区间外", CreatedAt: at(19, 8),
 			Context: ctxJSON(2, "2026-09-18T08:00:00Z")},
-		// 非 v2：忽略 first_time，用 created_at。
+		// 非 v2 也必须与展示的 first_time 一致。
 		{EventID: "evt-v1-first-ignored", EventName: "v1忽略first_time", CreatedAt: at(19, 8),
 			Context: ctxJSON(1, "2026-09-17T08:00:00Z")},
 		// v2 但 first_time 无法解析：回退 created_at。
@@ -55,7 +55,7 @@ func TestListEventsPageTimeRangeFilter(t *testing.T) {
 		got = append(got, e.EventID)
 	}
 	sort.Strings(got)
-	want := []string{"evt-at-start", "evt-in", "evt-v1-first-ignored", "evt-v2-first-in", "evt-v2-first-invalid"}
+	want := []string{"evt-at-start", "evt-in", "evt-v2-first-in", "evt-v2-first-invalid"}
 	if len(got) != len(want) {
 		t.Fatalf("got %v, want %v", got, want)
 	}

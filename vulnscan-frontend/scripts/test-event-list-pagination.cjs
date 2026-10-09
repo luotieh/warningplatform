@@ -21,14 +21,16 @@ function evaluate(source, bindings, result) {
   return new Function(...Object.keys(bindings), 'exports', `${js}\nreturn ${result};`)(...Object.values(bindings), {});
 }
 
+const queryTime = evaluate(fs.readFileSync(path.join(root, 'apps/web/src/utils/ly-query-time.ts'), 'utf8'), {}, '({ eventDateWindow, pickerTimeToEpoch, epochToPickerTime })');
 const pending = [];
+let failRank = false;
 const store = evaluate(fs.readFileSync(path.join(root, 'apps/web/src/store/ly.ts'), 'utf8'), {
   defineStore: (_name, options) => {
     const instance = options.state();
     for (const [name, action] of Object.entries(options.actions)) instance[name] = action.bind(instance);
     return instance;
   },
-  deepflowGetEvents: (params) => new Promise((resolve) => pending.push({ params, resolve })),
+  deepflowGetEvents: (params) => new Promise((resolve, reject) => pending.push({ params, resolve, reject })),
   normalizeLyEvents: (items) => items,
 }, 'useLyStore');
 
@@ -36,11 +38,12 @@ const source = fs.readFileSync(path.join(root, 'apps/web/src/views/ly/event/list
   .match(/<script[^>]*>([\s\S]*?)<\/script>/)[1];
 const page = evaluate(source, {
   ...vue,
+  ...queryTime,
   onMounted: () => {}, onUnmounted: () => {}, defineOptions: () => {},
   useRoute: () => ({ query: {} }), useLyStore: () => store,
   eventAssetNames: () => [],
-  deepflowGetEventRank: async () => ({ attackDevice: [], victimDevice: [], typeText: [] }),
-}, '({ state, loadEvents, onPageChange, filteredRows, selectedAsset, onlyAssetRelated })');
+  deepflowGetEventRank: async () => { if (failRank) throw new Error('rank offline'); return { attackDevice: [{ name: 'test', value: 20 }], victimDevice: [], typeText: [] }; },
+}, '({ state, loadEvents, onPageChange, filteredRows, selectedAsset, onlyAssetRelated, ranks, rankError })');
 const settle = async () => { await vue.nextTick(); await new Promise((resolve) => setImmediate(resolve)); };
 const reply = (request, total, id) => request.resolve({ total, items: [{ event_id: id }] });
 
@@ -109,5 +112,34 @@ const reply = (request, total, id) => request.resolve({ total, items: [{ event_i
   reply(related, 20, 'registered-result');
   await settle();
   assert.equal(page.state.total, 20);
+  failRank = true;
+  const fail = page.loadEvents();
+  reply(pending.shift(), 20, 'rank-failed');
+  await fail;
+  assert.equal(page.ranks.value.attackDevice.length, 0, 'old rank tags must be cleared');
+  assert.ok(page.rankError.value);
+  failRank = false;
+  const listFail = page.loadEvents();
+  pending.shift().reject(new Error('list offline'));
+  await listFail;
+  assert.equal(page.state.total, 0);
+  assert.equal(store.events.length, 0);
+  assert.equal(store.eventError, 'list offline');
+  assert.equal(page.ranks.value.attackDevice.length, 0);
+  const obsolete = page.loadEvents();
+  const oldFailed = pending.shift();
+  const current = page.loadEvents();
+  reply(pending.shift(), 5, 'current');
+  await current;
+  oldFailed.reject(new Error('obsolete failure'));
+  await obsolete;
+  assert.equal(store.eventTotal, 5);
+  assert.equal(store.eventError, '');
+  page.state.starttime = new Date(2026, 9, 9).getTime();
+  page.state.endtime = new Date(2026, 9, 8).getTime();
+  await page.loadEvents();
+  assert.equal(pending.length, 0, 'invalid date range must not query');
+  assert.ok(store.eventError);
+  assert.equal(store.eventTotal, 0);
   console.log('PASS: keyword and asset pagination, registered assets, clear, and stale response protection');
 })().catch((error) => { console.error(error); process.exitCode = 1; });

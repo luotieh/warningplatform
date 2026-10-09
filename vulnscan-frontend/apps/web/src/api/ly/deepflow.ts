@@ -126,7 +126,7 @@ export function deepflowLogin(data: { password: string; username: string }) {
 }
 
 export function deepflowGetEvents(params?: Record<string, any>) {
-  return deepflowGet<Record<string, any>>('/events/list', params);
+  return deepflowGet<Record<string, any>>('/events/list', { scope: 'all', ...params });
 }
 
 export function deepflowGetEventsPage(params?: Record<string, any>) {
@@ -207,4 +207,15 @@ export function deepflowAskAI(data: Record<string, any>, signal?: AbortSignal) {
 
 export function deepflowEstimateAI(data: Record<string, any>, signal?: AbortSignal) {
   return request('/engineer-chat/estimate', { method: 'POST', body: JSON.stringify(data), signal });
+}
+
+// Summary views need every page, not the current event-list page cache.
+export async function deepflowGetAllEvents(params: Record<string, any> = {}) {
+  const items: Record<string, any>[] = [];
+  for (let page = 1; ; page++) {
+    const result = await deepflowGetEventsPage({ ...params, scope: params.scope || 'all', page, page_size: 200 });
+    items.push(...result.items);
+    if (items.length >= result.total) return items;
+    if (!result.items.length) throw new Error('事件分页数据不完整，请刷新重试');
+  }
 }

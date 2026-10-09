@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 
 import {
+  NAlert,
   NButton,
   NCard,
   NCheckbox,
@@ -15,6 +16,7 @@ import {
 } from 'naive-ui';
 
 import { lyAssetList, type LyAsset } from '#/api/ly/assets';
+import { eventDateWindow } from '#/utils/ly-query-time';
 import deepflowSocket from '#/utils/deepflow-socket';
 import { assetOptionFilter } from '#/utils/ly-asset';
 
@@ -31,6 +33,7 @@ const route = useRoute();
 const lyStore = useLyStore();
 
 // 事件排行统计（服务端按基础过滤条件在全量结果上计数，与列表筛选同口径）。
+const rankError = ref('');
 const ranks = ref<EventRankResult>({ attackDevice: [], victimDevice: [], typeText: [] });
 
 const state = reactive({
@@ -98,21 +101,18 @@ async function loadEvents() {
   if (state.keyword.trim()) params.keyword = state.keyword.trim();
   if (selectedAsset.value) params.asset = selectedAsset.value;
   else if (onlyAssetRelated.value) params.only_asset_related = true;
-  if (state.starttime || state.endtime) {
-    // 自定义日期按事件开始时间过滤（可只选一端）：
-    // 只选开始=列出该日及以后开始的事件，只选结束=列出该日及之前开始的事件
-    // （结束日期按整日包含：date 选择器返回当天 00:00，后端区间为上界开，需 +1 天）。
-    // 与快捷范围互斥，由 onCustomDateChange 保证 scope 已复位为默认值。
-    if (state.starttime) params.starttime = Math.floor(state.starttime / 1000);
-    if (state.endtime) params.endtime = Math.floor((state.endtime + 86400000) / 1000);
-  } else if (state.scope === 'today' || state.scope === '3' || state.scope === '7') {
-    const days = state.scope === 'today' ? 1 : Number(state.scope);
-    const end = new Date();
-    const start = new Date(end);
-    start.setDate(start.getDate() - (days - 1));
-    start.setHours(0, 0, 0, 0);
-    params.starttime = Math.floor(start.getTime() / 1000);
-    params.endtime = Math.floor(end.getTime() / 1000);
+  Object.assign(params, eventDateWindow(state.scope, state.starttime, state.endtime));
+  if (params.starttime !== undefined && params.endtime !== undefined && params.starttime >= params.endtime) {
+    // Invalidate pending store requests as well as the page request.
+    lyStore.eventRequestId++;
+    lyStore.loading = false;
+    lyStore.events = [];
+    lyStore.eventTotal = 0;
+    lyStore.eventError = '开始日期不能晚于结束日期';
+    state.total = 0;
+    ranks.value = { attackDevice: [], victimDevice: [], typeText: [] };
+    rankError.value = '';
+    return;
   }
   // 服务端排序（分页前生效），默认 time/desc 与现状一致
   if (state.sort !== 'time' || state.order !== 'desc') {
@@ -135,12 +135,15 @@ async function loadEvents() {
     deepflowGetEventRank(rankParams).catch(() => null),
   ]);
   if (requestId !== listRequestId) return;
-  if (rankResult) {
+  rankError.value = rankResult ? '' : '排行查询失败，请刷新重试';
+  if (rankResult && !lyStore.eventError) {
     ranks.value = {
       attackDevice: rankResult.attackDevice || [],
       victimDevice: rankResult.victimDevice || [],
       typeText: rankResult.typeText || [],
     };
+  } else {
+    ranks.value = { attackDevice: [], victimDevice: [], typeText: [] };
   }
   state.total = lyStore.eventTotal;
   const maxPage = Math.max(1, Math.ceil(state.total / state.pageSize));
@@ -282,6 +285,7 @@ onUnmounted(() => {
 <template>
   <div class="ly-page">
     <NSpace vertical :size="12">
+      <NAlert v-if="lyStore.eventError || rankError" type="error">{{ lyStore.eventError || rankError }}</NAlert>
       <NCard title="事件排行筛选" size="small">
         <div class="rank-grid">
           <div>
@@ -348,8 +352,8 @@ onUnmounted(() => {
             @update:formatted-value="onArchiveFilterChange"
           />
           <NSelect v-model:value="state.level" clearable placeholder="严重级别" :options="levelOptions" style="width: 140px" />
-          <NDatePicker v-model:value="state.starttime" type="date" clearable placeholder="开始日期" style="width: 150px" @update:value="onCustomDateChange" />
-          <NDatePicker v-model:value="state.endtime" type="date" clearable placeholder="结束日期" style="width: 150px" @update:value="onCustomDateChange" />
+          <NDatePicker v-model:value="state.starttime" type="date" clearable placeholder="开始日期（北京时间）" style="width: 150px" @update:value="onCustomDateChange" />
+          <NDatePicker v-model:value="state.endtime" type="date" clearable placeholder="结束日期（北京时间）" style="width: 150px" @update:value="onCustomDateChange" />
           <NInput
             v-model:value="state.keyword"
             clearable

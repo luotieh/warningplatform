@@ -17,13 +17,18 @@ import {
   lyUserApi,
   lyWhitelistApi,
 } from '#/api/ly';
-import { deepflowGetEvents } from '#/api/ly/deepflow';
+import { deepflowGetAllEvents, deepflowGetEvents } from '#/api/ly/deepflow';
 import { normalizeLyEvents } from '#/utils/ly';
 
 export const useLyStore = defineStore('ly', {
   state: () => ({
     loading: false,
     eventRequestId: 0,
+    eventError: '',
+    overviewEvents: [] as Record<string, any>[],
+    overviewRequestId: 0,
+    overviewLoading: false,
+    overviewError: '',
     events: [] as Record<string, any>[],
     eventTotal: 0,
     internal: [] as Record<string, any>[],
@@ -45,11 +50,12 @@ export const useLyStore = defineStore('ly', {
     async loadEvents(params: Record<string, any> = {}) {
       const requestId = ++this.eventRequestId;
       this.loading = true;
+      this.eventError = '';
       try {
         // 事件数据源统一为 /api/traffic/events/list（服务端分页）。
-        // 默认今日视图（未归档），总览/搜索按需传 scope/page_size。
+        // 默认包含归档；概览使用独立的全量数据源。
         const data = await deepflowGetEvents({
-          scope: 'today',
+          scope: 'all',
           page: 1,
           page_size: 200,
           ...params,
@@ -60,12 +66,28 @@ export const useLyStore = defineStore('ly', {
         this.eventTotal = Number(data?.total || 0);
         return this.events;
       } catch (error) {
-        console.error('[ly] 加载事件列表失败', error);
-        // 刷新请求失败时保留上一次成功结果，避免瞬时网络/服务错误把列表清空，
-        // 用户会继续看到旧数据并可再次刷新。
+        if (requestId !== this.eventRequestId) return this.events;
+        this.eventError = error instanceof Error ? error.message : '事件查询失败';
+        this.events = [];
+        this.eventTotal = 0;
         return this.events;
       } finally {
         if (requestId === this.eventRequestId) this.loading = false;
+      }
+    },
+    async loadOverviewEvents() {
+      const requestId = ++this.overviewRequestId;
+      this.overviewLoading = true;
+      this.overviewError = '';
+      try {
+        const items = await deepflowGetAllEvents({ scope: 'all' });
+        if (requestId === this.overviewRequestId) this.overviewEvents = normalizeLyEvents(items);
+      } catch (error) {
+        if (requestId !== this.overviewRequestId) return;
+        this.overviewEvents = [];
+        this.overviewError = error instanceof Error ? error.message : '事件统计查询失败';
+      } finally {
+        if (requestId === this.overviewRequestId) this.overviewLoading = false;
       }
     },
     async loadConfigs() {

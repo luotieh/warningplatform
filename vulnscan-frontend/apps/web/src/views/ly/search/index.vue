@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref } from 'vue';
 import { useRoute } from 'vue-router';
 
 import {
+  NPagination,
   NButton,
   NCard,
   NDatePicker,
@@ -17,7 +18,7 @@ import { message } from '#/adapter/naive';
 import { lyEventSearch } from '#/api/ly';
 import { lyAssetList, type LyAsset } from '#/api/ly/assets';
 import { normalizeLyEvents } from '#/utils/ly';
-import { assetMatchesEvent } from '#/utils/ly-asset';
+import { epochToPickerTime, pickerTimeToEpoch } from '#/utils/ly-query-time';
 import LyEventTable from '../event/components/LyEventTable.vue';
 
 defineOptions({ name: 'LySearch' });
@@ -39,6 +40,9 @@ const assetOptions = computed(() =>
 const state = reactive({
   loading: false,
   searched: false,
+  page: 1,
+  pageSize: 20,
+  total: 0,
   rows: [] as Record<string, any>[],
 });
 
@@ -50,48 +54,60 @@ async function loadAssets() {
   }
 }
 
+let searchRequestId = 0;
+let submittedQuery: Record<string, any> = {};
+
 async function runSearch() {
+  const requestId = ++searchRequestId;
   state.loading = true;
   state.searched = true;
   try {
-    const query: Record<string, any> = { keyword: form.keyword || undefined };
-    if (form.asset) query.asset = form.asset;
-    if (form.starttime) query.starttime = Math.floor(form.starttime / 1000);
-    if (form.endtime) query.endtime = Math.floor(form.endtime / 1000);
-    const res = await lyEventSearch(query);
-    const rows = Array.isArray(res)
-      ? res
-      : Array.isArray(res?.items)
-        ? res.items
-        : [];
-    const keyword = String(form.keyword || '').trim().toLowerCase();
-    const asset = form.asset;
-    state.rows = normalizeLyEvents(rows).filter((item) => {
-      if (keyword && !JSON.stringify(item).toLowerCase().includes(keyword)) return false;
-      if (asset && !assetMatchesEvent({ address: asset }, item as Record<string, any>)) return false;
-      const t = Number(item.time ?? item.starttime ?? 0);
-      if (form.starttime && (!t || t < form.starttime / 1000)) return false;
-      if (form.endtime && (!t || t > form.endtime / 1000)) return false;
-      return true;
-    });
+    const res = await lyEventSearch({ ...submittedQuery, scope: 'all', page: state.page, page_size: state.pageSize });
+    if (requestId !== searchRequestId) return;
+    state.rows = normalizeLyEvents(Array.isArray(res?.items) ? res.items : []);
+    state.total = Number(res?.total || 0);
+    const maxPage = Math.max(1, Math.ceil(state.total / state.pageSize));
+    if (state.page > maxPage) { state.page = maxPage; await runSearch(); }
   } catch (error) {
-    console.error('[ly] 搜索失败', error);
-    message.error('搜索失败，请检查后端服务');
+    if (requestId !== searchRequestId) return;
+    message.error(error instanceof Error ? error.message : '搜索失败，请检查后端服务');
     state.rows = [];
+    state.total = 0;
   } finally {
-    state.loading = false;
+    if (requestId === searchRequestId) state.loading = false;
   }
 }
 
 function startSearch() {
-  runSearch();
+  const query: Record<string, any> = {};
+  if (form.keyword.trim()) query.keyword = form.keyword.trim();
+  if (form.asset) query.asset = form.asset;
+  if (form.starttime !== null) query.starttime = Math.floor(pickerTimeToEpoch(form.starttime) / 1000);
+  if (form.endtime !== null) query.endtime = Math.floor(pickerTimeToEpoch(form.endtime) / 1000);
+  if (query.starttime !== undefined && query.endtime !== undefined && query.starttime >= query.endtime) {
+    message.error('开始时间必须早于结束时间');
+    return;
+  }
+  submittedQuery = query;
+  state.page = 1;
+  void runSearch();
 }
 
+function onPageChange(page: number) { state.page = page; void runSearch(); }
+function onPageSizeChange(size: number) { state.pageSize = size; state.page = 1; void runSearch(); }
+
 function resetSearch() {
+  searchRequestId++;
   form.asset = '';
   form.keyword = '';
   form.starttime = null;
   form.endtime = null;
+  submittedQuery = {};
+  state.rows = [];
+  state.page = 1;
+  state.total = 0;
+  state.loading = false;
+  state.searched = false;
 }
 
 onMounted(() => {
@@ -101,10 +117,10 @@ onMounted(() => {
   form.keyword = String(q.keyword ?? '');
   const startSec = Number(q.starttime);
   const endSec = Number(q.endtime);
-  form.starttime = q.starttime && !Number.isNaN(startSec) ? startSec * 1000 : null;
-  form.endtime = q.endtime && !Number.isNaN(endSec) ? endSec * 1000 : null;
+  form.starttime = q.starttime && !Number.isNaN(startSec) ? epochToPickerTime(startSec * 1000) : null;
+  form.endtime = q.endtime && !Number.isNaN(endSec) ? epochToPickerTime(endSec * 1000) : null;
   if (q.asset || q.keyword || q.starttime || q.endtime) {
-    runSearch();
+    startSearch();
   }
 });
 </script>
@@ -127,10 +143,10 @@ onMounted(() => {
           <NFormItem label="关键字">
             <NInput v-model:value="form.keyword" placeholder="可选" />
           </NFormItem>
-          <NFormItem label="开始时间">
+          <NFormItem label="开始（北京）">
             <NDatePicker v-model:value="form.starttime" type="datetime" clearable placeholder="选择开始时间" class="full-input" />
           </NFormItem>
-          <NFormItem label="结束时间">
+          <NFormItem label="结束（北京）">
             <NDatePicker v-model:value="form.endtime" type="datetime" clearable placeholder="选择结束时间" class="full-input" />
           </NFormItem>
         </div>
@@ -143,6 +159,9 @@ onMounted(() => {
 
     <NCard v-if="state.searched" class="result-card" title="搜索结果" size="small">
       <LyEventTable :rows="state.rows" :show-desc="true" :auto-analyze="false" :loading="state.loading" />
+      <NPagination :page="state.page" :page-size="state.pageSize" :item-count="state.total"
+        show-size-picker :page-sizes="[20, 50, 100]" :disabled="state.loading"
+        @update:page="onPageChange" @update:page-size="onPageSizeChange" />
     </NCard>
   </div>
 </template>

@@ -55,7 +55,7 @@ func TestArchiveConvergedEventsAndPageScopes(t *testing.T) {
 	}
 
 	// 分页范围
-	today, _ := st.ListEventsPage(EventQuery{Scope: "today", Page: 1, PageSize: 10})
+	today, _ := st.ListEventsPage(EventQuery{Scope: "active", Page: 1, PageSize: 10})
 	if today.Total != 2 {
 		t.Fatalf("today total=%d want 2", today.Total)
 	}
@@ -81,7 +81,7 @@ func TestArchiveConvergedEventsAndPageScopes(t *testing.T) {
 }
 
 // 近三天/近七天（scope=3/7）是时间窗快捷筛选：不再回退到「仅看未归档」，
-// 已归档但开始时间落在窗口内的事件必须可见；today 语义保持不变。
+// 已归档但开始时间落在窗口内的事件必须可见，今日也使用相同口径。
 func TestRecentWindowScopesIncludeArchived(t *testing.T) {
 	st := NewMemoryStore()
 	at := func(day, hour int) time.Time { return time.Date(2026, 9, day, hour, 0, 0, 0, time.UTC) }
@@ -102,7 +102,7 @@ func TestRecentWindowScopesIncludeArchived(t *testing.T) {
 		t.Fatal(err)
 	}
 	start, end := at(28, 0), at(30, 0)
-	for _, scope := range []string{"3", "7"} {
+	for _, scope := range []string{"today", "3", "7"} {
 		page, err := st.ListEventsPage(EventQuery{Scope: scope, Page: 1, PageSize: 100, StartTime: &start, EndTime: &end})
 		if err != nil {
 			t.Fatal(err)
@@ -122,8 +122,8 @@ func TestRecentWindowScopesIncludeArchived(t *testing.T) {
 			}
 		}
 	}
-	// today 语义：仍只看未归档。
-	today, err := st.ListEventsPage(EventQuery{Scope: "today", Page: 1, PageSize: 100, StartTime: &start, EndTime: &end})
+	// active 显式只看未归档。
+	today, err := st.ListEventsPage(EventQuery{Scope: "active", Page: 1, PageSize: 100, StartTime: &start, EndTime: &end})
 	if err != nil {
 		t.Fatal(err)
 	}

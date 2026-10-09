@@ -215,8 +215,31 @@ FROM events ORDER BY created_at DESC, id DESC`)
 
 const eventSelectCols = `id, event_id, event_name, title, message, context, source, severity, category, event_status, current_round, observables, created_at, updated_at, review_status, review_comment, reviewed_by, reviewed_at, circular_code, analysis_version, aggregation_closed, last_analysis_at, last_seen_at, archive_date`
 
-// ListEventsPage 服务端分页/过滤查询：today=未归档、archive=归档日期范围（可选）、all=全量。
+// ListEventsPage filters before pagination, including archived events in time windows.
 func (s *MySQLStore) ListEventsPage(q EventQuery) (EventPage, error) {
+	var err error
+	q, err = q.Normalize(time.Now())
+	if err != nil {
+		return EventPage{}, err
+	}
+	if q.StartTime != nil || q.EndTime != nil {
+		// Parse legacy, numeric and offset timestamps with the same parser used by display.
+		// SQL substring/STR_TO_DATE loses timezone offsets and changes the matching day.
+		items, err := s.ListEventsMatching(q)
+		if err != nil {
+			return EventPage{}, err
+		}
+		page, size := normalizePage(q.Page, q.PageSize)
+		start := (page - 1) * size
+		if start > len(items) {
+			start = len(items)
+		}
+		end := start + size
+		if end > len(items) {
+			end = len(items)
+		}
+		return EventPage{Items: items[start:end], Total: len(items)}, nil
+	}
 	whereSQL, args, err := eventListWhere(q)
 	if err != nil {
 		return EventPage{}, err
@@ -239,16 +262,22 @@ func (s *MySQLStore) ListEventsPage(q EventQuery) (EventPage, error) {
 	out := make([]domain.Event, 0, pageSize)
 	for rows.Next() {
 		e, err := scanEvent(rows)
-		if err == nil {
-			out = append(out, e)
+		if err != nil {
+			return EventPage{}, err
 		}
+		out = append(out, e)
 	}
-	return EventPage{Items: out, Total: total}, nil
+	return EventPage{Items: out, Total: total}, rows.Err()
 }
 
 // ListEventsMatching 返回命中过滤条件的全部事件（不分页，按查询排序），
 // 供排行统计与排行筛选在 service 层按展示口径二次过滤。
 func (s *MySQLStore) ListEventsMatching(q EventQuery) ([]domain.Event, error) {
+	var err error
+	q, err = q.Normalize(time.Now())
+	if err != nil {
+		return nil, err
+	}
 	whereSQL, args, err := eventListWhere(q)
 	if err != nil {
 		return nil, err
@@ -262,7 +291,10 @@ func (s *MySQLStore) ListEventsMatching(q EventQuery) ([]domain.Event, error) {
 	out := []domain.Event{}
 	for rows.Next() {
 		e, err := scanEvent(rows)
-		if err == nil {
+		if err != nil {
+			return nil, err
+		}
+		if matchesEventTime(e, q) {
 			out = append(out, e)
 		}
 	}
@@ -278,7 +310,7 @@ func eventListWhere(q EventQuery) (string, []any, error) {
 	where := []string{"(CASE WHEN JSON_VALID(context) THEN COALESCE(JSON_UNQUOTE(JSON_EXTRACT(context, '$.canonical_event_id')), event_id) ELSE event_id END) = event_id"}
 	args := []any{}
 	switch strings.ToLower(strings.TrimSpace(q.Scope)) {
-	case "", "today":
+	case "active":
 		where = append(where, "archive_date IS NULL")
 	case "archive":
 		where = append(where, "archive_date IS NOT NULL")
@@ -290,10 +322,8 @@ func eventListWhere(q EventQuery) (string, []any, error) {
 			where = append(where, "archive_date <= ?")
 			args = append(args, to)
 		}
-	case "all":
-	case "3", "7":
-		// 近三天/近七天快捷范围：归档与否都可见，由 StartTime/EndTime 限定窗口；
-		// 落到 default 会被强制 archive_date IS NULL，退化成「仅看今日」。
+	case "", "all", "today", "3", "7":
+		// 时间窗口包含归档事件。
 	default:
 		where = append(where, "archive_date IS NULL")
 	}
@@ -310,14 +340,6 @@ func eventListWhere(q EventQuery) (string, []any, error) {
 		asset := "%" + escapeLike(v) + "%"
 		where = append(where, "(context LIKE ? OR observables LIKE ?)")
 		args = append(args, asset, asset)
-	}
-	if q.StartTime != nil {
-		where = append(where, eventFilterTimeSQL()+" >= ?")
-		args = append(args, *q.StartTime)
-	}
-	if q.EndTime != nil {
-		where = append(where, eventFilterTimeSQL()+" < ?")
-		args = append(args, *q.EndTime)
 	}
 	whereSQL := ""
 	if len(where) > 0 {
@@ -373,10 +395,6 @@ func eventOrderBy(q EventQuery) string {
 	default:
 		return "created_at " + dir + ", id DESC"
 	}
-}
-
-func eventFilterTimeSQL() string {
-	return "CASE WHEN JSON_VALID(context) AND JSON_UNQUOTE(JSON_EXTRACT(context,'$.aggregation_version'))='2' THEN COALESCE(STR_TO_DATE(REPLACE(SUBSTRING(JSON_UNQUOTE(JSON_EXTRACT(context,'$.first_time')),1,19),'T',' '),'%Y-%m-%d %H:%i:%s'),created_at) ELSE created_at END"
 }
 
 // ArchiveConvergedEvents 把已收敛且最后活跃早于阈值的未归档事件标记归档日
@@ -460,17 +478,17 @@ LIMIT 500`, threshold)
 	return out
 }
 
-// ListEventsByTargetIP 按目标 IP（context.dst_ip / victim_target）与 last_seen_at
+// ListEventsByTargetIP 按目标 IP（context.dst_ip / victim_target）与最近活动时间
 // 时间窗口查询事件（月度总结用）。
 func (s *MySQLStore) ListEventsByTargetIP(ip string, from time.Time, to time.Time) []domain.Event {
-	rows, err := s.db.QueryContext(context.Background(), `
-SELECT id, event_id, event_name, title, message, context, source, severity, category, event_status, current_round, observables, created_at, updated_at, review_status, review_comment, reviewed_by, reviewed_at, circular_code, analysis_version, aggregation_closed, last_analysis_at, last_seen_at, archive_date
-FROM events
-WHERE (JSON_UNQUOTE(JSON_EXTRACT(context, '$.dst_ip')) = ?
-       OR JSON_UNQUOTE(JSON_EXTRACT(context, '$.victim_target')) = ?)
-  AND last_seen_at IS NOT NULL AND last_seen_at >= ? AND last_seen_at < ?
-ORDER BY last_seen_at DESC
-LIMIT 1000`, ip, ip, from, to)
+	// Include archived and legacy events; parse context activity times in the business timezone.
+	where, args, err := eventListWhere(EventQuery{Scope: "all"})
+	if err != nil {
+		return nil
+	}
+	where += " AND CASE WHEN JSON_VALID(context) THEN (JSON_UNQUOTE(JSON_EXTRACT(context, '$.dst_ip')) = ? OR JSON_UNQUOTE(JSON_EXTRACT(context, '$.victim_target')) = ?) ELSE FALSE END"
+	args = append(args, ip, ip)
+	rows, err := s.db.QueryContext(context.Background(), "SELECT "+eventSelectCols+" FROM events"+where+" ORDER BY last_seen_at DESC, id DESC", args...)
 	if err != nil {
 		return nil
 	}
@@ -478,7 +496,11 @@ LIMIT 1000`, ip, ip, from, to)
 	out := []domain.Event{}
 	for rows.Next() {
 		e, err := scanEvent(rows)
-		if err == nil {
+		if err != nil {
+			continue
+		}
+		last := domain.LastActivity(e)
+		if !last.Before(from) && last.Before(to) {
 			out = append(out, e)
 		}
 	}

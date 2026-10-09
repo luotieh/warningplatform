@@ -76,3 +76,15 @@ func IsConverged(e Event, now time.Time) bool {
 	last := LastActivity(e)
 	return e.AggregationClosed || e.ArchiveDate != nil || (!last.IsZero() && !now.Before(last.Add(ConvergenceIdleWindow)))
 }
+
+// EventStartTime is shared by display and query filtering for all event versions.
+func EventStartTime(e Event) time.Time {
+	ctx := map[string]any{}
+	_ = json.Unmarshal([]byte(e.Context), &ctx)
+	for _, key := range []string{"first_time", "occurrence_time"} {
+		if t := ParseEventTime(ctx[key]); !t.IsZero() {
+			return t
+		}
+	}
+	return e.CreatedAt
+}

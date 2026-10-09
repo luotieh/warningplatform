@@ -8,7 +8,7 @@ import {
   deepflowGetEventDetail,
   deepflowGetEventStats,
   deepflowGetEventSummary,
-  deepflowGetEvents,
+  deepflowGetAllEvents,
 } from "#/api/ly/deepflow";
 import { message } from "#/adapter/naive";
 import { useDeepflowStore } from "#/store";
@@ -153,10 +153,11 @@ async function getDetails() {
 
 async function getTable() {
   try {
-    const res = await deepflowGetEvents();
+    const res = await deepflowGetAllEvents({ scope: "all" });
     tableData.value = Array.isArray(res) ? res : [];
-  } catch {
+  } catch (error) {
     tableData.value = [];
+    message.error(error instanceof Error ? error.message : '获取事件列表失败');
   }
 }
 

@@ -32,8 +32,14 @@ func TestArchiveListRangesAndPagination(t *testing.T) {
 		status, total int
 	}{
 		{"scope=archive", 200, 3},
-		{"scope=today", 200, 1},
+		{"scope=active", 200, 1},
 		{"scope=all", 200, 4},
+		{"", 200, 4},
+		{"scope=unknown", 400, 0},
+		{"scope=all&starttime=invalid", 400, 0},
+		{"scope=all&endtime=invalid", 400, 0},
+		{"scope=all&starttime=10&endtime=9", 400, 0},
+		{"scope=all&starttime=10&endtime=10", 400, 0},
 		{"scope=archive&archive_from=2026-09-12&archive_to=2026-09-14", 200, 2},
 		{"scope=archive&archive_from=2026-09-14&archive_to=2026-09-14", 200, 1},
 		{"scope=archive&date=2026-09-12", 200, 1},

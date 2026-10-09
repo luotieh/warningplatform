@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router';
 
 import { marked } from 'marked';
 import {
+  NAlert,
   NButton,
   NCard,
   NDataTable,
@@ -90,7 +91,7 @@ async function load() {
   loading.value = true;
   try {
     assets.value = (await lyAssetList()) || [];
-    if (!lyStore.events.length) await lyStore.loadEvents();
+    await lyStore.loadOverviewEvents();
   } catch (error) {
     message.error(error instanceof Error ? error.message : '加载失败');
   } finally {
@@ -316,7 +317,7 @@ const columns = [
     key: 'related',
     width: 110,
     render: (row: LyAsset) => {
-      const n = countAssetEvents(row, lyStore.events || []);
+      const n = countAssetEvents(row, lyStore.overviewEvents || []);
       return h(NButton, { text: true, type: 'primary', disabled: n === 0, onClick: () => jumpToEvents(row) }, { default: () => String(n) });
     },
   },
@@ -340,6 +341,7 @@ onMounted(load);
 
 <template>
   <div class="ly-page">
+    <NAlert v-if="lyStore.overviewError" type="error">{{ lyStore.overviewError }}</NAlert>
     <NSpace vertical :size="12">
       <NCard size="small">
         <NSpace>

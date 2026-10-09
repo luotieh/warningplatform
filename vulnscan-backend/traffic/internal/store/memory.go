@@ -355,6 +355,11 @@ func (s *MemoryStore) ListEventsMatching(q EventQuery) ([]domain.Event, error) {
 
 // filterEventsLocked 应用除分页/排序外的全部过滤条件（调用方须持读锁）。
 func (s *MemoryStore) filterEventsLocked(q EventQuery) ([]domain.Event, error) {
+	var err error
+	q, err = q.Normalize(time.Now())
+	if err != nil {
+		return nil, err
+	}
 	from, to, err := q.ArchiveRange()
 	if err != nil {
 		return nil, err
@@ -367,7 +372,7 @@ func (s *MemoryStore) filterEventsLocked(q EventQuery) ([]domain.Event, error) {
 			continue
 		}
 		switch strings.ToLower(strings.TrimSpace(q.Scope)) {
-		case "", "today":
+		case "active":
 			if e.ArchiveDate != nil {
 				continue
 			}
@@ -379,8 +384,7 @@ func (s *MemoryStore) filterEventsLocked(q EventQuery) ([]domain.Event, error) {
 			if (from != "" && date < from) || (to != "" && date > to) {
 				continue
 			}
-		case "all":
-		case "3", "7":
+		case "", "all", "today", "3", "7":
 			// 近三天/近七天快捷范围：归档与否都可见，由 StartTime/EndTime 限定窗口。
 		default:
 			if e.ArchiveDate != nil {
@@ -403,16 +407,7 @@ func (s *MemoryStore) filterEventsLocked(q EventQuery) ([]domain.Event, error) {
 				continue
 			}
 		}
-		filterTime := e.CreatedAt
-		if aggregation["aggregation_version"] == float64(2) {
-			if t := domain.ParseEventTime(aggregation["first_time"]); !t.IsZero() {
-				filterTime = t
-			}
-		}
-		if q.StartTime != nil && filterTime.Before(*q.StartTime) {
-			continue
-		}
-		if q.EndTime != nil && !filterTime.Before(*q.EndTime) {
+		if !matchesEventTime(e, q) {
 			continue
 		}
 		out = append(out, e)
@@ -637,16 +632,10 @@ func (s *MemoryStore) ListEventsByTargetIP(ip string, from time.Time, to time.Ti
 		if e.Context != "" {
 			_ = json.Unmarshal([]byte(e.Context), &ctxMap)
 		}
-		dst := ""
-		if v, ok := ctxMap["dst_ip"].(string); ok {
-			dst = v
+		if canonical, _ := ctxMap["canonical_event_id"].(string); canonical != "" && canonical != e.EventID {
+			continue
 		}
-		if dst == "" {
-			if v, ok := ctxMap["victim_target"].(string); ok {
-				dst = v
-			}
-		}
-		if dst == ip {
+		if ctxMap["dst_ip"] == ip || ctxMap["victim_target"] == ip {
 			out = append(out, e)
 		}
 	}

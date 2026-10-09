@@ -25,7 +25,7 @@ watch(() => [props.visible, props.eventId, props.hitId, props.version], async ()
   }
 });
 
-// 完整报文（packet_hex，含链路/IP/传输头的完整帧）以 hexdump 形式展示，
+// 抓获报文（packet_hex）以 hexdump 展示；采集内容可能已截断。
 // 与抓包工具一致：偏移 + 十六进制 + ASCII。
 const packetBytes = computed(() => {
   const clean = String(evidence.value.packet_hex || '').replace(/[^0-9a-fA-F]/g, '');
@@ -60,8 +60,17 @@ const packetDump = computed(() => {
           <div class="evidence-section-title">报文明文</div>
           <pre class="evidence-block">{{ evidence.payload_text }}</pre>
         </div>
+        <NAlert v-if="evidence.capture_truncated || (evidence.wire_length && packetBytes < Number(evidence.wire_length))" type="warning" class="evidence-section">
+          当前命中包未完整保存，以下仅展示已抓获的字节。
+        </NAlert>
+        <NAlert v-if="evidence.exchange?.response?.truncated || evidence.exchange?.response?.reassembly_incomplete" type="warning" class="evidence-section">
+          响应证据存在截断或 TCP 重组缺口，不能视为完整响应。
+        </NAlert>
+        <div v-if="evidence.exchange?.response_status === 'partial'" class="evidence-section">
+          响应完整性：不完整或应用消息边界尚未核验。
+        </div>
         <div v-if="evidence.packet_hex" class="evidence-section">
-          <div class="evidence-section-title">完整报文（packet_hex · {{ packetBytes }} 字节）</div>
+          <div class="evidence-section-title">抓获报文（packet_hex · {{ packetBytes }} 字节）</div>
           <pre class="evidence-block evidence-hex">{{ packetDump }}</pre>
         </div>
         <div class="evidence-section-title">原始明细 JSON</div>

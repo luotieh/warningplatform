@@ -3,6 +3,7 @@ import { computed, h, onMounted, reactive, watch } from 'vue';
 import { useRouter } from 'vue-router';
 
 import {
+  NAlert,
   NButton,
   NCard,
   NDataTable,
@@ -26,7 +27,7 @@ const pagerTimeline = reactive({ page: 1, pageSize: 10 });
 const pagerReview = reactive({ page: 1, pageSize: 10 });
 const pagerAnalysis = reactive({ page: 1, pageSize: 10 });
 
-const allEvents = computed(() => lyStore.events ?? []);
+const allEvents = computed(() => lyStore.overviewEvents ?? []);
 // 待审核：review_status 为空或 pending_review（已通过/已驳回不计入）
 const reviewPendingEvents = computed(() =>
   allEvents.value.filter(
@@ -107,14 +108,13 @@ const eventWorkColumns = [
 ];
 
 onMounted(async () => {
-  if (!lyStore.events.length) {
-    await lyStore.loadEvents();
-  }
+  await lyStore.loadOverviewEvents();
 });
 </script>
 
 <template>
   <div class="ly-page-grid">
+    <NAlert v-if="lyStore.overviewError" type="error">{{ lyStore.overviewError }}</NAlert>
     <NFlex :size="12" vertical>
       <NCard title="事件概览" size="small">
         <NFlex :size="12">

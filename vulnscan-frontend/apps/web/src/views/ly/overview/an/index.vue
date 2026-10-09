@@ -1,21 +1,14 @@
 <script lang="ts" setup>
-import { onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 
 import { NButton, NCard, NSpace, NText } from 'naive-ui';
 
-import { useLyStore } from '#/store/ly';
 
 defineOptions({ name: 'LyOverviewAN' });
 
 const router = useRouter();
-const lyStore = useLyStore();
 
-onMounted(async () => {
-  if (!lyStore.events.length) {
-    await lyStore.loadEvents();
-  }
-});
+
 </script>
 
 <template>

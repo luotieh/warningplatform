@@ -72,7 +72,7 @@ type Store interface {
 }
 
 // EventQuery 事件列表服务端分页/过滤条件。
-// Scope: today（默认，未归档）/ archive（全部归档，可按归档日期范围筛选）/ all（全量）。
+// Scope: all（默认全量）/ today,3,7（北京时间窗口，含归档）/ active（未归档）/ archive（归档）。
 type EventQuery struct {
 	Scope            string
 	Date             string // YYYY-MM-DD，兼容旧单日筛选，可选

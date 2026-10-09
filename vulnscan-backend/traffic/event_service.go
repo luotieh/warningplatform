@@ -380,13 +380,7 @@ func lyCompatibleEvent(event domain.Event) map[string]any {
 	}
 	eventType := firstNonEmpty(stringValue(context["event_type"]), stringValue(context["type"]), "cap")
 	level := lyLevel(event.Severity)
-	first := domain.ParseEventTime(context["first_time"])
-	if first.IsZero() {
-		first = domain.ParseEventTime(context["occurrence_time"])
-	}
-	if first.IsZero() {
-		first = event.CreatedAt
-	}
+	first := domain.EventStartTime(event)
 	lastSeen := domain.LastActivity(event)
 	now := time.Now().UTC()
 	isFinal := domain.IsConverged(event, now)

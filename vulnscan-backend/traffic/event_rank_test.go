@@ -3,6 +3,7 @@ package traffic
 import (
 	"context"
 	"testing"
+	"time"
 
 	"vulnscan-backend/traffic/internal/domain"
 	"vulnscan-backend/traffic/internal/store"
@@ -102,5 +103,38 @@ func TestListPageRankFilterRejectsUnknownKey(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("invalid rank key should fail")
+	}
+}
+
+// Every rank tag total must equal the paginated list under the same archived time window.
+func TestArchivedTimeWindowRankTotalsMatchEveryDimension(t *testing.T) {
+	svc, st := newTestEventService(t, "")
+	start := time.Date(2026, 10, 8, 0, 0, 0, 0, domain.Beijing)
+	end := start.AddDate(0, 0, 1)
+	for _, e := range []domain.Event{
+		{EventID: "archived", CreatedAt: start.AddDate(0, 0, -3), ArchiveDate: &start, Context: `{"first_time":"2026-10-08T00:05:00+08:00","event_type":"dns","src_ip":"10.0.0.8","dst_ip":"1.2.3.4"}`},
+		{EventID: "live", CreatedAt: start.Add(time.Hour), Context: `{"event_type":"dns","src_ip":"10.0.0.8","dst_ip":"1.2.3.4"}`},
+		{EventID: "before", CreatedAt: start, Context: `{"first_time":"2026-10-07T23:30:00+08:00","event_type":"dns","src_ip":"10.0.0.8","dst_ip":"1.2.3.4"}`},
+	} {
+		if _, err := st.CreateEvent(e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, scope := range []string{"today", "3", "7", "all"} {
+		q := store.EventQuery{Scope: scope, StartTime: &start, EndTime: &end, Asset: "10.0.0.8", Keyword: "DNS", Page: 2, PageSize: 1}
+		ranks, err := svc.RankCounts(context.Background(), q)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for key, items := range ranks {
+			if len(items) != 1 || items[0].Value != 2 {
+				t.Fatalf("scope=%s rank=%s: %v", scope, key, items)
+			}
+			q.RankKey, q.RankValue = key, items[0].Name
+			rows, total, err := svc.ListPage(context.Background(), q)
+			if err != nil || total != items[0].Value || len(rows) != 1 {
+				t.Fatalf("scope=%s rank=%s total=%d rows=%v err=%v", scope, key, total, rows, err)
+			}
+		}
 	}
 }

@@ -287,7 +287,7 @@ func (h *Handler) CreateEvent(c *gin.Context) {
 }
 
 func (h *Handler) ListEvents(c *gin.Context) {
-	// 服务端分页/过滤：scope=today（未归档）/ archive（日期范围可选）/ all（全局搜索）。
+	// 服务端分页/过滤：默认全量，时间窗口包含归档；active 显式只看未归档。
 	q, err := eventQueryFromRequest(c)
 	if err != nil {
 		fail(c, http.StatusBadRequest, err.Error())
@@ -332,7 +332,7 @@ func eventQueryFromRequest(c *gin.Context) (store.EventQuery, error) {
 		pageSize = 200
 	}
 	q := store.EventQuery{
-		Scope:            c.DefaultQuery("scope", "today"),
+		Scope:            c.DefaultQuery("scope", "all"),
 		Date:             c.Query("date"),
 		ArchiveFrom:      c.Query("archive_from"),
 		ArchiveTo:        c.Query("archive_to"),
@@ -353,21 +353,22 @@ func eventQueryFromRequest(c *gin.Context) (store.EventQuery, error) {
 		Order: c.Query("order"),
 	}
 	if v := c.Query("starttime"); v != "" {
-		if sec, err := strconv.ParseInt(v, 10, 64); err == nil {
-			t := time.Unix(sec, 0).UTC()
-			q.StartTime = &t
+		sec, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			return q, fmt.Errorf("starttime 必须为 Unix 秒时间戳")
 		}
+		t := time.Unix(sec, 0).UTC()
+		q.StartTime = &t
 	}
 	if v := c.Query("endtime"); v != "" {
-		if sec, err := strconv.ParseInt(v, 10, 64); err == nil {
-			t := time.Unix(sec, 0).UTC()
-			q.EndTime = &t
+		sec, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			return q, fmt.Errorf("endtime 必须为 Unix 秒时间戳")
 		}
+		t := time.Unix(sec, 0).UTC()
+		q.EndTime = &t
 	}
-	if _, _, err := q.ArchiveRange(); err != nil {
-		return q, err
-	}
-	return q, nil
+	return q.Normalize(time.Now())
 }
 
 // GetArchiveJob 查询每日归档任务（GET /events/archive/jobs/:jobID）。
