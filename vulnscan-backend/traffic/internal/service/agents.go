@@ -687,14 +687,15 @@ func (s Services) addAgentMessage(eventID, from, messageType string, roundID int
 // promptInternalIDKeys 注入 LLM 前需脱敏的证据内部标识字段：
 // 68 位哈希对研判没有信息量，模型抄进报告只会稀释关键证据的可读性。
 var promptInternalIDKeys = map[string]bool{
-	"hit_id":              true,
-	"evidence_id":         true,
-	"origin_event_id":     true,
-	"dedup_key":           true,
-	"identity_digest":     true,
-	"aggregate_key":       true,
-	"evidence_result_key": true,
-	"registry_version":    true,
+	"hit_id":                  true,
+	"evidence_id":             true,
+	"origin_event_id":         true,
+	"dedup_key":               true,
+	"identity_digest":         true,
+	"aggregate_key":           true,
+	"evidence_result_key":     true,
+	"registry_version":        true,
+	"source_registry_version": true,
 }
 
 // sanitizeEvidenceForPrompt 递归清理注入 prompt 的 context：

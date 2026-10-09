@@ -1076,20 +1076,27 @@ FROM traffic_assets WHERE id=?`, id)
 }
 
 func (s *MySQLStore) ListAssets() []domain.Asset {
-	rows, err := s.db.QueryContext(context.Background(), `
+	assets, _ := s.ListAssetsContext(context.Background())
+	return assets
+}
+
+func (s *MySQLStore) ListAssetsContext(ctx context.Context) ([]domain.Asset, error) {
+	rows, err := s.db.QueryContext(ctx, `
 SELECT id, name, asset_type, address, unit, owner, status, remark, created_at, updated_at
 FROM traffic_assets ORDER BY created_at DESC`)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	defer rows.Close()
 	out := []domain.Asset{}
 	for rows.Next() {
-		if a, err := scanAsset(rows); err == nil {
-			out = append(out, a)
+		a, err := scanAsset(rows)
+		if err != nil {
+			return nil, err
 		}
+		out = append(out, a)
 	}
-	return out
+	return out, rows.Err()
 }
 
 func (s *MySQLStore) UpdateAsset(id string, patch map[string]any) (domain.Asset, bool) {

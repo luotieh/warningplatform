@@ -164,6 +164,13 @@ func applySnapshotSupplemental(out *SnapshotEvidenceInput, snap EvidenceSnapshot
 		}
 		for _, b := range source.Baselines {
 			if accept(b.Provenance, "baselines") {
+				kept := target.Baselines[:0]
+				for _, old := range target.Baselines {
+					if old.FactID != b.FactID {
+						kept = append(kept, old)
+					}
+				}
+				target.Baselines = kept
 				target.Baselines = append(target.Baselines, b)
 			}
 		}
@@ -202,6 +209,10 @@ func applySnapshotSupplemental(out *SnapshotEvidenceInput, snap EvidenceSnapshot
 			}
 			if valid {
 				copy := *source.TLS
+				if len(copy.Records) == 0 && target.TLS != nil {
+					copy.Records = target.TLS.Records
+					copy.Complete = target.TLS.Complete
+				}
 				target.TLS = &copy
 			} else {
 				issue("supplemental_binding_mismatch", "tls.records")

@@ -24,9 +24,14 @@ func (s Services) PrepareReportEvidence(ctx context.Context, event domain.Event)
 type preparedReportInput struct {
 	Context      string
 	AssetSection string
+	Evaluation   SnapshotFactEvaluation
 }
 
 func (s Services) prepareReportInput(ctx context.Context, event domain.Event) (preparedReportInput, error) {
+	return s.prepareReportInputMode(ctx, event, true)
+}
+
+func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event, persist bool) (preparedReportInput, error) {
 	snap, err := s.EvidenceSnapshot(ctx, event.EventID, 0)
 	if err != nil {
 		if err.Error() != "legacy_event" {
@@ -41,21 +46,37 @@ func (s Services) prepareReportInput(ctx context.Context, event domain.Event) (p
 		c["input_manifest"] = map[string]any{"available_hits": len(occurrences), "declared_hits": c["occurrence_count"], "statistics_quality": "unverified"}
 		c["algorithm_evidence"] = map[string]any{"status": "unavailable", "reason": "legacy_snapshot_unverified"}
 		b, err := json.Marshal(c)
-		return preparedReportInput{Context: string(b), AssetSection: assetMatchContext(event, s.Store.ListAssets())}, err
+		manifest := SnapshotEvidenceManifest{AdapterVersion: snapshotAdapterVersion, Coverage: "unverified", FactCoverage: snapshotUnavailableCoverage(evidence.SupportedFacts(), "legacy_snapshot_unverified")}
+		manifest.addIssue(SnapshotInputIssue{Code: "legacy_snapshot_unverified", Stage: "load_snapshot"})
+		return preparedReportInput{Context: string(b), AssetSection: assetMatchContext(event, s.Store.ListAssets()), Evaluation: SnapshotFactEvaluation{Status: "unavailable", Reason: "legacy_snapshot_unverified", Manifest: manifest}}, err
 	}
 	// One registry read serves all hit/scope bindings in this evaluation. Cache
 	// identity includes the registry, so enrollment or address changes invalidate it.
-	assets := s.Store.ListAssets()
+	assetCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	assets, assetErr := s.Store.ListAssetsContext(assetCtx)
+	cancel()
+	if ctx.Err() != nil {
+		return preparedReportInput{}, ctx.Err()
+	}
 	options := DefaultSnapshotEvidenceOptions()
+	if assetErr != nil {
+		issue := snapshotIssueCause(SnapshotInputIssue{Code: "asset_registry_read_failed", Stage: "load_assets", Retryable: true}, assetErr)
+		options.RegistryIssue = &issue
+		assets = nil
+	}
 	options.Facts = evidence.SupportedFacts()
 	options.Supplemental, options.SupplementalIssue, err = s.loadSnapshotSupplemental(ctx, snap)
+	if err != nil {
+		return preparedReportInput{}, err
+	}
+	options.Sources, options.SourceIssue, err = s.loadEvidenceSources(ctx)
 	if err != nil {
 		return preparedReportInput{}, err
 	}
 	config := evidence.DefaultConfig()
 	assetVersions := append([]domain.Asset(nil), assets...)
 	sort.Slice(assetVersions, func(i, j int) bool { return assetVersions[i].ID < assetVersions[j].ID })
-	key := digest([]any{snap.EventID, snap.Version, snap.Watermark, snap.RevisionWatermark, evidence.RuleVersion, snapshotAdapterVersion, config, options, assetVersions, options.Supplemental, options.SupplementalIssue})
+	key := digest([]any{snap.EventID, snap.Version, snap.Watermark, snap.RevisionWatermark, evidence.RuleVersion, snapshotAdapterVersion, config, options, assetVersions, options.Supplemental, options.SupplementalIssue, options.Sources, options.SourceIssue, options.RegistryIssue})
 	record, exists, err := s.Store.AggregateRecord(ctx, "evidence_result", key)
 	cacheAvailable := err == nil
 	if err != nil {
@@ -81,6 +102,9 @@ func (s Services) prepareReportInput(ctx context.Context, event domain.Event) (p
 	if options.SupplementalIssue != nil && options.SupplementalIssue.Retryable {
 		exists = false
 	}
+	if !persist || options.SourceIssue != nil && options.SourceIssue.Retryable || options.RegistryIssue != nil {
+		exists = false
+	}
 	if !exists {
 		resultPersisted = false
 		evaluation, err = s.EvaluateSnapshotFacts(ctx, snap, assets, options, config)
@@ -92,13 +116,15 @@ func (s Services) prepareReportInput(ctx context.Context, event domain.Event) (p
 			// preserve the original report data and persist a correlated failure.
 			failureKey := snapshotKey(snap.EventID, snap.Version)
 			failure := map[string]any{"event_id": snap.EventID, "snapshot_version": snap.Version, "at": time.Now().UTC(), "adapter_version": snapshotAdapterVersion, "reason": evaluation.Reason, "manifest": evaluation.Manifest}
-			if saveErr := putRecord(ctx, s.Store, "evidence_failure", failureKey, snap.EventID, failure); saveErr != nil {
-				log.Printf("[evidence] failure_record_write_failed event=%s snapshot=%d", snap.EventID, snap.Version)
+			if persist {
+				if saveErr := putRecord(ctx, s.Store, "evidence_failure", failureKey, snap.EventID, failure); saveErr != nil {
+					log.Printf("[evidence] failure_record_write_failed event=%s snapshot=%d", snap.EventID, snap.Version)
+				}
 			}
 			log.Printf("[evidence] input_failed event=%s snapshot=%d reason=%s", snap.EventID, snap.Version, evaluation.Reason)
 			cacheAvailable = false
 		}
-		if cacheAvailable && (options.SupplementalIssue == nil || !options.SupplementalIssue.Retryable) {
+		if persist && cacheAvailable && (options.SupplementalIssue == nil || !options.SupplementalIssue.Retryable) && (options.SourceIssue == nil || !options.SourceIssue.Retryable) && options.RegistryIssue == nil {
 			if err = putRecord(ctx, s.Store, "evidence_result", key, snap.EventID, evaluation); err != nil {
 				evaluation.Manifest.addIssue(SnapshotInputIssue{Code: "result_cache_write_failed", Stage: "persist", Retryable: true})
 				log.Printf("[evidence] result_cache_write_failed event=%s snapshot=%d", snap.EventID, snap.Version)
@@ -111,9 +137,11 @@ func (s Services) prepareReportInput(ctx context.Context, event domain.Event) (p
 		evaluation.Manifest.addIssue(SnapshotInputIssue{Code: "result_not_cached", Stage: "persist", Retryable: true})
 	}
 	diagnostic := SnapshotEvidenceDiagnostics{EventID: snap.EventID, SnapshotVersion: snap.Version, At: time.Now().UTC(), Status: evaluation.Status, Reason: evaluation.Reason, ResultKey: key, ResultPersisted: resultPersisted, Manifest: evaluation.Manifest}
-	if saveErr := putRecord(ctx, s.Store, "evidence_diagnostics", snapshotKey(snap.EventID, snap.Version), snap.EventID, diagnostic); saveErr != nil {
-		evaluation.Manifest.addIssue(SnapshotInputIssue{Code: "diagnostics_write_failed", Stage: "persist", Retryable: true})
-		log.Printf("[evidence] diagnostics_write_failed event=%s snapshot=%d", snap.EventID, snap.Version)
+	if persist {
+		if saveErr := putRecord(ctx, s.Store, "evidence_diagnostics", snapshotKey(snap.EventID, snap.Version), snap.EventID, diagnostic); saveErr != nil {
+			evaluation.Manifest.addIssue(SnapshotInputIssue{Code: "diagnostics_write_failed", Stage: "persist", Retryable: true})
+			log.Printf("[evidence] diagnostics_write_failed event=%s snapshot=%d", snap.EventID, snap.Version)
+		}
 	}
 	manifest := make(map[string]any, len(snap.Manifest)+1)
 	for k, v := range snap.Manifest {
@@ -126,11 +154,12 @@ func (s Services) prepareReportInput(ctx context.Context, event domain.Event) (p
 		"read_pages": evaluation.Manifest.ReadPages, "revision_batches": evaluation.Manifest.RevisionBatches,
 		"max_hits": options.MaxHits, "max_raw_bytes": options.MaxRawBytes,
 		"issue_count": evaluation.Manifest.IssueCount, "omitted_issues": evaluation.Manifest.OmittedIssues, "supplemental_version": evaluation.Manifest.SupplementalVersion,
+		"source_registry_version":   evaluation.Manifest.SourceRegistryVersion,
 		"evidence_result_persisted": resultPersisted, "diagnostics_key": snapshotKey(snap.EventID, snap.Version),
 	}
 	snap.Manifest = manifest
 	projected, err := evidenceContextFromSnapshot(snap, map[string]any{"algorithm_evidence": snapshotFactSummary(evaluation)})
-	return preparedReportInput{Context: projected, AssetSection: assetMatchContext(event, assets)}, err
+	return preparedReportInput{Context: projected, AssetSection: assetMatchContext(event, assets), Evaluation: evaluation}, err
 }
 
 // Complete results remain in evidence_result; this projection is bounded and

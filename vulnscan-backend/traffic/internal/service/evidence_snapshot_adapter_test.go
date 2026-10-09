@@ -44,6 +44,11 @@ func (s *evidenceReadCounter) ListAssets() []domain.Asset {
 	return s.Store.ListAssets()
 }
 
+func (s *evidenceReadCounter) ListAssetsContext(ctx context.Context) ([]domain.Asset, error) {
+	s.registryReads++
+	return s.Store.ListAssetsContext(ctx)
+}
+
 func evidenceAdapterFixture(t *testing.T, n int) (Services, EvidenceSnapshot, []domain.Asset) {
 	t.Helper()
 	svc := Services{Store: store.NewMemoryStore()}

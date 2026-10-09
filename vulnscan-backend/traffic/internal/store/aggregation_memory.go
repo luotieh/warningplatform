@@ -6,7 +6,16 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"vulnscan-backend/traffic/internal/domain"
 )
+
+func (s *MemoryStore) ListAssetsContext(ctx context.Context) ([]domain.Asset, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	assets := s.ListAssets()
+	return assets, ctx.Err()
+}
 
 func (s *MemoryStore) LockAggregationKey(ctx context.Context, _ string) error { return ctx.Err() }
 

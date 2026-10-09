@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"time"
 
 	"vulnscan-backend/traffic/internal/domain"
@@ -59,6 +60,7 @@ type Store interface {
 	CreateAsset(a domain.Asset) (domain.Asset, error)
 	GetAsset(id string) (domain.Asset, bool)
 	ListAssets() []domain.Asset
+	ListAssetsContext(context.Context) ([]domain.Asset, error)
 	UpdateAsset(id string, patch map[string]any) (domain.Asset, bool)
 	DeleteAsset(id string) bool
 
