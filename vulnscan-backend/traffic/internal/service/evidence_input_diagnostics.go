@@ -12,14 +12,15 @@ import (
 )
 
 type SnapshotEvidenceDiagnostics struct {
-	EventID         string                   `json:"event_id"`
-	SnapshotVersion int64                    `json:"snapshot_version"`
-	At              time.Time                `json:"at"`
-	Status          string                   `json:"status"`
-	Reason          string                   `json:"reason,omitempty"`
-	ResultKey       string                   `json:"result_key,omitempty"`
-	ResultPersisted bool                     `json:"result_persisted"`
-	Manifest        SnapshotEvidenceManifest `json:"manifest"`
+	EventID         string                     `json:"event_id"`
+	SnapshotVersion int64                      `json:"snapshot_version"`
+	At              time.Time                  `json:"at"`
+	Status          string                     `json:"status"`
+	Reason          string                     `json:"reason,omitempty"`
+	ResultKey       string                     `json:"result_key,omitempty"`
+	ResultPersisted bool                       `json:"result_persisted"`
+	Manifest        SnapshotEvidenceManifest   `json:"manifest"`
+	Semantics       *ReportSemanticDiagnostics `json:"semantics,omitempty"`
 }
 
 // Read-only debugging: never executes an algorithm or reads the hit table.
@@ -44,6 +45,17 @@ func (s Services) EvidenceInputDiagnostics(ctx context.Context, eventID string, 
 	var diagnostic SnapshotEvidenceDiagnostics
 	if err := json.Unmarshal(record.Value, &diagnostic); err != nil || diagnostic.EventID != eventID || diagnostic.SnapshotVersion != version {
 		return diagnostic, errors.New("invalid stored evidence diagnostics")
+	}
+	semanticRecord, exists, readErr := s.Store.AggregateRecord(ctx, "semantic_diagnostics", snapshotKey(eventID, version))
+	if readErr != nil {
+		return diagnostic, errors.New("semantic diagnostics read failed")
+	}
+	if exists {
+		var sem ReportSemanticDiagnostics
+		if json.Unmarshal(semanticRecord.Value, &sem) != nil || sem.EventID != eventID || sem.SnapshotVersion != version {
+			return diagnostic, errors.New("invalid stored semantic diagnostics")
+		}
+		diagnostic.Semantics = &sem
 	}
 	return diagnostic, nil
 }

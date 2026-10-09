@@ -60,6 +60,10 @@ func credentialFields(fields map[string]string) bool {
 	return false
 }
 
+// HasCredentialFields shares the deterministic field-name predicate with
+// snapshot semantic adapters; values are irrelevant to this structural check.
+func HasCredentialFields(fields map[string]string) bool { return credentialFields(fields) }
+
 func (e *Engine) httpFact(f Finding, g *observations) Finding {
 	if f.FactID == "F_LONG_LOW_SESSION" {
 		return e.longSession(f, g)

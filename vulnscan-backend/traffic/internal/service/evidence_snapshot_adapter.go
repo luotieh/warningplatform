@@ -23,11 +23,12 @@ import (
 	"vulnscan-backend/traffic/internal/store"
 )
 
-const snapshotAdapterVersion = "snapshot-evidence-adapter-0.3"
+const snapshotAdapterVersion = "snapshot-evidence-adapter-0.4"
 
 // SnapshotEvidenceOptions limits the shared load, not each algorithm separately.
 // Large snapshots are explicitly deferred, never evaluated using model samples.
 type SnapshotEvidenceOptions struct {
+	CaptureSemantic   bool
 	Facts             []evidence.FactID
 	MaxHits           int64
 	MaxRawBytes       int64
@@ -70,9 +71,10 @@ type SnapshotEvidenceManifest struct {
 }
 
 type SnapshotEvidenceInput struct {
-	Request  evidence.Request         `json:"-"`
-	Manifest SnapshotEvidenceManifest `json:"manifest"`
-	Reason   string                   `json:"reason,omitempty"`
+	Request              evidence.Request              `json:"-"`
+	SemanticObservations []SnapshotSemanticObservation `json:"-"`
+	Manifest             SnapshotEvidenceManifest      `json:"manifest"`
+	Reason               string                        `json:"reason,omitempty"`
 }
 
 type SnapshotFactEvaluation struct {
@@ -265,6 +267,9 @@ func (s Services) SnapshotEvidenceInput(ctx context.Context, snap EvidenceSnapsh
 			scopeHits[scope] = append(scopeHits[scope], hit)
 			adaptSnapshotProtocols(input, h, m, remoteIP, remotePort, known && !truncated)
 			enrichSnapshotProtocols(input, h, m, &out.Manifest)
+			if opts.CaptureSemantic {
+				collectSnapshotSemanticObservation(&out, input, h, m, assets)
+			}
 		}
 		tail := page[len(page)-1]
 		if !q.AfterTime.IsZero() && (tail.OccurredAt.Before(q.AfterTime) || (tail.OccurredAt.Equal(q.AfterTime) && tail.ID <= q.AfterID)) {
@@ -527,6 +532,11 @@ func snapshotHTTPURL(app, packet map[string]any) string {
 func decodeSnapshotPayloadHex(raw string) ([]byte, error) { return hex.DecodeString(raw) }
 
 func (s Services) EvaluateSnapshotFacts(ctx context.Context, snap EvidenceSnapshot, assets []domain.Asset, opts SnapshotEvidenceOptions, cfg evidence.Config) (SnapshotFactEvaluation, error) {
+	input, err := s.SnapshotEvidenceInput(ctx, snap, assets, opts)
+	return evaluateSnapshotFactInput(ctx, snap, input, err, opts, cfg)
+}
+
+func evaluateSnapshotFactInput(ctx context.Context, snap EvidenceSnapshot, input SnapshotEvidenceInput, inputErr error, opts SnapshotEvidenceOptions, cfg evidence.Config) (SnapshotFactEvaluation, error) {
 	if opts.Supplemental != nil && validateSnapshotSupplemental(snap, *opts.Supplemental) == nil && opts.Supplemental.Policies != nil {
 		cfg.Policies = opts.Supplemental.Policies
 	}
@@ -534,7 +544,7 @@ func (s Services) EvaluateSnapshotFacts(ctx context.Context, snap EvidenceSnapsh
 	if err != nil {
 		return SnapshotFactEvaluation{}, err
 	}
-	input, err := s.SnapshotEvidenceInput(ctx, snap, assets, opts)
+	err = inputErr
 	out := SnapshotFactEvaluation{Status: "unavailable", Reason: input.Reason, Manifest: input.Manifest}
 	out.Manifest.FactCoverage = snapshotUnavailableCoverage(opts.Facts, evidence.ReasonCode(out.Reason))
 	if err != nil {

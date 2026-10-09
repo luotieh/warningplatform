@@ -21,6 +21,7 @@ type EvidenceValidation struct {
 	Evaluation     SnapshotFactEvaluation        `json:"evaluation"`
 	StatusCounts   map[string]int                `json:"status_counts"`
 	MissingReasons map[string]int                `json:"missing_reasons"`
+	SemanticPlan   map[string]any                `json:"semantic_plan,omitempty"`
 }
 
 type evidenceMeasuredStore struct {
@@ -84,6 +85,7 @@ func (s Services) ValidateReportEvidence(ctx context.Context, eventID string) (E
 	}
 	p, err := s.prepareReportInputMode(ctx, event, false)
 	out.Evaluation = p.Evaluation
+	out.SemanticPlan = reportSemanticSummary(p.Semantics)
 	out.ElapsedMS = float64(time.Since(start).Microseconds()) / 1000
 	// Full findings include source references; validation exports only the
 	// manifest. Operators can retrieve complete persisted evidence separately.

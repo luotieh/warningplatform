@@ -5,7 +5,21 @@ import (
 	"time"
 )
 
-const SemanticVersion = "evidence-semantics-0.1"
+const SemanticVersion = "evidence-semantics-0.2"
+
+type SemanticInputMode string
+
+const (
+	SemanticRedacted SemanticInputMode = "redacted"
+	SemanticRaw      SemanticInputMode = "raw"
+)
+
+func semanticMode(mode SemanticInputMode) SemanticInputMode {
+	if mode == "" {
+		return SemanticRedacted
+	}
+	return mode
+}
 
 // SlotKey is a composite key: S12 and S13 each have two distinct slots.
 type SlotKey struct {
@@ -24,7 +38,8 @@ type SemanticDefinition struct {
 }
 
 // SemanticMaterial is constructed by a trusted snapshot adapter, never from model
-// claims. Text MUST already be field-wise redacted; secret values are not inputs.
+// claims. Redacted mode requires field-wise redaction; explicit raw mode retains
+// actual text and leaves Redacted=false. Input mode is never inferred by LLM.
 // Kind describes a parsed field/context, rather than a malicious/benign verdict.
 type SemanticMaterial struct {
 	ID                 string         `json:"id"`
@@ -65,6 +80,7 @@ type SemanticDecodeStep struct {
 // PropositionID is assigned by the adapter to one operation/transfer, not by the
 // model. Distinct operations must use distinct IDs, even within the same scope.
 type SemanticSubject struct {
+	InputMode     SemanticInputMode  `json:"-"` // assigned from request by the engine
 	ID            string             `json:"id"`
 	PropositionID string             `json:"proposition_id"`
 	Scope         Scope              `json:"scope"`
@@ -74,6 +90,7 @@ type SemanticSubject struct {
 }
 
 type SemanticRequest struct {
+	InputMode       SemanticInputMode `json:"input_mode,omitempty"`
 	EventID         string            `json:"event_id"`
 	SnapshotVersion int64             `json:"snapshot_version"`
 	Subjects        []SemanticSubject `json:"subjects"`
@@ -111,13 +128,14 @@ type SemanticModel interface {
 }
 
 type DeliveredMaterial struct {
+	Redacted       bool     `json:"redacted"`
 	ID             string   `json:"id"`
 	Kind           string   `json:"kind"`
 	Text           string   `json:"text"`
 	FieldPath      string   `json:"field_path"`
 	SourceIDs      []string `json:"source_ids"`
 	SourceVersion  string   `json:"source_version"`
-	SHA256         string   `json:"sha256"` // hash of already redacted, pre-clipping text
+	SHA256         string   `json:"sha256"` // hash of actual pre-clipping text in this mode
 	Truncated      bool     `json:"truncated"`
 	AdjudicationID string   `json:"adjudication_id,omitempty"`
 	TransactionID  string   `json:"transaction_id,omitempty"`
@@ -140,6 +158,7 @@ type SemanticFactRef struct {
 }
 
 type SemanticTask struct {
+	InputMode       SemanticInputMode   `json:"input_mode"`
 	ID              string              `json:"task_id"`
 	Slot            SemanticDefinition  `json:"slot"`
 	SubjectID       string              `json:"subject_id"`
@@ -161,6 +180,7 @@ type SemanticExecution struct {
 }
 
 type SemanticPlan struct {
+	InputMode       SemanticInputMode   `json:"input_mode"`
 	EventID         string              `json:"event_id"`
 	SnapshotVersion int64               `json:"snapshot_version"`
 	RuleVersion     string              `json:"rule_version"`

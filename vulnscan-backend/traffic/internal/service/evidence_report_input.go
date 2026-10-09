@@ -25,6 +25,7 @@ type preparedReportInput struct {
 	Context      string
 	AssetSection string
 	Evaluation   SnapshotFactEvaluation
+	Semantics    ReportSemanticEvaluation
 }
 
 func (s Services) prepareReportInput(ctx context.Context, event domain.Event) (preparedReportInput, error) {
@@ -45,10 +46,12 @@ func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event
 		c["evidence_note"] = "历史统计未核验；仅扫描已保存明细，不代表全量原始命中"
 		c["input_manifest"] = map[string]any{"available_hits": len(occurrences), "declared_hits": c["occurrence_count"], "statistics_quality": "unverified"}
 		c["algorithm_evidence"] = map[string]any{"status": "unavailable", "reason": "legacy_snapshot_unverified"}
+		semantics := ReportSemanticEvaluation{Status: "unavailable", Reason: "legacy_snapshot_unverified", InputMode: evidence.SemanticRaw, AdapterVersion: semanticAdapterVersion}
+		c["semantic_evidence"] = reportSemanticSummary(semantics)
 		b, err := json.Marshal(c)
 		manifest := SnapshotEvidenceManifest{AdapterVersion: snapshotAdapterVersion, Coverage: "unverified", FactCoverage: snapshotUnavailableCoverage(evidence.SupportedFacts(), "legacy_snapshot_unverified")}
 		manifest.addIssue(SnapshotInputIssue{Code: "legacy_snapshot_unverified", Stage: "load_snapshot"})
-		return preparedReportInput{Context: string(b), AssetSection: assetMatchContext(event, s.Store.ListAssets()), Evaluation: SnapshotFactEvaluation{Status: "unavailable", Reason: "legacy_snapshot_unverified", Manifest: manifest}}, err
+		return preparedReportInput{Context: string(b), AssetSection: assetMatchContext(event, s.Store.ListAssets()), Evaluation: SnapshotFactEvaluation{Status: "unavailable", Reason: "legacy_snapshot_unverified", Manifest: manifest}, Semantics: semantics}, err
 	}
 	// One registry read serves all hit/scope bindings in this evaluation. Cache
 	// identity includes the registry, so enrollment or address changes invalidate it.
@@ -65,6 +68,7 @@ func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event
 		assets = nil
 	}
 	options.Facts = evidence.SupportedFacts()
+	options.CaptureSemantic = true
 	options.Supplemental, options.SupplementalIssue, err = s.loadSnapshotSupplemental(ctx, snap)
 	if err != nil {
 		return preparedReportInput{}, err
@@ -84,6 +88,7 @@ func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event
 		log.Printf("[evidence] cache_read_failed event=%s snapshot=%d", snap.EventID, snap.Version)
 	}
 	var evaluation SnapshotFactEvaluation
+	var sharedInput *SnapshotEvidenceInput
 	resultPersisted := false
 	if exists {
 		if err := json.Unmarshal(record.Value, &evaluation); err != nil {
@@ -107,7 +112,9 @@ func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event
 	}
 	if !exists {
 		resultPersisted = false
-		evaluation, err = s.EvaluateSnapshotFacts(ctx, snap, assets, options, config)
+		loaded, loadErr := s.SnapshotEvidenceInput(ctx, snap, assets, options)
+		sharedInput = &loaded
+		evaluation, err = evaluateSnapshotFactInput(ctx, snap, loaded, loadErr, options, config)
 		if err != nil {
 			if ctx.Err() != nil {
 				return preparedReportInput{}, ctx.Err()
@@ -158,8 +165,43 @@ func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event
 		"evidence_result_persisted": resultPersisted, "diagnostics_key": snapshotKey(snap.EventID, snap.Version),
 	}
 	snap.Manifest = manifest
-	projected, err := evidenceContextFromSnapshot(snap, map[string]any{"algorithm_evidence": snapshotFactSummary(evaluation)})
-	return preparedReportInput{Context: projected, AssetSection: assetMatchContext(event, assets), Evaluation: evaluation}, err
+	semantics, semanticErr := s.prepareReportSemantics(ctx, snap, evaluation, key, sharedInput, persist, resultPersisted, func() (SnapshotEvidenceInput, error) { return s.SnapshotEvidenceInput(ctx, snap, assets, options) })
+	if semanticErr != nil && ctx.Err() != nil {
+		return preparedReportInput{}, ctx.Err()
+	}
+	manifest["semantic_evidence"] = map[string]any{"result_key": semantics.ResultKey, "adapter_version": semantics.AdapterVersion, "input_mode": semantics.InputMode, "status": semantics.Status, "result_persisted": semantics.ResultPersisted}
+	projected, err := projectReportEvidence(snap, evaluation, semantics)
+	return preparedReportInput{Context: projected, AssetSection: assetMatchContext(event, assets), Evaluation: evaluation, Semantics: semantics}, err
+}
+
+func projectReportEvidence(snap EvidenceSnapshot, facts SnapshotFactEvaluation, semantics ReportSemanticEvaluation) (string, error) {
+	factSummary, semanticSummary := snapshotFactSummary(facts), reportSemanticSummary(semantics)
+	// Whole entries compete under the existing shared 6000-character envelope;
+	// retain explicit omission totals and status instead of slicing JSON/text.
+	for {
+		projected, err := evidenceContextFromSnapshot(snap, map[string]any{"algorithm_evidence": factSummary, "semantic_evidence": semanticSummary})
+		if err == nil {
+			return projected, nil
+		}
+		// Keep at least one validated interpretation alongside the highest
+		// priority fact before spending the shared budget on missing fact rows.
+		if entries, ok := factSummary["findings"].([]map[string]any); ok && len(entries) > 1 {
+			factSummary["findings"] = entries[:len(entries)-1]
+			factSummary["omitted_findings"] = factSummary["total_findings"].(int) - len(entries) + 1
+			continue
+		}
+		if entries, ok := semanticSummary["findings"].([]map[string]any); ok && len(entries) > 0 {
+			semanticSummary["findings"] = entries[:len(entries)-1]
+			semanticSummary["omitted_findings"] = semanticSummary["total_findings"].(int) - len(entries) + 1
+			continue
+		}
+		if entries, ok := factSummary["findings"].([]map[string]any); ok && len(entries) > 0 {
+			factSummary["findings"] = entries[:len(entries)-1]
+			factSummary["omitted_findings"] = factSummary["total_findings"].(int) - len(entries) + 1
+			continue
+		}
+		return "", err
+	}
 }
 
 // Complete results remain in evidence_result; this projection is bounded and

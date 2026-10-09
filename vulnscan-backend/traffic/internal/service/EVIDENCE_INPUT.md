@@ -2,13 +2,13 @@
 
 ## 当前已接通的链路
 
-`runAnalysis → prepareReportInput → 固定版本的EvidenceSnapshot → SnapshotEvidenceInput → evidence.Engine → 原有报告模型`
+`runAnalysis → prepareReportInput → 固定版本的EvidenceSnapshot → SnapshotEvidenceInput → evidence.Engine → SemanticEngine按需解释及校验 → 原有报告模型`
 
 `PrepareReportEvidence`提供同一准备流程的纯上下文入口；报告主流程同时取回资产说明，复用已读取的资产清单。
 
 初报、终报和手动刷新共用这个入口。输入来自现有Store：生产MySQLStore读取`traffic_event_hits`和`traffic_hit_revisions`，MemoryStore执行同样的契约用于测试。代码不需要测试夹具，也不从界面预览或模型回答构建事实。
 
-报告入口现在选择全部59项事实规则，适用且材料充分的执行，不足的保留逐项原因；模块直接调用的nil选择仍兼容原来两项默认规则。23类内容解释的真实材料构建和模型调度仍待后续接入，本次不新增语义模型调用。补充输入与排错说明见[EVIDENCE_INPUT_COVERAGE.md](EVIDENCE_INPUT_COVERAGE.md)。
+报告入口现在选择全部59项事实规则，适用且材料充分的执行，不足的保留逐项原因；模块直接调用的nil选择仍兼容原来两项默认规则。23个语义槽位现已接入同一报告流程，首次计算共用命中读取，原文材料按需批量调用并独立校验、缓存；详见[EVIDENCE_SEMANTIC_REPORT.md](EVIDENCE_SEMANTIC_REPORT.md)。补充输入与排错说明见[EVIDENCE_INPUT_COVERAGE.md](EVIDENCE_INPUT_COVERAGE.md)。
 
 可信来源登记已接入同一流程：按完整范围/时间自动匹配、生成当前快照补充输入，审核历史和源内容哈希可追溯；只读验收命令复用该流程，强制冷计算且不调用模型。配置方法和现场数据限制见[EVIDENCE_SOURCES.md](EVIDENCE_SOURCES.md)。
 
@@ -38,7 +38,7 @@
 | DNS元数据 | 已保存的查询、应答及明确提供的rcode；没有rcode不假设成功 |
 | 网络记录 | 实际对端及端口；仅完整抓包的合法payload_hex可用于载荷字节数 |
 
-`app`中的正文仍是样本，不能证明完整性。适配器新增原始HTTP报文解析，只有完整字节、合法消息边界及Content-Length/chunked读取完成才能获得正文长度和字段名；字段值立即脱敏，编码特征在脱敏前由确定性代码提取。缺帧、残缺正文、不支持的嵌套结构和多消息均保留诊断。DNS从完整报文读取rcode，查询报文不当作成功应答；真实Ethernet帧可补充载荷，但必须匹配流五元组。
+`app`中的正文仍是样本，不能证明完整性。适配器新增原始HTTP报文解析，只有完整字节、合法消息边界及Content-Length/chunked读取完成才能获得正文长度和字段名；事实输入中的字段值立即脱敏，编码特征在脱敏前由确定性代码提取；报告语义适配器在同次扫描中单独保留实际原文，明确标记raw模式，不把事实字段脱敏冒充整份报文脱敏。缺帧、残缺正文、不支持的嵌套结构和多消息均保留诊断。DNS从完整报文读取rcode，查询报文不当作成功应答；真实Ethernet帧可补充载荷，但必须匹配流五元组。
 
 外部基线、历史定谳、战役/当前阶段证明、完整群体成员、授权任务、TLS信任资料和独立情报来源元数据可通过后端独立的快照补充记录接入。这是输入桥接能力；当前仓库没有这些来源的完整自动采集任务，没有配置补充记录时仍返回缺失。不能把探针verified标记、人工通报审核approved/rejected或模型判断升级成独立证明。
 

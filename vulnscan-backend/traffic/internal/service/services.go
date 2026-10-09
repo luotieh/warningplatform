@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"vulnscan-backend/evidence"
 
 	"vulnscan-backend/traffic/internal/client"
 	"vulnscan-backend/traffic/internal/domain"
@@ -28,6 +29,9 @@ type Services struct {
 	// api_key/model 能即时对”分析引擎”(RunAgentWorkflow)生效，无需重启。
 	LLM   *client.LLMClient
 	Queue mq.Queue
+	// Optional per-deployment budgets; defaults retain bounded raw local inputs.
+	ReportSemantics *ReportSemanticOptions
+	SemanticModel   evidence.SemanticModel // optional injected transport for tests/deployment
 }
 
 func (s Services) ProcessLyEvent(ctx context.Context, ly map[string]any) (map[string]any, error) {

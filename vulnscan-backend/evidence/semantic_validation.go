@@ -4,9 +4,49 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"reflect"
 	"strings"
 	"time"
 )
+
+// ValidateSemanticResult rechecks cached outputs against the newly resolved
+// plan. A matching hash alone must not bless corrupted references or strength.
+func ValidateSemanticResult(plan SemanticPlan, result SemanticResult) error {
+	if result.Plan.EventID != plan.EventID || result.Plan.SnapshotVersion != plan.SnapshotVersion || result.Plan.RuleVersion != plan.RuleVersion || result.Plan.InputMode != plan.InputMode || result.Plan.ContextSHA256 != plan.ContextSHA256 || !reflect.DeepEqual(result.Plan.Tasks, plan.Tasks) {
+		return fmt.Errorf("cached semantic plan mismatch")
+	}
+	tasks := map[string]SemanticTask{}
+	for _, t := range plan.Tasks {
+		tasks[t.ID] = t
+	}
+	seen := map[string]bool{}
+	if len(result.Plan.Executions) != len(plan.Executions) {
+		return fmt.Errorf("cached semantic executions mismatch")
+	}
+	for n, expected := range plan.Executions {
+		actual := result.Plan.Executions[n]
+		if expected.Status == "planned" {
+			if actual.Slot != expected.Slot || actual.SubjectID != expected.SubjectID || actual.TaskID != expected.TaskID || actual.Status != "accepted" || actual.Reason != "references_and_strength_validated" {
+				return fmt.Errorf("invalid cached semantic execution")
+			}
+		} else if actual != expected {
+			return fmt.Errorf("invalid cached semantic skip")
+		}
+	}
+	for _, f := range result.Findings {
+		task, ok := tasks[f.TaskID]
+		if !ok || seen[f.TaskID] || f.Slot != task.Slot.Key || f.SubjectID != task.SubjectID || f.PropositionID != task.PropositionID || f.Scope != task.Scope || !sameSemanticWindow(f.Window, task.Window) || f.SnapshotVersion != plan.SnapshotVersion || f.RuleVersion != plan.RuleVersion || f.ExplanationOnly != task.Slot.ExplanationOnly || !reflect.DeepEqual(f.NonAdditiveWith, task.NonAdditiveWith) || validateSemanticItem(task, f.SemanticItem) != "" {
+			return fmt.Errorf("invalid cached semantic finding")
+		}
+		seen[f.TaskID] = true
+	}
+	for _, t := range plan.Tasks {
+		if !seen[t.ID] {
+			return fmt.Errorf("missing cached semantic finding")
+		}
+	}
+	return nil
+}
 
 func decodeSemanticResponse(raw string, maxBytes int) ([]SemanticItem, error) {
 	if len(raw) > maxBytes {
@@ -107,12 +147,12 @@ func validateSemanticItem(task SemanticTask, item SemanticItem) string {
 			}
 		}
 	}
-	if redactSemanticText(item.Explanation) != item.Explanation {
+	if task.InputMode != SemanticRaw && redactSemanticText(item.Explanation) != item.Explanation {
 		return "sensitive_model_output"
 	}
 	for _, ss := range [][]string{item.Alternatives, item.Gaps} {
 		for _, s := range ss {
-			if redactSemanticText(s) != s {
+			if task.InputMode != SemanticRaw && redactSemanticText(s) != s {
 				return "sensitive_model_output"
 			}
 		}

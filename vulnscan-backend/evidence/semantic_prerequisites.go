@@ -13,6 +13,9 @@ func sameSemanticWindow(a, b AnalysisWindow) bool {
 }
 
 func validateSemanticRequest(r SemanticRequest) error {
+	if semanticMode(r.InputMode) != SemanticRaw && semanticMode(r.InputMode) != SemanticRedacted {
+		return fmt.Errorf("invalid semantic input mode")
+	}
 	if strings.TrimSpace(r.EventID) == "" || r.SnapshotVersion <= 0 {
 		return fmt.Errorf("event_id and positive snapshot_version required")
 	}
@@ -66,7 +69,10 @@ func knownMaterialKind(k string) bool {
 }
 
 func trustedSemanticMaterial(m SemanticMaterial) bool {
-	if !m.Provenance.Verified || m.Provenance.Version == "" || len(m.Provenance.SourceIDs) == 0 || !m.Redacted || strings.TrimSpace(m.Text) == "" || m.FieldPath == "" {
+	return trustedSemanticMaterialMode(m, SemanticRedacted)
+}
+func trustedSemanticMaterialMode(m SemanticMaterial, mode SemanticInputMode) bool {
+	if !m.Provenance.Verified || m.Provenance.Version == "" || len(m.Provenance.SourceIDs) == 0 || (semanticMode(mode) != SemanticRaw && !m.Redacted) || strings.TrimSpace(m.Text) == "" || m.FieldPath == "" {
 		return false
 	}
 	for _, id := range m.Provenance.SourceIDs {
@@ -86,7 +92,7 @@ func resolveSemanticSlot(spec slotSpec, s SemanticSubject, eventID string) (mate
 	byID := map[string]SemanticMaterial{}
 	byKind := map[string][]SemanticMaterial{}
 	for _, m := range s.Materials {
-		if trustedSemanticMaterial(m) {
+		if trustedSemanticMaterialMode(m, s.InputMode) {
 			byID[m.ID] = m
 			byKind[m.Kind] = append(byKind[m.Kind], m)
 		}
