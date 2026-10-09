@@ -17,11 +17,18 @@ import (
 //
 // 只匹配启用（status=1）资产；返回空串表示无可用清单或事件无 IP 地址。
 func (s Services) AssetMatchContext(event domain.Event) string {
+	if len(eventAddressRoles(event)) == 0 {
+		return ""
+	}
+	return assetMatchContext(event, s.Store.ListAssets())
+}
+
+// The report preparation path shares this same registry with fact bindings.
+func assetMatchContext(event domain.Event, assets []domain.Asset) string {
 	roles := eventAddressRoles(event)
 	if len(roles) == 0 {
 		return ""
 	}
-	assets := s.Store.ListAssets()
 	if len(assets) == 0 {
 		return ""
 	}

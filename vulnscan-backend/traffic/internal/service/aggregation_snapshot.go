@@ -123,7 +123,7 @@ func (s Services) buildSnapshot(ctx context.Context, seg EventSegment) (Evidence
 	q := store.HitQuery{Sources: seg.Sources, Watermark: seg.Watermark, Limit: 500}
 	volume := newVolumeAccumulator(seg.First)
 	for {
-		page, err := s.Store.HitPage(ctx, q)
+		page, err := snapshotHitPage(ctx, s.Store, q, seg.RevisionWatermark)
 		if err != nil {
 			return snap, err
 		}
@@ -131,15 +131,6 @@ func (s Services) buildSnapshot(ctx context.Context, seg EventSegment) (Evidence
 			break
 		}
 		for _, h := range page {
-			if seg.RevisionWatermark > 0 {
-				raw, e := s.Store.HitRevision(ctx, h.ID, seg.RevisionWatermark)
-				if e != nil {
-					return snap, e
-				}
-				if raw != nil {
-					h.Raw = raw
-				}
-			}
 			if err := ctx.Err(); err != nil {
 				return snap, err
 			}
@@ -532,7 +523,22 @@ func (s Services) EvidenceContext(ctx context.Context, event domain.Event) (stri
 		b, _ := json.Marshal(c)
 		return string(b), nil
 	}
-	c := map[string]any{"event_id": event.EventID, "snapshot_version": snap.Version, "quant_stats": snap.Context["quant_stats"], "occurrence_count": snap.Count, "input_manifest": snap.Manifest, "evidence_index": snap.Evidence, "statistics_quality": "verified"}
+	return evidenceContextFromSnapshot(snap, nil)
+}
+
+// The immutable snapshot is shared with adapters. Projection never mutates its
+// manifest, evidence samples or complete statistics.
+func evidenceContextFromSnapshot(snap EvidenceSnapshot, extra map[string]any) (string, error) {
+	manifest := make(map[string]any, len(snap.Manifest)+4)
+	for k, v := range snap.Manifest {
+		manifest[k] = v
+	}
+	snap.Manifest = manifest
+	snap.Evidence = append([]map[string]any(nil), snap.Evidence...)
+	c := map[string]any{"event_id": snap.EventID, "snapshot_version": snap.Version, "quant_stats": snap.Context["quant_stats"], "occurrence_count": snap.Count, "input_manifest": snap.Manifest, "evidence_index": snap.Evidence, "statistics_quality": "verified"}
+	for k, v := range extra {
+		c[k] = v
+	}
 	// The aggregate model input is a projection of the snapshot. Preserve the
 	// bounded IOC description and enrichment evidence (especially cross_check),
 	// which otherwise disappear when the original event context is replaced.

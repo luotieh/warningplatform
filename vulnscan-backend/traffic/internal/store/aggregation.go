@@ -51,6 +51,8 @@ type AggregationStore interface {
 	HitPage(context.Context, HitQuery) ([]Hit, error)
 	InsertHitRevision(context.Context, string, int64, json.RawMessage) (int64, error)
 	HitRevision(context.Context, string, int64) (json.RawMessage, error)
+	// HitRevisions resolves at most 500 identities in one read at a fixed watermark.
+	HitRevisions(context.Context, []string, int64) (map[string]json.RawMessage, error)
 }
 
 const AggregationSchema = `

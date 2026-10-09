@@ -45,6 +45,44 @@ func (s *MemoryStore) HitRevision(ctx context.Context, id string, watermark int6
 	return raw, ctx.Err()
 }
 
+func (s *MemoryStore) HitRevisions(ctx context.Context, ids []string, watermark int64) (map[string]json.RawMessage, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if len(ids) > 500 {
+		return nil, errors.New("revision batch exceeds 500 hits")
+	}
+	out := make(map[string]json.RawMessage)
+	if len(ids) == 0 || watermark <= 0 {
+		return out, nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	best := make(map[string]int64, len(ids))
+	for _, id := range ids {
+		best[id] = -1
+	}
+	for _, r := range s.aggregateRecords {
+		previous, wanted := best[r.Group]
+		if r.Kind != "hit_revision" || !wanted {
+			continue
+		}
+		var v struct {
+			Sequence int64
+			Revision int64
+			Raw      json.RawMessage
+		}
+		if err := json.Unmarshal(r.Value, &v); err != nil {
+			return nil, err
+		}
+		if v.Sequence <= watermark && v.Revision > previous {
+			best[r.Group] = v.Revision
+			out[r.Group] = append(json.RawMessage(nil), v.Raw...)
+		}
+	}
+	return out, ctx.Err()
+}
+
 func cloneMap[K comparable, V any](m map[K]V) map[K]V {
 	out := make(map[K]V, len(m))
 	for k, v := range m {

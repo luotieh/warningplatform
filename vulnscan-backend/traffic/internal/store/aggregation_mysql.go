@@ -130,6 +130,39 @@ func (s *MySQLStore) HitRevision(ctx context.Context, id string, watermark int64
 	return raw, err
 }
 
+func (s *MySQLStore) HitRevisions(ctx context.Context, ids []string, watermark int64) (map[string]json.RawMessage, error) {
+	out := make(map[string]json.RawMessage)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if len(ids) == 0 || watermark <= 0 {
+		return out, nil
+	}
+	if len(ids) > 500 {
+		return nil, errors.New("revision batch exceeds 500 hits")
+	}
+	args := make([]any, 0, len(ids)+1)
+	for _, id := range ids {
+		args = append(args, id)
+	}
+	args = append(args, watermark)
+	query := "SELECT r.hit_id,r.raw_json FROM traffic_hit_revisions r JOIN (SELECT hit_id,MAX(source_revision) AS revision FROM traffic_hit_revisions WHERE hit_id IN (" + strings.TrimRight(strings.Repeat("?,", len(ids)), ",") + ") AND sequence<=? GROUP BY hit_id) latest ON r.hit_id=latest.hit_id AND r.source_revision=latest.revision"
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query hit revisions: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		var raw json.RawMessage
+		if err := rows.Scan(&id, &raw); err != nil {
+			return nil, err
+		}
+		out[id] = raw
+	}
+	return out, rows.Err()
+}
+
 func scanHit(row interface{ Scan(...any) error }) (h Hit, err error) {
 	err = row.Scan(&h.Sequence, &h.ID, &h.DedupKey, &h.Identity, &h.AggregateKey, &h.EventID, &h.OccurredAt, &h.ReceivedAt, &h.Raw)
 	return
