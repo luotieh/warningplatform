@@ -288,6 +288,13 @@ func (s *EventService) Stats(ctx context.Context, eventID string) map[string]any
 	return out
 }
 
+func (s *EventService) EvidenceDiagnostics(ctx context.Context, eventID string, version int64) (any, error) {
+	if _, ok := s.core.Store.GetEvent(eventID); !ok {
+		return nil, errors.New("事件不存在")
+	}
+	return s.core.EvidenceInputDiagnostics(ctx, eventID, version)
+}
+
 func (s *EventService) Summaries(ctx context.Context, eventID string) []domain.Summary {
 	return s.core.Store.ListSummaries(eventID)
 }

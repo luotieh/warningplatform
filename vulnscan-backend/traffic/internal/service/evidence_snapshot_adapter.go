@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/netip"
@@ -22,37 +23,46 @@ import (
 	"vulnscan-backend/traffic/internal/store"
 )
 
-const snapshotAdapterVersion = "snapshot-evidence-adapter-0.1"
+const snapshotAdapterVersion = "snapshot-evidence-adapter-0.2"
 
 // SnapshotEvidenceOptions limits the shared load, not each algorithm separately.
 // Large snapshots are explicitly deferred, never evaluated using model samples.
 type SnapshotEvidenceOptions struct {
-	Facts       []evidence.FactID
-	MaxHits     int64
-	MaxRawBytes int64
+	Facts             []evidence.FactID
+	MaxHits           int64
+	MaxRawBytes       int64
+	MaxScopes         int
+	Supplemental      *SnapshotSupplementalInputs `json:"-"`
+	SupplementalIssue *SnapshotInputIssue         `json:"-"`
 }
 
 func DefaultSnapshotEvidenceOptions() SnapshotEvidenceOptions {
-	return SnapshotEvidenceOptions{MaxHits: 20000, MaxRawBytes: 16 << 20}
+	return SnapshotEvidenceOptions{MaxHits: 20000, MaxRawBytes: 16 << 20, MaxScopes: 256}
 }
 
 type SnapshotEvidenceManifest struct {
-	AdapterVersion    string   `json:"adapter_version"`
-	RegistryVersion   string   `json:"registry_version"`
-	SnapshotVersion   int64    `json:"snapshot_version"`
-	Watermark         int64    `json:"watermark"`
-	RevisionWatermark int64    `json:"revision_watermark"`
-	DeclaredHits      int64    `json:"declared_hits"`
-	LoadedHits        int64    `json:"loaded_hits"`
-	BoundHits         int64    `json:"bound_hits"`
-	UnresolvedHits    int64    `json:"unresolved_hits"`
-	ReadPages         int      `json:"read_pages"`
-	RevisionBatches   int      `json:"revision_batches"`
-	RawBytes          int64    `json:"raw_bytes"`
-	MaxHits           int64    `json:"max_hits"`
-	MaxRawBytes       int64    `json:"max_raw_bytes"`
-	Coverage          string   `json:"coverage"`
-	MissingInputs     []string `json:"missing_inputs"`
+	AdapterVersion      string                 `json:"adapter_version"`
+	RegistryVersion     string                 `json:"registry_version"`
+	SnapshotVersion     int64                  `json:"snapshot_version"`
+	Watermark           int64                  `json:"watermark"`
+	RevisionWatermark   int64                  `json:"revision_watermark"`
+	DeclaredHits        int64                  `json:"declared_hits"`
+	LoadedHits          int64                  `json:"loaded_hits"`
+	BoundHits           int64                  `json:"bound_hits"`
+	UnresolvedHits      int64                  `json:"unresolved_hits"`
+	ReadPages           int                    `json:"read_pages"`
+	RevisionBatches     int                    `json:"revision_batches"`
+	RawBytes            int64                  `json:"raw_bytes"`
+	MaxHits             int64                  `json:"max_hits"`
+	MaxRawBytes         int64                  `json:"max_raw_bytes"`
+	MaxScopes           int                    `json:"max_scopes"`
+	Coverage            string                 `json:"coverage"`
+	MissingInputs       []string               `json:"missing_inputs"`
+	Issues              []SnapshotInputIssue   `json:"issues,omitempty"`
+	IssueCount          int                    `json:"issue_count"`
+	OmittedIssues       int                    `json:"omitted_issues"`
+	FactCoverage        []SnapshotFactCoverage `json:"fact_coverage,omitempty"`
+	SupplementalVersion string                 `json:"supplemental_version,omitempty"`
 }
 
 type SnapshotEvidenceInput struct {
@@ -95,21 +105,51 @@ func snapshotHitPage(ctx context.Context, st store.Store, q store.HitQuery, revi
 // SnapshotEvidenceInput uses the caller's already loaded immutable snapshot.
 // Only committed hit records are read. assets must come from the server registry;
 // raw payloads, model labels, IOC matches and client verified flags are not proofs.
-func (s Services) SnapshotEvidenceInput(ctx context.Context, snap EvidenceSnapshot, assets []domain.Asset, opts SnapshotEvidenceOptions) (SnapshotEvidenceInput, error) {
-	out := SnapshotEvidenceInput{Manifest: SnapshotEvidenceManifest{
+func (s Services) SnapshotEvidenceInput(ctx context.Context, snap EvidenceSnapshot, assets []domain.Asset, opts SnapshotEvidenceOptions) (out SnapshotEvidenceInput, err error) {
+	out = SnapshotEvidenceInput{Manifest: SnapshotEvidenceManifest{
 		AdapterVersion: snapshotAdapterVersion, SnapshotVersion: snap.Version,
 		RegistryVersion: snapshotRegistryVersion(assets),
 		Watermark:       snap.Watermark, RevisionWatermark: snap.RevisionWatermark,
 		DeclaredHits: snap.Count, MaxHits: opts.MaxHits, MaxRawBytes: opts.MaxRawBytes,
-		Coverage: "unknown", MissingInputs: []string{"baselines", "history", "campaign_and_stage_proofs", "group_membership", "authorization_records", "tls_trust_and_fingerprint_registry", "independent_rule_and_intel_metadata"},
+		Coverage: "unknown", MissingInputs: []string{"baselines", "history", "campaign_and_stage_proofs", "group_membership", "authorization_records", "tls_trust_and_fingerprint_registry", "independent_rule_and_intel_metadata", "brand_registry", "service_registry", "dns_lexical_corpus", "infrastructure_registry"},
 	}}
+	if opts.MaxScopes == 0 {
+		opts.MaxScopes = 256
+	}
+	out.Manifest.MaxScopes = opts.MaxScopes
+	defer func() {
+		if err == nil && out.Reason != "" {
+			out.Manifest.addIssue(SnapshotInputIssue{Code: out.Reason, Stage: "load"})
+		}
+		if err != nil {
+			out.Request.Hits, out.Request.Inputs = nil, nil
+			code, stage := "input_validation_failed", "validate"
+			var failure *SnapshotInputError
+			if errors.As(err, &failure) {
+				code, stage = failure.Code, failure.Stage
+			}
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				code, stage = "input_cancelled", "load"
+			}
+			out.Reason = code
+			out.Manifest.addIssue(snapshotIssueCause(SnapshotInputIssue{Code: code, Stage: stage, Retryable: code == "snapshot_read_failed"}, err))
+			hitID := ""
+			if failure != nil {
+				hitID = failure.HitID
+			}
+			err = &SnapshotInputError{Code: code, Stage: stage, EventID: snap.EventID, SnapshotVersion: snap.Version, HitID: hitID, Cause: err}
+		}
+	}()
+	if opts.SupplementalIssue != nil {
+		out.Manifest.addIssue(*opts.SupplementalIssue)
+	}
 	if err := ctx.Err(); err != nil {
 		return out, err
 	}
 	if snap.EventID == "" || snap.Version <= 0 || snap.Watermark <= 0 || snap.Count < 1 || len(snap.Sources) == 0 {
-		return out, errors.New("invalid evidence snapshot identity or membership")
+		return out, &SnapshotInputError{Code: "snapshot_identity_invalid", Stage: "validate_snapshot", Cause: errors.New("invalid snapshot identity")}
 	}
-	if opts.MaxHits < 1 || opts.MaxRawBytes < 1 {
+	if opts.MaxHits < 1 || opts.MaxRawBytes < 1 || opts.MaxScopes < 1 {
 		return out, errors.New("positive snapshot input budgets required")
 	}
 	// Validate selection even when binding/data budgets prevent evaluation.
@@ -146,7 +186,7 @@ func (s Services) SnapshotEvidenceInput(ctx context.Context, snap EvidenceSnapsh
 	for {
 		page, err := snapshotHitPage(ctx, s.Store, q, snap.RevisionWatermark)
 		if err != nil {
-			return out, err
+			return out, &SnapshotInputError{Code: "snapshot_read_failed", Stage: "load_hits_and_revisions", Cause: err}
 		}
 		out.Manifest.ReadPages++
 		if len(page) == 0 {
@@ -160,7 +200,7 @@ func (s Services) SnapshotEvidenceInput(ctx context.Context, snap EvidenceSnapsh
 				return out, err
 			}
 			if h.ID == "" || seenHits[h.ID] {
-				return out, errors.New("duplicate or empty snapshot hit identity")
+				return out, &SnapshotInputError{Code: "duplicate_or_empty_hit_identity", Stage: "validate_hits", HitID: h.ID, Cause: errors.New("invalid hit identity")}
 			}
 			seenHits[h.ID] = true
 			out.Manifest.LoadedHits++
@@ -174,41 +214,56 @@ func (s Services) SnapshotEvidenceInput(ctx context.Context, snap EvidenceSnapsh
 			decoder := json.NewDecoder(bytes.NewReader(h.Raw))
 			decoder.UseNumber()
 			if err := decoder.Decode(&m); err != nil {
-				return out, fmt.Errorf("decode stored hit %s: %w", h.ID, err)
+				out.Manifest.addIssue(SnapshotInputIssue{Code: "stored_json_invalid", Stage: "decode", HitID: h.ID, Field: "raw_json"})
+				return out, &SnapshotInputError{Code: "stored_json_invalid", Stage: "decode", HitID: h.ID, Cause: err}
+			}
+			var trailing any
+			if decodeErr := decoder.Decode(&trailing); decodeErr != io.EOF {
+				return out, &SnapshotInputError{Code: "stored_json_invalid", Stage: "decode", HitID: h.ID, Cause: errors.New("trailing stored JSON")}
 			}
 			scope, remoteIP, remotePort, ok := snapshotScope(m, assets)
 			if !ok || h.OccurredAt.IsZero() {
 				out.Manifest.UnresolvedHits++
+				out.Manifest.addIssue(SnapshotInputIssue{Code: "unresolved_binding_or_time", Stage: "bind", HitID: h.ID, Field: "asset/endpoint/device/time"})
 				continue
 			}
 			truncated, known := nestedMap(m, "raw_packet")["capture_truncated"].(bool)
 			if !known {
 				allCaptureKnown = false
+				out.Manifest.addIssue(SnapshotInputIssue{Code: "field_missing", Stage: "quality", HitID: h.ID, Scope: scope, Field: "raw_packet.capture_truncated"})
 			}
 			anyTruncated = anyTruncated || truncated
 			hit := evidence.Hit{ID: h.ID, OccurredAt: h.OccurredAt, Scope: scope}
 			if n, ok := strictUint(m["packets"]); ok {
 				hit.Packets = &n
+			} else {
+				out.Manifest.addIssue(SnapshotInputIssue{Code: "field_missing_or_invalid", Stage: "parse", HitID: h.ID, Scope: scope, Field: "packets"})
 			}
 			out.Request.Hits = append(out.Request.Hits, hit)
 			out.Manifest.BoundHits++
 			input := inputs[scope]
 			if input == nil {
+				if len(inputs) >= opts.MaxScopes {
+					out.Request.Hits, out.Request.Inputs = nil, nil
+					out.Reason = "snapshot_scope_budget_exceeded"
+					return out, nil
+				}
 				input = &evidence.Input{Scope: scope}
 				inputs[scope] = input
 			}
 			counts[scope]++
 			scopeHits[scope] = append(scopeHits[scope], hit)
 			adaptSnapshotProtocols(input, h, m, remoteIP, remotePort, known && !truncated)
+			enrichSnapshotProtocols(input, h, m, &out.Manifest)
 		}
 		tail := page[len(page)-1]
 		if !q.AfterTime.IsZero() && (tail.OccurredAt.Before(q.AfterTime) || (tail.OccurredAt.Equal(q.AfterTime) && tail.ID <= q.AfterID)) {
-			return out, errors.New("snapshot hit cursor did not advance")
+			return out, &SnapshotInputError{Code: "snapshot_cursor_stalled", Stage: "pagination", HitID: tail.ID, Cause: errors.New("cursor did not advance")}
 		}
 		q.AfterTime, q.AfterID = tail.OccurredAt, tail.ID
 	}
 	if out.Manifest.LoadedHits != snap.Count {
-		return out, fmt.Errorf("snapshot membership mismatch: expected %d loaded %d", snap.Count, out.Manifest.LoadedHits)
+		return out, &SnapshotInputError{Code: "snapshot_membership_mismatch", Stage: "validate_membership", Cause: fmt.Errorf("expected %d loaded %d", snap.Count, out.Manifest.LoadedHits)}
 	}
 	if len(out.Request.Hits) == 0 {
 		out.Reason = "unresolved_asset_endpoint_binding"
@@ -219,7 +274,7 @@ func (s Services) SnapshotEvidenceInput(ctx context.Context, snap EvidenceSnapsh
 		coverage = evidence.CoveragePartial
 	}
 	out.Request.Quality.Coverage = coverage
-	if allCaptureKnown {
+	if allCaptureKnown || anyTruncated {
 		out.Request.Quality.CaptureTruncated = &anyTruncated
 	}
 	out.Manifest.Coverage = string(coverage)
@@ -248,11 +303,17 @@ func (s Services) SnapshotEvidenceInput(ctx context.Context, snap EvidenceSnapsh
 			input.DNS.Provenance = provenance
 			input.DNS.Complete = provenance.Complete && len(input.DNS.Records) == counts[scope]
 		}
+		if input.TLS != nil {
+			input.TLS.Provenance = provenance
+			input.TLS.Complete = false
+		}
 		out.Request.Inputs = append(out.Request.Inputs, *input)
 	}
 	sort.Slice(out.Request.Inputs, func(i, j int) bool {
 		return scopeKey(out.Request.Inputs[i].Scope) < scopeKey(out.Request.Inputs[j].Scope)
 	})
+	buildSnapshotAssetInputs(&out.Request)
+	applySnapshotSupplemental(&out, snap, opts.Supplemental)
 	return out, nil
 }
 
@@ -455,12 +516,16 @@ func snapshotHTTPURL(app, packet map[string]any) string {
 func decodeSnapshotPayloadHex(raw string) ([]byte, error) { return hex.DecodeString(raw) }
 
 func (s Services) EvaluateSnapshotFacts(ctx context.Context, snap EvidenceSnapshot, assets []domain.Asset, opts SnapshotEvidenceOptions, cfg evidence.Config) (SnapshotFactEvaluation, error) {
+	if opts.Supplemental != nil && validateSnapshotSupplemental(snap, *opts.Supplemental) == nil && opts.Supplemental.Policies != nil {
+		cfg.Policies = opts.Supplemental.Policies
+	}
 	engine, err := evidence.NewEngine(cfg)
 	if err != nil {
 		return SnapshotFactEvaluation{}, err
 	}
 	input, err := s.SnapshotEvidenceInput(ctx, snap, assets, opts)
 	out := SnapshotFactEvaluation{Status: "unavailable", Reason: input.Reason, Manifest: input.Manifest}
+	out.Manifest.FactCoverage = snapshotUnavailableCoverage(opts.Facts, evidence.ReasonCode(out.Reason))
 	if err != nil {
 		return out, err
 	}
@@ -469,14 +534,21 @@ func (s Services) EvaluateSnapshotFacts(ctx context.Context, snap EvidenceSnapsh
 	}
 	result, err := engine.Evaluate(ctx, input.Request)
 	if err != nil {
-		return out, err
+		out.Reason = "algorithm_input_invalid"
+		out.Manifest.addIssue(SnapshotInputIssue{Code: out.Reason, Stage: "evaluate"})
+		out.Manifest.FactCoverage = snapshotUnavailableCoverage(opts.Facts, evidence.ReasonCode(out.Reason))
+		return out, &SnapshotInputError{Code: out.Reason, Stage: "evaluate", EventID: snap.EventID, SnapshotVersion: snap.Version, Cause: err}
 	}
 	for i := range result.Findings {
 		result.Findings[i].Dependencies = append(result.Findings[i].Dependencies,
 			evidence.Dependency{Kind: "asset_registry", Version: input.Manifest.RegistryVersion},
 			evidence.Dependency{Kind: "hit_snapshot", Version: fmt.Sprintf("%s:%d:%d:%d", snap.EventID, snap.Version, snap.Watermark, snap.RevisionWatermark), SourceIDs: append([]string(nil), snap.Sources...)})
+		if input.Manifest.SupplementalVersion != "" {
+			result.Findings[i].Dependencies = append(result.Findings[i].Dependencies, evidence.Dependency{Kind: "supplemental_inputs", Version: input.Manifest.SupplementalVersion, SourceIDs: []string{snapshotKey(snap.EventID, snap.Version)}})
+		}
 	}
 	out.Status = "evaluated"
 	out.Result = &result
+	out.Manifest.FactCoverage = snapshotFactCoverage(input.Request, result)
 	return out, nil
 }

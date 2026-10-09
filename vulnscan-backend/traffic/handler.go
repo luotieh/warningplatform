@@ -405,6 +405,24 @@ func (h *Handler) EventOccurrences(c *gin.Context) {
 	ok(c, page)
 }
 
+func (h *Handler) EventEvidenceDiagnostics(c *gin.Context) {
+	var version int64
+	if raw := c.Query("snapshot_version"); raw != "" {
+		parsed, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || parsed < 0 {
+			fail(c, 400, "snapshot_version 必须是非负整数")
+			return
+		}
+		version = parsed
+	}
+	data, err := h.events.EvidenceDiagnostics(c.Request.Context(), c.Param("eventID"), version)
+	if err != nil {
+		fail(c, 400, err.Error())
+		return
+	}
+	ok(c, data)
+}
+
 func (h *Handler) EventTasks(c *gin.Context) {
 	ok(c, h.events.Tasks(c.Request.Context(), c.Param("eventID")))
 }

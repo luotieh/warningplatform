@@ -3,8 +3,9 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"errors"
+	"log"
 	"sort"
+	"time"
 	"unicode/utf8"
 
 	"vulnscan-backend/evidence"
@@ -13,7 +14,8 @@ import (
 
 // PrepareReportEvidence reads the snapshot once and shares its exact version
 // with both the deterministic engine and the existing model projection.
-// This first integration runs only the two explicit inexpensive defaults.
+// Reports check all registered facts against shared inputs; missing dependencies
+// remain explicit and cannot become negative evidence.
 func (s Services) PrepareReportEvidence(ctx context.Context, event domain.Event) (string, error) {
 	prepared, err := s.prepareReportInput(ctx, event)
 	return prepared.Context, err
@@ -45,31 +47,73 @@ func (s Services) prepareReportInput(ctx context.Context, event domain.Event) (p
 	// identity includes the registry, so enrollment or address changes invalidate it.
 	assets := s.Store.ListAssets()
 	options := DefaultSnapshotEvidenceOptions()
-	config := evidence.DefaultConfig()
-	assetVersions := append([]domain.Asset(nil), assets...)
-	sort.Slice(assetVersions, func(i, j int) bool { return assetVersions[i].ID < assetVersions[j].ID })
-	key := digest([]any{snap.EventID, snap.Version, snap.Watermark, snap.RevisionWatermark, evidence.RuleVersion, snapshotAdapterVersion, config, options, assetVersions})
-	record, exists, err := s.Store.AggregateRecord(ctx, "evidence_result", key)
+	options.Facts = evidence.SupportedFacts()
+	options.Supplemental, options.SupplementalIssue, err = s.loadSnapshotSupplemental(ctx, snap)
 	if err != nil {
 		return preparedReportInput{}, err
 	}
+	config := evidence.DefaultConfig()
+	assetVersions := append([]domain.Asset(nil), assets...)
+	sort.Slice(assetVersions, func(i, j int) bool { return assetVersions[i].ID < assetVersions[j].ID })
+	key := digest([]any{snap.EventID, snap.Version, snap.Watermark, snap.RevisionWatermark, evidence.RuleVersion, snapshotAdapterVersion, config, options, assetVersions, options.Supplemental, options.SupplementalIssue})
+	record, exists, err := s.Store.AggregateRecord(ctx, "evidence_result", key)
+	cacheAvailable := err == nil
+	if err != nil {
+		exists = false
+		log.Printf("[evidence] cache_read_failed event=%s snapshot=%d", snap.EventID, snap.Version)
+	}
 	var evaluation SnapshotFactEvaluation
+	resultPersisted := false
 	if exists {
 		if err := json.Unmarshal(record.Value, &evaluation); err != nil {
-			return preparedReportInput{}, err
+			exists = false
 		}
-		if evaluation.Manifest.SnapshotVersion != snap.Version || evaluation.Manifest.AdapterVersion != snapshotAdapterVersion || (evaluation.Result != nil && evaluation.Result.RuleVersion != evidence.RuleVersion) {
-			return preparedReportInput{}, errors.New("cached evidence version mismatch")
+		if evaluation.Manifest.SnapshotVersion != snap.Version || evaluation.Manifest.AdapterVersion != snapshotAdapterVersion || (evaluation.Result != nil && evaluation.Result.RuleVersion != evidence.RuleVersion) || evaluation.Status == "evaluated" && evaluation.Result == nil || len(evaluation.Manifest.FactCoverage) < len(evidence.SupportedFacts()) {
+			exists = false
 		}
-		evaluation.CacheHit = true
-	} else {
+		if exists {
+			evaluation.CacheHit = true
+			resultPersisted = true
+		} else {
+			log.Printf("[evidence] cache_invalid event=%s snapshot=%d", snap.EventID, snap.Version)
+		}
+	}
+	if options.SupplementalIssue != nil && options.SupplementalIssue.Retryable {
+		exists = false
+	}
+	if !exists {
+		resultPersisted = false
 		evaluation, err = s.EvaluateSnapshotFacts(ctx, snap, assets, options, config)
 		if err != nil {
-			return preparedReportInput{}, err
+			if ctx.Err() != nil {
+				return preparedReportInput{}, ctx.Err()
+			}
+			// Evidence is an independent subsystem: fail closed for its claims,
+			// preserve the original report data and persist a correlated failure.
+			failureKey := snapshotKey(snap.EventID, snap.Version)
+			failure := map[string]any{"event_id": snap.EventID, "snapshot_version": snap.Version, "at": time.Now().UTC(), "adapter_version": snapshotAdapterVersion, "reason": evaluation.Reason, "manifest": evaluation.Manifest}
+			if saveErr := putRecord(ctx, s.Store, "evidence_failure", failureKey, snap.EventID, failure); saveErr != nil {
+				log.Printf("[evidence] failure_record_write_failed event=%s snapshot=%d", snap.EventID, snap.Version)
+			}
+			log.Printf("[evidence] input_failed event=%s snapshot=%d reason=%s", snap.EventID, snap.Version, evaluation.Reason)
+			cacheAvailable = false
 		}
-		if err = putRecord(ctx, s.Store, "evidence_result", key, snap.EventID, evaluation); err != nil {
-			return preparedReportInput{}, err
+		if cacheAvailable && (options.SupplementalIssue == nil || !options.SupplementalIssue.Retryable) {
+			if err = putRecord(ctx, s.Store, "evidence_result", key, snap.EventID, evaluation); err != nil {
+				evaluation.Manifest.addIssue(SnapshotInputIssue{Code: "result_cache_write_failed", Stage: "persist", Retryable: true})
+				log.Printf("[evidence] result_cache_write_failed event=%s snapshot=%d", snap.EventID, snap.Version)
+			} else {
+				resultPersisted = true
+			}
 		}
+	}
+	if !cacheAvailable {
+		evaluation.Manifest.addIssue(SnapshotInputIssue{Code: "result_not_cached", Stage: "persist", Retryable: true})
+	}
+	diagnostic := SnapshotEvidenceDiagnostics{EventID: snap.EventID, SnapshotVersion: snap.Version, At: time.Now().UTC(), Status: evaluation.Status, Reason: evaluation.Reason, ResultKey: key, ResultPersisted: resultPersisted, Manifest: evaluation.Manifest}
+	if saveErr := putRecord(ctx, s.Store, "evidence_diagnostics", snapshotKey(snap.EventID, snap.Version), snap.EventID, diagnostic); saveErr != nil {
+		evaluation.Manifest.addIssue(SnapshotInputIssue{Code: "diagnostics_write_failed", Stage: "persist", Retryable: true})
+		log.Printf("[evidence] diagnostics_write_failed event=%s snapshot=%d", snap.EventID, snap.Version)
 	}
 	manifest := make(map[string]any, len(snap.Manifest)+1)
 	for k, v := range snap.Manifest {
@@ -81,6 +125,8 @@ func (s Services) prepareReportInput(ctx context.Context, event domain.Event) (p
 		"status": evaluation.Status, "reason": evaluation.Reason,
 		"read_pages": evaluation.Manifest.ReadPages, "revision_batches": evaluation.Manifest.RevisionBatches,
 		"max_hits": options.MaxHits, "max_raw_bytes": options.MaxRawBytes,
+		"issue_count": evaluation.Manifest.IssueCount, "omitted_issues": evaluation.Manifest.OmittedIssues, "supplemental_version": evaluation.Manifest.SupplementalVersion,
+		"evidence_result_persisted": resultPersisted, "diagnostics_key": snapshotKey(snap.EventID, snap.Version),
 	}
 	snap.Manifest = manifest
 	projected, err := evidenceContextFromSnapshot(snap, map[string]any{"algorithm_evidence": snapshotFactSummary(evaluation)})
@@ -96,8 +142,10 @@ func snapshotFactSummary(evaluation SnapshotFactEvaluation) map[string]any {
 		"snapshot_version": evaluation.Manifest.SnapshotVersion, "cache_hit": evaluation.CacheHit,
 		"declared_hits": evaluation.Manifest.DeclaredHits, "loaded_hits": evaluation.Manifest.LoadedHits,
 		"bound_hits": evaluation.Manifest.BoundHits, "unresolved_hits": evaluation.Manifest.UnresolvedHits,
-		"coverage": evaluation.Manifest.Coverage,
-		"note":     "由确定性程序对本版本已保存命中计算；不代表全部网络通信。missing表示证据不足，不能改写成行为不存在；周期性不能确认C2或设备失陷。",
+		"coverage":               evaluation.Manifest.Coverage,
+		"input_issue_count":      evaluation.Manifest.IssueCount,
+		"missing_input_families": evaluation.Manifest.MissingInputs,
+		"note":                   "由确定性程序对本版本已保存命中计算；不代表全部网络通信。missing表示证据不足，不能改写成行为不存在；周期性不能确认C2或设备失陷。",
 	}
 	if evaluation.Result == nil {
 		return summary

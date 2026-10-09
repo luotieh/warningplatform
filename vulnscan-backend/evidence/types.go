@@ -9,7 +9,7 @@ type FactID string
 const (
 	BeaconPeriodic  FactID = "F_BEACON_PERIODIC"
 	MultiDayPersist FactID = "F_MULTI_DAY_PERSIST"
-	RuleVersion            = "evidence-algorithms-0.3"
+	RuleVersion            = "evidence-algorithms-0.4"
 )
 
 type Scope struct {
@@ -48,9 +48,12 @@ type Request struct {
 	Quality         Quality `json:"quality"`
 	// nil preserves the two inexpensive v0.1 defaults; all other facts require selection.
 	// An explicit empty slice selects none. SupportedFacts lists all 59 registered facts.
-	Facts  []FactID     `json:"facts"`
-	Inputs []Input      `json:"inputs,omitempty"`
-	Groups []GroupInput `json:"groups,omitempty"`
+	Facts  []FactID `json:"facts"`
+	Inputs []Input  `json:"inputs,omitempty"`
+	// AssetInputs aggregate already-bound hits across endpoints of one asset
+	// and device. Only asset-wide rules run here; periodic rules stay endpoint-bound.
+	AssetInputs []Input      `json:"asset_inputs,omitempty"`
+	Groups      []GroupInput `json:"groups,omitempty"`
 }
 
 type Status string

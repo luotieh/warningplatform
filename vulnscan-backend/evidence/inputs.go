@@ -47,29 +47,37 @@ type DNSData struct {
 	BigramLogProbabilities map[string]float64 `json:"bigram_log_probabilities"`
 }
 type HTTPRecord struct {
-	SourceID                string            `json:"source_id"`
-	TransactionID           string            `json:"transaction_id"`
-	SessionID               string            `json:"session_id"`
-	Time                    time.Time         `json:"time"`
-	URL                     string            `json:"url"`
-	Method                  string            `json:"method"`
-	UserAgent               string            `json:"user_agent"`
-	Fields                  map[string]string `json:"fields"`
-	BodyLength              *uint64           `json:"body_length"`
-	Truncated               bool              `json:"truncated"`
-	ResponseURL             string            `json:"response_url"`
-	ResponseStatus          int               `json:"response_status"`
-	ResponseLocation        string            `json:"response_location"`
-	ResponseVerified        bool              `json:"response_verified"`
-	FormAction              string            `json:"form_action"`
-	RedirectToTransactionID string            `json:"redirect_to_transaction_id"`
-	RedirectVerified        bool              `json:"redirect_verified"`
-	DeclaredBrand           string            `json:"declared_brand"`
-	BrandClaimVerified      bool              `json:"brand_claim_verified"`
+	SourceID                string                    `json:"source_id"`
+	TransactionID           string                    `json:"transaction_id"`
+	SessionID               string                    `json:"session_id"`
+	Time                    time.Time                 `json:"time"`
+	URL                     string                    `json:"url"`
+	Method                  string                    `json:"method"`
+	UserAgent               string                    `json:"user_agent"`
+	Fields                  map[string]string         `json:"fields"`
+	FieldValuesRedacted     bool                      `json:"field_values_redacted,omitempty"`
+	EncodingSummary         *HTTPFieldEncodingSummary `json:"encoding_summary,omitempty"`
+	BodyLength              *uint64                   `json:"body_length"`
+	Truncated               bool                      `json:"truncated"`
+	ResponseURL             string                    `json:"response_url"`
+	ResponseStatus          int                       `json:"response_status"`
+	ResponseLocation        string                    `json:"response_location"`
+	ResponseVerified        bool                      `json:"response_verified"`
+	FormAction              string                    `json:"form_action"`
+	RedirectToTransactionID string                    `json:"redirect_to_transaction_id"`
+	RedirectVerified        bool                      `json:"redirect_verified"`
+	DeclaredBrand           string                    `json:"declared_brand"`
+	BrandClaimVerified      bool                      `json:"brand_claim_verified"`
 }
 type Brand struct {
 	Name              string   `json:"name"`
 	AuthorizedDomains []string `json:"authorized_domains"`
+}
+
+type HTTPFieldEncodingSummary struct {
+	Total   int `json:"total"`
+	Encoded int `json:"encoded"`
+	Longest int `json:"longest"`
 }
 type HTTPData struct {
 	Provenance

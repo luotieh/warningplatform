@@ -335,6 +335,7 @@ func (m *Traffic) RoutesWithGroup(e *gin.RouterGroup) []authorize.BackendItem {
 				{Name: "事件动作", Path: "detail/:eventID/actions", Method: "GET", Handler: m.api.EventActions, Enabled: true},
 				{Name: "事件命令", Path: "detail/:eventID/commands", Method: "GET", Handler: m.api.EventCommands, Enabled: true},
 				{Name: "事件统计", Path: "detail/:eventID/stats", Method: "GET", Handler: m.api.EventStats, Enabled: true},
+				{Name: "证据输入诊断", Path: "detail/:eventID/evidence-diagnostics", Method: "GET", Handler: m.api.EventEvidenceDiagnostics, Enabled: true},
 				{Name: "命中明细", Path: "detail/:eventID/occurrences", Method: "GET", Handler: m.api.EventOccurrences, Enabled: true},
 				{Name: "命中证据", Path: "detail/:eventID/occurrences/:hitID", Method: "GET", Handler: m.api.EventOccurrences, Enabled: true},
 				{Name: "命中PCAP", Path: "detail/:eventID/occurrences/:hitID/evidence/:idx", Method: "GET", Handler: m.api.EventEvidence, Enabled: true},

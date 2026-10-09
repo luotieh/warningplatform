@@ -125,6 +125,31 @@ func (e *Engine) Evaluate(ctx context.Context, request Request) (Result, error) 
 		}
 		g.input = input
 	}
+	assetScopes := map[Scope]bool{}
+	assetBindings := map[string]bool{}
+	for i := range request.AssetInputs {
+		input := &request.AssetInputs[i]
+		scope := input.Scope
+		if scope.AssetID == "" || scope.DeviceID == "" || scope.EndpointID != "asset://"+scope.AssetID || scope.GroupID != "" || groups[scope] != nil || input.Window == nil || !input.Window.Start.Before(input.Window.End) {
+			return Result{}, fmt.Errorf("invalid or repeated asset-wide scope: %+v", scope)
+		}
+		g := &observations{scope: scope, complete: complete, request: &request, input: input}
+		for _, hit := range request.Hits {
+			if hit.Scope.AssetID == scope.AssetID && hit.Scope.DeviceID == scope.DeviceID {
+				if hit.OccurredAt.Before(input.Window.Start) || !hit.OccurredAt.Before(input.Window.End) {
+					return Result{}, fmt.Errorf("asset-wide window excludes bound hit")
+				}
+				g.hits = append(g.hits, hit)
+				g.sourceIDs = append(g.sourceIDs, hit.ID)
+			}
+		}
+		if len(g.hits) == 0 {
+			return Result{}, fmt.Errorf("asset-wide scope has no bound hits")
+		}
+		groups[scope] = g
+		assetScopes[scope] = true
+		assetBindings[scope.AssetID+"\x00"+scope.DeviceID] = true
+	}
 	scopes := make([]Scope, 0, len(groups))
 	for scope := range groups {
 		scopes = append(scopes, scope)
@@ -144,6 +169,9 @@ func (e *Engine) Evaluate(ctx context.Context, request Request) (Result, error) 
 		g := groups[scope]
 		sort.Strings(g.sourceIDs)
 		for _, id := range SupportedFacts() {
+			if assetScopes[scope] && !AssetWideFact(id) || !assetScopes[scope] && AssetWideFact(id) && assetBindings[scope.AssetID+"\x00"+scope.DeviceID] {
+				continue
+			}
 			if groupRule(id) || (!selected[id] && id != BeaconPeriodic && id != MultiDayPersist) {
 				continue
 			}

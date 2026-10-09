@@ -120,8 +120,18 @@ func (e *Engine) httpFact(f Finding, g *observations) Finding {
 		}
 		total, count, longest := 0, 0, 0
 		for _, r := range h.Records {
-			if r.Truncated {
+			if r.Truncated || r.FieldValuesRedacted && r.EncodingSummary == nil {
 				return absent(f, UnverifiedCoverage)
+			}
+			if r.EncodingSummary != nil {
+				s := r.EncodingSummary
+				if s.Total < 0 || s.Encoded < 0 || s.Encoded > s.Total || s.Longest < 0 || s.Encoded == 0 && s.Longest != 0 || s.Encoded > 0 && s.Longest == 0 {
+					return absent(f, MissingInput)
+				}
+				total += s.Total
+				count += s.Encoded
+				longest = max(longest, s.Longest)
+				continue
 			}
 			for name, value := range r.Fields {
 				total++
@@ -376,6 +386,23 @@ func (e *Engine) redirects(f Finding, h *HTTPData, refs []string) Finding {
 		}
 	}
 	return finish(f, matched, map[string]float64{"max_redirect_edges": float64(best)}, refs...)
+}
+
+// Extract features before redaction without retaining reversible secrets.
+func SummarizeHTTPFieldEncoding(fields map[string]string) HTTPFieldEncodingSummary {
+	s := HTTPFieldEncodingSummary{}
+	for name, value := range fields {
+		s.Total++
+		lower := strings.ToLower(name)
+		if strings.Contains(lower, "oauth") || lower == "authorization" || lower == "access_token" || strings.Count(value, ".") == 2 {
+			continue
+		}
+		if decodedEncoding(value) != "" {
+			s.Encoded++
+			s.Longest = max(s.Longest, len(value))
+		}
+	}
+	return s
 }
 
 func (e *Engine) longSession(f Finding, g *observations) Finding {
