@@ -52,6 +52,8 @@ function onEvidenceClick(event: MouseEvent) {
 const sendError = ref('');
 const messageInput = ref('');
 const messageRecord = ref<ChatMessage[]>([]);
+const historyExpanded = ref(false);
+const currentConversationKeys = ref(new Set<string>());
 const chatRef = ref<InstanceType<typeof NScrollbar> | null>(null);
 const chatWrapRef = ref<HTMLElement | null>(null);
 // 用户上翻历史时不跟随新消息强制滚动到底部
@@ -133,6 +135,33 @@ const chatMessages = computed(() =>
       };
     }),
 );
+
+// Keep the latest completed report and questions sent during this opening visible.
+// Previous analysis and conversations remain available above the report.
+const latestReportKey = computed(() =>
+  chatMessages.value.filter((item) => item.messageType === 'event_summary').at(-1)?.key,
+);
+const visibleChatMessages = computed(() =>
+  historyExpanded.value
+    ? chatMessages.value
+    : chatMessages.value.filter((item) =>
+        item.key === latestReportKey.value || currentConversationKeys.value.has(item.key),
+      ),
+);
+const hiddenMessageCount = computed(() => chatMessages.value.length - visibleChatMessages.value.length);
+
+async function showHistory() {
+  const el = chatScrollEl;
+  const previousHeight = el?.scrollHeight || 0;
+  const previousTop = el?.scrollTop || 0;
+  historyExpanded.value = true;
+  await nextTick();
+  // Preserve the report's position when older messages are inserted above it.
+  if (el) {
+    el.scrollTop = previousTop + el.scrollHeight - previousHeight;
+    handleChatScroll();
+  }
+}
 
 // 供父组件（报告弹窗）导出 PDF：把当前对话拼成报告 Markdown
 function getReportMarkdown() {
@@ -257,7 +286,7 @@ function removeDuplicatedPendingUserMessage(existed: Map<string, ChatMessage>, m
   });
 }
 
-function upsertMessages(items: Record<string, any>[]) {
+function upsertMessages(items: Record<string, any>[], currentConversation = false) {
   const existed = new Map<string, ChatMessage>();
   messageRecord.value.forEach((item) => {
     existed.set(getMessageKey(item), item);
@@ -271,6 +300,7 @@ function upsertMessages(items: Record<string, any>[]) {
     removeDuplicatedPendingUserMessage(existed, normalized);
 
     const key = getMessageKey(normalized);
+    if (currentConversation || normalized.pending) currentConversationKeys.value.add(key);
     existed.set(key, normalized);
     const numericId = Number(normalized.id || normalized.message_id || 0);
     if (Number.isFinite(numericId)) {
@@ -321,6 +351,8 @@ function removeTempMessage(tempId: string) {
 
 function resetMessages() {
   messageRecord.value = [];
+  historyExpanded.value = false;
+  currentConversationKeys.value = new Set();
   lastMessageDbId.value = 0;
   aiThinkingId.value = '';
   nearBottom.value = true;
@@ -403,9 +435,9 @@ async function sendAIMessage(text: string) {
     if (res?.reply && String(res.reply).trim()) saveDuration(profile, (Date.now() - startedAt) / 1000);
     if (res?.user_message) {
       removeTempMessage(tempId);
-      upsertMessages([res.user_message]);
+      upsertMessages([res.user_message], true);
     }
-    if (res?.message) upsertMessages([res.message]);
+    if (res?.message) upsertMessages([res.message], true);
     await fetchMessages(true);
   } catch (error) {
     if (generation !== requestGeneration) return;
@@ -448,7 +480,14 @@ function handleNewMessage(data: any) {
 
   if (matched.length === 0) return;
   upsertMessages(matched);
-  scrollToBottom();
+  if (loading.value) {
+    for (const item of matched) {
+      if (item.message_category === 'engineer_chat') {
+        currentConversationKeys.value.add(getMessageKey(normalizeDeepflowMessage(item, props.eventId)));
+      }
+    }
+  }
+  if (nearBottom.value) scrollToBottom();
 }
 
 // 模型正文增量（后端流式转发，不含推理过程）：
@@ -589,8 +628,12 @@ onUnmounted(() => {
     <div ref="chatWrapRef" class="chat-body-wrap">
     <NScrollbar ref="chatRef" class="chat-body">
       <div v-if="chatMessages.length" class="messages">
+        <div v-if="hiddenMessageCount" class="history-entry">
+          <NButton text type="primary" @click="showHistory">查看历史记录（{{ hiddenMessageCount }}条）</NButton>
+        </div>
+        <div v-if="!visibleChatMessages.length" class="report-pending">最终报告尚未生成，可查看历史记录或继续提问。</div>
         <div
-          v-for="item in chatMessages"
+          v-for="item in visibleChatMessages"
           :key="item.key"
           :class="['message', item.messageClass]"
         >
@@ -713,6 +756,18 @@ onUnmounted(() => {
 }
 .generation-status-heading { display: flex; align-items: center; gap: 10px; color: hsl(var(--foreground)); }
 .generation-status-slow { background: hsl(var(--warning) / 10%); }
+
+.history-entry {
+  flex-shrink: 0;
+  padding: 8px 0 16px;
+  text-align: center;
+}
+
+.report-pending {
+  padding: 24px 0;
+  color: var(--msg-muted);
+  text-align: center;
+}
 
 .messages {
   display: flex;
