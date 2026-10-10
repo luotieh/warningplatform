@@ -115,6 +115,10 @@ func (s *MemoryStore) AggregationTransaction(ctx context.Context, _ string, fn f
 	tx.aggregateRecords = cloneMap(s.aggregateRecords)
 	tx.aggregateHits = cloneMap(s.aggregateHits)
 	tx.hitSeq = s.hitSeq
+	tx.summarySeq = s.summarySeq
+	for id, items := range s.summariesByEvent {
+		tx.summariesByEvent[id] = append([]domain.Summary(nil), items...)
+	}
 	if err := fn(tx); err != nil {
 		return err
 	}
@@ -127,6 +131,8 @@ func (s *MemoryStore) AggregationTransaction(ctx context.Context, _ string, fn f
 	s.aggregateRecords = tx.aggregateRecords
 	s.aggregateHits = tx.aggregateHits
 	s.hitSeq = tx.hitSeq
+	s.summarySeq = tx.summarySeq
+	s.summariesByEvent = tx.summariesByEvent
 	return nil
 }
 func (s *MemoryStore) AggregateRecord(ctx context.Context, kind, key string) (AggregateRecord, bool, error) {
@@ -143,7 +149,7 @@ func (s *MemoryStore) PutAggregateRecord(ctx context.Context, r AggregateRecord)
 		return err
 	}
 	key := r.Kind + "/" + r.Key
-	if _, ok := s.aggregateRecords[key]; ok && (r.Kind == "snapshot" || r.Kind == "revision") {
+	if _, ok := s.aggregateRecords[key]; ok && (r.Kind == "snapshot" || r.Kind == "revision" || r.Kind == "report_document") {
 		return errors.New("immutable aggregation record already exists")
 	}
 	r.Value = append([]byte(nil), r.Value...)

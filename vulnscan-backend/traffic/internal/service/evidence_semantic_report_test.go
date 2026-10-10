@@ -250,10 +250,10 @@ func TestAllReportKindsUseActualSemanticTransport(t *testing.T) {
 					reply = acceptedSemanticResponse(t, evidence.SemanticCall{System: system, Prompt: user})
 				} else if user != "health" {
 					reportCalls++
-					if !strings.Contains(user, "semantic_evidence") || !strings.Contains(user, "正常业务也是替代解释") {
+					if !strings.Contains(user, `"kind":"semantic"`) || !strings.Contains(user, "正常业务也是替代解释") {
 						t.Error("validated semantics absent from report prompt")
 					}
-					reply = "【结论】威胁事件概率35%，需要核验。"
+					reply = acceptedReportResponse(t, user)
 				}
 				w.Header().Set("Content-Type", "application/json")
 				_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"finish_reason": "stop", "message": map[string]any{"content": reply}}}})

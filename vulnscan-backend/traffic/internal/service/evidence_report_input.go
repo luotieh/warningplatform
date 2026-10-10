@@ -26,6 +26,7 @@ type preparedReportInput struct {
 	AssetSection string
 	Evaluation   SnapshotFactEvaluation
 	Semantics    ReportSemanticEvaluation
+	Evidence     ReportEvidenceBundle
 }
 
 func (s Services) prepareReportInput(ctx context.Context, event domain.Event) (preparedReportInput, error) {
@@ -51,7 +52,8 @@ func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event
 		b, err := json.Marshal(c)
 		manifest := SnapshotEvidenceManifest{AdapterVersion: snapshotAdapterVersion, Coverage: "unverified", FactCoverage: snapshotUnavailableCoverage(evidence.SupportedFacts(), "legacy_snapshot_unverified")}
 		manifest.addIssue(SnapshotInputIssue{Code: "legacy_snapshot_unverified", Stage: "load_snapshot"})
-		return preparedReportInput{Context: string(b), AssetSection: assetMatchContext(event, s.Store.ListAssets()), Evaluation: SnapshotFactEvaluation{Status: "unavailable", Reason: "legacy_snapshot_unverified", Manifest: manifest}, Semantics: semantics}, err
+		evaluation := SnapshotFactEvaluation{Status: "unavailable", Reason: "legacy_snapshot_unverified", Manifest: manifest}
+		return preparedReportInput{Context: string(b), AssetSection: assetMatchContext(event, s.Store.ListAssets()), Evaluation: evaluation, Semantics: semantics, Evidence: buildReportEvidence(event, EvidenceSnapshot{EventID: event.EventID, Context: c}, evaluation, semantics)}, err
 	}
 	// One registry read serves all hit/scope bindings in this evaluation. Cache
 	// identity includes the registry, so enrollment or address changes invalidate it.
@@ -171,7 +173,7 @@ func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event
 	}
 	manifest["semantic_evidence"] = map[string]any{"result_key": semantics.ResultKey, "adapter_version": semantics.AdapterVersion, "input_mode": semantics.InputMode, "status": semantics.Status, "result_persisted": semantics.ResultPersisted}
 	projected, err := projectReportEvidence(snap, evaluation, semantics)
-	return preparedReportInput{Context: projected, AssetSection: assetMatchContext(event, assets), Evaluation: evaluation, Semantics: semantics}, err
+	return preparedReportInput{Context: projected, AssetSection: assetMatchContext(event, assets), Evaluation: evaluation, Semantics: semantics, Evidence: buildReportEvidence(event, snap, evaluation, semantics)}, err
 }
 
 func projectReportEvidence(snap EvidenceSnapshot, facts SnapshotFactEvaluation, semantics ReportSemanticEvaluation) (string, error) {

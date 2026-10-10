@@ -74,7 +74,7 @@ func (s *MySQLStore) AggregateRecord(ctx context.Context, kind, key string) (Agg
 func (s *MySQLStore) PutAggregateRecord(ctx context.Context, r AggregateRecord) error {
 	// Snapshots and revision journals are immutable, even on worker retries.
 	query := "INSERT INTO traffic_aggregation_records(kind,record_key,group_key,value_json) VALUES (?,?,?,?)"
-	if r.Kind != "snapshot" && r.Kind != "revision" {
+	if r.Kind != "snapshot" && r.Kind != "revision" && r.Kind != "report_document" {
 		query += " ON DUPLICATE KEY UPDATE group_key=VALUES(group_key),value_json=VALUES(value_json)"
 	}
 	_, err := s.db.ExecContext(ctx, query, r.Kind, r.Key, r.Group, string(r.Value))

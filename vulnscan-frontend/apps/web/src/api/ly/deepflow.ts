@@ -100,6 +100,20 @@ export function deepflowGet<T = any>(url: string, params?: Record<string, any>) 
   return request<T>(url, { method: 'GET', params });
 }
 
+export function deepflowGetEvidenceReport(eventId: string, summaryId?: number) {
+  return deepflowGet<Record<string, any>>(`/events/detail/${encodeURIComponent(eventId)}/report`, { summary_id: summaryId });
+}
+
+export async function deepflowExportEvidenceReport(eventId: string, summaryId: number) {
+  const token = useAccessStore().accessToken || localStorage.getItem('deepflow_token');
+  if (!token) { redirectToLogin(false); throw new Error('未登录，请先登录'); }
+  const response = await fetch(buildUrl(`/events/detail/${encodeURIComponent(eventId)}/report/export`, { summary_id: summaryId }), {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) { await parseResponse(response); throw new Error('报告导出失败'); }
+  return response.blob();
+}
+
 export function deepflowPost<T = any>(url: string, data?: Record<string, any>) {
   return request<T>(url, {
     body: JSON.stringify(data ?? {}),

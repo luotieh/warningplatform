@@ -214,7 +214,11 @@ func TestAllReportKindsActuallySendProducedSourceFacts(t *testing.T) {
 					}
 				}
 				w.Header().Set("Content-Type", "application/json")
-				_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"finish_reason": "stop", "message": map[string]any{"content": "【结论】威胁事件概率35%，等待核验。"}}}})
+				reply := "OK"
+				if prompt != "" {
+					reply = acceptedReportResponse(t, prompt)
+				}
+				_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"finish_reason": "stop", "message": map[string]any{"content": reply}}}})
 			}))
 			defer server.Close()
 			svc.LLM = &client.LLMClient{BaseURL: server.URL, Model: "fixture", HTTP: server.Client()}

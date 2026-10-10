@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -171,7 +170,11 @@ func (s Services) runAnalysis(ctx context.Context, eventID string, kind string, 
 		return s.failAgentWorkflow(eventID, err)
 	}
 	event.Context = prepared.Context
-	reply, err := s.LLM.Chat(ctx, autoAnalysisSystemPrompt, autoAnalysisPromptWithDialogue(event, prepared.AssetSection, s.dialogueEvidenceSection(eventID)))
+	prompt, err := evidenceReportPrompt(event, prepared, prepared.Evidence, s.dialogueEvidenceSection(eventID))
+	if err != nil {
+		return s.failAgentWorkflow(eventID, err)
+	}
+	rawReply, err := s.LLM.Chat(ctx, evidenceReportSystemPrompt, prompt)
 	if err != nil {
 		err = fmt.Errorf("LLM自动分析失败，请检查LLM配置: %w", err)
 		_ = s.addLLMConfigRequiredMessage(eventID, roundID, err.Error())
@@ -180,14 +183,19 @@ func (s Services) runAnalysis(ctx context.Context, eventID string, kind string, 
 		realtime.BroadcastStatus(eventID, map[string]any{"event_id": eventID, "status": "llm_config_required", "message": err.Error()})
 		return err
 	}
-
-	sm, err := s.Store.AddSummary(domain.Summary{
-		EventID:      eventID,
-		RoundID:      roundID,
-		EventSummary: reply,
-		Version:      version,
-		Kind:         kind,
-	})
+	assessment, err := decodeReportAssessment(rawReply, prepared.Evidence)
+	if err != nil {
+		_ = putRecord(ctx, s.Store, "report_validation_failure", snapshotKey(eventID, prepared.Evidence.SnapshotVersion), eventID, map[string]any{"reason": err.Error(), "schema_version": reportEvidenceVersion, "snapshot_version": prepared.Evidence.SnapshotVersion, "at": time.Now().UTC()})
+		return s.failAgentWorkflow(eventID, fmt.Errorf("报告证据一致性校验失败：%w", err))
+	}
+	document := ReportDocument{SchemaVersion: reportEvidenceVersion, EventID: eventID, Title: firstNonEmpty(event.EventName, event.Title, "安全事件研判报告"), AnalysisVersion: version, Kind: kind, CreatedAt: time.Now().UTC(), Evidence: prepared.Evidence, Assessment: assessment, Validation: "references_and_facts_validated", ModelIdentity: digest(semanticModelIdentity(s))}
+	document.AssetSection = prepared.AssetSection
+	reply := renderReportMarkdown(document)
+	document.Markdown = reply
+	if raw, e := json.Marshal(document); e != nil || len(raw) > 16<<20 {
+		return s.failAgentWorkflow(eventID, fmt.Errorf("report_document_budget_exceeded"))
+	}
+	sm, err := s.saveReportDocument(ctx, document, roundID)
 	if err != nil {
 		return s.failAgentWorkflow(eventID, fmt.Errorf("保存分析总结失败: %w", err))
 	}
@@ -209,17 +217,23 @@ func (s Services) runAnalysis(ctx context.Context, eventID string, kind string, 
 	// 提取模型输出的威胁概率并入事件 context 持久化（ai_probability，0-100），
 	// 供列表「研判概率」列展示与排序。注意合并进存储 context 而非 event.Context
 	// （后者是 EvidenceContext 生成的模型输入精简版，不含 src_ip 等入库字段）。
-	// 提取失败不写：保留历史值，且与 0% 区分「未研判」。
-	if probability, ok := parseThreatProbability(reply); ok {
+	// null 表示本版暂不估计，清除旧版概率，避免列表继续显示旧结论。
+	if assessment.Probability != nil {
 		if stored, found := s.Store.GetEvent(eventID); found {
 			ctxMap := decodeEventContext(stored.Context)
-			ctxMap["ai_probability"] = probability
+			ctxMap["ai_probability"] = *assessment.Probability
 			if raw, err := json.Marshal(ctxMap); err == nil {
 				patch["context"] = string(raw)
 			}
 		}
 	} else {
-		log.Printf("[traffic] 事件 %s 研判报告未提取到威胁概率，ai_probability 不更新", eventID)
+		if stored, found := s.Store.GetEvent(eventID); found {
+			ctxMap := decodeEventContext(stored.Context)
+			delete(ctxMap, "ai_probability")
+			if raw, e := json.Marshal(ctxMap); e == nil {
+				patch["context"] = string(raw)
+			}
+		}
 	}
 	_, _ = s.Store.UpdateEvent(eventID, patch)
 	realtime.BroadcastStatus(eventID, map[string]any{"event_id": eventID, "status": "round_finished"})

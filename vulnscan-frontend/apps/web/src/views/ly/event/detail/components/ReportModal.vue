@@ -1,21 +1,23 @@
 <script lang="ts" setup>
 import { computed, ref, watch } from 'vue';
 
-import { marked } from 'marked';
 import { NAlert, NModal } from 'naive-ui';
 
 import {
   deepflowGetEventDetail,
   deepflowGetEventSummary,
+  deepflowGetEvidenceReport,
+  deepflowExportEvidenceReport,
   deepflowRefreshEventReport,
 } from '#/api/ly/deepflow';
 import { message } from '#/adapter/naive';
 import { useDeepflowStore } from '#/store';
-import { formatDeepflowDate, mapSeverityToDisplay } from '#/utils/deepflow';
+import { mapSeverityToDisplay } from '#/utils/deepflow';
 import { eventTimestampMs, formatTimestamp } from '#/utils/ly';
 import deepflowSocket from '#/utils/deepflow-socket';
 
 import ChatBox from './ChatBox.vue';
+import EvidenceReport from './EvidenceReport.vue';
 
 defineOptions({ name: 'LyReportModal' });
 
@@ -39,10 +41,51 @@ const show = computed({
 
 const deepflowStore = useDeepflowStore();
 const detail = ref<Record<string, any>>({});
-const chatBoxRef = ref<{ getReportMarkdown: () => string } | null>(null);
 const downloading = ref(false);
 const refreshing = ref(false);
 const analysisVersion = ref(0);
+const reportDocument = ref<Record<string, any> | null>(null);
+const legacyMarkdown = ref('');
+const reportLoading = ref(false);
+const reportError = ref('');
+const reportVersions = ref<Record<string, any>[]>([]);
+const selectedSummaryId = ref(0);
+let reportReadToken = 0;
+
+async function loadFormalReport(summaryId?: number) {
+  const eventId = props.eventId;
+  const readToken = ++reportReadToken;
+  if (!eventId) return;
+  reportLoading.value = true;
+  reportError.value = '';
+  try {
+    const summaries = await deepflowGetEventSummary(eventId);
+    if (eventId !== props.eventId || readToken !== reportReadToken) return;
+    reportVersions.value = Array.isArray(summaries) ? summaries : [];
+    const selected = summaryId ? reportVersions.value.find((item) => item.id === summaryId) : reportVersions.value.at(-1);
+    selectedSummaryId.value = Number(selected?.id || 0);
+    reportDocument.value = null;
+    legacyMarkdown.value = '';
+    if (!selected) return;
+    try {
+      const doc = await deepflowGetEvidenceReport(eventId, selectedSummaryId.value);
+      if (eventId === props.eventId && readToken === reportReadToken) reportDocument.value = doc;
+    } catch (error) {
+      if (eventId !== props.eventId || readToken !== reportReadToken) return;
+      if (error instanceof Error && error.message.includes('legacy_report_without_evidence_document')) legacyMarkdown.value = selected.event_summary || '';
+      else throw error;
+    }
+  } catch (error) {
+    if (readToken === reportReadToken) reportError.value = error instanceof Error ? error.message : '报告读取失败';
+  } finally {
+    if (eventId === props.eventId && readToken === reportReadToken) reportLoading.value = false;
+  }
+}
+
+function handleReportMessage(data: Record<string, any> | Record<string, any>[]) {
+  const messages = Array.isArray(data) ? data : [data];
+  if (messages.some((item) => String(item?.event_id || '') === props.eventId && item?.message_type === 'event_summary')) void loadFormalReport();
+}
 const wsConnectionStatus = ref<'connected' | 'connecting' | 'disconnected'>(
   'disconnected',
 );
@@ -129,7 +172,9 @@ async function getDetails() {
     return;
   }
   try {
-    detail.value = (await deepflowGetEventDetail(props.eventId)) || {};
+    const eventId = props.eventId;
+    const response = await deepflowGetEventDetail(eventId);
+    if (eventId === props.eventId && props.visible) detail.value = response || {};
   } catch (error) {
     message.error(
       error instanceof Error ? error.message : '获取事件详情失败，请检查后端服务',
@@ -149,6 +194,7 @@ async function refreshReport() {
         : '分析刷新任务已提交，完成后自动更新',
     );
     await getDetails();
+    await loadFormalReport();
   } catch (error) {
     message.error(
       error instanceof Error ? error.message : '刷新分析失败，请稍后重试',
@@ -162,6 +208,7 @@ function bindSocket() {
   deepflowSocket.on('connected', handleSocketConnected);
   deepflowSocket.on('disconnected', handleSocketDisconnected);
   deepflowSocket.on('error', handleSocketError);
+  deepflowSocket.on('new_message', handleReportMessage);
   syncSocketStatus();
   deepflowSocket.connect();
   syncSocketStatus();
@@ -171,119 +218,51 @@ function unbindSocket() {
   deepflowSocket.off('connected', handleSocketConnected);
   deepflowSocket.off('disconnected', handleSocketDisconnected);
   deepflowSocket.off('error', handleSocketError);
+  deepflowSocket.off('new_message', handleReportMessage);
 }
 
 function close() {
   show.value = false;
 }
 
-// 把 LLM 自动分析总结整理成 Markdown：只取最新一轮（后端按 id 升序返回，
-// 最后一轮即最新报告），避免 Word 下载把历史所有轮次的报告都渲染进去。
-function formatSummary(res: any): string {
-  const list = Array.isArray(res)
-    ? res
-    : Array.isArray(res?.data)
-      ? res.data
-      : [];
-  if (list.length > 0) {
-    const latest = list[list.length - 1] as Record<string, any>;
-    const title = `第 ${latest.round_id || 1} 轮分析`;
-    const time = formatDeepflowDate(latest.updated_at || latest.created_at);
-    return [
-      `## ${title}`,
-      time ? `*${time}*` : '',
-      latest.event_summary || '暂无总结内容',
-    ]
-      .filter(Boolean)
-      .join('\n\n');
-  }
-  if (typeof res === 'string') return res;
-  if (res?.event_summary) return String(res.event_summary);
-  if (res?.data?.event_summary) return String(res.data.event_summary);
-  return '';
-}
-
-// 生成并下载 LLM 告警自动分析报告 Word 文档（.doc）
+// Export exactly the immutable report version displayed on screen.
 async function downloadReport() {
-  if (downloading.value) return;
+  if (downloading.value || !props.eventId) return;
+  if (!reportDocument.value?.summary_id) {
+    message.warning('该报告尚未绑定新版证据清单，请生成新版报告后导出DOCX');
+    return;
+  }
   downloading.value = true;
   try {
-    // 1) LLM 自动分析总结（真正的“告警自动分析报告”）
-    let summaryMd = '';
-    if (props.eventId) {
-      try {
-        summaryMd = formatSummary(await deepflowGetEventSummary(props.eventId));
-      } catch {
-        summaryMd = '';
-      }
-    }
-    // 2) 分析过程对话（多智能体研判）
-    const chatMd = chatBoxRef.value?.getReportMarkdown?.() ?? '';
-
-    const sections = [
-      summaryMd ? `# 自动分析报告\n\n${summaryMd}` : '',
-      chatMd ? `# 分析过程\n\n${chatMd}` : '',
-    ].filter(Boolean);
-
-    if (sections.length === 0) {
-      message.warning('暂无可下载的报告内容');
-      return;
-    }
-
-    const header = `# ${eventTitle.value}\n\n${eventSource.value} · 严重程度 ${eventLevelText.value} · ${createdAtText.value}\n`;
-    const fullMd = [header, ...sections].join('\n\n---\n\n');
-
-    const safeName = String(eventTitle.value || '安全事件报告')
-      .replace(/[\n\r\t\\/:*?"<>|]/g, '_')
-      .slice(0, 80);
-
-    // Markdown -> HTML，再包成 Word 可识别的 HTML 文档（application/msword）。
-    // 该方案无需额外依赖、可离线，Word / WPS 均可正常打开并保留排版。
-    const bodyHtml = marked.parse(fullMd, { async: false }) as string;
-    const docHtml =
-      '<!DOCTYPE html>' +
-      '<html xmlns:o="urn:schemas-microsoft-com:office:office" ' +
-      'xmlns:w="urn:schemas-microsoft-com:office:word" ' +
-      'xmlns="http://www.w3.org/TR/REC-html40">' +
-      '<head><meta charset="utf-8">' +
-      `<title>${safeName}</title>` +
-      '<style>' +
-      'body{font-family:"Microsoft YaHei","PingFang SC",-apple-system,sans-serif;font-size:14px;line-height:1.7;color:#1a1a1a;}' +
-      'h1{font-size:22px;font-weight:700;margin:0 0 16px;}' +
-      'h2{font-size:18px;font-weight:700;margin:20px 0 10px;}' +
-      'h3{font-size:15px;font-weight:600;margin:16px 0 8px;}' +
-      'p,li{margin:6px 0;}' +
-      'hr{border:0;border-top:1px solid #d9d9d9;margin:18px 0;}' +
-      'pre,code{background:#f5f5f5;font-family:Consolas,monospace;}' +
-      'pre{padding:12px;}' +
-      'table{border-collapse:collapse;width:100%;}' +
-      'th,td{border:1px solid #d9d9d9;padding:6px 10px;}' +
-      '</style></head>' +
-      `<body>${bodyHtml}</body></html>`;
-
-    // 前置 BOM，确保中文在 Word 中不乱码
-    const blob = new Blob(['﻿', docHtml], { type: 'application/msword' });
+    const doc = reportDocument.value;
+    const blob = await deepflowExportEvidenceReport(props.eventId, Number(doc.summary_id));
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${safeName}.doc`;
+    link.download = `${String(doc.title || '安全事件研判报告').replace(/[\n\r\t\\/:*?"<>|]/g, '_').slice(0, 80)}.docx`;
     document.body.append(link);
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
   } catch (error) {
-    console.error('[report] 生成 Word 文档失败', error);
-    message.error('生成报告 Word 文档失败');
+    message.error(error instanceof Error ? error.message : '报告DOCX导出失败');
   } finally {
     downloading.value = false;
   }
 }
-
 watch(
-  () => props.visible,
-  async (open) => {
+  () => [props.visible, props.eventId] as const,
+  async ([open, eventId]) => {
+    reportReadToken++;
+    detail.value = {};
+    reportDocument.value = null;
+    legacyMarkdown.value = '';
+    reportVersions.value = [];
+    selectedSummaryId.value = 0;
+    reportError.value = '';
+    reportLoading.value = false;
+    unbindSocket();
     if (!open) {
-      unbindSocket();
       return;
     }
     try {
@@ -295,8 +274,11 @@ watch(
     } catch (error) {
       console.error('[DeepFlow] 自动登录失败:', error);
     }
+    if (!props.visible || eventId !== props.eventId) return;
     await getDetails();
-    bindSocket();
+    if (!props.visible || eventId !== props.eventId) return;
+    await loadFormalReport();
+    if (props.visible && eventId === props.eventId) bindSocket();
   },
 );
 </script>
@@ -377,13 +359,21 @@ watch(
           <!-- DeepFlow API has its own token; mount only after automatic login. -->
           <NAlert v-if="activityContext.report_stale" type="warning" style="margin-bottom:8px">事件证据已更新，已有报告可能基于旧数据版本；重新生成后请核对证据。</NAlert>
           <NAlert v-if="activityContext.canonical_event_id && activityContext.canonical_event_id !== eventId" type="info" style="margin-bottom:8px">此事件已关联到 {{ activityContext.canonical_event_id }}，当前保留历史报告与审核记录。</NAlert>
+          <div class="report-version-select" v-if="reportVersions.length">
+            <label>报告版本 <select :value="selectedSummaryId" @change="loadFormalReport(Number(($event.target as HTMLSelectElement).value))"><option v-for="item in reportVersions" :key="item.id" :value="item.id">版本 {{ item.version || item.round_id }} · {{ item.kind || '历史' }}</option></select></label>
+          </div>
+          <NAlert v-if="reportError" type="error">{{ reportError }}</NAlert>
+          <div v-if="reportLoading" class="formal-loading">正在读取报告及绑定证据…</div>
+          <EvidenceReport v-else-if="reportDocument || legacyMarkdown" :document="reportDocument" :legacy-markdown="legacyMarkdown" :event-id="eventId" />
+          <div v-else class="formal-loading">正式报告尚未生成</div>
+          <details class="analysis-process"><summary>分析过程与补充对话</summary>
           <ChatBox
             v-if="eventId && deepflowStore.accessToken"
-            ref="chatBoxRef"
             :event-id="eventId"
             :event-context="eventContext"
           />
           <div v-else class="report-empty">暂无报告内容</div>
+          </details>
         </div>
       </div>
     </div>
@@ -482,10 +472,16 @@ watch(
   max-width: 1100px;
   height: 100%;
   margin: 0 auto;
-  overflow: hidden;
+  overflow: auto;
   border: 1px solid hsl(var(--border));
   border-radius: 12px;
 }
+.report-version-select { padding: 12px 20px; }
+.report-version-select select { margin-left: 8px; padding: 4px 8px; border: 1px solid hsl(var(--border)); background: hsl(var(--card)); }
+.formal-loading { padding: 24px; color: hsl(var(--muted-foreground)); }
+.analysis-process { padding: 16px; border-top: 1px solid hsl(var(--border)); }
+.analysis-process summary { cursor: pointer; margin-bottom: 12px; font-weight: 600; }
+.analysis-process :deep(.chat-box) { min-height: 500px; }
 .report-empty {
   display: flex;
   align-items: center;

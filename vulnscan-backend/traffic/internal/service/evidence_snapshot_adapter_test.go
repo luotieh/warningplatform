@@ -389,7 +389,7 @@ func TestAnalysisPipelineActuallySendsComputedSnapshotFacts(t *testing.T) {
 		for _, message := range body.Messages {
 			if message.Role == "user" && message.Content != "health" {
 				reportPrompt = message.Content
-				reply = "【结论】规律通信，威胁事件概率35%，需要核查业务。"
+				reply = acceptedReportResponse(t, message.Content)
 			}
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -400,7 +400,7 @@ func TestAnalysisPipelineActuallySendsComputedSnapshotFacts(t *testing.T) {
 	if err := svc.RunAgentWorkflow(context.Background(), snap.EventID); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(reportPrompt, "algorithm_evidence") || !strings.Contains(reportPrompt, "F_BEACON_PERIODIC") || !strings.Contains(reportPrompt, `"status":"observed"`) {
+	if !strings.Contains(reportPrompt, "selected_evidence") || !strings.Contains(reportPrompt, "F_BEACON_PERIODIC") || !strings.Contains(reportPrompt, `"status":"observed"`) {
 		t.Fatalf("new engine absent from actual model call: %s", reportPrompt)
 	}
 	if strings.Contains(reportPrompt, "evidence_result_key") || strings.Contains(reportPrompt, "registry_version") {

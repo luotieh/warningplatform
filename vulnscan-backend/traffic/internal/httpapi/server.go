@@ -103,6 +103,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/events/detail/{event_id}/occurrences", s.getOccurrences)
 	s.mux.HandleFunc("GET /api/events/detail/{event_id}/occurrences/{hit_id}", s.getOccurrences)
 	s.mux.HandleFunc("GET /api/events/detail/{event_id}/summaries", s.getSummaries)
+	s.mux.HandleFunc("GET /api/events/detail/{event_id}/report", s.getReportDocument)
+	s.mux.HandleFunc("GET /api/events/detail/{event_id}/report/export", s.exportReportDocument)
 	s.mux.HandleFunc("POST /api/events/detail/{event_id}/messages", s.withNewMessageBroadcast(s.sendEventMessage))
 	s.mux.HandleFunc("GET /api/events/detail/{event_id}/executions", s.getExecutions)
 	s.mux.HandleFunc("POST /api/events/detail/{event_id}/executions/{execution_id}/complete", s.withExecutionUpdateBroadcast(s.completeExecution))
