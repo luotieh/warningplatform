@@ -3,6 +3,7 @@ package httpapi
 import (
 	"net/http"
 	"strconv"
+	"strings"
 	"vulnscan-backend/traffic/internal/domain"
 	"vulnscan-backend/traffic/internal/service"
 )
@@ -21,7 +22,13 @@ func (s *Server) readReportDocument(w http.ResponseWriter, r *http.Request) (ser
 			return service.ReportDocument{}, false
 		}
 	}
-	doc, err := s.services.ReportDocument(r.Context(), r.PathValue("event_id"), id)
+	var doc service.ReportDocument
+	var err error
+	if r.URL.Path != "" && strings.HasSuffix(r.URL.Path, "/export") {
+		doc, err = s.services.ReportDocumentForExport(r.Context(), r.PathValue("event_id"), id)
+	} else {
+		doc, err = s.services.ReportDocument(r.Context(), r.PathValue("event_id"), id)
+	}
 	if err != nil {
 		writeJSON(w, 400, domain.APIResponse{Status: "error", Message: err.Error()})
 		return doc, false

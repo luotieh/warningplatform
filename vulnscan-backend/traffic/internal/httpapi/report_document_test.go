@@ -1,9 +1,12 @@
 package httpapi
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -79,6 +82,8 @@ func TestReportAPIAuthenticationPinnedVersionAndExport(t *testing.T) {
 		contains    string
 	}{
 		{base, "", 401, ""},
+		{base + "/export", "", 401, ""},
+		{base + "/export", "report-token", 200, ""},
 		{base + "?summary_id=0", "report-token", 400, "正整数"},
 		{base + "?summary_id=garbage", "report-token", 400, "正整数"},
 		{base, "report-token", 400, "legacy_report_without_evidence_document"},
@@ -98,6 +103,34 @@ func TestReportAPIAuthenticationPinnedVersionAndExport(t *testing.T) {
 		if tc.status == 200 && strings.Contains(tc.path, "/export") {
 			if !strings.HasPrefix(w.Body.String(), "PK") || !strings.Contains(w.Header().Get("Content-Type"), "wordprocessingml") || !strings.Contains(w.Header().Get("Content-Disposition"), ".docx") {
 				t.Fatal("export is not a DOCX attachment")
+			}
+			if tc.path == base+"/export" {
+				archive, err := zip.NewReader(bytes.NewReader(w.Body.Bytes()), int64(w.Body.Len()))
+				if err != nil {
+					t.Fatal(err)
+				}
+				found := false
+				for _, file := range archive.File {
+					if file.Name != "word/document.xml" {
+						continue
+					}
+					reader, err := file.Open()
+					if err != nil {
+						t.Fatal(err)
+					}
+					content, err := io.ReadAll(reader)
+					reader.Close()
+					if err != nil {
+						t.Fatal(err)
+					}
+					found = strings.Contains(string(content), "legacy")
+					if strings.Contains(string(content), "附录：正文证据来源定位") {
+						t.Fatal("legacy export contains fabricated evidence appendix")
+					}
+				}
+				if !found {
+					t.Fatal("latest legacy report was not exported")
+				}
 			}
 		}
 	}

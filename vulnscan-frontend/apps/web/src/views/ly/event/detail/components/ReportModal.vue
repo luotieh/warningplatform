@@ -1,12 +1,10 @@
 <script lang="ts" setup>
 import { computed, ref, watch } from 'vue';
 
-import { NAlert, NModal } from 'naive-ui';
+import { NModal } from 'naive-ui';
 
 import {
   deepflowGetEventDetail,
-  deepflowGetEventSummary,
-  deepflowGetEvidenceReport,
   deepflowExportEvidenceReport,
   deepflowRefreshEventReport,
 } from '#/api/ly/deepflow';
@@ -17,7 +15,6 @@ import { eventTimestampMs, formatTimestamp } from '#/utils/ly';
 import deepflowSocket from '#/utils/deepflow-socket';
 
 import ChatBox from './ChatBox.vue';
-import EvidenceReport from './EvidenceReport.vue';
 
 defineOptions({ name: 'LyReportModal' });
 
@@ -44,48 +41,6 @@ const detail = ref<Record<string, any>>({});
 const downloading = ref(false);
 const refreshing = ref(false);
 const analysisVersion = ref(0);
-const reportDocument = ref<Record<string, any> | null>(null);
-const legacyMarkdown = ref('');
-const reportLoading = ref(false);
-const reportError = ref('');
-const reportVersions = ref<Record<string, any>[]>([]);
-const selectedSummaryId = ref(0);
-let reportReadToken = 0;
-
-async function loadFormalReport(summaryId?: number) {
-  const eventId = props.eventId;
-  const readToken = ++reportReadToken;
-  if (!eventId) return;
-  reportLoading.value = true;
-  reportError.value = '';
-  try {
-    const summaries = await deepflowGetEventSummary(eventId);
-    if (eventId !== props.eventId || readToken !== reportReadToken) return;
-    reportVersions.value = Array.isArray(summaries) ? summaries : [];
-    const selected = summaryId ? reportVersions.value.find((item) => item.id === summaryId) : reportVersions.value.at(-1);
-    selectedSummaryId.value = Number(selected?.id || 0);
-    reportDocument.value = null;
-    legacyMarkdown.value = '';
-    if (!selected) return;
-    try {
-      const doc = await deepflowGetEvidenceReport(eventId, selectedSummaryId.value);
-      if (eventId === props.eventId && readToken === reportReadToken) reportDocument.value = doc;
-    } catch (error) {
-      if (eventId !== props.eventId || readToken !== reportReadToken) return;
-      if (error instanceof Error && error.message.includes('legacy_report_without_evidence_document')) legacyMarkdown.value = selected.event_summary || '';
-      else throw error;
-    }
-  } catch (error) {
-    if (readToken === reportReadToken) reportError.value = error instanceof Error ? error.message : '报告读取失败';
-  } finally {
-    if (eventId === props.eventId && readToken === reportReadToken) reportLoading.value = false;
-  }
-}
-
-function handleReportMessage(data: Record<string, any> | Record<string, any>[]) {
-  const messages = Array.isArray(data) ? data : [data];
-  if (messages.some((item) => String(item?.event_id || '') === props.eventId && item?.message_type === 'event_summary')) void loadFormalReport();
-}
 const wsConnectionStatus = ref<'connected' | 'connecting' | 'disconnected'>(
   'disconnected',
 );
@@ -194,7 +149,6 @@ async function refreshReport() {
         : '分析刷新任务已提交，完成后自动更新',
     );
     await getDetails();
-    await loadFormalReport();
   } catch (error) {
     message.error(
       error instanceof Error ? error.message : '刷新分析失败，请稍后重试',
@@ -208,7 +162,6 @@ function bindSocket() {
   deepflowSocket.on('connected', handleSocketConnected);
   deepflowSocket.on('disconnected', handleSocketDisconnected);
   deepflowSocket.on('error', handleSocketError);
-  deepflowSocket.on('new_message', handleReportMessage);
   syncSocketStatus();
   deepflowSocket.connect();
   syncSocketStatus();
@@ -218,28 +171,24 @@ function unbindSocket() {
   deepflowSocket.off('connected', handleSocketConnected);
   deepflowSocket.off('disconnected', handleSocketDisconnected);
   deepflowSocket.off('error', handleSocketError);
-  deepflowSocket.off('new_message', handleReportMessage);
 }
 
 function close() {
   show.value = false;
 }
 
-// Export exactly the immutable report version displayed on screen.
+// Resolve the latest saved report on the server at download time.
 async function downloadReport() {
   if (downloading.value || !props.eventId) return;
-  if (!reportDocument.value?.summary_id) {
-    message.warning('该报告尚未绑定新版证据清单，请生成新版报告后导出DOCX');
-    return;
-  }
   downloading.value = true;
+  const eventId = props.eventId;
+  const title = eventTitle.value;
   try {
-    const doc = reportDocument.value;
-    const blob = await deepflowExportEvidenceReport(props.eventId, Number(doc.summary_id));
+    const blob = await deepflowExportEvidenceReport(eventId);
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${String(doc.title || '安全事件研判报告').replace(/[\n\r\t\\/:*?"<>|]/g, '_').slice(0, 80)}.docx`;
+    link.download = `${title.replace(/[\n\r\t\\/:*?"<>|]/g, '_').slice(0, 80)}.docx`;
     document.body.append(link);
     link.click();
     link.remove();
@@ -253,14 +202,7 @@ async function downloadReport() {
 watch(
   () => [props.visible, props.eventId] as const,
   async ([open, eventId]) => {
-    reportReadToken++;
     detail.value = {};
-    reportDocument.value = null;
-    legacyMarkdown.value = '';
-    reportVersions.value = [];
-    selectedSummaryId.value = 0;
-    reportError.value = '';
-    reportLoading.value = false;
     unbindSocket();
     if (!open) {
       return;
@@ -277,7 +219,6 @@ watch(
     if (!props.visible || eventId !== props.eventId) return;
     await getDetails();
     if (!props.visible || eventId !== props.eventId) return;
-    await loadFormalReport();
     if (props.visible && eventId === props.eventId) bindSocket();
   },
 );
@@ -325,8 +266,8 @@ watch(
             class="report-icon-btn"
             type="button"
             :disabled="downloading"
-            aria-label="下载报告 Word 文档"
-            title="下载报告 Word 文档"
+            aria-label="下载最新版报告 Word 文档"
+            title="下载最新版报告 Word 文档"
             @click="downloadReport"
           >
             <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
@@ -356,24 +297,12 @@ watch(
 
       <div class="report-body">
         <div class="report-chat">
-          <!-- DeepFlow API has its own token; mount only after automatic login. -->
-          <NAlert v-if="activityContext.report_stale" type="warning" style="margin-bottom:8px">事件证据已更新，已有报告可能基于旧数据版本；重新生成后请核对证据。</NAlert>
-          <NAlert v-if="activityContext.canonical_event_id && activityContext.canonical_event_id !== eventId" type="info" style="margin-bottom:8px">此事件已关联到 {{ activityContext.canonical_event_id }}，当前保留历史报告与审核记录。</NAlert>
-          <div class="report-version-select" v-if="reportVersions.length">
-            <label>报告版本 <select :value="selectedSummaryId" @change="loadFormalReport(Number(($event.target as HTMLSelectElement).value))"><option v-for="item in reportVersions" :key="item.id" :value="item.id">版本 {{ item.version || item.round_id }} · {{ item.kind || '历史' }}</option></select></label>
-          </div>
-          <NAlert v-if="reportError" type="error">{{ reportError }}</NAlert>
-          <div v-if="reportLoading" class="formal-loading">正在读取报告及绑定证据…</div>
-          <EvidenceReport v-else-if="reportDocument || legacyMarkdown" :document="reportDocument" :legacy-markdown="legacyMarkdown" :event-id="eventId" />
-          <div v-else class="formal-loading">正式报告尚未生成</div>
-          <details class="analysis-process"><summary>分析过程与补充对话</summary>
           <ChatBox
             v-if="eventId && deepflowStore.accessToken"
             :event-id="eventId"
             :event-context="eventContext"
           />
-          <div v-else class="report-empty">暂无报告内容</div>
-          </details>
+          <div v-else class="report-empty">正在加载对话…</div>
         </div>
       </div>
     </div>
@@ -472,16 +401,10 @@ watch(
   max-width: 1100px;
   height: 100%;
   margin: 0 auto;
-  overflow: auto;
+  overflow: hidden;
   border: 1px solid hsl(var(--border));
   border-radius: 12px;
 }
-.report-version-select { padding: 12px 20px; }
-.report-version-select select { margin-left: 8px; padding: 4px 8px; border: 1px solid hsl(var(--border)); background: hsl(var(--card)); }
-.formal-loading { padding: 24px; color: hsl(var(--muted-foreground)); }
-.analysis-process { padding: 16px; border-top: 1px solid hsl(var(--border)); }
-.analysis-process summary { cursor: pointer; margin-bottom: 12px; font-weight: 600; }
-.analysis-process :deep(.chat-box) { min-height: 500px; }
 .report-empty {
   display: flex;
   align-items: center;

@@ -57,6 +57,37 @@ func (s Services) ReportDocument(ctx context.Context, eventID string, summaryID 
 	return doc, nil
 }
 
+// ReportDocumentForExport also supports saved reports predating evidence bundles.
+func (s Services) ReportDocumentForExport(ctx context.Context, eventID string, summaryID int64) (ReportDocument, error) {
+	summaries := s.Store.ListSummaries(eventID)
+	if len(summaries) == 0 {
+		return ReportDocument{}, fmt.Errorf("report_not_found")
+	}
+	summary := summaries[len(summaries)-1]
+	if summaryID > 0 {
+		found := false
+		for _, item := range summaries {
+			if item.ID == summaryID {
+				summary = item
+				found = true
+				break
+			}
+		}
+		if !found {
+			return ReportDocument{}, fmt.Errorf("report_not_found")
+		}
+	}
+	// Pin the resolved version before reading its bundle.
+	doc, err := s.ReportDocument(ctx, eventID, summary.ID)
+	if err == nil || err.Error() != "legacy_report_without_evidence_document" {
+		return doc, err
+	}
+	if strings.TrimSpace(summary.EventSummary) == "" {
+		return ReportDocument{}, fmt.Errorf("report_not_found")
+	}
+	return ReportDocument{EventID: eventID, SummaryID: summary.ID, Title: "安全事件研判报告", Markdown: summary.EventSummary, AnalysisVersion: summary.Version, Kind: summary.Kind, CreatedAt: summary.CreatedAt}, nil
+}
+
 func (s Services) saveReportDocument(ctx context.Context, doc ReportDocument, roundID int) (summary domain.Summary, err error) {
 	err = s.Store.AggregationTransaction(ctx, "report-"+doc.EventID, func(tx store.Store) error {
 		var e error
@@ -84,7 +115,11 @@ func ExportEvidenceReportDOCX(report ReportDocument) ([]byte, error) {
 	p := doc.AddParagraph("")
 	p.Justification(stypes.JustificationCenter)
 	p.AddText(report.Title).Bold(true).Size(18)
-	doc.AddParagraph(fmt.Sprintf("报告版本 %d · 快照版本 %d · %s（北京时间）", report.AnalysisVersion, report.Evidence.SnapshotVersion, report.CreatedAt.In(time.FixedZone("Asia/Shanghai", 8*3600)).Format("2006-01-02 15:04:05"))).AddText("").Size(9)
+	metadata := fmt.Sprintf("报告版本 %d · 快照版本 %d · %s（北京时间）", report.AnalysisVersion, report.Evidence.SnapshotVersion, report.CreatedAt.In(time.FixedZone("Asia/Shanghai", 8*3600)).Format("2006-01-02 15:04:05"))
+	if report.SchemaVersion == "" {
+		metadata = fmt.Sprintf("报告版本 %d · %s（北京时间）", report.AnalysisVersion, report.CreatedAt.In(time.FixedZone("Asia/Shanghai", 8*3600)).Format("2006-01-02 15:04:05"))
+	}
+	doc.AddParagraph(metadata).AddText("").Size(9)
 	lines := strings.Split(report.Markdown, "\n")
 	for n := 0; n < len(lines); n++ {
 		line := strings.TrimSpace(lines[n])
@@ -123,61 +158,63 @@ func ExportEvidenceReportDOCX(report ReportDocument) ([]byte, error) {
 	}
 	// Detailed appendix comes from the SAME immutable bundle, no database
 	// queries and no regeneration of historical evidence on export.
-	doc.AddPageBreak()
-	doc.AddParagraph("附录：正文证据来源定位").Style("Heading1")
-	doc.AddParagraph(fmt.Sprintf("事件：%s；快照版本：%d；命中水位：%d；修订水位：%d。", report.EventID, report.Evidence.SnapshotVersion, report.Evidence.Watermark, report.Evidence.RevisionWatermark))
-	selected := map[string]bool{}
-	for _, id := range report.Evidence.SelectedIDs {
-		selected[id] = true
-	}
-	for _, e := range report.Evidence.Entries {
-		if !selected[e.ID] {
-			continue
+	if report.SchemaVersion != "" {
+		doc.AddPageBreak()
+		doc.AddParagraph("附录：正文证据来源定位").Style("Heading1")
+		doc.AddParagraph(fmt.Sprintf("事件：%s；快照版本：%d；命中水位：%d；修订水位：%d。", report.EventID, report.Evidence.SnapshotVersion, report.Evidence.Watermark, report.Evidence.RevisionWatermark))
+		selected := map[string]bool{}
+		for _, id := range report.Evidence.SelectedIDs {
+			selected[id] = true
 		}
-		doc.AddParagraph(e.ID + " · " + e.Name).AddText("").Bold(true)
-		doc.AddParagraph("来源：" + e.Source)
-		if e.Scope.AssetID != "" || e.Scope.EndpointID != "" {
-			doc.AddParagraph("核验范围：资产=" + e.Scope.AssetID + "；端点=" + e.Scope.EndpointID + "；设备=" + e.Scope.DeviceID + "；群体=" + e.Scope.GroupID)
+		for _, e := range report.Evidence.Entries {
+			if !selected[e.ID] {
+				continue
+			}
+			doc.AddParagraph(e.ID + " · " + e.Name).AddText("").Bold(true)
+			doc.AddParagraph("来源：" + e.Source)
+			if e.Scope.AssetID != "" || e.Scope.EndpointID != "" {
+				doc.AddParagraph("核验范围：资产=" + e.Scope.AssetID + "；端点=" + e.Scope.EndpointID + "；设备=" + e.Scope.DeviceID + "；群体=" + e.Scope.GroupID)
+			}
+			if e.Window != nil {
+				doc.AddParagraph("核验窗口（UTC）：" + e.Window.Start.UTC().Format(time.RFC3339Nano) + " 至 " + e.Window.End.UTC().Format(time.RFC3339Nano) + "；边界约定=" + e.Window.Convention)
+			}
+			if len(e.SourceIDs) > 0 {
+				doc.AddParagraph(fmt.Sprintf("来源标识共%d条；以下展示前%d条定位入口：%s", len(e.SourceIDs), min(8, len(e.SourceIDs)), strings.Join(e.SourceIDs[:min(8, len(e.SourceIDs))], "；")))
+			}
 		}
-		if e.Window != nil {
-			doc.AddParagraph("核验窗口（UTC）：" + e.Window.Start.UTC().Format(time.RFC3339Nano) + " 至 " + e.Window.End.UTC().Format(time.RFC3339Nano) + "；边界约定=" + e.Window.Convention)
+		doc.AddParagraph("附录：完整事实检查清单").Style("Heading1")
+		table := doc.AddTable()
+		table.Style("TableGrid")
+		header := table.AddRow()
+		for _, v := range []string{"事实规则", "范围", "核验状态", "结果或缺项原因"} {
+			header.AddCell().AddParagraph(v)
 		}
-		if len(e.SourceIDs) > 0 {
-			doc.AddParagraph(fmt.Sprintf("来源标识共%d条；以下展示前%d条定位入口：%s", len(e.SourceIDs), min(8, len(e.SourceIDs)), strings.Join(e.SourceIDs[:min(8, len(e.SourceIDs))], "；")))
-		}
-	}
-	doc.AddParagraph("附录：完整事实检查清单").Style("Heading1")
-	table := doc.AddTable()
-	table.Style("TableGrid")
-	header := table.AddRow()
-	for _, v := range []string{"事实规则", "范围", "核验状态", "结果或缺项原因"} {
-		header.AddCell().AddParagraph(v)
-	}
-	for _, f := range report.Evidence.FactChecks {
-		row := table.AddRow()
-		for _, v := range []string{string(f.FactID), f.Scope.AssetID + " / " + f.Scope.EndpointID, string(f.Status), string(f.ReasonCode) + "；" + reportFactMeasurements(f)} {
-			row.AddCell().AddParagraph(v)
-		}
-	}
-	if len(report.Evidence.FactChecks) == 0 {
-		for _, f := range report.Evidence.FactCoverage {
+		for _, f := range report.Evidence.FactChecks {
 			row := table.AddRow()
-			for _, v := range []string{string(f.FactID), f.Scope.AssetID + " / " + f.Scope.EndpointID, f.Status, string(f.Reason)} {
+			for _, v := range []string{string(f.FactID), f.Scope.AssetID + " / " + f.Scope.EndpointID, string(f.Status), string(f.ReasonCode) + "；" + reportFactMeasurements(f)} {
 				row.AddCell().AddParagraph(v)
 			}
 		}
-	}
-	doc.AddParagraph("语义任务检查清单").Style("Heading1")
-	table = doc.AddTable()
-	table.Style("TableGrid")
-	header = table.AddRow()
-	for _, v := range []string{"槽位", "命题", "执行状态", "原因"} {
-		header.AddCell().AddParagraph(v)
-	}
-	for _, x := range report.Evidence.SemanticChecks {
-		row := table.AddRow()
-		for _, v := range []string{x.Slot.String(), x.SubjectID, x.Status, x.Reason} {
-			row.AddCell().AddParagraph(v)
+		if len(report.Evidence.FactChecks) == 0 {
+			for _, f := range report.Evidence.FactCoverage {
+				row := table.AddRow()
+				for _, v := range []string{string(f.FactID), f.Scope.AssetID + " / " + f.Scope.EndpointID, f.Status, string(f.Reason)} {
+					row.AddCell().AddParagraph(v)
+				}
+			}
+		}
+		doc.AddParagraph("语义任务检查清单").Style("Heading1")
+		table = doc.AddTable()
+		table.Style("TableGrid")
+		header = table.AddRow()
+		for _, v := range []string{"槽位", "命题", "执行状态", "原因"} {
+			header.AddCell().AddParagraph(v)
+		}
+		for _, x := range report.Evidence.SemanticChecks {
+			row := table.AddRow()
+			for _, v := range []string{x.Slot.String(), x.SubjectID, x.Status, x.Reason} {
+				row.AddCell().AddParagraph(v)
+			}
 		}
 	}
 	var out bytes.Buffer
