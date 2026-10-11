@@ -179,6 +179,7 @@ func (s Services) runAnalysis(ctx context.Context, eventID string, kind string, 
 	}
 	reportClient := *s.LLM
 	reportClient.DisableThinking = true
+	reportClient.ReportThinkingDisabled = true
 	completion, err := reportClient.CompleteReport(ctx, evidenceReportSystemPrompt, prompt)
 	rawReply := completion.Reply
 	finalInputHash := digest(prompt)
@@ -198,7 +199,7 @@ func (s Services) runAnalysis(ctx context.Context, eventID string, kind string, 
 		firstReason := err.Error()
 		_ = putRecord(ctx, s.Store, "report_validation_attempt", fmt.Sprintf("%s:%d:%d", eventID, prepared.Evidence.SnapshotVersion, version), eventID, map[string]any{"reason": firstReason, "reply": rawReply})
 		correction := prompt + "\n上次输出未通过一致性校验，原因=" + firstReason + "。重新输出完整JSON，纠正引用、同源重复、数字重述或不支持的结论；不得提高概率来解决错误。正文数字须能在当前引用的证据范围核验。上次输出作为待修复数据：\n" + rawReply
-		if estimateTokens(evidenceReportSystemPrompt+correction) <= promptBudgetTokens {
+		if estimateTokens(evidenceReportSystemPrompt+correction) <= reportPromptEstimateBudget {
 			if persistErr := putRecord(ctx, s.Store, "report_model_correction_input", fmt.Sprintf("%s:%d:%d", eventID, prepared.Evidence.SnapshotVersion, version), eventID, map[string]any{"system": evidenceReportSystemPrompt, "user": correction, "input_hash": digest(correction), "build_revision": ReportBuildRevision}); persistErr != nil {
 				return s.failAgentWorkflow(eventID, fmt.Errorf("report_model_input_persist_failed: %w", persistErr))
 			}
@@ -274,6 +275,7 @@ func (s Services) runAnalysis(ctx context.Context, eventID string, kind string, 
 // failAgentWorkflow 把事件置为 failed 并广播失败详情；列表显示“分析失败”，
 // 且不阻断重试（专家消息未落库时 hasAgentWorkflowMessages 仍为 false，重推可再跑）。
 func (s Services) failAgentWorkflow(eventID string, err error) error {
+	_ = putRecord(context.Background(), s.Store, "report_pipeline_failure", fmt.Sprintf("%s:%d", eventID, time.Now().UnixNano()), eventID, map[string]any{"reason": err.Error(), "build_revision": ReportBuildRevision, "at": time.Now().UTC()})
 	_, _ = s.Store.UpdateEvent(eventID, map[string]any{"event_status": "failed"})
 	realtime.BroadcastStatus(eventID, map[string]any{"event_id": eventID, "status": "failed", "message": err.Error()})
 	realtime.BroadcastEventListUpdate(map[string]any{"event_id": eventID, "status": "failed"})

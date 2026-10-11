@@ -35,7 +35,7 @@ func TestReportPromptBudgetPreservesAuthoritativeEntries(t *testing.T) {
 	if json.Unmarshal([]byte(prompt), &input) != nil || !input.ContextOmitted || len(input.Entries) != len(bundle.SelectedIDs) {
 		t.Fatal("budget reduction removed authoritative entries or omission marker")
 	}
-	if estimateTokens(prompt) > eventDataBudgetTokens || estimateTokens(evidenceReportSystemPrompt+prompt) > promptBudgetTokens {
+	if estimateTokens(prompt) > reportInputEstimateBudget || estimateTokens(evidenceReportSystemPrompt+prompt) > reportPromptEstimateBudget {
 		t.Fatal("prompt budget exceeded")
 	}
 }

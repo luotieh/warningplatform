@@ -73,6 +73,9 @@ func (c LLMClient) complete(ctx context.Context, system, prompt string, budget i
 		if !responses && c.DisableThinking {
 			payload["chat_template_kwargs"] = map[string]any{"enable_thinking": false}
 		}
+		if !responses && c.ReportThinkingDisabled {
+			payload["thinking"] = map[string]any{"type": "disabled"}
+		}
 		result := completionResult{Endpoint: endpoint}
 		fail := func(detail string) (completionResult, error) {
 			err := c.callError(endpoint, result.Status, detail)

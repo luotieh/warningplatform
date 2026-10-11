@@ -84,6 +84,7 @@ func (s Services) prepareReportSemantics(ctx context.Context, snap EvidenceSnaps
 	if s.LLM != nil {
 		copy := *s.LLM
 		copy.DisableThinking = true
+		copy.ReportThinkingDisabled = true
 		s.LLM = &copy
 	}
 	defer func() {
