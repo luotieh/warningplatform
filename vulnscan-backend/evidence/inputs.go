@@ -22,16 +22,17 @@ type Baseline struct {
 	Frequencies map[string]float64 `json:"frequencies"`
 }
 type Input struct {
-	Scope          Scope              `json:"scope"`
-	Window         *AnalysisWindow    `json:"window"`
-	Baselines      []Baseline         `json:"baselines"`
-	DNS            *DNSData           `json:"dns"`
-	HTTP           *HTTPData          `json:"http"`
-	Network        *NetworkData       `json:"network"`
-	TLS            *TLSData           `json:"tls"`
-	History        *HistoryData       `json:"history"`
-	Corroboration  *CorroborationData `json:"corroboration"`
-	Authorizations *AuthorizationData `json:"authorizations"`
+	Scope           Scope              `json:"scope"`
+	Window          *AnalysisWindow    `json:"window"`
+	Baselines       []Baseline         `json:"baselines"`
+	DNS             *DNSData           `json:"dns"`
+	HTTP            *HTTPData          `json:"http"`
+	Network         *NetworkData       `json:"network"`
+	TLS             *TLSData           `json:"tls"`
+	History         *HistoryData       `json:"history"`
+	PlatformHistory *HistoryData       `json:"-"`
+	Corroboration   *CorroborationData `json:"corroboration"`
+	Authorizations  *AuthorizationData `json:"authorizations"`
 }
 type DNSRecord struct {
 	SourceID   string    `json:"source_id"`
@@ -147,6 +148,9 @@ type TLSData struct {
 	TrustRootsDER        [][]byte          `json:"trust_roots_der"`
 }
 type HistoryEvent struct {
+	AssetIDs           []string           `json:"asset_ids,omitempty"`
+	ActivityType       string             `json:"activity_type,omitempty"`
+	Relation           string             `json:"relation,omitempty"`
 	ID                 string             `json:"id"`
 	AdjudicationID     string             `json:"adjudication_id"`
 	Adjudication       string             `json:"adjudication"`
@@ -168,6 +172,9 @@ type HistoryEvent struct {
 	GroupMembershipVerified bool       `json:"group_membership_verified"`
 }
 type HistoryData struct {
+	// Platform records prove activity, not a malicious classification. Partial
+	// retrieval permits positive recurrence proofs but never absence/novelty.
+	PlatformRecords bool `json:"platform_records,omitempty"`
 	Provenance
 	Events                    []HistoryEvent     `json:"events"`
 	AsOf                      time.Time          `json:"as_of"`

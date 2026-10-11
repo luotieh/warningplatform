@@ -44,7 +44,7 @@ func (s Services) ReportDocument(ctx context.Context, eventID string, summaryID 
 		return ReportDocument{}, fmt.Errorf("legacy_report_without_evidence_document")
 	}
 	var doc ReportDocument
-	if len(record.Value) > 16<<20 || json.Unmarshal(record.Value, &doc) != nil || doc.SummaryID != summary.ID || doc.EventID != eventID || doc.Markdown != summary.EventSummary || doc.SchemaVersion != reportEvidenceVersion || doc.AnalysisVersion != summary.Version || doc.Kind != summary.Kind {
+	if len(record.Value) > 16<<20 || json.Unmarshal(record.Value, &doc) != nil || doc.SummaryID != summary.ID || doc.EventID != eventID || doc.Markdown != summary.EventSummary || (doc.SchemaVersion != reportEvidenceVersion && doc.SchemaVersion != "evidence-report-1.0") || doc.AnalysisVersion != summary.Version || doc.Kind != summary.Kind {
 		return ReportDocument{}, fmt.Errorf("report_document_binding_invalid")
 	}
 	if err := validateReportAssessment(doc.Assessment, doc.Evidence); err != nil {
@@ -200,6 +200,21 @@ func ExportEvidenceReportDOCX(report ReportDocument) ([]byte, error) {
 				row := table.AddRow()
 				for _, v := range []string{string(f.FactID), f.Scope.AssetID + " / " + f.Scope.EndpointID, f.Status, string(f.Reason)} {
 					row.AddCell().AddParagraph(v)
+				}
+			}
+		}
+		if history := report.Evidence.History; history != nil && len(history.Rows) > 0 {
+			doc.AddParagraph("平台历史活动清单（活动关联不代表同战役）").Style("Heading1")
+			historyTable := doc.AddTable()
+			historyTable.Style("TableGrid")
+			header := historyTable.AddRow()
+			for _, text := range []string{"历史事件ID", "活动时间（UTC）", "匹配关系", "资产 / IOC"} {
+				header.AddCell().AddParagraph(text)
+			}
+			for _, item := range history.Rows {
+				row := historyTable.AddRow()
+				for _, text := range []string{item.EventID, item.First.UTC().Format(time.RFC3339) + " 至 " + item.Last.UTC().Format(time.RFC3339), item.Relation, strings.Join(item.AllAssetIDs, ", ") + " / " + fmt.Sprint(item.ActivityIOCs)} {
+					row.AddCell().AddParagraph(text)
 				}
 			}
 		}

@@ -21,7 +21,13 @@ type ReportSemanticOptions struct {
 }
 
 func DefaultReportSemanticOptions() ReportSemanticOptions {
-	return ReportSemanticOptions{InputMode: evidence.SemanticRaw, Config: evidence.DefaultSemanticConfig()}
+	cfg := evidence.DefaultSemanticConfig()
+	cfg.MaxInputBytes = 24000
+	cfg.MaxMaterialBytes = 4096
+	cfg.MaxOutputTokens = 4000
+	cfg.MaxTasks = 12
+	cfg.Timeout = 120 * time.Second
+	return ReportSemanticOptions{InputMode: evidence.SemanticRaw, Config: cfg}
 }
 
 type ReportSemanticEvaluation struct {
@@ -66,6 +72,8 @@ func (s Services) prepareReportSemantics(ctx context.Context, snap EvidenceSnaps
 	if s.ReportSemantics != nil {
 		opts = *s.ReportSemantics
 	}
+	opts.Config.ReportHistory = true
+	opts.Config.CompactProvenance = true
 	out = ReportSemanticEvaluation{InputMode: opts.InputMode, AdapterVersion: semanticAdapterVersion, Status: "unavailable"}
 	if opts.InputMode == "" {
 		opts.InputMode = evidence.SemanticRedacted
@@ -73,6 +81,7 @@ func (s Services) prepareReportSemantics(ctx context.Context, snap EvidenceSnaps
 	}
 	if s.LLM != nil {
 		copy := *s.LLM
+		copy.DisableThinking = true
 		s.LLM = &copy
 	}
 	defer func() {
@@ -221,6 +230,11 @@ func (s Services) prepareReportSemantics(ctx context.Context, snap EvidenceSnaps
 		model = s.SemanticModel
 		if model == nil && s.LLM != nil {
 			model = client.EvidenceSemanticModel{Client: *s.LLM}
+		}
+		if model != nil {
+			model = reportSemanticAuditModel{Model: model, Save: func(ctx context.Context, call evidence.SemanticCall) error {
+				return putRecord(ctx, s.Store, "semantic_model_input", digest([]any{snap.EventID, snap.Version, call.Prompt}), snap.EventID, map[string]any{"snapshot_version": snap.Version, "system": call.System, "user": call.Prompt, "max_output_tokens": call.MaxOutputTokens, "input_hash": digest(call.Prompt), "build_revision": ReportBuildRevision, "capacity_verified": false})
+			}}
 		}
 	}
 	var result evidence.SemanticResult

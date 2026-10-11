@@ -11,8 +11,10 @@ import (
 	"golang.org/x/net/dns/dnsmessage"
 	"io"
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"vulnscan-backend/evidence"
@@ -20,7 +22,7 @@ import (
 	"vulnscan-backend/traffic/internal/store"
 )
 
-const semanticAdapterVersion = "snapshot-semantic-adapter-0.1"
+const semanticAdapterVersion = "snapshot-semantic-adapter-1.3"
 const maxSemanticObservations = 128
 const maxSemanticObservationBytes = 2 << 20
 const maxSemanticMessageBytes = 32 << 10
@@ -342,24 +344,77 @@ func addSemanticSupplementalMaterials(s *evidence.SemanticSubject, i evidence.In
 			}
 		}
 	}
-	if h := i.History; h != nil && trustedInputProvenance(h.Provenance) {
-		count := 0
-		for _, e := range h.Events {
-			if count >= 5 {
-				break
-			}
-			if e.ID == "" || e.ID == currentEventID || e.AssetID != s.Scope.AssetID || e.Endpoint != "" && e.Endpoint != s.Scope.EndpointID || e.AdjudicationID == "" || (e.AdjudicationSource != "human" && e.AdjudicationSource != "host_evidence" && e.AdjudicationSource != "authoritative_external") || !e.Time.Before(s.Window.Start) {
+	if strings.HasPrefix(s.ID, "operation:") {
+		return
+	}
+	h := i.PlatformHistory
+	if h == nil {
+		h = i.History
+	}
+	if h != nil && h.Verified && h.Version != "" && len(h.SourceIDs) > 0 {
+		groups := map[string][]evidence.HistoryEvent{}
+		for _, row := range h.Events {
+			if row.ID == "" || row.ID == currentEventID || !row.Time.Before(s.Window.Start) {
 				continue
 			}
-			raw, _ := json.Marshal(e)
-			m := makeMaterial(s, "history", string(raw), "history.events", h.Provenance, true)
-			m.ID += ":" + e.ID
-			m.EventID, m.AdjudicationID, m.AdjudicationSource, m.FalsePositive = e.ID, e.AdjudicationID, e.AdjudicationSource, e.Adjudication == "false_positive"
-			s.Materials = append(s.Materials, m)
-			count++
+			relation := ""
+			sameAsset, sameIOC := row.AssetID == s.Scope.AssetID || slices.Contains(row.AssetIDs, s.Scope.AssetID), h.IOC != "" && row.IOC == h.IOC
+			switch {
+			case sameAsset && sameIOC:
+				relation = "same_asset_ioc"
+			case sameIOC:
+				relation = "same_ioc"
+			case sameAsset:
+				relation = "same_asset"
+			}
+			if relation != "" {
+				groups[relation] = append(groups[relation], row)
+			}
 		}
-		if count > 0 {
-			s.Materials = append(s.Materials, makeMaterial(s, "current_pattern", fmt.Sprintf("范围=%s；IOC=%s；历史独立裁决用于人工参考，不认定当前战役归属", s.Scope.EndpointID, h.IOC), "history.current", h.Provenance, true))
+		total := 0
+		for _, relation := range []string{"same_asset_ioc", "same_ioc", "same_asset"} {
+			rows := groups[relation]
+			if len(rows) == 0 {
+				continue
+			}
+			days, assets := map[string]bool{}, map[string]bool{}
+			refs := []string{}
+			types := map[string]int{}
+			for _, row := range rows {
+				types[row.ActivityType]++
+				days[row.Time.UTC().Format("2006-01-02")] = true
+				if row.AssetID != "" {
+					assets[row.AssetID] = true
+				}
+				for _, assetID := range row.AssetIDs {
+					assets[assetID] = true
+				}
+				refs = append(refs, row.ID)
+			}
+			p := h.Provenance
+			p.SourceIDs = refs[:min(3, len(refs))]
+			typeText, _ := json.Marshal(types)
+			text := fmt.Sprintf("关联=%s；历史事件数=%d；活跃日期数=%d；已绑定资产数=%d；最近示例事件=%s；时间=%s；历史检索完整=%t。全部关联记录参与统计；相似关系不自动证明同战役或误报。事件类型分布=%s", relation, len(rows), len(days), len(assets), rows[0].ID, rows[0].Time.UTC().Format(time.RFC3339), h.Complete, typeText)
+			m := makeMaterial(s, "history", text, "history.events."+relation, p, true)
+			m.ID += ":" + relation
+			m.EventID = rows[0].ID
+			s.Materials = append(s.Materials, m)
+			total += len(rows)
+		}
+		if total > 0 {
+			p := h.Provenance
+			p.SourceIDs = []string{currentEventID}
+			text := fmt.Sprintf("当前范围=%s；IOC=%s；关联历史总数=%d；当前已核验事实数=%d。比较关联复发、基础设施复用与正常业务解释，不按审核状态筛选。", s.Scope.EndpointID, h.IOC, total, len(s.Facts))
+			observed := 0
+			for _, f := range s.Facts {
+				if f.Status != evidence.Observed {
+					continue
+				}
+				raw, _ := json.Marshal(f.Measurements)
+				text += "；" + string(f.FactID) + "=" + string(raw)
+				observed++
+			}
+			s.Materials = append(s.Materials, makeMaterial(s, "current_pattern", text, "history.current", p, true))
 		}
 	}
 }
@@ -432,7 +487,7 @@ func addSemanticDecodeMaterials(s *evidence.SemanticSubject, text string, linked
 
 func prioritizedSemanticSlots() []evidence.SlotKey {
 	// Action and paired-message explanations precede lexical/visibility tasks.
-	order := []string{"S06", "S09", "S10", "S02", "S01", "S11", "S13", "S04", "S05", "SC03", "BT-S01", "S03", "S12", "S07", "S08", "SC01", "S14", "SC02", "R06", "R07", "S15"}
+	order := []string{"S06", "S09", "S10", "S02", "S01", "S11", "R06", "R07", "S13", "S04", "S05", "SC03", "BT-S01", "S03", "S12", "S07", "S08", "SC01", "S14", "SC02", "S15"}
 	out := []evidence.SlotKey{}
 	for _, id := range order {
 		for _, d := range evidence.SemanticDefinitions() {

@@ -37,6 +37,8 @@ const (
 
 type Quality struct {
 	Coverage Coverage `json:"coverage"`
+	// Report-only opt-in: verifies all saved hit identities/timestamps, not packet completeness.
+	SavedTimelineComplete *bool `json:"saved_timeline_complete,omitempty"`
 	// nil means truncation has not been verified, rather than false.
 	CaptureTruncated *bool `json:"capture_truncated"`
 }

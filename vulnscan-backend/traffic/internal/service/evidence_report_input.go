@@ -50,7 +50,7 @@ func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event
 		semantics := ReportSemanticEvaluation{Status: "unavailable", Reason: "legacy_snapshot_unverified", InputMode: evidence.SemanticRaw, AdapterVersion: semanticAdapterVersion}
 		c["semantic_evidence"] = reportSemanticSummary(semantics)
 		b, err := json.Marshal(c)
-		manifest := SnapshotEvidenceManifest{AdapterVersion: snapshotAdapterVersion, Coverage: "unverified", FactCoverage: snapshotUnavailableCoverage(evidence.SupportedFacts(), "legacy_snapshot_unverified")}
+		manifest := SnapshotEvidenceManifest{AdapterVersion: reportSnapshotAdapterVersion, Coverage: "unverified", FactCoverage: snapshotUnavailableCoverage(evidence.SupportedFacts(), "legacy_snapshot_unverified")}
 		manifest.addIssue(SnapshotInputIssue{Code: "legacy_snapshot_unverified", Stage: "load_snapshot"})
 		evaluation := SnapshotFactEvaluation{Status: "unavailable", Reason: "legacy_snapshot_unverified", Manifest: manifest}
 		return preparedReportInput{Context: string(b), AssetSection: assetMatchContext(event, s.Store.ListAssets()), Evaluation: evaluation, Semantics: semantics, Evidence: buildReportEvidence(event, EvidenceSnapshot{EventID: event.EventID, Context: c}, evaluation, semantics)}, err
@@ -64,6 +64,7 @@ func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event
 		return preparedReportInput{}, ctx.Err()
 	}
 	options := DefaultSnapshotEvidenceOptions()
+	options.ReportMaterialMode = true
 	if assetErr != nil {
 		issue := snapshotIssueCause(SnapshotInputIssue{Code: "asset_registry_read_failed", Stage: "load_assets", Retryable: true}, assetErr)
 		options.RegistryIssue = &issue
@@ -80,9 +81,20 @@ func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event
 		return preparedReportInput{}, err
 	}
 	config := evidence.DefaultConfig()
+	config.Policies = map[evidence.FactID]map[string]float64{
+		"F_BEACON_JITTER": {"ljung_box_lags": 3, "median_relative_tolerance": 0.25},
+		"F_PORT_SEQUENCE": {"difference_entropy_threshold": 3},
+		"F_SMALL_PACKET":  {"small_payload_bytes": 64},
+		"F_RATE_RAMP":     {"window_seconds": 300},
+	}
+	history := s.loadReportHistory(ctx, event, snap, assets)
+	if ctx.Err() != nil {
+		return preparedReportInput{}, ctx.Err()
+	}
+	options.PlatformHistory = &history
 	assetVersions := append([]domain.Asset(nil), assets...)
 	sort.Slice(assetVersions, func(i, j int) bool { return assetVersions[i].ID < assetVersions[j].ID })
-	key := digest([]any{snap.EventID, snap.Version, snap.Watermark, snap.RevisionWatermark, evidence.RuleVersion, snapshotAdapterVersion, config, options, assetVersions, options.Supplemental, options.SupplementalIssue, options.Sources, options.SourceIssue, options.RegistryIssue})
+	key := digest([]any{snap.EventID, snap.Version, snap.Watermark, snap.RevisionWatermark, evidence.RuleVersion, reportSnapshotAdapterVersion, config, options, assetVersions, options.Supplemental, options.SupplementalIssue, options.Sources, options.SourceIssue, options.RegistryIssue})
 	record, exists, err := s.Store.AggregateRecord(ctx, "evidence_result", key)
 	cacheAvailable := err == nil
 	if err != nil {
@@ -96,7 +108,7 @@ func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event
 		if err := json.Unmarshal(record.Value, &evaluation); err != nil {
 			exists = false
 		}
-		if evaluation.Manifest.SnapshotVersion != snap.Version || evaluation.Manifest.AdapterVersion != snapshotAdapterVersion || (evaluation.Result != nil && evaluation.Result.RuleVersion != evidence.RuleVersion) || evaluation.Status == "evaluated" && evaluation.Result == nil || len(evaluation.Manifest.FactCoverage) < len(evidence.SupportedFacts()) {
+		if evaluation.Manifest.SnapshotVersion != snap.Version || evaluation.Manifest.AdapterVersion != reportSnapshotAdapterVersion || (evaluation.Result != nil && evaluation.Result.RuleVersion != evidence.RuleVersion) || evaluation.Status == "evaluated" && evaluation.Result == nil || len(evaluation.Manifest.FactCoverage) < len(evidence.SupportedFacts()) {
 			exists = false
 		}
 		if exists {
@@ -124,7 +136,7 @@ func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event
 			// Evidence is an independent subsystem: fail closed for its claims,
 			// preserve the original report data and persist a correlated failure.
 			failureKey := snapshotKey(snap.EventID, snap.Version)
-			failure := map[string]any{"event_id": snap.EventID, "snapshot_version": snap.Version, "at": time.Now().UTC(), "adapter_version": snapshotAdapterVersion, "reason": evaluation.Reason, "manifest": evaluation.Manifest}
+			failure := map[string]any{"event_id": snap.EventID, "snapshot_version": snap.Version, "at": time.Now().UTC(), "adapter_version": reportSnapshotAdapterVersion, "reason": evaluation.Reason, "manifest": evaluation.Manifest}
 			if persist {
 				if saveErr := putRecord(ctx, s.Store, "evidence_failure", failureKey, snap.EventID, failure); saveErr != nil {
 					log.Printf("[evidence] failure_record_write_failed event=%s snapshot=%d", snap.EventID, snap.Version)
@@ -145,6 +157,17 @@ func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event
 	if !cacheAvailable {
 		evaluation.Manifest.addIssue(SnapshotInputIssue{Code: "result_not_cached", Stage: "persist", Retryable: true})
 	}
+	if ctx.Err() != nil {
+		return preparedReportInput{}, ctx.Err()
+	}
+	evaluation.Manifest.History = &ReportHistoryDiagnostics{Status: history.Status, Reason: history.Reason, Candidates: history.CandidateCount, Matched: len(history.Rows), Excluded: history.ExcludedCount, Truncated: history.Truncated}
+	if history.Status == "unavailable" {
+		issue := SnapshotInputIssue{Code: history.Reason, Stage: "load_history", Retryable: history.Reason == "history_query_failed"}
+		if history.Issue != nil {
+			issue = *history.Issue
+		}
+		evaluation.Manifest.addIssue(issue)
+	}
 	diagnostic := SnapshotEvidenceDiagnostics{EventID: snap.EventID, SnapshotVersion: snap.Version, At: time.Now().UTC(), Status: evaluation.Status, Reason: evaluation.Reason, ResultKey: key, ResultPersisted: resultPersisted, Manifest: evaluation.Manifest}
 	if persist {
 		if saveErr := putRecord(ctx, s.Store, "evidence_diagnostics", snapshotKey(snap.EventID, snap.Version), snap.EventID, diagnostic); saveErr != nil {
@@ -157,7 +180,7 @@ func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event
 		manifest[k] = v
 	}
 	manifest["algorithm_evidence"] = map[string]any{
-		"evidence_result_key": key, "adapter_version": snapshotAdapterVersion,
+		"evidence_result_key": key, "adapter_version": reportSnapshotAdapterVersion,
 		"rule_version": evidence.RuleVersion, "registry_version": evaluation.Manifest.RegistryVersion,
 		"status": evaluation.Status, "reason": evaluation.Reason,
 		"read_pages": evaluation.Manifest.ReadPages, "revision_batches": evaluation.Manifest.RevisionBatches,
@@ -173,7 +196,7 @@ func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event
 	}
 	manifest["semantic_evidence"] = map[string]any{"result_key": semantics.ResultKey, "adapter_version": semantics.AdapterVersion, "input_mode": semantics.InputMode, "status": semantics.Status, "result_persisted": semantics.ResultPersisted}
 	projected, err := projectReportEvidence(snap, evaluation, semantics)
-	return preparedReportInput{Context: projected, AssetSection: assetMatchContext(event, assets), Evaluation: evaluation, Semantics: semantics, Evidence: buildReportEvidence(event, snap, evaluation, semantics)}, err
+	return preparedReportInput{Context: projected, AssetSection: assetMatchContext(event, assets), Evaluation: evaluation, Semantics: semantics, Evidence: buildReportEvidence(event, snap, evaluation, semantics, history)}, err
 }
 
 func projectReportEvidence(snap EvidenceSnapshot, facts SnapshotFactEvaluation, semantics ReportSemanticEvaluation) (string, error) {
@@ -211,7 +234,7 @@ func projectReportEvidence(snap EvidenceSnapshot, facts SnapshotFactEvaluation, 
 func snapshotFactSummary(evaluation SnapshotFactEvaluation) map[string]any {
 	summary := map[string]any{
 		"status": evaluation.Status, "reason": evaluation.Reason,
-		"rule_version": evidence.RuleVersion, "adapter_version": snapshotAdapterVersion,
+		"rule_version": evidence.RuleVersion, "adapter_version": reportSnapshotAdapterVersion,
 		"snapshot_version": evaluation.Manifest.SnapshotVersion, "cache_hit": evaluation.CacheHit,
 		"declared_hits": evaluation.Manifest.DeclaredHits, "loaded_hits": evaluation.Manifest.LoadedHits,
 		"bound_hits": evaluation.Manifest.BoundHits, "unresolved_hits": evaluation.Manifest.UnresolvedHits,

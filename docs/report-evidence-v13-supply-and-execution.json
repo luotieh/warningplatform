@@ -1,0 +1,2989 @@
+{
+  "purpose": "逐项原设计、读取位置及真实执行记录；注册或合成测试不算生产完成",
+  "baseline_date": "2026-10-10",
+  "baseline_note": "供应分类来自2026-10-10固定样本审计，不冒充本轮运行状态；本轮以execution字段为准",
+  "report_history_override": "报告专用参数参考全部匹配历史；默认语义目录键保持兼容，送达R06/R07为活动关联和替代解释",
+  "reports": [],
+  "items": [
+    {
+      "id": "F_BEACON_PERIODIC",
+      "kind": "fact",
+      "name": "严格周期信标",
+      "original_fields": [
+        "hit.time",
+        "packets"
+      ],
+      "algorithm": "n≥8；5s≤Δt≤24h；CV(Δt)≤0.15；每次≤5 包（DetectHeartbeat）",
+      "execution_contract": "MinSamples、MinIntervalSeconds、MaxIntervalSeconds、MaxIntervalCV、MaxPacketsPerObservation；现默认8、5秒、86400秒、0.15、5包",
+      "material_families": [
+        "time_series",
+        "capture_quality"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "time_series",
+          "status": "recoverable",
+          "reason": "固定快照已保存141条真实命中时间",
+          "next_step": "按资产、端点、设备汇总；跨日分析需声明联合窗口"
+        },
+        {
+          "layer": "fact",
+          "input": "capture_quality",
+          "status": "partial",
+          "reason": "141条均缺capture_truncated；135条帧满足完整IPv4长度检查，6条不满足",
+          "next_step": "逐报文核验cap/wire、IP长度、分片和元数据冲突；不得全局补false"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_BEACON_JITTER",
+      "kind": "fact",
+      "name": "抖动周期信标",
+      "original_fields": [
+        "hit.time",
+        "packets"
+      ],
+      "algorithm": "n≥16；median(Δt) 稳定且 0.15<CV≤0.40；Ljung-Box p<0.05 且 ACF 峰值>0.3",
+      "execution_contract": "ljung_box_lags、median_relative_tolerance",
+      "material_families": [
+        "time_series",
+        "capture_quality"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "time_series",
+          "status": "recoverable",
+          "reason": "固定快照已保存141条真实命中时间",
+          "next_step": "按资产、端点、设备汇总；跨日分析需声明联合窗口"
+        },
+        {
+          "layer": "fact",
+          "input": "capture_quality",
+          "status": "partial",
+          "reason": "141条均缺capture_truncated；135条帧满足完整IPv4长度检查，6条不满足",
+          "next_step": "逐报文核验cap/wire、IP长度、分片和元数据冲突；不得全局补false"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_FIXED_DAILY_WINDOW",
+      "kind": "fact",
+      "name": "每天固定时间点",
+      "original_fields": [
+        "hit.time"
+      ],
+      "algorithm": "≥3 自然日且 ≥80% 命中落在同一 ≤2h 窗口",
+      "execution_contract": "至少3个活跃自然日，统一时区；逐条命中时间；实际每日时间分布及2小时窗口占比。不能以单日跨午夜替代3日。",
+      "material_families": [
+        "time_series",
+        "capture_quality"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "time_series",
+          "status": "recoverable",
+          "reason": "固定快照已保存141条真实命中时间",
+          "next_step": "按资产、端点、设备汇总；跨日分析需声明联合窗口"
+        },
+        {
+          "layer": "fact",
+          "input": "capture_quality",
+          "status": "partial",
+          "reason": "141条均缺capture_truncated；135条帧满足完整IPv4长度检查，6条不满足",
+          "next_step": "逐报文核验cap/wire、IP长度、分片和元数据冲突；不得全局补false"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_MULTI_DAY_PERSIST",
+      "kind": "fact",
+      "name": "跨日持续",
+      "original_fields": [
+        "hit.time"
+      ],
+      "algorithm": "锁定窗口内逐日桶活跃 ≥2 天为 days2 / ≥3 天为 days3（不用首末两点推持续；固定资产/端点，需跨段时联合快照）",
+      "execution_contract": "MinDays、Timezone；现默认2日、Asia/Shanghai；是否增加原设计days3展示需明确",
+      "material_families": [
+        "time_series",
+        "capture_quality"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "time_series",
+          "status": "recoverable",
+          "reason": "固定快照已保存141条真实命中时间",
+          "next_step": "按资产、端点、设备汇总；跨日分析需声明联合窗口"
+        },
+        {
+          "layer": "fact",
+          "input": "capture_quality",
+          "status": "partial",
+          "reason": "141条均缺capture_truncated；135条帧满足完整IPv4长度检查，6条不满足",
+          "next_step": "逐报文核验cap/wire、IP长度、分片和元数据冲突；不得全局补false"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_RATE_BURST",
+      "kind": "fact",
+      "name": "命中突发",
+      "original_fields": [
+        "hit.time",
+        "locked_baseline"
+      ],
+      "algorithm": "peak_window(5m)/长期窗口均值 >p99 基线",
+      "execution_contract": "mean_per_5m、burst_ratio_p99",
+      "material_families": [
+        "time_series",
+        "capture_quality",
+        "baselines"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "time_series",
+          "status": "recoverable",
+          "reason": "固定快照已保存141条真实命中时间",
+          "next_step": "按资产、端点、设备汇总；跨日分析需声明联合窗口"
+        },
+        {
+          "layer": "fact",
+          "input": "capture_quality",
+          "status": "partial",
+          "reason": "141条均缺capture_truncated；135条帧满足完整IPv4长度检查，6条不满足",
+          "next_step": "逐报文核验cap/wire、IP长度、分片和元数据冲突；不得全局补false"
+        },
+        {
+          "layer": "fact",
+          "input": "baselines",
+          "status": "unavailable",
+          "reason": "没有可信来源登记，也没有完整正常流量分母",
+          "next_step": "新增正常流量采集与基线训练，不能从告警命中训练正常基线"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_RATE_RAMP",
+      "kind": "fact",
+      "name": "速率阶梯上升",
+      "original_fields": [
+        "hit.time",
+        "locked_baseline"
+      ],
+      "algorithm": "至少5个固定等长窗口；无并列值时精确双侧Mann-Kendall p<0.05；并列/缺窗标ineligible，禁止静默切渐近检验",
+      "execution_contract": "window_seconds",
+      "material_families": [
+        "time_series",
+        "capture_quality"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "time_series",
+          "status": "recoverable",
+          "reason": "固定快照已保存141条真实命中时间",
+          "next_step": "按资产、端点、设备汇总；跨日分析需声明联合窗口"
+        },
+        {
+          "layer": "fact",
+          "input": "capture_quality",
+          "status": "partial",
+          "reason": "141条均缺capture_truncated；135条帧满足完整IPv4长度检查，6条不满足",
+          "next_step": "逐报文核验cap/wire、IP长度、分片和元数据冲突；不得全局补false"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_DNS_HIGH_ENTROPY",
+      "kind": "fact",
+      "name": "长标签高基数子域（单资产）",
+      "original_fields": [
+        "app.dns_query",
+        "hit.time",
+        "domain_baseline"
+      ],
+      "algorithm": "PSL 归一后：独特子域比 >p95 且 标签长 p90 >p95 且 查询速率 >p95（同域基线）；单机高熵不支持 Botnet",
+      "execution_contract": "unique_subdomain_ratio_p95、label_length_p95、query_rate_p95",
+      "material_families": [
+        "dns_records",
+        "baselines"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "dns_records",
+          "status": "recoverable",
+          "reason": "9条命中带查询名，4条带回答；原始DNS报文存在",
+          "next_step": "区分查询与应答，解析rcode，按物理报文去重"
+        },
+        {
+          "layer": "fact",
+          "input": "baselines",
+          "status": "unavailable",
+          "reason": "没有可信来源登记，也没有完整正常流量分母",
+          "next_step": "新增正常流量采集与基线训练，不能从告警命中训练正常基线"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_DNS_ENCODED_LABEL",
+      "kind": "fact",
+      "name": "子域编码结构",
+      "original_fields": [
+        "app.dns_query",
+        "hit.time",
+        "domain_baseline"
+      ],
+      "algorithm": "base32/hex 模式匹配且代码可验证解码链",
+      "execution_contract": "完整实际DNS问题名、逐标签编码匹配及代码解码验证；原目录列domain_baseline，当前结构检查不依赖基线，不以此阻断；意图另交S04。",
+      "material_families": [
+        "dns_records"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "dns_records",
+          "status": "recoverable",
+          "reason": "9条命中带查询名，4条带回答；原始DNS报文存在",
+          "next_step": "区分查询与应答，解析rcode，按物理报文去重"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_DGA_LEXICAL",
+      "kind": "fact",
+      "name": "词形随机性（单资产）",
+      "original_fields": [
+        "app.dns_query",
+        "dns.rcode",
+        "hit.time",
+        "baseline"
+      ],
+      "algorithm": "bigram 对数概率 <语料 p05；元音比/长度分布异常；单机随机域名不支持 Botnet",
+      "execution_contract": "bigram_log_probability_p05、vowel_ratio_p05/p95、length_p05/p95；BigramLogProbabilities语料",
+      "material_families": [
+        "dns_records",
+        "baselines",
+        "dns_lexical_corpus"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "dns_records",
+          "status": "recoverable",
+          "reason": "9条命中带查询名，4条带回答；原始DNS报文存在",
+          "next_step": "区分查询与应答，解析rcode，按物理报文去重"
+        },
+        {
+          "layer": "fact",
+          "input": "baselines",
+          "status": "unavailable",
+          "reason": "没有可信来源登记，也没有完整正常流量分母",
+          "next_step": "新增正常流量采集与基线训练，不能从告警命中训练正常基线"
+        },
+        {
+          "layer": "fact",
+          "input": "dns_lexical_corpus",
+          "status": "unavailable",
+          "reason": "没有bigram语料及分位数来源",
+          "next_step": "引入有版本、有训练范围的词形语料"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_NXDOMAIN_CLUSTER",
+      "kind": "fact",
+      "name": "NXDOMAIN 聚集（scope=asset，单资产）",
+      "original_fields": [
+        "app.dns_query",
+        "dns.rcode",
+        "hit.time",
+        "baseline"
+      ],
+      "algorithm": "单资产窗口内不同 eTLD+1 的 NXDOMAIN >p99 基线；需 rcode＋未命中 DNS 分母",
+      "execution_contract": "nxdomain_rate_p99",
+      "material_families": [
+        "dns_records",
+        "baselines"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "dns_records",
+          "status": "recoverable",
+          "reason": "9条命中带查询名，4条带回答；原始DNS报文存在",
+          "next_step": "区分查询与应答，解析rcode，按物理报文去重"
+        },
+        {
+          "layer": "fact",
+          "input": "baselines",
+          "status": "unavailable",
+          "reason": "没有可信来源登记，也没有完整正常流量分母",
+          "next_step": "新增正常流量采集与基线训练，不能从告警命中训练正常基线"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_GROUP_NXDOMAIN_CLUSTER",
+      "kind": "fact",
+      "name": "群体 NXDOMAIN 聚集（scope=asset_group）",
+      "original_fields": [
+        "app.dns_query",
+        "dns.rcode",
+        "hit.time",
+        "baseline"
+      ],
+      "algorithm": "≥3 资产同窗口对同词形簇域名的失败解析率 >群体基线 p99；需 rcode＋未命中分母；与单资产版为不同 fact",
+      "execution_contract": "group_nxdomain_rate_p99",
+      "material_families": [
+        "group_membership",
+        "group_observations",
+        "baselines"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "group_membership",
+          "status": "unavailable",
+          "reason": "1686条资产地址不是群体成员或NAT归属证明；本批无多资产群体",
+          "next_step": "补真实资产身份、NAT/代理归属与群体分析范围"
+        },
+        {
+          "layer": "fact",
+          "input": "group_observations",
+          "status": "partial",
+          "reason": "存在真实资产登记和单资产命中，但本批材料只绑定一个分析资产",
+          "next_step": "跨事件检索独立资产观察；未证实成员与群体范围前不得宣称群体"
+        },
+        {
+          "layer": "fact",
+          "input": "baselines",
+          "status": "unavailable",
+          "reason": "没有可信来源登记，也没有完整正常流量分母",
+          "next_step": "新增正常流量采集与基线训练，不能从告警命中训练正常基线"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_FAILED_TO_ACTIVE",
+      "kind": "fact",
+      "name": "失败域→激活连接",
+      "original_fields": [
+        "app.dns_query",
+        "dns.rcode",
+        "hit.time",
+        "baseline"
+      ],
+      "algorithm": "连续失败域名中成功解析，且 ≤5min 外联对应 IP（DNS→连接关联）",
+      "execution_contract": "min_failures",
+      "material_families": [
+        "dns_records"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "dns_records",
+          "status": "recoverable",
+          "reason": "9条命中带查询名，4条带回答；原始DNS报文存在",
+          "next_step": "区分查询与应答，解析rcode，按物理报文去重"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_SHARED_DOMAIN_CLUSTER",
+      "kind": "fact",
+      "name": "群体共同域名簇",
+      "original_fields": [
+        "app.dns_query",
+        "hit.time",
+        "domain_baseline"
+      ],
+      "algorithm": "≥3 资产共同查询一簇非常规域名（同注册域/同命名模式）",
+      "execution_contract": "domain_frequency_p01；逐注册域Frequency",
+      "material_families": [
+        "group_membership",
+        "group_observations",
+        "baselines"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "group_membership",
+          "status": "unavailable",
+          "reason": "1686条资产地址不是群体成员或NAT归属证明；本批无多资产群体",
+          "next_step": "补真实资产身份、NAT/代理归属与群体分析范围"
+        },
+        {
+          "layer": "fact",
+          "input": "group_observations",
+          "status": "partial",
+          "reason": "存在真实资产登记和单资产命中，但本批材料只绑定一个分析资产",
+          "next_step": "跨事件检索独立资产观察；未证实成员与群体范围前不得宣称群体"
+        },
+        {
+          "layer": "fact",
+          "input": "baselines",
+          "status": "unavailable",
+          "reason": "没有可信来源登记，也没有完整正常流量分母",
+          "next_step": "新增正常流量采集与基线训练，不能从告警命中训练正常基线"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_HTTP_ENDPOINT_REPEAT",
+      "kind": "fact",
+      "name": "端点重复回连",
+      "original_fields": [
+        "app.http_method",
+        "app.http_host",
+        "app.http_url",
+        "app.user_agent",
+        "request_response_sizes",
+        "service_baseline"
+      ],
+      "algorithm": "主机＋规范端点分组：重复 ≥6 次且间隔低抖动（CV≤0.3）；POST 本身不加分",
+      "execution_contract": "可解析URL/Host/方法/时间、真实事务；至少6同端点请求，间隔CV；原目录列UA/尺寸/基线为上下文，实际重复判定不应误加无关依赖。",
+      "material_families": [
+        "http_records"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "http_records",
+          "status": "unavailable",
+          "reason": "本批代表帧及exchange报文边界未发现HTTP请求/应答明文；主要为TLS、DNS和TCP小包",
+          "next_step": "接代理/网关HTTP日志或合法明文来源；不从TLS密文猜正文"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_HTTP_FIELD_ENCODING",
+      "kind": "fact",
+      "name": "字段编码异常",
+      "original_fields": [
+        "app.http_method",
+        "app.http_host",
+        "app.http_url",
+        "app.user_agent",
+        "request_response_sizes",
+        "service_baseline"
+      ],
+      "algorithm": "编码链验证后异常长度/编码占比 >同服务基线 p95；排除 JWT/OAuth",
+      "execution_contract": "encoded_field_ratio_p95、encoded_field_length_p95",
+      "material_families": [
+        "http_records",
+        "baselines"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "http_records",
+          "status": "unavailable",
+          "reason": "本批代表帧及exchange报文边界未发现HTTP请求/应答明文；主要为TLS、DNS和TCP小包",
+          "next_step": "接代理/网关HTTP日志或合法明文来源；不从TLS密文猜正文"
+        },
+        {
+          "layer": "fact",
+          "input": "baselines",
+          "status": "unavailable",
+          "reason": "没有可信来源登记，也没有完整正常流量分母",
+          "next_step": "新增正常流量采集与基线训练，不能从告警命中训练正常基线"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_HTTP_UA_RARITY",
+      "kind": "fact",
+      "name": "UA 稀有/不一致",
+      "original_fields": [
+        "app.http_method",
+        "app.http_host",
+        "app.http_url",
+        "app.user_agent",
+        "request_response_sizes",
+        "service_baseline"
+      ],
+      "algorithm": "同资产 UA 一致且全平台稀有度 <p01；弱证据，与 S03 同事实取其一",
+      "execution_contract": "ua_frequency、ua_frequency_p01",
+      "material_families": [
+        "http_records",
+        "baselines"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "http_records",
+          "status": "unavailable",
+          "reason": "本批代表帧及exchange报文边界未发现HTTP请求/应答明文；主要为TLS、DNS和TCP小包",
+          "next_step": "接代理/网关HTTP日志或合法明文来源；不从TLS密文猜正文"
+        },
+        {
+          "layer": "fact",
+          "input": "baselines",
+          "status": "unavailable",
+          "reason": "没有可信来源登记，也没有完整正常流量分母",
+          "next_step": "新增正常流量采集与基线训练，不能从告警命中训练正常基线"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_HTTP_SIZE_STABILITY",
+      "kind": "fact",
+      "name": "请求/响应尺寸稳定",
+      "original_fields": [
+        "app.http_method",
+        "app.http_host",
+        "app.http_url",
+        "app.user_agent",
+        "request_response_sizes",
+        "service_baseline"
+      ],
+      "algorithm": "n≥12；CV(size)<baseline_p05 且 unique_size_ratio<baseline_p05（或 z≤−2.0）",
+      "execution_contract": "size_cv_p05、unique_size_ratio_p05",
+      "material_families": [
+        "http_records",
+        "baselines"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "http_records",
+          "status": "unavailable",
+          "reason": "本批代表帧及exchange报文边界未发现HTTP请求/应答明文；主要为TLS、DNS和TCP小包",
+          "next_step": "接代理/网关HTTP日志或合法明文来源；不从TLS密文猜正文"
+        },
+        {
+          "layer": "fact",
+          "input": "baselines",
+          "status": "unavailable",
+          "reason": "没有可信来源登记，也没有完整正常流量分母",
+          "next_step": "新增正常流量采集与基线训练，不能从告警命中训练正常基线"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_LONG_LOW_SESSION",
+      "kind": "fact",
+      "name": "长会话低频小流量",
+      "original_fields": [
+        "session_id",
+        "session_start_end",
+        "directional_wire_bytes",
+        "volume_quality"
+      ],
+      "algorithm": "会话 >30min 且双向 <10KB 且含周期小包（体量须 Q02 verified）",
+      "execution_contract": "核验会话ID、开始/结束、上/下行字节、VolumeVerified、HitIDs；会话内真实周期样本；累计计数不能当各包载荷相加。",
+      "material_families": [
+        "verified_sessions",
+        "time_series",
+        "capture_quality"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "verified_sessions",
+          "status": "partial",
+          "reason": "64条命中保存exchange，共349个报文引用，存在重复或不完整",
+          "next_step": "去重、校验序号与双向状态；缺包会话只保留观察量"
+        },
+        {
+          "layer": "fact",
+          "input": "time_series",
+          "status": "recoverable",
+          "reason": "固定快照已保存141条真实命中时间",
+          "next_step": "按资产、端点、设备汇总；跨日分析需声明联合窗口"
+        },
+        {
+          "layer": "fact",
+          "input": "capture_quality",
+          "status": "partial",
+          "reason": "141条均缺capture_truncated；135条帧满足完整IPv4长度检查，6条不满足",
+          "next_step": "逐报文核验cap/wire、IP长度、分片和元数据冲突；不得全局补false"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_URL_ODD_AUTHORITY",
+      "kind": "fact",
+      "name": "URL 授权部分异常（弱欺骗）",
+      "original_fields": [
+        "app.http_url",
+        "app.http_host",
+        "brand_authorized_domains"
+      ],
+      "algorithm": "userinfo `@` / IP·数字·十六进制主机；deception_strength: weak，不满足 Phishing 欺骗门槛",
+      "execution_contract": "完整URL授权部分与Host原文、解析结果、IP/编码主机及userinfo；保留弱欺骗属性；原品牌字段不构成该结构检查的强制目录依赖。",
+      "material_families": [
+        "http_records"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "http_records",
+          "status": "unavailable",
+          "reason": "本批代表帧及exchange报文边界未发现HTTP请求/应答明文；主要为TLS、DNS和TCP小包",
+          "next_step": "接代理/网关HTTP日志或合法明文来源；不从TLS密文猜正文"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_URL_HOMOGLYPH",
+      "kind": "fact",
+      "name": "同形混淆字符（强欺骗）",
+      "original_fields": [
+        "app.http_url",
+        "app.http_host",
+        "brand_authorized_domains"
+      ],
+      "algorithm": "IDNA 解码后视觉近似（rn→m、0→o、西里尔/希腊字母混入）；输出混淆字符清单",
+      "execution_contract": "实际URL/Host、IDNA Unicode/ASCII映射、混淆字符与skeleton规则版本、真实品牌授权域目录；不能仅凭非ASCII认定恶意。",
+      "material_families": [
+        "http_records",
+        "brand_registry"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "http_records",
+          "status": "unavailable",
+          "reason": "本批代表帧及exchange报文边界未发现HTTP请求/应答明文；主要为TLS、DNS和TCP小包",
+          "next_step": "接代理/网关HTTP日志或合法明文来源；不从TLS密文猜正文"
+        },
+        {
+          "layer": "fact",
+          "input": "brand_registry",
+          "status": "unavailable",
+          "reason": "没有实际品牌与授权域目录",
+          "next_step": "登记真实品牌及授权域；域名含品牌词不能替代目录"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_URL_BRAND_SUBDOMAIN_TRICK",
+      "kind": "fact",
+      "name": "伪装子域（强欺骗）",
+      "original_fields": [
+        "app.http_url",
+        "app.http_host",
+        "brand_authorized_domains"
+      ],
+      "algorithm": "品牌词在子域而注册域无关（PSL 提取），如 `brand.com.evil.tld`",
+      "execution_contract": "实际子域、注册域、PSL版本、品牌词和真实授权域集合；明确品牌词所在层级与注册域不一致事实。",
+      "material_families": [
+        "http_records",
+        "brand_registry"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "http_records",
+          "status": "unavailable",
+          "reason": "本批代表帧及exchange报文边界未发现HTTP请求/应答明文；主要为TLS、DNS和TCP小包",
+          "next_step": "接代理/网关HTTP日志或合法明文来源；不从TLS密文猜正文"
+        },
+        {
+          "layer": "fact",
+          "input": "brand_registry",
+          "status": "unavailable",
+          "reason": "没有实际品牌与授权域目录",
+          "next_step": "登记真实品牌及授权域；域名含品牌词不能替代目录"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_BRAND_IMPOSTOR",
+      "kind": "fact",
+      "name": "品牌仿冒",
+      "original_fields": [
+        "app.http_url",
+        "app.http_host",
+        "brand_authorized_domains"
+      ],
+      "algorithm": "与审核品牌清单编辑距离/邻键比对，或授权域核验失败；需品牌清单",
+      "execution_contract": "max_edit_distance",
+      "material_families": [
+        "http_records",
+        "brand_registry"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "http_records",
+          "status": "unavailable",
+          "reason": "本批代表帧及exchange报文边界未发现HTTP请求/应答明文；主要为TLS、DNS和TCP小包",
+          "next_step": "接代理/网关HTTP日志或合法明文来源；不从TLS密文猜正文"
+        },
+        {
+          "layer": "fact",
+          "input": "brand_registry",
+          "status": "unavailable",
+          "reason": "没有实际品牌与授权域目录",
+          "next_step": "登记真实品牌及授权域；域名含品牌词不能替代目录"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_CRED_POST_STRUCTURE",
+      "kind": "fact",
+      "name": "登录提交结构",
+      "original_fields": [
+        "transaction_id",
+        "app.http_method",
+        "redacted_body_field_names",
+        "page_origin",
+        "form_action",
+        "response.Location"
+      ],
+      "algorithm": "同请求 POST＋脱敏凭据字段名；正文截断标 insufficient",
+      "execution_contract": "完整同事务请求：方法、实际字段名、字段来源和正文完整性；程序判定POST与凭据结构；字段值不是该结构算法必需。",
+      "material_families": [
+        "http_records"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "http_records",
+          "status": "unavailable",
+          "reason": "本批代表帧及exchange报文边界未发现HTTP请求/应答明文；主要为TLS、DNS和TCP小包",
+          "next_step": "接代理/网关HTTP日志或合法明文来源；不从TLS密文猜正文"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_FORM_CROSSSITE",
+      "kind": "fact",
+      "name": "表单跨站提交",
+      "original_fields": [
+        "transaction_id",
+        "app.http_method",
+        "redacted_body_field_names",
+        "page_origin",
+        "form_action",
+        "response.Location"
+      ],
+      "algorithm": "action 与页面来源不同可注册域",
+      "execution_contract": "页面真实来源URL、表单action、事务/页面关联、解析后的双方注册域；跨站正常业务背景保留。",
+      "material_families": [
+        "http_records"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "http_records",
+          "status": "unavailable",
+          "reason": "本批代表帧及exchange报文边界未发现HTTP请求/应答明文；主要为TLS、DNS和TCP小包",
+          "next_step": "接代理/网关HTTP日志或合法明文来源；不从TLS密文猜正文"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_REDIRECT_CHAIN",
+      "kind": "fact",
+      "name": "落地页→异站提交链",
+      "original_fields": [
+        "transaction_id",
+        "app.http_method",
+        "redacted_body_field_names",
+        "page_origin",
+        "form_action",
+        "response.Location"
+      ],
+      "algorithm": "事务 ID 关联的跨注册域跳转提交链；两条无关联命中不得拼接",
+      "execution_contract": "请求/响应同事务关联、完整Location/状态、ResponseURL、RedirectToTransactionID、最终提交方法与字段；程序验证链，禁止两条无关命中拼接。",
+      "material_families": [
+        "http_records"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "http_records",
+          "status": "unavailable",
+          "reason": "本批代表帧及exchange报文边界未发现HTTP请求/应答明文；主要为TLS、DNS和TCP小包",
+          "next_step": "接代理/网关HTTP日志或合法明文来源；不从TLS密文猜正文"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_MULTI_REDIRECT_CHAIN",
+      "kind": "fact",
+      "name": "多重短链跳转",
+      "original_fields": [
+        "transaction_id",
+        "app.http_method",
+        "redacted_body_field_names",
+        "page_origin",
+        "form_action",
+        "response.Location"
+      ],
+      "algorithm": "短链→中间页→落地页的重定向序列还原（需完整响应/Location）",
+      "execution_contract": "连续多步请求/响应ID、状态、Location、目标URL、时间及链顺序；每条边真实绑定；短链外观不足。",
+      "material_families": [
+        "http_records"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "http_records",
+          "status": "unavailable",
+          "reason": "本批代表帧及exchange报文边界未发现HTTP请求/应答明文；主要为TLS、DNS和TCP小包",
+          "next_step": "接代理/网关HTTP日志或合法明文来源；不从TLS密文猜正文"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_PROTOCOL_PORT_MISMATCH",
+      "kind": "fact",
+      "name": "协议-端口错配",
+      "original_fields": [
+        "app_proto",
+        "dst_port",
+        "service_inventory"
+      ],
+      "algorithm": "dst_port vs 可解析 app_proto 指纹＋服务清单不符（端口推断的 protocol 不算）",
+      "execution_contract": "实际目的端口、由字节解析的AppProtocol/ProtocolParsed、真实Services及核验来源；protocol=tcp不是HTTP等应用协议。",
+      "material_families": [
+        "network_records",
+        "service_registry"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "network_records",
+          "status": "recoverable",
+          "reason": "原始帧、五元组和端口真实存在",
+          "next_step": "解析全量命中，保留端口分布与TCP标志"
+        },
+        {
+          "layer": "fact",
+          "input": "service_registry",
+          "status": "unavailable",
+          "reason": "现场t_asset_srv及t_internal_srv_list均为0",
+          "next_step": "接实际服务发现/服务目录；不能用常见端口猜真实协议"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_RARE_PORT",
+      "kind": "fact",
+      "name": "稀有端口",
+      "original_fields": [
+        "dst_ip",
+        "dst_port",
+        "asset_id",
+        "locked_baseline"
+      ],
+      "algorithm": "目的端口在同角色资产群体中频率 <p01",
+      "execution_contract": "port_frequency_p01；逐目的端口Frequency",
+      "material_families": [
+        "network_records",
+        "baselines"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "network_records",
+          "status": "recoverable",
+          "reason": "原始帧、五元组和端口真实存在",
+          "next_step": "解析全量命中，保留端口分布与TCP标志"
+        },
+        {
+          "layer": "fact",
+          "input": "baselines",
+          "status": "unavailable",
+          "reason": "没有可信来源登记，也没有完整正常流量分母",
+          "next_step": "新增正常流量采集与基线训练，不能从告警命中训练正常基线"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_DST_NOVELTY",
+      "kind": "fact",
+      "name": "目的端点新颖",
+      "original_fields": [
+        "dst_ip",
+        "dst_port",
+        "asset_id",
+        "locked_baseline"
+      ],
+      "algorithm": "资产历史覆盖窗口内首现（只称\"首次告警\"）",
+      "execution_contract": "当前精确端点(协议/地址/端口)、资产/设备、完整历史覆盖窗口与历史端点；只称覆盖历史内首次告警；原locked_baseline映射为历史覆盖而非凭空训练基线。",
+      "material_families": [
+        "history"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "history",
+          "status": "recoverable",
+          "reason": "平台事件库已有真实历史记录",
+          "next_step": "有界检索全部匹配历史；补端点与DNS应答IOC绑定，声明覆盖范围"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_INFRA_RARITY",
+      "kind": "fact",
+      "name": "目标基础设施稀有度",
+      "original_fields": [
+        "dst_ip",
+        "dst_port",
+        "asset_id",
+        "locked_baseline"
+      ],
+      "algorithm": "目的 IP 的 ASN/地理/信誉稀有（外部清单，二期）",
+      "execution_contract": "infra_frequency_p01；ASN/国家/信誉组合Frequency",
+      "material_families": [
+        "network_records",
+        "baselines",
+        "infrastructure_registry"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "network_records",
+          "status": "recoverable",
+          "reason": "原始帧、五元组和端口真实存在",
+          "next_step": "解析全量命中，保留端口分布与TCP标志"
+        },
+        {
+          "layer": "fact",
+          "input": "baselines",
+          "status": "unavailable",
+          "reason": "没有可信来源登记，也没有完整正常流量分母",
+          "next_step": "新增正常流量采集与基线训练，不能从告警命中训练正常基线"
+        },
+        {
+          "layer": "fact",
+          "input": "infrastructure_registry",
+          "status": "unavailable",
+          "reason": "没有ASN、国家、信誉目录及对应频率资料",
+          "next_step": "接实际基础设施资料并保存版本；另需正常基线"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_FANOUT_SINGLE_SRC",
+      "kind": "fact",
+      "name": "单源目标扇出",
+      "original_fields": [
+        "asset_id",
+        "dst_ip",
+        "dst_port",
+        "hit.time",
+        "joint_snapshot"
+      ],
+      "algorithm": "跨事件按源去重 unique(dst,port)/小时 >角色基线 p99",
+      "execution_contract": "unique_targets_per_hour_p99",
+      "material_families": [
+        "network_records",
+        "baselines"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "network_records",
+          "status": "recoverable",
+          "reason": "原始帧、五元组和端口真实存在",
+          "next_step": "解析全量命中，保留端口分布与TCP标志"
+        },
+        {
+          "layer": "fact",
+          "input": "baselines",
+          "status": "unavailable",
+          "reason": "没有可信来源登记，也没有完整正常流量分母",
+          "next_step": "新增正常流量采集与基线训练，不能从告警命中训练正常基线"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_PORT_SEQUENCE",
+      "kind": "fact",
+      "name": "端口序列形态",
+      "original_fields": [
+        "asset_id",
+        "dst_ip",
+        "dst_port",
+        "hit.time",
+        "joint_snapshot"
+      ],
+      "algorithm": "目的端口序列呈顺序/逆序/伪随机（≥8 去重端口）",
+      "execution_contract": "difference_entropy_threshold",
+      "material_families": [
+        "network_records"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "network_records",
+          "status": "recoverable",
+          "reason": "原始帧、五元组和端口真实存在",
+          "next_step": "解析全量命中，保留端口分布与TCP标志"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_SMALL_PACKET",
+      "kind": "fact",
+      "name": "小包无载荷",
+      "original_fields": [
+        "payload_length",
+        "tcp_flags",
+        "hit.time"
+      ],
+      "algorithm": "payload 长度分布 ≥80% 集中于小包",
+      "execution_contract": "small_payload_bytes",
+      "material_families": [
+        "network_records"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "network_records",
+          "status": "recoverable",
+          "reason": "原始帧、五元组和端口真实存在",
+          "next_step": "解析全量命中，保留端口分布与TCP标志"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_CONN_FAIL_RATE",
+      "kind": "fact",
+      "name": "连接失败率",
+      "original_fields": [
+        "payload_length",
+        "tcp_flags",
+        "hit.time"
+      ],
+      "algorithm": "SYN/RST 失败比例 >p95（需 TCP 状态，一期仅线索）",
+      "execution_contract": "connection_failure_rate_p95",
+      "material_families": [
+        "network_records",
+        "baselines"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "network_records",
+          "status": "recoverable",
+          "reason": "原始帧、五元组和端口真实存在",
+          "next_step": "解析全量命中，保留端口分布与TCP标志"
+        },
+        {
+          "layer": "fact",
+          "input": "baselines",
+          "status": "unavailable",
+          "reason": "没有可信来源登记，也没有完整正常流量分母",
+          "next_step": "新增正常流量采集与基线训练，不能从告警命中训练正常基线"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_INDEPENDENT_RULE_CORROB",
+      "kind": "fact",
+      "name": "独立规则交叉佐证",
+      "original_fields": [
+        "rule_metadata",
+        "intel_source_provenance",
+        "hard_fact_findings"
+      ],
+      "algorithm": "by_rule＋规则库元数据判独立性；同 IOC 派生多 rule_id 只记一组",
+      "execution_contract": "真实RuleRecord.ID、IndependenceGroup、OriginalSource和当前命中关系；规则共享同一IOC来源不算独立。",
+      "material_families": [
+        "independent_rule_and_intel_metadata"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "independent_rule_and_intel_metadata",
+          "status": "partial",
+          "reason": "保存IOC来源、标签、规则标识；未核验来源独立性或类型硬分",
+          "next_step": "保留来源背景；补来源链与规则独立组，类型硬分需要实际生产过程"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_INDEPENDENT_INTEL_CORROB",
+      "kind": "fact",
+      "name": "跨情报源独立命中",
+      "original_fields": [
+        "rule_metadata",
+        "intel_source_provenance",
+        "hard_fact_findings"
+      ],
+      "algorithm": "多情报源/引擎独立标记同一目的；须验证情报源独立性（同源转引不算）",
+      "execution_contract": "同一类型化IOC、IntelRecord.ID/OriginalSource、来源转引链、提供者和时效；至少两个独立原始来源；仅多个feed名不够。",
+      "material_families": [
+        "independent_rule_and_intel_metadata"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "independent_rule_and_intel_metadata",
+          "status": "partial",
+          "reason": "保存IOC来源、标签、规则标识；未核验来源独立性或类型硬分",
+          "next_step": "保留来源背景；补来源链与规则独立组，类型硬分需要实际生产过程"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_IOC_TYPE_CORROB",
+      "kind": "fact",
+      "name": "IOC 类型与行为证据一致",
+      "original_fields": [
+        "hard_type_scores",
+        "ioc_semantic_class"
+      ],
+      "algorithm": "IOC 情报类型与成立硬行为事实类型一致（evaluation_stage=post_hard_type；抑制与 modifier 后的 hard_type_scores 满足 top1≥15、份额≥0.60、margin≥10 且情报标签与 top1 一致时成立）；不回填类型分",
+      "execution_contract": "查找原硬分真实生产者；无则登记未满足依赖。新增的报告权重不是原HardTypeScores，不能拿它反向证明该规则",
+      "material_families": [
+        "independent_rule_and_intel_metadata"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "independent_rule_and_intel_metadata",
+          "status": "partial",
+          "reason": "保存IOC来源、标签、规则标识；未核验来源独立性或类型硬分",
+          "next_step": "保留来源背景；补来源链与规则独立组，类型硬分需要实际生产过程"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_TLS_SNI_MISMATCH",
+      "kind": "fact",
+      "name": "SNI 与目的不符",
+      "original_fields": [
+        "tls.sni",
+        "tls.cert",
+        "tls.ja3_or_ja4"
+      ],
+      "algorithm": "需 TLS 握手元数据；CDN 例外清单",
+      "execution_contract": "实际SNI、证书SAN/CN集合及CDNExceptions/ExceptionsVerified；SNI与证书/目的的关系口径核对，不能拿SNI和目的IP直接字符串比。",
+      "material_families": [
+        "tls_records",
+        "tls_trust_and_fingerprint_registry"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "tls_records",
+          "status": "partial",
+          "reason": "10条命中保存SNI；5条代表帧为TLS握手形态，部分ClientHello不完整",
+          "next_step": "按TCP序列重组可见握手；SNI不冒充证书或指纹"
+        },
+        {
+          "layer": "fact",
+          "input": "tls_trust_and_fingerprint_registry",
+          "status": "unavailable",
+          "reason": "没有证书信任、CDN例外、指纹客户端目录",
+          "next_step": "接证书和信任/指纹目录；完整握手不等于这些外部资料"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_TLS_CERT_ANOMALY",
+      "kind": "fact",
+      "name": "自签名/异常证书",
+      "original_fields": [
+        "tls.sni",
+        "tls.cert",
+        "tls.ja3_or_ja4"
+      ],
+      "algorithm": "证书链/有效期/颁发者异常",
+      "execution_contract": "实际证书DER及TrustRootsDER、链；或独立已核验链结果、NotBefore/After、Issuer；TrustedIssuers及版本；按事件时刻验证有效期。",
+      "material_families": [
+        "tls_records",
+        "tls_trust_and_fingerprint_registry"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "tls_records",
+          "status": "partial",
+          "reason": "10条命中保存SNI；5条代表帧为TLS握手形态，部分ClientHello不完整",
+          "next_step": "按TCP序列重组可见握手；SNI不冒充证书或指纹"
+        },
+        {
+          "layer": "fact",
+          "input": "tls_trust_and_fingerprint_registry",
+          "status": "unavailable",
+          "reason": "没有证书信任、CDN例外、指纹客户端目录",
+          "next_step": "接证书和信任/指纹目录；完整握手不等于这些外部资料"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_TLS_JA_MISMATCH",
+      "kind": "fact",
+      "name": "JA3/JA4 指纹与声明不符",
+      "original_fields": [
+        "tls.sni",
+        "tls.cert",
+        "tls.ja3_or_ja4"
+      ],
+      "algorithm": "指纹库比对；浏览器声称 vs TLS 指纹",
+      "execution_contract": "真实JA3/JA4握手计算字段/指纹、同客户端实际UA、FingerprintClients目录与核验版本；跨事务UA不能拼到该握手。",
+      "material_families": [
+        "tls_records",
+        "tls_trust_and_fingerprint_registry"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "tls_records",
+          "status": "partial",
+          "reason": "10条命中保存SNI；5条代表帧为TLS握手形态，部分ClientHello不完整",
+          "next_step": "按TCP序列重组可见握手；SNI不冒充证书或指纹"
+        },
+        {
+          "layer": "fact",
+          "input": "tls_trust_and_fingerprint_registry",
+          "status": "unavailable",
+          "reason": "没有证书信任、CDN例外、指纹客户端目录",
+          "next_step": "接证书和信任/指纹目录；完整握手不等于这些外部资料"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_MULTI_ASSET_IOC",
+      "kind": "fact",
+      "name": "多资产同 IOC",
+      "original_fields": [
+        "verified_asset_id",
+        "ioc",
+        "endpoint_id",
+        "hit.time",
+        "joint_snapshot"
+      ],
+      "algorithm": "≥3 独立资产（NAT/代理/解析器归属去重）同 IOC 且时间聚集",
+      "execution_contract": "cluster_window_seconds",
+      "material_families": [
+        "group_membership",
+        "group_observations"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "group_membership",
+          "status": "unavailable",
+          "reason": "1686条资产地址不是群体成员或NAT归属证明；本批无多资产群体",
+          "next_step": "补真实资产身份、NAT/代理归属与群体分析范围"
+        },
+        {
+          "layer": "fact",
+          "input": "group_observations",
+          "status": "partial",
+          "reason": "存在真实资产登记和单资产命中，但本批材料只绑定一个分析资产",
+          "next_step": "跨事件检索独立资产观察；未证实成员与群体范围前不得宣称群体"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_MULTI_ASSET_DIST",
+      "kind": "fact",
+      "name": "聚集分布形态",
+      "original_fields": [
+        "verified_asset_id",
+        "ioc",
+        "endpoint_id",
+        "hit.time",
+        "joint_snapshot"
+      ],
+      "algorithm": "命中资产跨网段随机分布（真感染面）vs 同网段管理面",
+      "execution_contract": "subnet_entropy_min",
+      "material_families": [
+        "group_membership",
+        "group_observations"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "group_membership",
+          "status": "unavailable",
+          "reason": "1686条资产地址不是群体成员或NAT归属证明；本批无多资产群体",
+          "next_step": "补真实资产身份、NAT/代理归属与群体分析范围"
+        },
+        {
+          "layer": "fact",
+          "input": "group_observations",
+          "status": "partial",
+          "reason": "存在真实资产登记和单资产命中，但本批材料只绑定一个分析资产",
+          "next_step": "跨事件检索独立资产观察；未证实成员与群体范围前不得宣称群体"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_TIME_COORDINATION",
+      "kind": "fact",
+      "name": "多资产时间协同",
+      "original_fields": [
+        "verified_asset_group",
+        "endpoint_id",
+        "hit.time",
+        "joint_snapshot",
+        "verified_association"
+      ],
+      "algorithm": "各资产到同端点时序相位一致（互相关 >0.7），或秒级窗口同向突发",
+      "execution_contract": "bucket_seconds、max_lag_bins（可选但有效范围需校验）",
+      "material_families": [
+        "group_membership",
+        "group_observations"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "group_membership",
+          "status": "unavailable",
+          "reason": "1686条资产地址不是群体成员或NAT归属证明；本批无多资产群体",
+          "next_step": "补真实资产身份、NAT/代理归属与群体分析范围"
+        },
+        {
+          "layer": "fact",
+          "input": "group_observations",
+          "status": "partial",
+          "reason": "存在真实资产登记和单资产命中，但本批材料只绑定一个分析资产",
+          "next_step": "跨事件检索独立资产观察；未证实成员与群体范围前不得宣称群体"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_COORD_FANOUT",
+      "kind": "fact",
+      "name": "协同扫描/扇出",
+      "original_fields": [
+        "verified_asset_group",
+        "endpoint_id",
+        "hit.time",
+        "joint_snapshot",
+        "verified_association"
+      ],
+      "algorithm": "多源目标集合重叠 >70%，或不同资产分工覆盖目标段且时间衔接",
+      "execution_contract": "handoff_seconds",
+      "material_families": [
+        "group_membership",
+        "group_observations"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "group_membership",
+          "status": "unavailable",
+          "reason": "1686条资产地址不是群体成员或NAT归属证明；本批无多资产群体",
+          "next_step": "补真实资产身份、NAT/代理归属与群体分析范围"
+        },
+        {
+          "layer": "fact",
+          "input": "group_observations",
+          "status": "partial",
+          "reason": "存在真实资产登记和单资产命中，但本批材料只绑定一个分析资产",
+          "next_step": "跨事件检索独立资产观察；未证实成员与群体范围前不得宣称群体"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_INFECTION_CHAIN",
+      "kind": "fact",
+      "name": "感染链传播",
+      "original_fields": [
+        "verified_asset_group",
+        "endpoint_id",
+        "hit.time",
+        "joint_snapshot",
+        "verified_association"
+      ],
+      "algorithm": "A 可疑外联→A 访问多内网 B→B 随后外联同目的的时序链",
+      "execution_contract": "chain_window_seconds",
+      "material_families": [
+        "group_membership",
+        "group_observations"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "group_membership",
+          "status": "unavailable",
+          "reason": "1686条资产地址不是群体成员或NAT归属证明；本批无多资产群体",
+          "next_step": "补真实资产身份、NAT/代理归属与群体分析范围"
+        },
+        {
+          "layer": "fact",
+          "input": "group_observations",
+          "status": "partial",
+          "reason": "存在真实资产登记和单资产命中，但本批材料只绑定一个分析资产",
+          "next_step": "跨事件检索独立资产观察；未证实成员与群体范围前不得宣称群体"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_SHARED_ENDPOINT",
+      "kind": "fact",
+      "name": "共享目的端点",
+      "original_fields": [
+        "verified_asset_id",
+        "ioc",
+        "endpoint_id",
+        "hit.time",
+        "joint_snapshot"
+      ],
+      "algorithm": "去 IOC 标签后 ≥3 资产独立聚集同目的端点（端点稀有度 × 资产数）",
+      "execution_contract": "endpoint_frequency、endpoint_frequency_p01",
+      "material_families": [
+        "group_membership",
+        "group_observations",
+        "baselines"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "group_membership",
+          "status": "unavailable",
+          "reason": "1686条资产地址不是群体成员或NAT归属证明；本批无多资产群体",
+          "next_step": "补真实资产身份、NAT/代理归属与群体分析范围"
+        },
+        {
+          "layer": "fact",
+          "input": "group_observations",
+          "status": "partial",
+          "reason": "存在真实资产登记和单资产命中，但本批材料只绑定一个分析资产",
+          "next_step": "跨事件检索独立资产观察；未证实成员与群体范围前不得宣称群体"
+        },
+        {
+          "layer": "fact",
+          "input": "baselines",
+          "status": "unavailable",
+          "reason": "没有可信来源登记，也没有完整正常流量分母",
+          "next_step": "新增正常流量采集与基线训练，不能从告警命中训练正常基线"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_FIRST_VISIT_CLUSTER",
+      "kind": "fact",
+      "name": "首访时间聚集",
+      "original_fields": [
+        "verified_asset_id",
+        "ioc",
+        "endpoint_id",
+        "hit.time",
+        "joint_snapshot"
+      ],
+      "algorithm": "多资产首访集中 ≤1h 窗口（投递后点击潮）",
+      "execution_contract": "至少3成员真实首访时间、端点、过去完整覆盖历史与当前联合窗口；不得把当前首次保存记录当首次访问。",
+      "material_families": [
+        "group_membership",
+        "group_observations",
+        "history"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "group_membership",
+          "status": "unavailable",
+          "reason": "1686条资产地址不是群体成员或NAT归属证明；本批无多资产群体",
+          "next_step": "补真实资产身份、NAT/代理归属与群体分析范围"
+        },
+        {
+          "layer": "fact",
+          "input": "group_observations",
+          "status": "partial",
+          "reason": "存在真实资产登记和单资产命中，但本批材料只绑定一个分析资产",
+          "next_step": "跨事件检索独立资产观察；未证实成员与群体范围前不得宣称群体"
+        },
+        {
+          "layer": "fact",
+          "input": "history",
+          "status": "recoverable",
+          "reason": "平台事件库已有真实历史记录",
+          "next_step": "有界检索全部匹配历史；补端点与DNS应答IOC绑定，声明覆盖范围"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_COORD_PATTERN_RECURRENCE",
+      "kind": "fact",
+      "name": "协同模式跨日重复",
+      "original_fields": [
+        "verified_asset_group",
+        "endpoint_id",
+        "hit.time",
+        "joint_snapshot",
+        "verified_association"
+      ],
+      "algorithm": "同一资产组的协同模式（相位/突发窗口）在 ≥2 个自然日重现",
+      "execution_contract": "bucket_seconds",
+      "material_families": [
+        "group_membership",
+        "group_observations"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "group_membership",
+          "status": "unavailable",
+          "reason": "1686条资产地址不是群体成员或NAT归属证明；本批无多资产群体",
+          "next_step": "补真实资产身份、NAT/代理归属与群体分析范围"
+        },
+        {
+          "layer": "fact",
+          "input": "group_observations",
+          "status": "partial",
+          "reason": "存在真实资产登记和单资产命中，但本批材料只绑定一个分析资产",
+          "next_step": "跨事件检索独立资产观察；未证实成员与群体范围前不得宣称群体"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_HIST_ASSET_IOC_RECURRENCE",
+      "kind": "fact",
+      "name": "同 IOC→同资产跨日复发",
+      "original_fields": [
+        "verified_adjudication",
+        "history_snapshot",
+        "asset_id",
+        "ioc",
+        "hit.time"
+      ],
+      "algorithm": "30 天窗 ≥2 自然日独立事件；确认恶意 +20｜判误报 −20｜未审核 0",
+      "execution_contract": "30日真实历史，独立EventID、AssetIDs、同类型IOC、时间与来源；≥2日/独立事件；所有审核状态参与，原+20/-20不执行。",
+      "material_families": [
+        "history"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "history",
+          "status": "recoverable",
+          "reason": "平台事件库已有真实历史记录",
+          "next_step": "有界检索全部匹配历史；补端点与DNS应答IOC绑定，声明覆盖范围"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_HIST_GROUP_RECURRENCE",
+      "kind": "fact",
+      "name": "群体+基础设施复发",
+      "original_fields": [
+        "verified_adjudication",
+        "history_snapshot",
+        "asset_id",
+        "ioc",
+        "hit.time"
+      ],
+      "algorithm": "同 IOC 簇/同族域名/同目的端点的资产组跨周重现；确认恶意 +15｜判误报 −15｜未审核 0",
+      "execution_contract": "当前与历史完整成员全集及核验、GroupID、相同IOC/族/精确端点基础设施和跨周时间；同GroupID不代替集合核验；原加减分不执行。",
+      "material_families": [
+        "history"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "history",
+          "status": "recoverable",
+          "reason": "平台事件库已有真实历史记录",
+          "next_step": "有界检索全部匹配历史；补端点与DNS应答IOC绑定，声明覆盖范围"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_HIST_INFRA_PERSISTENCE",
+      "kind": "fact",
+      "name": "钓鱼基础设施持续存活",
+      "original_fields": [
+        "verified_adjudication",
+        "history_snapshot",
+        "asset_id",
+        "ioc",
+        "hit.time"
+      ],
+      "algorithm": "同 IOC 连续多天被不同资产访问；确认恶意 +15｜未审核 0",
+      "execution_contract": "同实际IOC、不同独立资产、按日活动与连续日定义，当前AsOf/回溯范围；所有历史参与；不是证明基础设施全天在线。",
+      "material_families": [
+        "history"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "history",
+          "status": "recoverable",
+          "reason": "平台事件库已有真实历史记录",
+          "next_step": "有界检索全部匹配历史；补端点与DNS应答IOC绑定，声明覆盖范围"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_HIST_SCHEDULE_MATCH",
+      "kind": "fact",
+      "name": "历史时刻模式一致",
+      "original_fields": [
+        "verified_adjudication",
+        "history_snapshot",
+        "asset_id",
+        "ioc",
+        "hit.time"
+      ],
+      "algorithm": "历史事件与当前命中时刻分布一致（KL 散度 <阈值）",
+      "execution_contract": "kl_threshold",
+      "material_families": [
+        "history"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "history",
+          "status": "recoverable",
+          "reason": "平台事件库已有真实历史记录",
+          "next_step": "有界检索全部匹配历史；补端点与DNS应答IOC绑定，声明覆盖范围"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_HIST_MULTI_IOC_SIEGE",
+      "kind": "fact",
+      "name": "同资产多 IOC 围攻",
+      "original_fields": [
+        "verified_adjudication",
+        "history_snapshot",
+        "asset_id",
+        "ioc",
+        "hit.time"
+      ],
+      "algorithm": "窗口内同资产被 ≥3 不同 IOC/规则族命中；按角色基线",
+      "execution_contract": "distinct_ioc_families_p99",
+      "material_families": [
+        "history",
+        "baselines"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "history",
+          "status": "recoverable",
+          "reason": "平台事件库已有真实历史记录",
+          "next_step": "有界检索全部匹配历史；补端点与DNS应答IOC绑定，声明覆盖范围"
+        },
+        {
+          "layer": "fact",
+          "input": "baselines",
+          "status": "unavailable",
+          "reason": "没有可信来源登记，也没有完整正常流量分母",
+          "next_step": "新增正常流量采集与基线训练，不能从告警命中训练正常基线"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_HIST_STAGE_PROGRESSION",
+      "kind": "fact",
+      "name": "攻击阶段递进",
+      "original_fields": [
+        "verified_adjudication",
+        "history_snapshot",
+        "asset_id",
+        "ioc",
+        "hit.time"
+      ],
+      "algorithm": "同资产、同IOC或独立核验战役内，已定谳恶意历史与有来源证明的CurrentStage构成scan/exploit→c2→exfil推进；当前阶段须高于最近历史阶段，历史不得回退；不证明因果攻击链",
+      "execution_contract": "CurrentStage及独立来源、历史Stage、同资产与同IOC/核验CampaignID/活动链、时序；当前阶段必须实际参与，不串无关历史。",
+      "material_families": [
+        "history",
+        "campaign_and_stage_proofs"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "history",
+          "status": "recoverable",
+          "reason": "平台事件库已有真实历史记录",
+          "next_step": "有界检索全部匹配历史；补端点与DNS应答IOC绑定，声明覆盖范围"
+        },
+        {
+          "layer": "fact",
+          "input": "campaign_and_stage_proofs",
+          "status": "unavailable",
+          "reason": "没有同战役、CurrentStage及完整协同参数来源证明",
+          "next_step": "接关联活动证明；不得把同资产或模型标签当战役证明"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_HIST_COORD_PARAM_MATCH",
+      "kind": "fact",
+      "name": "历史协同参数一致",
+      "original_fields": [
+        "verified_adjudication",
+        "history_snapshot",
+        "asset_id",
+        "ioc",
+        "hit.time"
+      ],
+      "algorithm": "同实际基础设施、独立核验战役及资产/完整群体范围内，核验的当前协同参数与已定谳历史按配置容限比较；群体ID及完整核验成员集合须一致；只说明受约束的参数相似",
+      "execution_contract": "parameter_relative_tolerance",
+      "material_families": [
+        "history",
+        "campaign_and_stage_proofs"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "history",
+          "status": "recoverable",
+          "reason": "平台事件库已有真实历史记录",
+          "next_step": "有界检索全部匹配历史；补端点与DNS应答IOC绑定，声明覆盖范围"
+        },
+        {
+          "layer": "fact",
+          "input": "campaign_and_stage_proofs",
+          "status": "unavailable",
+          "reason": "没有同战役、CurrentStage及完整协同参数来源证明",
+          "next_step": "接关联活动证明；不得把同资产或模型标签当战役证明"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_HIST_EXERCISE",
+      "kind": "fact",
+      "name": "登记演练平台命中",
+      "original_fields": [
+        "verified_adjudication",
+        "history_snapshot",
+        "asset_id",
+        "ioc",
+        "hit.time"
+      ],
+      "algorithm": "资产/域名属登记钓鱼演练或测试平台（留验证记录）；classification_effect: type=PH, effective_score_cap=34, status=candidate",
+      "execution_contract": "真实演练登记ID、AssetID/域名/目标/角色/TaskType、有效起止和来源；与当前活动匹配；旧PH分数封顶不是本任务概率公式。",
+      "material_families": [
+        "authorization_records"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "authorization_records",
+          "status": "unavailable",
+          "reason": "evidence_sources/evidence_inputs无记录，流量tasks为0；没有授权扫描或演练资料",
+          "next_step": "接实际授权工单、扫描计划、演练登记，包含主体、目标、端口和有效期"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_IOC_NOVELTY",
+      "kind": "fact",
+      "name": "IOC 平台首现",
+      "original_fields": [
+        "verified_adjudication",
+        "history_snapshot",
+        "asset_id",
+        "ioc",
+        "hit.time"
+      ],
+      "algorithm": "历史库无记录；与 F_HIST_ASSET_IOC_RECURRENCE 互斥",
+      "execution_contract": "类型化IOC、完整可追溯历史检索、LookbackStart/AsOf与0匹配；历史达到上限/超时不能输出首现；审核状态不作过滤。",
+      "material_families": [
+        "history"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "history",
+          "status": "recoverable",
+          "reason": "平台事件库已有真实历史记录",
+          "next_step": "有界检索全部匹配历史；补端点与DNS应答IOC绑定，声明覆盖范围"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_EXCL_SCAN_TASK",
+      "kind": "fact",
+      "name": "已核验扫描任务",
+      "original_fields": [
+        "approved_task_id",
+        "verified_scanner",
+        "target_range",
+        "time_window"
+      ],
+      "algorithm": "核验登记角色/任务与当前活动匹配，不由模型推断",
+      "execution_contract": "实际任务ID、scanner主体、目标集合、端口/协议、授权有效时段；与本次通信逐项匹配；不能由模型猜授权。",
+      "material_families": [
+        "authorization_records"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "authorization_records",
+          "status": "unavailable",
+          "reason": "evidence_sources/evidence_inputs无记录，流量tasks为0；没有授权扫描或演练资料",
+          "next_step": "接实际授权工单、扫描计划、演练登记，包含主体、目标、端口和有效期"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "F_EXCL_INFRA_ROLE",
+      "kind": "fact",
+      "name": "已核验基础服务",
+      "original_fields": [
+        "verified_role",
+        "verified_matching_task"
+      ],
+      "algorithm": "核验登记角色/任务与当前活动匹配，不由模型推断",
+      "execution_contract": "实际资产业务角色、匹配任务、服务/目标/协议及有效时间；角色命中只提供业务解释，不能自动排除所有恶意。",
+      "material_families": [
+        "authorization_records"
+      ],
+      "baseline_supply": [
+        {
+          "layer": "fact",
+          "input": "authorization_records",
+          "status": "unavailable",
+          "reason": "evidence_sources/evidence_inputs无记录，流量tasks为0；没有授权扫描或演练资料",
+          "next_step": "接实际授权工单、扫描计划、演练登记，包含主体、目标、端口和有效期"
+        }
+      ],
+      "current_reader": "traffic/internal/service/evidence_report_input.go → SnapshotEvidenceInput → report/history adapter → evidence.Engine",
+      "storage": "traffic_event_hits(raw_json)+固定快照；traffic_aggregation_records(evidence_inputs/evidence_sources)；events历史只读；现有PCAP/交换报文",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "S01/",
+      "kind": "semantic",
+      "name": "可读协议、可信方向；strong须同事务双向语义对应；不证明执行成功",
+      "target": "c2.command_intent",
+      "original_fields": [
+        "protocol_request",
+        "direction"
+      ],
+      "required_positive_facts": {
+        "all": null,
+        "any": null
+      },
+      "baseline_supply": [
+        {
+          "layer": "semantic",
+          "input": "protocol_request",
+          "status": "unavailable",
+          "reason": "本批没有可供命令/利用意图解释的HTTP或Stratum请求；SSH标识不是命令",
+          "next_step": "取得可读应用请求，或扩展协议适配后保持原始含义"
+        },
+        {
+          "layer": "semantic",
+          "input": "direction",
+          "status": "recoverable",
+          "reason": "已绑定资产与真实源/目的地址可确定相对于资产的报文方向",
+          "next_step": "生成绑定事务的入/出站方向；不推断攻击发起方"
+        }
+      ],
+      "current_reader": "evidence_semantic_input.go → prepareReportSemantics → SemanticEngine.Plan/Evaluate → 引用/逐字摘录核验",
+      "storage": "同一次固定快照读取+已有目录/历史；semantic_materials、semantic_model_input、semantic_result、semantic_diagnostics",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "S02/",
+      "kind": "semantic",
+      "name": "同事务真实请求应答；排除文档与日志回显",
+      "target": "c2.command_exchange",
+      "original_fields": [
+        "protocol_request",
+        "protocol_response",
+        "pair"
+      ],
+      "required_positive_facts": {
+        "all": null,
+        "any": null
+      },
+      "baseline_supply": [
+        {
+          "layer": "semantic",
+          "input": "protocol_request",
+          "status": "unavailable",
+          "reason": "本批没有可供命令/利用意图解释的HTTP或Stratum请求；SSH标识不是命令",
+          "next_step": "取得可读应用请求，或扩展协议适配后保持原始含义"
+        },
+        {
+          "layer": "semantic",
+          "input": "protocol_response",
+          "status": "unavailable",
+          "reason": "没有与上述请求绑定的可读应用应答",
+          "next_step": "取得同事务响应并验证关联"
+        },
+        {
+          "layer": "semantic",
+          "input": "pair",
+          "status": "partial",
+          "reason": "exchange有两侧报文，但不是已核验同事务应用请求应答",
+          "next_step": "先重组核验应用消息与序号/事务ID，不能把ACK当业务应答"
+        }
+      ],
+      "current_reader": "evidence_semantic_input.go → prepareReportSemantics → SemanticEngine.Plan/Evaluate → 引用/逐字摘录核验",
+      "storage": "同一次固定快照读取+已有目录/历史；semantic_materials、semantic_model_input、semantic_result、semantic_diagnostics",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "S03/",
+      "kind": "semantic",
+      "name": "重复端点事实及实际UA；浏览器声明不足",
+      "target": "c2.ua_behavior_conflict",
+      "original_fields": [
+        "ua",
+        "protocol_request"
+      ],
+      "required_positive_facts": {
+        "all": [
+          "F_HTTP_ENDPOINT_REPEAT"
+        ],
+        "any": null
+      },
+      "baseline_supply": [
+        {
+          "layer": "semantic",
+          "input": "ua",
+          "status": "unavailable",
+          "reason": "没有HTTP UA明文；SNI不是UA",
+          "next_step": "接实际HTTP请求字段"
+        },
+        {
+          "layer": "semantic",
+          "input": "protocol_request",
+          "status": "unavailable",
+          "reason": "本批没有可供命令/利用意图解释的HTTP或Stratum请求；SSH标识不是命令",
+          "next_step": "取得可读应用请求，或扩展协议适配后保持原始含义"
+        }
+      ],
+      "current_reader": "evidence_semantic_input.go → prepareReportSemantics → SemanticEngine.Plan/Evaluate → 引用/逐字摘录核验",
+      "storage": "同一次固定快照读取+已有目录/历史；semantic_materials、semantic_model_input、semantic_result、semantic_diagnostics",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "S04/",
+      "kind": "semantic",
+      "name": "编码标签事实及代码验证解码链；考虑追踪token",
+      "target": "c2.dns_encoded_intent",
+      "original_fields": [
+        "domain",
+        "decode",
+        "decoded_payload"
+      ],
+      "required_positive_facts": {
+        "all": [
+          "F_DNS_ENCODED_LABEL"
+        ],
+        "any": null
+      },
+      "baseline_supply": [
+        {
+          "layer": "semantic",
+          "input": "domain",
+          "status": "recoverable",
+          "reason": "已保存9条DNS查询名",
+          "next_step": "使用真实问题字段，不把IP情报描述域名当查询名"
+        },
+        {
+          "layer": "semantic",
+          "input": "decode",
+          "status": "unavailable",
+          "reason": "本批未得到符合语义契约的实际编码链，TLS解密不属于base64解码",
+          "next_step": "仅对真实编码字段验证解码链，不能伪造"
+        },
+        {
+          "layer": "semantic",
+          "input": "decoded_payload",
+          "status": "unavailable",
+          "reason": "没有可核验解码链对应明文",
+          "next_step": "由真实编码链产生并保存关联"
+        }
+      ],
+      "current_reader": "evidence_semantic_input.go → prepareReportSemantics → SemanticEngine.Plan/Evaluate → 引用/逐字摘录核验",
+      "storage": "同一次固定快照读取+已有目录/历史；semantic_materials、semantic_model_input、semantic_result、semantic_diagnostics",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "S05/",
+      "kind": "semantic",
+      "name": "页面正文、Host、核验品牌授权域；strong须明确仿冒依据",
+      "target": "phishing.deception",
+      "original_fields": [
+        "page",
+        "host",
+        "brand_authorization"
+      ],
+      "required_positive_facts": {
+        "all": null,
+        "any": null
+      },
+      "baseline_supply": [
+        {
+          "layer": "semantic",
+          "input": "page",
+          "status": "unavailable",
+          "reason": "没有页面正文",
+          "next_step": "接实际页面或HTTP响应明文"
+        },
+        {
+          "layer": "semantic",
+          "input": "host",
+          "status": "partial",
+          "reason": "DNS名及SNI存在，但不是HTTP Host字段",
+          "next_step": "保留各自协议来源；取得HTTP后再生成host材料"
+        },
+        {
+          "layer": "semantic",
+          "input": "brand_authorization",
+          "status": "unavailable",
+          "reason": "没有真实授权域目录",
+          "next_step": "接品牌授权资料"
+        }
+      ],
+      "current_reader": "evidence_semantic_input.go → prepareReportSemantics → SemanticEngine.Plan/Evaluate → 引用/逐字摘录核验",
+      "storage": "同一次固定快照读取+已有目录/历史；semantic_materials、semantic_model_input、semantic_result、semantic_diagnostics",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "S06/",
+      "kind": "semantic",
+      "name": "同请求字段名、方法、目的及行动事实；只解释收集意图",
+      "target": "phishing.credential_action",
+      "original_fields": [
+        "credential_fields",
+        "protocol_request"
+      ],
+      "required_positive_facts": {
+        "all": null,
+        "any": [
+          "F_CRED_POST_STRUCTURE",
+          "F_FORM_CROSSSITE",
+          "F_REDIRECT_CHAIN"
+        ]
+      },
+      "baseline_supply": [
+        {
+          "layer": "semantic",
+          "input": "credential_fields",
+          "status": "unavailable",
+          "reason": "没有当前请求中的凭据字段明文",
+          "next_step": "取得完整请求；情报说钓鱼不能替代字段"
+        },
+        {
+          "layer": "semantic",
+          "input": "protocol_request",
+          "status": "unavailable",
+          "reason": "本批没有可供命令/利用意图解释的HTTP或Stratum请求；SSH标识不是命令",
+          "next_step": "取得可读应用请求，或扩展协议适配后保持原始含义"
+        }
+      ],
+      "current_reader": "evidence_semantic_input.go → prepareReportSemantics → SemanticEngine.Plan/Evaluate → 引用/逐字摘录核验",
+      "storage": "同一次固定快照读取+已有目录/历史；semantic_materials、semantic_model_input、semantic_result、semantic_diagnostics",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "S07/",
+      "kind": "semantic",
+      "name": "完整请求、可信方向与体量、内容分类依据；不证明送达",
+      "target": "exfil.sensitive_upload",
+      "original_fields": [
+        "protocol_request",
+        "direction",
+        "volume",
+        "content_classification"
+      ],
+      "required_positive_facts": {
+        "all": null,
+        "any": null
+      },
+      "baseline_supply": [
+        {
+          "layer": "semantic",
+          "input": "protocol_request",
+          "status": "unavailable",
+          "reason": "本批没有可供命令/利用意图解释的HTTP或Stratum请求；SSH标识不是命令",
+          "next_step": "取得可读应用请求，或扩展协议适配后保持原始含义"
+        },
+        {
+          "layer": "semantic",
+          "input": "direction",
+          "status": "recoverable",
+          "reason": "已绑定资产与真实源/目的地址可确定相对于资产的报文方向",
+          "next_step": "生成绑定事务的入/出站方向；不推断攻击发起方"
+        },
+        {
+          "layer": "semantic",
+          "input": "volume",
+          "status": "partial",
+          "reason": "可以计算已保存报文载荷长度，不能证明整个上传事务体量",
+          "next_step": "区分观察量、累计计数与核验事务字节"
+        },
+        {
+          "layer": "semantic",
+          "input": "content_classification",
+          "status": "unavailable",
+          "reason": "没有实际上传内容及敏感分类来源，当前适配不自动生产",
+          "next_step": "接内容分类依据与事务绑定"
+        }
+      ],
+      "current_reader": "evidence_semantic_input.go → prepareReportSemantics → SemanticEngine.Plan/Evaluate → 引用/逐字摘录核验",
+      "storage": "同一次固定快照读取+已有目录/历史；semantic_materials、semantic_model_input、semantic_result、semantic_diagnostics",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "S08/",
+      "kind": "semantic",
+      "name": "至少两个可靠关联事务、块序号及可信体量；禁止拼接无关命中",
+      "target": "exfil.chunk_sequence",
+      "original_fields": [
+        "chunk",
+        "volume",
+        "transfer_join"
+      ],
+      "required_positive_facts": {
+        "all": null,
+        "any": null
+      },
+      "baseline_supply": [
+        {
+          "layer": "semantic",
+          "input": "chunk",
+          "status": "unavailable",
+          "reason": "没有可核验的分块上传字段、块序号与事务体量",
+          "next_step": "取得明文请求并解析真实分块协议"
+        },
+        {
+          "layer": "semantic",
+          "input": "volume",
+          "status": "partial",
+          "reason": "可以计算已保存报文载荷长度，不能证明整个上传事务体量",
+          "next_step": "区分观察量、累计计数与核验事务字节"
+        },
+        {
+          "layer": "semantic",
+          "input": "transfer_join",
+          "status": "unavailable",
+          "reason": "没有跨块/事务的真实传输关联标识",
+          "next_step": "取得分块ID与关联证据；当前适配未生产"
+        }
+      ],
+      "current_reader": "evidence_semantic_input.go → prepareReportSemantics → SemanticEngine.Plan/Evaluate → 引用/逐字摘录核验",
+      "storage": "同一次固定快照读取+已有目录/历史；semantic_materials、semantic_model_input、semantic_result、semantic_diagnostics",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "S09/",
+      "kind": "semantic",
+      "name": "已解析请求载荷、方法、目标协议及可信方向；不证明利用成功",
+      "target": "exploit.payload_intent",
+      "original_fields": [
+        "protocol_request",
+        "parsed_payload",
+        "direction"
+      ],
+      "required_positive_facts": {
+        "all": null,
+        "any": null
+      },
+      "baseline_supply": [
+        {
+          "layer": "semantic",
+          "input": "protocol_request",
+          "status": "unavailable",
+          "reason": "本批没有可供命令/利用意图解释的HTTP或Stratum请求；SSH标识不是命令",
+          "next_step": "取得可读应用请求，或扩展协议适配后保持原始含义"
+        },
+        {
+          "layer": "semantic",
+          "input": "parsed_payload",
+          "status": "unavailable",
+          "reason": "没有可读请求正文，握手/密文不能当利用载荷",
+          "next_step": "取得并解析明文请求正文"
+        },
+        {
+          "layer": "semantic",
+          "input": "direction",
+          "status": "recoverable",
+          "reason": "已绑定资产与真实源/目的地址可确定相对于资产的报文方向",
+          "next_step": "生成绑定事务的入/出站方向；不推断攻击发起方"
+        }
+      ],
+      "current_reader": "evidence_semantic_input.go → prepareReportSemantics → SemanticEngine.Plan/Evaluate → 引用/逐字摘录核验",
+      "storage": "同一次固定快照读取+已有目录/历史；semantic_materials、semantic_model_input、semantic_result、semantic_diagnostics",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "S10/",
+      "kind": "semantic",
+      "name": "同事务真实双向应答；HTTP200不证明执行",
+      "target": "protocol.response_meaning",
+      "original_fields": [
+        "protocol_request",
+        "protocol_response",
+        "pair"
+      ],
+      "required_positive_facts": {
+        "all": null,
+        "any": null
+      },
+      "baseline_supply": [
+        {
+          "layer": "semantic",
+          "input": "protocol_request",
+          "status": "unavailable",
+          "reason": "本批没有可供命令/利用意图解释的HTTP或Stratum请求；SSH标识不是命令",
+          "next_step": "取得可读应用请求，或扩展协议适配后保持原始含义"
+        },
+        {
+          "layer": "semantic",
+          "input": "protocol_response",
+          "status": "unavailable",
+          "reason": "没有与上述请求绑定的可读应用应答",
+          "next_step": "取得同事务响应并验证关联"
+        },
+        {
+          "layer": "semantic",
+          "input": "pair",
+          "status": "partial",
+          "reason": "exchange有两侧报文，但不是已核验同事务应用请求应答",
+          "next_step": "先重组核验应用消息与序号/事务ID，不能把ACK当业务应答"
+        }
+      ],
+      "current_reader": "evidence_semantic_input.go → prepareReportSemantics → SemanticEngine.Plan/Evaluate → 引用/逐字摘录核验",
+      "storage": "同一次固定快照读取+已有目录/历史；semantic_materials、semantic_model_input、semantic_result、semantic_diagnostics",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "S11/",
+      "kind": "semantic",
+      "name": "实际Stratum方法、参数和应答；不重复协议事实",
+      "target": "mining.protocol_intent",
+      "original_fields": [
+        "stratum_request",
+        "stratum_response",
+        "pair"
+      ],
+      "required_positive_facts": {
+        "all": null,
+        "any": null
+      },
+      "baseline_supply": [
+        {
+          "layer": "semantic",
+          "input": "stratum_request",
+          "status": "unavailable",
+          "reason": "未发现真实mining方法和参数",
+          "next_step": "有真实Stratum时解析；不从443端口猜挖矿"
+        },
+        {
+          "layer": "semantic",
+          "input": "stratum_response",
+          "status": "unavailable",
+          "reason": "未发现可关联Stratum应答",
+          "next_step": "保留实际请求/响应ID关联"
+        },
+        {
+          "layer": "semantic",
+          "input": "pair",
+          "status": "partial",
+          "reason": "exchange有两侧报文，但不是已核验同事务应用请求应答",
+          "next_step": "先重组核验应用消息与序号/事务ID，不能把ACK当业务应答"
+        }
+      ],
+      "current_reader": "evidence_semantic_input.go → prepareReportSemantics → SemanticEngine.Plan/Evaluate → 引用/逐字摘录核验",
+      "storage": "同一次固定快照读取+已有目录/历史；semantic_materials、semantic_model_input、semantic_result、semantic_diagnostics",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "S12/dga_lexical",
+      "kind": "semantic",
+      "name": "原始域名及词形上下文；随机串不自动等于DGA",
+      "target": "c2.domain_lexical",
+      "original_fields": [
+        "domain",
+        "lexical_context"
+      ],
+      "required_positive_facts": {
+        "all": null,
+        "any": null
+      },
+      "baseline_supply": [
+        {
+          "layer": "semantic",
+          "input": "domain",
+          "status": "recoverable",
+          "reason": "已保存9条DNS查询名",
+          "next_step": "使用真实问题字段，不把IP情报描述域名当查询名"
+        },
+        {
+          "layer": "semantic",
+          "input": "lexical_context",
+          "status": "recoverable",
+          "reason": "原始域名及其查询来源可追溯",
+          "next_step": "供词形语义解释；不冒充统计语料"
+        }
+      ],
+      "current_reader": "evidence_semantic_input.go → prepareReportSemantics → SemanticEngine.Plan/Evaluate → 引用/逐字摘录核验",
+      "storage": "同一次固定快照读取+已有目录/历史；semantic_materials、semantic_model_input、semantic_result、semantic_diagnostics",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "S12/brand_semantic_impostor",
+      "kind": "semantic",
+      "name": "品牌、实际授权域与仿冒关系；仅品牌词最多weak",
+      "target": "phishing.deception",
+      "original_fields": [
+        "brand",
+        "host",
+        "brand_authorization"
+      ],
+      "required_positive_facts": {
+        "all": null,
+        "any": null
+      },
+      "baseline_supply": [
+        {
+          "layer": "semantic",
+          "input": "brand",
+          "status": "unavailable",
+          "reason": "没有已核验页面品牌或品牌声明",
+          "next_step": "取得实际页面并绑定品牌目录"
+        },
+        {
+          "layer": "semantic",
+          "input": "host",
+          "status": "partial",
+          "reason": "DNS名及SNI存在，但不是HTTP Host字段",
+          "next_step": "保留各自协议来源；取得HTTP后再生成host材料"
+        },
+        {
+          "layer": "semantic",
+          "input": "brand_authorization",
+          "status": "unavailable",
+          "reason": "没有真实授权域目录",
+          "next_step": "接品牌授权资料"
+        }
+      ],
+      "current_reader": "evidence_semantic_input.go → prepareReportSemantics → SemanticEngine.Plan/Evaluate → 引用/逐字摘录核验",
+      "storage": "同一次固定快照读取+已有目录/历史；semantic_materials、semantic_model_input、semantic_result、semantic_diagnostics",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "S13/command",
+      "kind": "semantic",
+      "name": "代码验证解码链及实际命令上下文；strong遵循S01",
+      "target": "payload.decoded_intent",
+      "original_fields": [
+        "decode",
+        "decoded_payload",
+        "protocol_request",
+        "direction"
+      ],
+      "required_positive_facts": {
+        "all": null,
+        "any": null
+      },
+      "baseline_supply": [
+        {
+          "layer": "semantic",
+          "input": "decode",
+          "status": "unavailable",
+          "reason": "本批未得到符合语义契约的实际编码链，TLS解密不属于base64解码",
+          "next_step": "仅对真实编码字段验证解码链，不能伪造"
+        },
+        {
+          "layer": "semantic",
+          "input": "decoded_payload",
+          "status": "unavailable",
+          "reason": "没有可核验解码链对应明文",
+          "next_step": "由真实编码链产生并保存关联"
+        },
+        {
+          "layer": "semantic",
+          "input": "protocol_request",
+          "status": "unavailable",
+          "reason": "本批没有可供命令/利用意图解释的HTTP或Stratum请求；SSH标识不是命令",
+          "next_step": "取得可读应用请求，或扩展协议适配后保持原始含义"
+        },
+        {
+          "layer": "semantic",
+          "input": "direction",
+          "status": "recoverable",
+          "reason": "已绑定资产与真实源/目的地址可确定相对于资产的报文方向",
+          "next_step": "生成绑定事务的入/出站方向；不推断攻击发起方"
+        }
+      ],
+      "current_reader": "evidence_semantic_input.go → prepareReportSemantics → SemanticEngine.Plan/Evaluate → 引用/逐字摘录核验",
+      "storage": "同一次固定快照读取+已有目录/历史；semantic_materials、semantic_model_input、semantic_result、semantic_diagnostics",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "S13/other",
+      "kind": "semantic",
+      "name": "代码验证解码链及独立操作上下文；解码成功不等于恶意",
+      "target": "payload.decoded_intent",
+      "original_fields": [
+        "decode",
+        "decoded_payload",
+        "operation_context"
+      ],
+      "required_positive_facts": {
+        "all": null,
+        "any": null
+      },
+      "baseline_supply": [
+        {
+          "layer": "semantic",
+          "input": "decode",
+          "status": "unavailable",
+          "reason": "本批未得到符合语义契约的实际编码链，TLS解密不属于base64解码",
+          "next_step": "仅对真实编码字段验证解码链，不能伪造"
+        },
+        {
+          "layer": "semantic",
+          "input": "decoded_payload",
+          "status": "unavailable",
+          "reason": "没有可核验解码链对应明文",
+          "next_step": "由真实编码链产生并保存关联"
+        },
+        {
+          "layer": "semantic",
+          "input": "operation_context",
+          "status": "unavailable",
+          "reason": "没有满足绑定的解码后操作上下文",
+          "next_step": "从同条实际请求或操作日志取得"
+        }
+      ],
+      "current_reader": "evidence_semantic_input.go → prepareReportSemantics → SemanticEngine.Plan/Evaluate → 引用/逐字摘录核验",
+      "storage": "同一次固定快照读取+已有目录/历史；semantic_materials、semantic_model_input、semantic_result、semantic_diagnostics",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "S14/",
+      "kind": "semantic",
+      "name": "实际流量、事实规则、资产角色及任务上下文；仅记录异议",
+      "target": "review.benign_alternative",
+      "original_fields": [
+        "protocol_request",
+        "asset_role",
+        "task_context"
+      ],
+      "required_positive_facts": {
+        "all": null,
+        "any": null
+      },
+      "baseline_supply": [
+        {
+          "layer": "semantic",
+          "input": "protocol_request",
+          "status": "unavailable",
+          "reason": "本批没有可供命令/利用意图解释的HTTP或Stratum请求；SSH标识不是命令",
+          "next_step": "取得可读应用请求，或扩展协议适配后保持原始含义"
+        },
+        {
+          "layer": "semantic",
+          "input": "asset_role",
+          "status": "partial",
+          "reason": "有资产登记，但asset_type=ip不代表业务角色；语义适配当前主要依赖授权角色",
+          "next_step": "接实际业务角色，不能由IP或备注自动证明"
+        },
+        {
+          "layer": "semantic",
+          "input": "task_context",
+          "status": "unavailable",
+          "reason": "没有授权任务资料",
+          "next_step": "接实际业务/授权任务"
+        }
+      ],
+      "current_reader": "evidence_semantic_input.go → prepareReportSemantics → SemanticEngine.Plan/Evaluate → 引用/逐字摘录核验",
+      "storage": "同一次固定快照读取+已有目录/历史；semantic_materials、semantic_model_input、semantic_result、semantic_diagnostics",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "S15/",
+      "kind": "semantic",
+      "name": "接受的事实、可见范围及缺项；成功性须独立证据",
+      "target": "review.stage_and_gaps",
+      "original_fields": [
+        "visibility",
+        "gaps"
+      ],
+      "required_positive_facts": {
+        "all": null,
+        "any": null
+      },
+      "baseline_supply": [
+        {
+          "layer": "semantic",
+          "input": "visibility",
+          "status": "recoverable",
+          "reason": "快照成员、已读取/绑定数量与范围已保存",
+          "next_step": "明确告警快照而非全部通信"
+        },
+        {
+          "layer": "semantic",
+          "input": "gaps",
+          "status": "recoverable",
+          "reason": "规则结果包含具体reason_code",
+          "next_step": "按字段和规则整理缺项"
+        }
+      ],
+      "current_reader": "evidence_semantic_input.go → prepareReportSemantics → SemanticEngine.Plan/Evaluate → 引用/逐字摘录核验",
+      "storage": "同一次固定快照读取+已有目录/历史；semantic_materials、semantic_model_input、semantic_result、semantic_diagnostics",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "BT-S01/",
+      "kind": "semantic",
+      "name": "核验群体及协同硬事实；最多5资产；不替代硬门槛",
+      "target": "botnet.coordination",
+      "original_fields": [
+        "group_member"
+      ],
+      "required_positive_facts": {
+        "all": null,
+        "any": [
+          "F_TIME_COORDINATION",
+          "F_COORD_PATTERN_RECURRENCE",
+          "F_COORD_FANOUT",
+          "F_INFECTION_CHAIN"
+        ]
+      },
+      "baseline_supply": [
+        {
+          "layer": "semantic",
+          "input": "group_member",
+          "status": "unavailable",
+          "reason": "没有已核验群体成员和角色，本批只绑定一个资产",
+          "next_step": "取得真实多资产资料及明确分组"
+        }
+      ],
+      "current_reader": "evidence_semantic_input.go → prepareReportSemantics → SemanticEngine.Plan/Evaluate → 引用/逐字摘录核验",
+      "storage": "同一次固定快照读取+已有目录/历史；semantic_materials、semantic_model_input、semantic_result、semantic_diagnostics",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "SC01/",
+      "kind": "semantic",
+      "name": "核验角色、业务作息及实际时间分布；夜间服务器运行不自动异常",
+      "target": "c2.role_schedule_conflict",
+      "original_fields": [
+        "asset_role",
+        "business_schedule",
+        "time_distribution"
+      ],
+      "required_positive_facts": {
+        "all": null,
+        "any": null
+      },
+      "baseline_supply": [
+        {
+          "layer": "semantic",
+          "input": "asset_role",
+          "status": "partial",
+          "reason": "有资产登记，但asset_type=ip不代表业务角色；语义适配当前主要依赖授权角色",
+          "next_step": "接实际业务角色，不能由IP或备注自动证明"
+        },
+        {
+          "layer": "semantic",
+          "input": "business_schedule",
+          "status": "unavailable",
+          "reason": "没有业务作息资料，当前输入结构也未自动供给该材料",
+          "next_step": "接业务登记和明确作息材料适配"
+        },
+        {
+          "layer": "semantic",
+          "input": "time_distribution",
+          "status": "recoverable",
+          "reason": "141条真实命中含微秒时间",
+          "next_step": "按固定范围分桶；样本不足与未采集分开"
+        }
+      ],
+      "current_reader": "evidence_semantic_input.go → prepareReportSemantics → SemanticEngine.Plan/Evaluate → 引用/逐字摘录核验",
+      "storage": "同一次固定快照读取+已有目录/历史；semantic_materials、semantic_model_input、semantic_result、semantic_diagnostics",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "SC02/",
+      "kind": "semantic",
+      "name": "核验群体角色与实际行为摘要；供人工解释",
+      "target": "botnet.group_alternative",
+      "original_fields": [
+        "group_member"
+      ],
+      "required_positive_facts": {
+        "all": null,
+        "any": null
+      },
+      "baseline_supply": [
+        {
+          "layer": "semantic",
+          "input": "group_member",
+          "status": "unavailable",
+          "reason": "没有已核验群体成员和角色，本批只绑定一个资产",
+          "next_step": "取得真实多资产资料及明确分组"
+        }
+      ],
+      "current_reader": "evidence_semantic_input.go → prepareReportSemantics → SemanticEngine.Plan/Evaluate → 引用/逐字摘录核验",
+      "storage": "同一次固定快照读取+已有目录/历史；semantic_materials、semantic_model_input、semantic_result、semantic_diagnostics",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "SC03/",
+      "kind": "semantic",
+      "name": "实际品牌、字段级引用及核验授权背景；不替代欺骗或行动门槛",
+      "target": "phishing.brand_field_conflict",
+      "original_fields": [
+        "brand",
+        "credential_fields",
+        "brand_authorization"
+      ],
+      "required_positive_facts": {
+        "all": null,
+        "any": null
+      },
+      "baseline_supply": [
+        {
+          "layer": "semantic",
+          "input": "brand",
+          "status": "unavailable",
+          "reason": "没有已核验页面品牌或品牌声明",
+          "next_step": "取得实际页面并绑定品牌目录"
+        },
+        {
+          "layer": "semantic",
+          "input": "credential_fields",
+          "status": "unavailable",
+          "reason": "没有当前请求中的凭据字段明文",
+          "next_step": "取得完整请求；情报说钓鱼不能替代字段"
+        },
+        {
+          "layer": "semantic",
+          "input": "brand_authorization",
+          "status": "unavailable",
+          "reason": "没有真实授权域目录",
+          "next_step": "接品牌授权资料"
+        }
+      ],
+      "current_reader": "evidence_semantic_input.go → prepareReportSemantics → SemanticEngine.Plan/Evaluate → 引用/逐字摘录核验",
+      "storage": "同一次固定快照读取+已有目录/历史；semantic_materials、semantic_model_input、semantic_result、semantic_diagnostics",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "R06/",
+      "kind": "semantic",
+      "name": "引用历史活动与当前模式，解释同IOC/资产关联；相似不自动等于同战役",
+      "target": "history.activity_association",
+      "original_fields": [
+        "history",
+        "current_pattern"
+      ],
+      "required_positive_facts": {
+        "all": null,
+        "any": null
+      },
+      "baseline_supply": [
+        {
+          "layer": "semantic",
+          "input": "history",
+          "status": "recoverable",
+          "reason": "已有平台历史事件",
+          "next_step": "全部匹配历史参与，不按审核状态筛选"
+        },
+        {
+          "layer": "semantic",
+          "input": "current_pattern",
+          "status": "recoverable",
+          "reason": "当前真实端点、命中时间和规则结果已存在",
+          "next_step": "加入端口分布/DNS问答等基础观测，不只拼接missing结果"
+        }
+      ],
+      "current_reader": "evidence_semantic_input.go → prepareReportSemantics → SemanticEngine.Plan/Evaluate → 引用/逐字摘录核验",
+      "storage": "同一次固定快照读取+已有目录/历史；semantic_materials、semantic_model_input、semantic_result、semantic_diagnostics",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    },
+    {
+      "id": "R07/",
+      "kind": "semantic",
+      "name": "使用全部关联历史比较业务解释与异常解释，不按审核状态筛选，不以相似认定误报",
+      "target": "history.alternative_explanation",
+      "original_fields": [
+        "history",
+        "current_pattern"
+      ],
+      "required_positive_facts": {
+        "all": null,
+        "any": null
+      },
+      "baseline_supply": [
+        {
+          "layer": "semantic",
+          "input": "history",
+          "status": "recoverable",
+          "reason": "已有平台历史事件",
+          "next_step": "全部匹配历史参与，不按审核状态筛选"
+        },
+        {
+          "layer": "semantic",
+          "input": "current_pattern",
+          "status": "recoverable",
+          "reason": "当前真实端点、命中时间和规则结果已存在",
+          "next_step": "加入端口分布/DNS问答等基础观测，不只拼接missing结果"
+        }
+      ],
+      "current_reader": "evidence_semantic_input.go → prepareReportSemantics → SemanticEngine.Plan/Evaluate → 引用/逐字摘录核验",
+      "storage": "同一次固定快照读取+已有目录/历史；semantic_materials、semantic_model_input、semantic_result、semantic_diagnostics",
+      "execution": [],
+      "actual_status": "pending_real_report"
+    }
+  ]
+}

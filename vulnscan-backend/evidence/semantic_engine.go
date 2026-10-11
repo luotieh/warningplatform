@@ -54,6 +54,7 @@ func (e *SemanticEngine) Plan(ctx context.Context, r SemanticRequest) (SemanticP
 	}
 	for _, spec := range specs {
 		for _, subject := range r.Subjects {
+			subject.ReportHistory = e.config.ReportHistory
 			subject.InputMode = semanticMode(r.InputMode)
 			if err := ctx.Err(); err != nil {
 				return p, err
@@ -134,6 +135,59 @@ func (e *SemanticEngine) Plan(ctx context.Context, r SemanticRequest) (SemanticP
 }
 
 func (e *SemanticEngine) encodePlan(r SemanticRequest, tasks []SemanticTask) (string, int, int, error) {
+	if e.config.CompactProvenance {
+		projected := make([]map[string]any, 0, len(tasks))
+		for _, t := range tasks {
+			facts := []map[string]any{}
+			for _, f := range t.Facts {
+				v := map[string]any{"id": f.ID, "status": f.Status, "source_count": len(f.SourceIDs)}
+				for _, s := range r.Subjects {
+					if s.ID == t.SubjectID {
+						for _, original := range s.Facts {
+							if string(original.FactID) == f.ID {
+								v["reason"] = original.ReasonCode
+								if original.Status != Missing {
+									v["measurements"] = original.Measurements
+									v["parameters"] = original.Parameters
+								}
+							}
+						}
+					}
+				}
+				facts = append(facts, v)
+			}
+			materials := append([]DeliveredMaterial(nil), t.Materials...)
+			for n := range materials {
+				if len(materials[n].SourceIDs) > 3 {
+					materials[n].SourceIDs = materials[n].SourceIDs[:3]
+				}
+			}
+			deliveredSlot := t.Slot
+			if e.config.ReportHistory {
+				if deliveredSlot.Key.ID == "R06" {
+					deliveredSlot.Key.Target = "history.activity_association"
+					deliveredSlot.Prerequisite = "实际历史与当前模式，全部审核状态；不认定同战役"
+				}
+				if deliveredSlot.Key.ID == "R07" {
+					deliveredSlot.Key.Target = "history.alternative_explanation"
+					deliveredSlot.Prerequisite = "实际历史活动的替代解释，不自动认定误报"
+				}
+			}
+			projected = append(projected, map[string]any{"task_id": t.ID, "slot": deliveredSlot, "scope": t.Scope, "window": t.Window, "max_strength": t.MaxStrength, "input_mode": t.InputMode, "materials": materials, "facts": facts, "non_additive_with": t.NonAdditiveWith})
+		}
+		data, err := json.Marshal(map[string]any{"event_id": r.EventID, "snapshot_version": r.SnapshotVersion, "tasks": projected, "provenance_note": "完整来源存于固定快照证据账本；每项保留全部指标、状态、原因及材料引用。历史只解释活动关联，不继承历史模型结论或认定同战役。"})
+		if err != nil {
+			return "", 0, 0, err
+		}
+		tokens := 0
+		if e.config.CountTokens != nil {
+			tokens, err = e.config.CountTokens(semanticSystemPrompt, string(data))
+			if err != nil {
+				return "", 0, 0, err
+			}
+		}
+		return string(data), len(semanticSystemPrompt) + 1 + len(data), tokens, nil
+	}
 	data, err := json.Marshal(struct {
 		EventID         string         `json:"event_id"`
 		SnapshotVersion int64          `json:"snapshot_version"`

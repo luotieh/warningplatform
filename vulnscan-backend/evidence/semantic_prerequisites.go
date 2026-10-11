@@ -269,10 +269,14 @@ func resolveSemanticSlot(spec slotSpec, s SemanticSubject, eventID string) (mate
 		}
 		events, adjudications := map[string]bool{}, map[string]bool{}
 		for _, m := range history {
-			if m.EventID == "" || m.EventID == eventID || m.AdjudicationID == "" || events[m.EventID] || adjudications[m.AdjudicationID] || (m.AdjudicationSource != "human" && m.AdjudicationSource != "host_evidence" && m.AdjudicationSource != "authoritative_external") || (spec.Key.ID == "R07" && !m.FalsePositive) {
+			if !s.ReportHistory && (m.EventID == "" || m.EventID == eventID || events[m.EventID] || adjudications[m.AdjudicationID] || m.AdjudicationID == "" || (m.AdjudicationSource != "human" && m.AdjudicationSource != "host_evidence" && m.AdjudicationSource != "authoritative_external") || (spec.Key.ID == "R07" && !m.FalsePositive)) {
 				return nil, nil, "", "invalid_independent_adjudication", nil
 			}
-			events[m.EventID], adjudications[m.AdjudicationID] = true, true
+			if m.EventID == "" || m.EventID == eventID || events[m.EventID] {
+				return nil, nil, "", "invalid_history_reference", nil
+			}
+			events[m.EventID] = true
+			adjudications[m.AdjudicationID] = true
 		}
 	}
 	if spec.Key.ID == "S01" || (spec.Key.ID == "S13" && spec.Key.Subtype == "command") {
@@ -313,7 +317,7 @@ func resolveSemanticSlot(spec slotSpec, s SemanticSubject, eventID string) (mate
 	// Actual parsed fields and authoritative records must be complete for these tasks.
 	for _, m := range materials {
 		if !m.Provenance.Complete || m.Truncated {
-			if spec.Key.ID == "S07" || spec.Key.ID == "S08" || spec.Key.ID == "S06" || spec.Key.ID == "R06" || spec.Key.ID == "R07" {
+			if spec.Key.ID == "S07" || spec.Key.ID == "S08" || spec.Key.ID == "S06" {
 				return nil, nil, "", "incomplete_required_material", nil
 			}
 			if !spec.ExplanationOnly {

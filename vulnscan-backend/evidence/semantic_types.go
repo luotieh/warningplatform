@@ -80,6 +80,7 @@ type SemanticDecodeStep struct {
 // PropositionID is assigned by the adapter to one operation/transfer, not by the
 // model. Distinct operations must use distinct IDs, even within the same scope.
 type SemanticSubject struct {
+	ReportHistory bool               `json:"-"`
 	InputMode     SemanticInputMode  `json:"-"` // assigned from request by the engine
 	ID            string             `json:"id"`
 	PropositionID string             `json:"proposition_id"`
@@ -99,12 +100,14 @@ type SemanticRequest struct {
 }
 
 type SemanticConfig struct {
-	MaxTasks         int
-	MaxInputBytes    int // includes system prompt; bytes are NOT tokenizer tokens
-	MaxOutputBytes   int
-	MaxMaterialBytes int
-	MaxOutputTokens  int
-	Timeout          time.Duration
+	ReportHistory     bool
+	CompactProvenance bool
+	MaxTasks          int
+	MaxInputBytes     int // includes system prompt; bytes are NOT tokenizer tokens
+	MaxOutputBytes    int
+	MaxMaterialBytes  int
+	MaxOutputTokens   int
+	Timeout           time.Duration
 	// Optional actual tokenizer. Required when MaxInputTokens is configured.
 	CountTokens    func(system, user string) (int, error)
 	MaxInputTokens int

@@ -7,17 +7,19 @@ import (
 	"sort"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"vulnscan-backend/evidence"
 	"vulnscan-backend/traffic/internal/domain"
 )
 
-const reportEvidenceVersion = "evidence-report-1.0"
+const reportEvidenceVersion = "evidence-report-1.3"
+
+var ReportBuildRevision = "development"
 
 // ReportEvidence is built from complete engine outputs BEFORE model projection.
 // Source identities stay in the immutable journal, not in the model's prose.
 type ReportEvidence struct {
+	Unified        *evidence.UnifiedEvidence `json:"normalized,omitempty"`
 	ID             string                    `json:"id"`
 	Kind           string                    `json:"kind"`
 	Name           string                    `json:"name"`
@@ -36,6 +38,9 @@ type ReportEvidence struct {
 }
 
 type ReportEvidenceBundle struct {
+	Digest            evidence.EvidenceDigest      `json:"evidence_digest"`
+	Normalized        evidence.NormalizedEvidence  `json:"normalized_evidence"`
+	History           *ReportHistory               `json:"platform_history,omitempty"`
 	SnapshotVersion   int64                        `json:"snapshot_version"`
 	Watermark         int64                        `json:"watermark"`
 	RevisionWatermark int64                        `json:"revision_watermark"`
@@ -51,7 +56,7 @@ type ReportEvidenceBundle struct {
 	FactCoverage      []SnapshotFactCoverage       `json:"fact_coverage"`
 }
 
-func buildReportEvidence(event domain.Event, snap EvidenceSnapshot, f SnapshotFactEvaluation, sem ReportSemanticEvaluation) ReportEvidenceBundle {
+func buildReportEvidence(event domain.Event, snap EvidenceSnapshot, f SnapshotFactEvaluation, sem ReportSemanticEvaluation, history ...ReportHistory) ReportEvidenceBundle {
 	b := ReportEvidenceBundle{SnapshotVersion: snap.Version, FactStatus: f.Status, FactCounts: map[string]int{}, SemanticCounts: map[string]int{}, Entries: []ReportEvidence{}, SelectedIDs: []string{}, FactChecks: []evidence.Finding{}, SemanticChecks: []evidence.SemanticExecution{}}
 	b.FactCoverage = append([]SnapshotFactCoverage(nil), f.Manifest.FactCoverage...)
 	b.Watermark, b.RevisionWatermark, b.SourceEvents = snap.Watermark, snap.RevisionWatermark, append([]string(nil), snap.Sources...)
@@ -59,19 +64,32 @@ func buildReportEvidence(event domain.Event, snap EvidenceSnapshot, f SnapshotFa
 		e.ID = fmt.Sprintf("E%03d", len(b.Entries)+1)
 		b.Entries = append(b.Entries, e)
 	}
+	for _, e := range reportMaterialEvidence(f.Manifest.ReportObservations) {
+		add(e)
+	}
+	if len(history) > 0 {
+		b.History = &history[0]
+		for _, e := range reportDNSConnectionEvidence(f.Manifest.ReportObservations, b.History) {
+			add(e)
+		}
+
+	}
 	if snap.Version > 0 && f.Manifest.LoadedHits == snap.Count && snap.Count > 0 {
-		add(ReportEvidence{Kind: "observation", Name: "已保存告警命中", Status: "observed", Result: fmt.Sprintf("固定快照保存%d条告警命中；已加载%d条，已绑定%d条", snap.Count, f.Manifest.LoadedHits, f.Manifest.BoundHits), Source: "固定版本事件快照", Family: "snapshot_membership"})
+		add(ReportEvidence{Kind: "observation", Name: "已保存告警命中", Status: "observed", Result: fmt.Sprintf("固定快照保存%d条告警命中；已加载%d条，已绑定%d条", snap.Count, f.Manifest.LoadedHits, f.Manifest.BoundHits), Source: "固定版本事件快照", SourceIDs: []string{snapshotKey(snap.EventID, snap.Version)}, Family: "snapshot_membership"})
 	}
 	// Intel is attributed background, never upgraded to an independently verified
 	// malicious classification. Preserve its actual supplied fields and source.
+	intel := map[string]any{}
 	for _, key := range []string{"ioc", "ioc_evidence"} {
 		if v, ok := snap.Context[key]; ok && v != nil {
-			raw, _ := json.Marshal(boundedEvidenceValue(v, 0))
-			if string(raw) != "{}" && string(raw) != "null" {
-				add(ReportEvidence{Kind: "intelligence", Name: "已保存威胁情报背景", Status: "context", Result: semanticSummaryText(string(raw), 900), Source: "事件保存的情报字段（来源及置信度见记录）", Family: "ioc_intelligence"})
-			}
+			intel[key] = boundedEvidenceValue(v, 0)
 		}
 	}
+	if len(intel) > 0 {
+		raw, _ := json.Marshal(intel)
+		add(ReportEvidence{Kind: "intelligence", Name: "有来源的IOC情报背景", Status: "context", Result: string(raw), Source: "事件保存的IOC与情报来源；同源信息合并", Family: "ioc_intelligence"})
+	}
+
 	// Actual saved bytes are observations, not automatically a TLS version,
 	// command, malicious payload or verified session volume.
 	for n, sample := range snap.Evidence {
@@ -134,43 +152,67 @@ func buildReportEvidence(event domain.Event, snap EvidenceSnapshot, f SnapshotFa
 			add(ReportEvidence{Kind: "semantic", Name: reportSemanticName(finding.Slot), Status: finding.Judgement, Result: semanticSummaryText(finding.Explanation, 350), Source: "通过引用与强度校验的模型解释", Scope: finding.Scope, Window: &window, Semantic: &copy, SourceIDs: ids, Dependencies: dependencies, Family: "semantic:" + finding.PropositionID, RelatedFactIDs: finding.NonAdditiveWith})
 		}
 	}
-	// Observed facts first. Negative facts only when relevant to protocol/type;
-	// missing rules are in the appendix, never promoted to negative evidence.
-	candidates := append([]ReportEvidence(nil), b.Entries...)
-	score := func(e ReportEvidence) int {
-		if e.Kind == "fact" && e.Status == "observed" {
-			return 0
-		}
-		if e.Kind == "observation" {
-			return 1
-		}
-		if e.Kind == "intelligence" {
-			return 2
-		}
-		if e.Kind == "semantic" {
-			return 3
-		}
-		return 4
+	executions := []evidence.Execution{}
+	if f.Result != nil {
+		executions = f.Result.Executions
 	}
-	sort.SliceStable(candidates, func(i, j int) bool { return score(candidates[i]) < score(candidates[j]) })
-	budget := 0
-	for _, e := range candidates {
-		if e.Status == "not_observed" && !reportFactRelevant(e.FactID, event, snap) {
+	b.Normalized = evidence.Normalize(b.FactChecks, sem.Result, executions)
+	for k := range b.Normalized.Items {
+		u := &b.Normalized.Items[k]
+		if u.Reason != "no_execution_result" {
 			continue
 		}
-		raw, _ := json.Marshal(reportEvidencePromptEntry(e))
-		if len(b.SelectedIDs) >= 12 || budget+utf8.RuneCount(raw) > 6000 {
-			continue
+		if u.Kind == "fact" && f.Reason != "" {
+			u.Reason = f.Reason
 		}
-		b.SelectedIDs = append(b.SelectedIDs, e.ID)
-		budget += utf8.RuneCount(raw)
+		if u.Kind == "semantic" && sem.Reason != "" {
+			u.Reason = sem.Reason
+		}
 	}
+	for n := range b.Entries {
+		e := &b.Entries[n]
+		idx := -1
+		for k, u := range b.Normalized.Items {
+			if e.Kind == "fact" && u.Kind == "fact" && u.ID == evidence.UnifiedID("fact", string(e.FactID), e.Scope, e.Window, "") {
+				idx = k
+				break
+			}
+			if e.Semantic != nil && u.Kind == "semantic" && u.TaskID == e.Semantic.TaskID {
+				idx = k
+				break
+			}
+		}
+		if idx < 0 {
+			u := evidence.UnifiedEvidence{ID: evidence.UnifiedID(e.Kind, e.Family, e.Scope, e.Window, ""), Kind: e.Kind, RuleID: e.Family, Scope: e.Scope, Window: e.Window, Status: e.Status, Quality: "attributed", Role: "context", Interpretation: e.Result, SourceIDs: e.SourceIDs, Dependencies: e.Dependencies, Version: reportEvidenceVersion}
+			if e.Kind == "observation" {
+				u.Role = "observation"
+			}
+			b.Normalized.Items = append(b.Normalized.Items, u)
+			idx = len(b.Normalized.Items) - 1
+		}
+		b.Normalized.Items[idx].ReportID = e.ID
+		u := b.Normalized.Items[idx]
+		e.Unified = &u
+	}
+	b.Normalized.Recount()
+	entriesByID := map[string]ReportEvidence{}
+	for _, entry := range b.Entries {
+		entriesByID[entry.ID] = entry
+	}
+	b.Digest = evidence.Compress(b.Normalized, evidence.CompressionOptions{MaxItems: len(b.Entries), MaxRunes: 1 << 30,
+		Eligible: func(u evidence.UnifiedEvidence) bool {
+			e := entriesByID[u.ReportID]
+			return e.Status != "not_observed" || reportFactRelevant(e.FactID, event, snap)
+		},
+		Project: func(u evidence.UnifiedEvidence) any { return reportEvidencePromptEntry(entriesByID[u.ReportID]) },
+	})
+	b.SelectedIDs = b.Digest.SelectedIDs
 	b.SelectionOmitted = len(b.Entries) - len(b.SelectedIDs)
 	return b
 }
 
 func reportSemanticName(slot evidence.SlotKey) string {
-	names := map[string]string{"S01": "指令意图解释", "S02": "双向指令交互解释", "S03": "UA与行为一致性", "S04": "DNS编码内容解释", "S05": "页面欺骗语义", "S06": "凭据提交意图", "S07": "敏感上传语义", "S08": "分块传输语义", "S09": "请求载荷意图", "S10": "协议应答含义", "S11": "挖矿交互语义", "S12": "域名与品牌语义", "S13": "解码载荷意图", "S14": "正常业务替代解释", "S15": "阶段与信息缺口", "BT-S01": "群体协同行为解释", "SC01": "角色与作息一致性", "SC02": "群体替代解释", "SC03": "品牌与字段一致性", "R06": "历史事件参考", "R07": "历史误报参考"}
+	names := map[string]string{"S01": "指令意图解释", "S02": "双向指令交互解释", "S03": "UA与行为一致性", "S04": "DNS编码内容解释", "S05": "页面欺骗语义", "S06": "凭据提交意图", "S07": "敏感上传语义", "S08": "分块传输语义", "S09": "请求载荷意图", "S10": "协议应答含义", "S11": "挖矿交互语义", "S12": "域名与品牌语义", "S13": "解码载荷意图", "S14": "正常业务替代解释", "S15": "阶段与信息缺口", "BT-S01": "群体协同行为解释", "SC01": "角色与作息一致性", "SC02": "群体替代解释", "SC03": "品牌与字段一致性", "R06": "历史事件参考", "R07": "历史活动替代解释"}
 	if name := names[slot.ID]; name != "" {
 		return "语义解释：" + name
 	}
@@ -238,6 +280,13 @@ func reportFactMeasurements(f evidence.Finding) string {
 
 func reportEvidencePromptEntry(e ReportEvidence) map[string]any {
 	out := map[string]any{"id": e.ID, "kind": e.Kind, "name": e.Name, "status": e.Status, "result": e.Result, "source": e.Source, "scope": e.Scope, "window": e.Window, "family": e.Family, "related_fact_ids": e.RelatedFactIDs}
+	if e.Unified != nil {
+		u := e.Unified
+		out["normalized_id"], out["role"], out["quality"], out["reason"] = u.ID, u.Role, u.Quality, u.Reason
+		out["source_count"] = len(u.SourceIDs)
+		out["source_refs"] = u.SourceIDs[:min(3, len(u.SourceIDs))]
+		out["duplicate_of"], out["non_additive_with"] = u.DuplicateOf, u.NonAdditiveWith
+	}
 	if e.Finding != nil {
 		out["fact_id"] = e.FactID
 		out["measurements"] = e.Finding.Measurements
@@ -249,11 +298,18 @@ func reportEvidencePromptEntry(e ReportEvidence) map[string]any {
 		out["judgement"] = e.Semantic.Judgement
 		out["strength"] = e.Semantic.Strength
 		out["explanation_only"] = e.Semantic.ExplanationOnly
+		out["validated_quotes"] = e.Semantic.Quotes
+		out["fact_refs"] = e.Semantic.FactRefs
+		out["material_refs"] = e.Semantic.MaterialRefs
+		out["alternatives"] = e.Semantic.Alternatives
+		out["gaps"] = e.Semantic.Gaps
 	}
 	return out
 }
 
 type ReportDocument struct {
+	BuildRevision   string               `json:"build_revision,omitempty"`
+	ModelInputHash  string               `json:"model_input_hash,omitempty"`
 	SchemaVersion   string               `json:"schema_version"`
 	SummaryID       int64                `json:"summary_id"`
 	EventID         string               `json:"event_id"`

@@ -171,7 +171,7 @@ func TestReportUsesCompleteFindingsNotCompressedProjection(t *testing.T) {
 	raw, _ := json.Marshal(b)
 	var copy ReportEvidenceBundle
 	json.Unmarshal(raw, &copy)
-	if len(copy.FactChecks) != len(b.FactChecks) || len(copy.SelectedIDs) > 12 {
+	if len(copy.FactChecks) != len(b.FactChecks) || len(copy.SelectedIDs) != len(b.SelectedIDs) {
 		t.Fatal("journal/projection contract failed")
 	}
 }

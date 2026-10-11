@@ -24,20 +24,23 @@ import (
 )
 
 const snapshotAdapterVersion = "snapshot-evidence-adapter-0.4"
+const reportSnapshotAdapterVersion = "report-snapshot-adapter-1.3"
 
 // SnapshotEvidenceOptions limits the shared load, not each algorithm separately.
 // Large snapshots are explicitly deferred, never evaluated using model samples.
 type SnapshotEvidenceOptions struct {
-	CaptureSemantic   bool
-	Facts             []evidence.FactID
-	MaxHits           int64
-	MaxRawBytes       int64
-	MaxScopes         int
-	Supplemental      *SnapshotSupplementalInputs `json:"-"`
-	SupplementalIssue *SnapshotInputIssue         `json:"-"`
-	Sources           *EvidenceSourceRegistry     `json:"-"`
-	SourceIssue       *SnapshotInputIssue         `json:"-"`
-	RegistryIssue     *SnapshotInputIssue         `json:"-"`
+	ReportMaterialMode bool
+	PlatformHistory    *ReportHistory
+	CaptureSemantic    bool
+	Facts              []evidence.FactID
+	MaxHits            int64
+	MaxRawBytes        int64
+	MaxScopes          int
+	Supplemental       *SnapshotSupplementalInputs `json:"-"`
+	SupplementalIssue  *SnapshotInputIssue         `json:"-"`
+	Sources            *EvidenceSourceRegistry     `json:"-"`
+	SourceIssue        *SnapshotInputIssue         `json:"-"`
+	RegistryIssue      *SnapshotInputIssue         `json:"-"`
 }
 
 func DefaultSnapshotEvidenceOptions() SnapshotEvidenceOptions {
@@ -45,29 +48,32 @@ func DefaultSnapshotEvidenceOptions() SnapshotEvidenceOptions {
 }
 
 type SnapshotEvidenceManifest struct {
-	AdapterVersion        string                 `json:"adapter_version"`
-	RegistryVersion       string                 `json:"registry_version"`
-	SnapshotVersion       int64                  `json:"snapshot_version"`
-	Watermark             int64                  `json:"watermark"`
-	RevisionWatermark     int64                  `json:"revision_watermark"`
-	DeclaredHits          int64                  `json:"declared_hits"`
-	LoadedHits            int64                  `json:"loaded_hits"`
-	BoundHits             int64                  `json:"bound_hits"`
-	UnresolvedHits        int64                  `json:"unresolved_hits"`
-	ReadPages             int                    `json:"read_pages"`
-	RevisionBatches       int                    `json:"revision_batches"`
-	RawBytes              int64                  `json:"raw_bytes"`
-	MaxHits               int64                  `json:"max_hits"`
-	MaxRawBytes           int64                  `json:"max_raw_bytes"`
-	MaxScopes             int                    `json:"max_scopes"`
-	Coverage              string                 `json:"coverage"`
-	MissingInputs         []string               `json:"missing_inputs"`
-	Issues                []SnapshotInputIssue   `json:"issues,omitempty"`
-	IssueCount            int                    `json:"issue_count"`
-	OmittedIssues         int                    `json:"omitted_issues"`
-	FactCoverage          []SnapshotFactCoverage `json:"fact_coverage,omitempty"`
-	SupplementalVersion   string                 `json:"supplemental_version,omitempty"`
-	SourceRegistryVersion string                 `json:"source_registry_version,omitempty"`
+	ReportDuplicateHits   map[string]string           `json:"report_duplicate_hits,omitempty"`
+	ReportObservations    []ReportMaterialObservation `json:"report_observations,omitempty"`
+	History               *ReportHistoryDiagnostics   `json:"history,omitempty"`
+	AdapterVersion        string                      `json:"adapter_version"`
+	RegistryVersion       string                      `json:"registry_version"`
+	SnapshotVersion       int64                       `json:"snapshot_version"`
+	Watermark             int64                       `json:"watermark"`
+	RevisionWatermark     int64                       `json:"revision_watermark"`
+	DeclaredHits          int64                       `json:"declared_hits"`
+	LoadedHits            int64                       `json:"loaded_hits"`
+	BoundHits             int64                       `json:"bound_hits"`
+	UnresolvedHits        int64                       `json:"unresolved_hits"`
+	ReadPages             int                         `json:"read_pages"`
+	RevisionBatches       int                         `json:"revision_batches"`
+	RawBytes              int64                       `json:"raw_bytes"`
+	MaxHits               int64                       `json:"max_hits"`
+	MaxRawBytes           int64                       `json:"max_raw_bytes"`
+	MaxScopes             int                         `json:"max_scopes"`
+	Coverage              string                      `json:"coverage"`
+	MissingInputs         []string                    `json:"missing_inputs"`
+	Issues                []SnapshotInputIssue        `json:"issues,omitempty"`
+	IssueCount            int                         `json:"issue_count"`
+	OmittedIssues         int                         `json:"omitted_issues"`
+	FactCoverage          []SnapshotFactCoverage      `json:"fact_coverage,omitempty"`
+	SupplementalVersion   string                      `json:"supplemental_version,omitempty"`
+	SourceRegistryVersion string                      `json:"source_registry_version,omitempty"`
 }
 
 type SnapshotEvidenceInput struct {
@@ -193,6 +199,7 @@ func (s Services) SnapshotEvidenceInput(ctx context.Context, snap EvidenceSnapsh
 	counts := map[evidence.Scope]int{}
 	scopeHits := map[evidence.Scope][]evidence.Hit{}
 	seenHits := map[string]bool{}
+	seenReportPackets := map[string]string{}
 	allCaptureKnown, anyTruncated := true, false
 	q := store.HitQuery{Sources: snap.Sources, Watermark: snap.Watermark, Limit: 500}
 	for {
@@ -215,6 +222,9 @@ func (s Services) SnapshotEvidenceInput(ctx context.Context, snap EvidenceSnapsh
 				return out, &SnapshotInputError{Code: "duplicate_or_empty_hit_identity", Stage: "validate_hits", HitID: h.ID, Cause: errors.New("invalid hit identity")}
 			}
 			seenHits[h.ID] = true
+			if opts.ReportMaterialMode {
+				out.Manifest.AdapterVersion = reportSnapshotAdapterVersion
+			}
 			out.Manifest.LoadedHits++
 			out.Manifest.RawBytes += int64(len(h.Raw))
 			if out.Manifest.LoadedHits > opts.MaxHits || out.Manifest.RawBytes > opts.MaxRawBytes {
@@ -239,6 +249,9 @@ func (s Services) SnapshotEvidenceInput(ctx context.Context, snap EvidenceSnapsh
 				out.Manifest.addIssue(SnapshotInputIssue{Code: "unresolved_binding_or_time", Stage: "bind", HitID: h.ID, Field: "asset/endpoint/device/time"})
 				continue
 			}
+			if opts.ReportMaterialMode {
+				reportVerifyDatagram(m)
+			}
 			truncated, known := nestedMap(m, "raw_packet")["capture_truncated"].(bool)
 			if !known {
 				allCaptureKnown = false
@@ -251,8 +264,23 @@ func (s Services) SnapshotEvidenceInput(ctx context.Context, snap EvidenceSnapsh
 			} else {
 				out.Manifest.addIssue(SnapshotInputIssue{Code: "field_missing_or_invalid", Stage: "parse", HitID: h.ID, Scope: scope, Field: "packets"})
 			}
-			out.Request.Hits = append(out.Request.Hits, hit)
 			out.Manifest.BoundHits++
+			if opts.ReportMaterialMode {
+				o := reportMaterialObservation(h, m, scope)
+				out.Manifest.ReportObservations = append(out.Manifest.ReportObservations, o)
+				if o.PhysicalPacketID != "" {
+					key := scopeKey(scope) + ":" + o.PhysicalPacketID
+					if original, ok := seenReportPackets[key]; ok {
+						if out.Manifest.ReportDuplicateHits == nil {
+							out.Manifest.ReportDuplicateHits = map[string]string{}
+						}
+						out.Manifest.ReportDuplicateHits[h.ID] = original
+						continue
+					}
+					seenReportPackets[key] = h.ID
+				}
+			}
+			out.Request.Hits = append(out.Request.Hits, hit)
 			input := inputs[scope]
 			if input == nil {
 				if len(inputs) >= opts.MaxScopes {
@@ -289,6 +317,10 @@ func (s Services) SnapshotEvidenceInput(ctx context.Context, snap EvidenceSnapsh
 		coverage = evidence.CoveragePartial
 	}
 	out.Request.Quality.Coverage = coverage
+	if opts.ReportMaterialMode {
+		completeTimeline := coverage == evidence.CoverageComplete && out.Manifest.BoundHits == snap.Count
+		out.Request.Quality.SavedTimelineComplete = &completeTimeline
+	}
 	if allCaptureKnown || anyTruncated {
 		out.Request.Quality.CaptureTruncated = &anyTruncated
 	}
@@ -330,6 +362,7 @@ func (s Services) SnapshotEvidenceInput(ctx context.Context, snap EvidenceSnapsh
 	buildSnapshotAssetInputs(&out.Request)
 	produceSnapshotSupplemental(&out, snap, opts.Sources)
 	applySnapshotSupplemental(&out, snap, opts.Supplemental)
+	applyPlatformHistory(&out, snap, opts.PlatformHistory)
 	return out, nil
 }
 
