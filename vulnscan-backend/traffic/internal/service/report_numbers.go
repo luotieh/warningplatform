@@ -28,7 +28,7 @@ func validateReportNumbers(text string, refs []string, entries map[string]Report
 			allowed[n] = true
 			if strings.Count(n, ".") == 1 {
 				if v, err := strconv.ParseFloat(n, 64); err == nil {
-					for precision := 1; precision <= 6; precision++ {
+					for precision := 0; precision <= 6; precision++ {
 						allowed[strconv.FormatFloat(v, 'f', precision, 64)] = true
 					}
 				}
@@ -43,7 +43,7 @@ func validateReportNumbers(text string, refs []string, entries map[string]Report
 	}
 	for _, n := range reportNumericTokens.FindAllString(text, -1) {
 		if !allowed[n] {
-			return fmt.Errorf("report_fact_numbers_not_in_cited_scope")
+			return fmt.Errorf("report_fact_numbers_not_in_cited_scope: value=%s refs=%s", n, strings.Join(refs, ","))
 		}
 	}
 	if reportChineseCounts.MatchString(text) {

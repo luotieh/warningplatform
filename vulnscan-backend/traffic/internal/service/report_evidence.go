@@ -288,6 +288,7 @@ func reportEvidencePromptEntry(e ReportEvidence) map[string]any {
 		out["duplicate_of"], out["non_additive_with"] = u.DuplicateOf, u.NonAdditiveWith
 	}
 	if e.Finding != nil {
+		delete(out, "result") // the same values are retained below as typed metrics
 		out["fact_id"] = e.FactID
 		out["measurements"] = e.Finding.Measurements
 		out["parameters"] = e.Finding.Parameters

@@ -100,6 +100,8 @@ type SemanticRequest struct {
 }
 
 type SemanticConfig struct {
+	// Report-only bounded batches avoid truncating a large multi-slot reply.
+	ReportBatchSize   int
 	ReportHistory     bool
 	CompactProvenance bool
 	MaxTasks          int

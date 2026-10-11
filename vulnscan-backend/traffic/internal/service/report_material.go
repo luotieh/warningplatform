@@ -84,6 +84,11 @@ func reportVerifyDatagram(m map[string]any) {
 	if complete && p.ErrorLayer() == nil {
 		packet["capture_truncated"] = false
 		packet["report_quality_derivation"] = "validated_datagram_length; stream completeness not inferred"
+		// Read the actual transport payload, including DNS bytes. A saved empty
+		// application preview is not proof of a payload-free packet.
+		if transport := p.TransportLayer(); transport != nil {
+			packet["payload_hex"] = hex.EncodeToString(transport.LayerPayload())
+		}
 	}
 }
 

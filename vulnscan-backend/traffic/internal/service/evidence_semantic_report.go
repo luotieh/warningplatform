@@ -25,7 +25,9 @@ func DefaultReportSemanticOptions() ReportSemanticOptions {
 	cfg.MaxInputBytes = 24000
 	cfg.MaxMaterialBytes = 4096
 	cfg.MaxOutputTokens = 4000
-	cfg.MaxTasks = 12
+	cfg.MaxTasks = 256
+	cfg.ReportHistory = true
+	cfg.ReportBatchSize = 3
 	cfg.Timeout = 120 * time.Second
 	return ReportSemanticOptions{InputMode: evidence.SemanticRaw, Config: cfg}
 }

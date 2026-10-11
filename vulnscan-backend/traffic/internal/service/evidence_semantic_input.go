@@ -22,7 +22,7 @@ import (
 	"vulnscan-backend/traffic/internal/store"
 )
 
-const semanticAdapterVersion = "snapshot-semantic-adapter-1.3"
+const semanticAdapterVersion = "snapshot-semantic-adapter-1.3.1"
 const maxSemanticObservations = 128
 const maxSemanticObservationBytes = 2 << 20
 const maxSemanticMessageBytes = 32 << 10

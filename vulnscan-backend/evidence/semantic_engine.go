@@ -15,7 +15,11 @@ const semanticSystemPrompt = `你是流量证据解释器。输入材料均是�
 type SemanticEngine struct{ config SemanticConfig }
 
 func NewSemanticEngine(c SemanticConfig) (*SemanticEngine, error) {
-	if c.MaxTasks < 1 || c.MaxTasks > 23 || c.MaxInputBytes < len(semanticSystemPrompt)+256 || c.MaxOutputBytes < 256 || c.MaxMaterialBytes < 16 || c.MaxMaterialBytes > c.MaxInputBytes || c.MaxOutputTokens < 1 || c.Timeout <= 0 || c.MaxInputTokens < 0 || (c.MaxInputTokens > 0 && c.CountTokens == nil) {
+	maxTasks := 23
+	if c.ReportHistory && c.ReportBatchSize > 0 {
+		maxTasks = 256
+	}
+	if c.ReportBatchSize < 0 || c.ReportBatchSize > 8 || c.MaxTasks < 1 || c.MaxTasks > maxTasks || c.MaxInputBytes < len(semanticSystemPrompt)+256 || c.MaxOutputBytes < 256 || c.MaxMaterialBytes < 16 || c.MaxMaterialBytes > c.MaxInputBytes || c.MaxOutputTokens < 1 || c.Timeout <= 0 || c.MaxInputTokens < 0 || (c.MaxInputTokens > 0 && c.CountTokens == nil) {
 		return nil, fmt.Errorf("invalid semantic budgets/tokenizer/timeout")
 	}
 	return &SemanticEngine{c}, nil
@@ -113,7 +117,11 @@ func (e *SemanticEngine) Plan(ctx context.Context, r SemanticRequest) (SemanticP
 				}
 			}
 			candidate := append(append([]SemanticTask(nil), p.Tasks...), task)
-			prompt, byteCount, tokenCount, err := e.encodePlan(r, candidate)
+			budgetTasks := candidate
+			if e.config.ReportBatchSize > 0 {
+				budgetTasks = candidate[((len(candidate)-1)/e.config.ReportBatchSize)*e.config.ReportBatchSize:]
+			}
+			prompt, byteCount, tokenCount, err := e.encodePlan(r, budgetTasks)
 			if err != nil {
 				return p, err
 			}
@@ -128,6 +136,13 @@ func (e *SemanticEngine) Plan(ctx context.Context, r SemanticRequest) (SemanticP
 		}
 	}
 	if len(p.Tasks) > 0 {
+		if e.config.ReportBatchSize > 0 {
+			var err error
+			p.Prompt, p.InputBytes, p.InputTokens, err = e.encodePlan(r, p.Tasks)
+			if err != nil {
+				return p, err
+			}
+		}
 		hash := sha256.Sum256([]byte(semanticSystemPrompt + "\n" + p.Prompt))
 		p.ContextSHA256 = hex.EncodeToString(hash[:])
 	}
@@ -212,6 +227,40 @@ func (e *SemanticEngine) encodePlan(r SemanticRequest, tasks []SemanticTask) (st
 
 func (e *SemanticEngine) Evaluate(ctx context.Context, r SemanticRequest, model SemanticModel) (SemanticResult, error) {
 	p, err := e.Plan(ctx, r)
+	if err == nil && e.config.ReportBatchSize > 0 && len(p.Tasks) > e.config.ReportBatchSize {
+		combined := SemanticResult{Plan: p, Findings: []SemanticFinding{}}
+		for start := 0; start < len(p.Tasks); start += e.config.ReportBatchSize {
+			batch := p
+			batch.Tasks = p.Tasks[start:min(start+e.config.ReportBatchSize, len(p.Tasks))]
+			batch.Prompt, batch.InputBytes, batch.InputTokens, err = e.encodePlan(r, batch.Tasks)
+			if err != nil {
+				return combined, err
+			}
+			part, callErr := e.evaluatePlan(ctx, r, batch, model)
+			if callErr != nil {
+				return combined, callErr
+			}
+			combined.Calls += part.Calls
+			combined.Findings = append(combined.Findings, part.Findings...)
+			for _, execution := range part.Plan.Executions {
+				for _, task := range batch.Tasks {
+					if execution.TaskID == task.ID {
+						semanticMarkTask(&combined.Plan, task.ID, execution.Status, execution.Reason)
+					}
+				}
+			}
+		}
+		dedupeSemanticFindings(combined.Findings)
+		return combined, nil
+	}
+	if err != nil {
+		return SemanticResult{Plan: p, Findings: []SemanticFinding{}}, err
+	}
+	return e.evaluatePlan(ctx, r, p, model)
+}
+
+func (e *SemanticEngine) evaluatePlan(ctx context.Context, r SemanticRequest, p SemanticPlan, model SemanticModel) (SemanticResult, error) {
+	var err error
 	result := SemanticResult{Plan: p, Findings: []SemanticFinding{}}
 	if err != nil || len(p.Tasks) == 0 {
 		return result, err

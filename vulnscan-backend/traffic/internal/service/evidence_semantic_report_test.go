@@ -99,6 +99,12 @@ func TestSemanticReportSharesReadAndReusesIndependentCache(t *testing.T) {
 	calls := 0
 	svc.SemanticModel = reportSemanticModelFunc(func(_ context.Context, call evidence.SemanticCall) (string, error) {
 		calls++
+		var batch struct {
+			Tasks []evidence.SemanticTask `json:"tasks"`
+		}
+		if json.Unmarshal([]byte(call.Prompt), &batch) != nil || len(batch.Tasks) < 1 || len(batch.Tasks) > 3 {
+			t.Fatal("report semantic batch exceeds bounded reply capacity")
+		}
 		if !strings.Contains(call.Prompt, "LOCAL_PASSWORD_") {
 			t.Fatal("raw material missing")
 		}
@@ -106,7 +112,7 @@ func TestSemanticReportSharesReadAndReusesIndependentCache(t *testing.T) {
 	})
 	event := mustEvent(t, svc, snap.EventID)
 	p, err := svc.prepareReportInput(context.Background(), event)
-	if err != nil || p.Semantics.Status != "evaluated" || p.Semantics.Result == nil || len(p.Semantics.Result.Findings) == 0 || calls != 1 || counter.hitPages != 2 {
+	if err != nil || p.Semantics.Status != "evaluated" || p.Semantics.Result == nil || len(p.Semantics.Result.Findings) == 0 || calls != p.Semantics.Result.Calls || calls < 2 || counter.hitPages != 2 {
 		t.Fatalf("shared pipeline failed: %v status=%s reason=%s calls=%d pages=%d", err, p.Semantics.Status, p.Semantics.Reason, calls, counter.hitPages)
 	}
 	if utf8.RuneCountInString(p.Context) > 6000 || !strings.Contains(p.Context, "semantic_evidence") {
@@ -120,8 +126,9 @@ func TestSemanticReportSharesReadAndReusesIndependentCache(t *testing.T) {
 		}
 	}
 	pages := counter.hitPages
+	previousCalls := calls
 	p, err = svc.prepareReportInput(context.Background(), event)
-	if err != nil || !p.Evaluation.CacheHit || !p.Semantics.CacheHit || calls != 1 || counter.hitPages != pages {
+	if err != nil || !p.Evaluation.CacheHit || !p.Semantics.CacheHit || calls != previousCalls || counter.hitPages != pages {
 		t.Fatalf("warm report recomputed: %v cache=%v calls=%d pages=%d", err, p.Semantics.CacheHit, calls, counter.hitPages)
 	}
 	d, err := svc.EvidenceInputDiagnostics(context.Background(), snap.EventID, snap.Version)
@@ -158,8 +165,9 @@ func TestSemanticFailureRetriesWithoutChangingFacts(t *testing.T) {
 	}
 	fail = false
 	pages := counter.hitPages
+	previousCalls := calls
 	p, err = svc.prepareReportInput(context.Background(), event)
-	if err != nil || p.Semantics.Status != "evaluated" || calls != 2 || counter.hitPages != pages {
+	if err != nil || p.Semantics.Status != "evaluated" || calls != previousCalls+p.Semantics.Result.Calls || counter.hitPages != pages {
 		t.Fatal("semantic retry failed or reread hits")
 	}
 }
@@ -202,19 +210,20 @@ func TestSemanticCacheRejectsCorruptedQuotesAndTracksModelVersion(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
+	initialCalls := calls
 	p.Semantics.Result.Findings[0].Quotes[0].Excerpt = "invented quote not in source"
 	if err := putRecord(context.Background(), svc.Store, "semantic_result", p.Semantics.ResultKey, snap.EventID, p.Semantics); err != nil {
 		t.Fatal(err)
 	}
 	p, err = svc.prepareReportInput(context.Background(), event)
-	if err != nil || p.Semantics.CacheHit || calls != 2 {
+	if err != nil || p.Semantics.CacheHit || calls != 2*initialCalls {
 		t.Fatal("corrupt semantic cache trusted")
 	}
 	options := DefaultReportSemanticOptions()
 	options.ModelVersion = "local-model-updated"
 	svc.ReportSemantics = &options
 	p, err = svc.prepareReportInput(context.Background(), event)
-	if err != nil || p.Semantics.CacheHit || calls != 3 {
+	if err != nil || p.Semantics.CacheHit || calls != 3*initialCalls {
 		t.Fatal("model revision retained stale interpretation")
 	}
 }
@@ -270,7 +279,7 @@ func TestAllReportKindsUseActualSemanticTransport(t *testing.T) {
 			case AnalysisKindManual:
 				_, err = svc.RefreshAnalysis(context.Background(), snap.EventID)
 			}
-			if err != nil || semanticCalls != 1 || reportCalls != 1 {
+			if err != nil || semanticCalls < 2 || reportCalls != 1 {
 				t.Fatalf("report kind %s failed: %v semantic=%d report=%d", kind, err, semanticCalls, reportCalls)
 			}
 		})

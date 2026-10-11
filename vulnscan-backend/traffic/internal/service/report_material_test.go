@@ -24,6 +24,9 @@ func TestReportRecordedDatagramLengthCannotRepairTruncatedBytes(t *testing.T) {
 		if n == 0 && (!known || v) {
 			t.Fatal("complete recorded DNS datagram rejected")
 		}
+		if n == 0 && asString(nestedMap(row, "raw_packet")["payload_hex"]) == "" {
+			t.Fatal("actual DNS transport payload collapsed into an empty preview")
+		}
 		if n == 1 && known && !v {
 			t.Fatal("missing IPv4 bytes manufactured as complete")
 		}
