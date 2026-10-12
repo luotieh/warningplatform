@@ -24,7 +24,7 @@ import (
 )
 
 const snapshotAdapterVersion = "snapshot-evidence-adapter-0.4"
-const reportSnapshotAdapterVersion = "report-snapshot-adapter-1.5.0"
+const reportSnapshotAdapterVersion = "report-snapshot-adapter-1.5.1"
 
 // SnapshotEvidenceOptions limits the shared load, not each algorithm separately.
 // Large snapshots are explicitly deferred, never evaluated using model samples.
