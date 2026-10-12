@@ -152,6 +152,11 @@ func renderNarrativeReportMarkdown(doc ReportDocument) string {
 	}
 	// Detailed facts, interpretation/probability audit, gaps and provenance remain
 	// lossless in appendices. They no longer dictate the narrative body.
+	return w.String()
+}
+
+func renderReportTechnicalAppendix(doc ReportDocument) string {
+	var w bytes.Buffer
 	fmt.Fprint(&w, "## 附录：完整证据与研判依据\n\n")
 	legacy := renderV132ReportMarkdown(doc)
 	start := strings.Index(legacy, "## 事实证据与研判意义")

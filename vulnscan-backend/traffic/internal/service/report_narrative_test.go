@@ -1,10 +1,47 @@
 package service
 
 import (
+	"archive/zip"
+	"bytes"
+	"io"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestNarrativeDefaultDOCXDoesNotIncludeTechnicalInventory(t *testing.T) {
+	_, event, b := reportTestBundle(t)
+	doc := ReportDocument{SchemaVersion: reportEvidenceVersion, EventID: event.EventID, Evidence: b, Assessment: validReportAssessment(b)}
+	doc.Markdown = renderReportMarkdown(doc)
+	for _, withAppendix := range []bool{false, true} {
+		var data []byte
+		var err error
+		if withAppendix {
+			data, err = ExportEvidenceReportDOCXWithAppendix(doc)
+		} else {
+			data, err = ExportEvidenceReportDOCX(doc)
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		archive, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, file := range archive.File {
+			if file.Name != "word/document.xml" {
+				continue
+			}
+			reader, _ := file.Open()
+			raw, _ := io.ReadAll(reader)
+			reader.Close()
+			text := string(raw)
+			if !strings.Contains(text, "五、建议处置") || strings.Contains(text, "完整事实检查清单") != withAppendix || strings.Contains(text, "技术附录") != withAppendix {
+				t.Fatal("business report and technical attachment mixed", withAppendix)
+			}
+		}
+	}
+}
 
 func TestNarrativeOverviewRetainsEveryFiveTupleAndPhysicalDedup(t *testing.T) {
 	start := time.Date(2026, 10, 11, 12, 3, 53, 0, time.UTC)
@@ -30,14 +67,14 @@ func TestNarrativeReportOrdersBusinessSectionsAndKeepsTechnicalDetailsInAppendix
 	doc := ReportDocument{SchemaVersion: reportEvidenceVersion, EventID: event.EventID, Evidence: bundle, Assessment: a}
 	text := renderReportMarkdown(doc)
 	position := -1
-	for _, heading := range []string{"## 一、研判结论", "## 二、事件总览", "## 三、关键证据", "## 四、风险分析", "## 五、建议处置", "## 附录：完整证据与研判依据"} {
+	for _, heading := range []string{"## 一、研判结论", "## 二、事件总览", "## 三、关键证据", "## 四、风险分析", "## 五、建议处置"} {
 		next := strings.Index(text, heading)
 		if next <= position {
 			t.Fatal("wrong narrative order", heading)
 		}
 		position = next
 	}
-	body := text[:strings.Index(text, "## 附录：")]
+	body := text
 	for _, forbidden := range []string{"sample_count", "材料缺项", "事实证据与研判意义", "核验概况", "来源索引"} {
 		if strings.Contains(body, forbidden) {
 			t.Fatal("technical record leaked into narrative", forbidden)
@@ -48,7 +85,8 @@ func TestNarrativeReportOrdersBusinessSectionsAndKeepsTechnicalDetailsInAppendix
 			t.Fatal("business context missing", required)
 		}
 	}
-	if !strings.Contains(text, "## 技术附录") || !strings.Contains(text, "事实证据与研判意义") {
+	appendix := renderReportTechnicalAppendix(doc)
+	if strings.Contains(text, "## 附录") || !strings.Contains(appendix, "## 技术附录") || !strings.Contains(appendix, "事实证据与研判意义") {
 		t.Fatal("detailed evidence discarded instead of moved")
 	}
 }

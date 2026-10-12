@@ -53,6 +53,9 @@ func (s Services) ReportDocument(ctx context.Context, eventID string, summaryID 
 	if renderReportMarkdown(doc) != doc.Markdown {
 		return ReportDocument{}, fmt.Errorf("stored_report_render_mismatch")
 	}
+	if doc.SchemaVersion == reportEvidenceVersion && doc.TechnicalAppendix != renderReportTechnicalAppendix(doc) {
+		return ReportDocument{}, fmt.Errorf("stored_report_appendix_mismatch")
+	}
 	doc.SummaryID = summary.ID
 	return doc, nil
 }
@@ -89,6 +92,9 @@ func (s Services) ReportDocumentForExport(ctx context.Context, eventID string, s
 }
 
 func (s Services) saveReportDocument(ctx context.Context, doc ReportDocument, roundID int) (summary domain.Summary, err error) {
+	if doc.SchemaVersion == reportEvidenceVersion {
+		doc.TechnicalAppendix = renderReportTechnicalAppendix(doc)
+	}
 	err = s.Store.AggregationTransaction(ctx, "report-"+doc.EventID, func(tx store.Store) error {
 		var e error
 		summary, e = tx.AddSummary(domain.Summary{EventID: doc.EventID, RoundID: roundID, Version: doc.AnalysisVersion, Kind: doc.Kind, EventSummary: doc.Markdown})
@@ -108,6 +114,14 @@ func (s Services) saveReportDocument(ctx context.Context, doc ReportDocument, ro
 }
 
 func ExportEvidenceReportDOCX(report ReportDocument) ([]byte, error) {
+	return exportEvidenceReportDOCX(report, false)
+}
+
+func ExportEvidenceReportDOCXWithAppendix(report ReportDocument) ([]byte, error) {
+	return exportEvidenceReportDOCX(report, true)
+}
+
+func exportEvidenceReportDOCX(report ReportDocument, includeAppendix bool) ([]byte, error) {
 	doc, err := godocx.NewDocument()
 	if err != nil {
 		return nil, err
@@ -125,7 +139,11 @@ func ExportEvidenceReportDOCX(report ReportDocument) ([]byte, error) {
 		metadata = fmt.Sprintf("报告版本 %d · %s（北京时间）", report.AnalysisVersion, report.CreatedAt.In(time.FixedZone("Asia/Shanghai", 8*3600)).Format("2006-01-02 15:04:05"))
 	}
 	doc.AddParagraph(metadata).AddText("").Size(9)
-	lines := strings.Split(report.Markdown, "\n")
+	markdown := report.Markdown
+	if includeAppendix && report.SchemaVersion == reportEvidenceVersion {
+		markdown += "\n" + renderReportTechnicalAppendix(report)
+	}
+	lines := strings.Split(markdown, "\n")
 	appendixStarted := false
 	for n := 0; n < len(lines); n++ {
 		line := strings.TrimSpace(lines[n])
@@ -168,7 +186,7 @@ func ExportEvidenceReportDOCX(report ReportDocument) ([]byte, error) {
 	}
 	// Detailed appendix comes from the SAME immutable bundle, no database
 	// queries and no regeneration of historical evidence on export.
-	if report.SchemaVersion != "" {
+	if report.SchemaVersion != "" && (includeAppendix || report.SchemaVersion != reportEvidenceVersion) {
 		doc.AddPageBreak()
 		doc.AddParagraph("附录：正文证据来源定位").Style("Heading1")
 		doc.AddParagraph(fmt.Sprintf("事件：%s；快照版本：%d；命中水位：%d；修订水位：%d。", report.EventID, report.Evidence.SnapshotVersion, report.Evidence.Watermark, report.Evidence.RevisionWatermark))

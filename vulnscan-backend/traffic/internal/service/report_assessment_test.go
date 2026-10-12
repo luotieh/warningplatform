@@ -247,7 +247,7 @@ func TestReportDocumentPinnedAndDOCXHasAuthoritativeAppendix(t *testing.T) {
 	if _, err := svc.ReportDocument(context.Background(), "unrelated-event", summary.ID); err == nil {
 		t.Fatal("cross-event summary accepted")
 	}
-	data, err := ExportEvidenceReportDOCX(pinned)
+	data, err := ExportEvidenceReportDOCXWithAppendix(pinned)
 	if err != nil {
 		t.Fatal(err)
 	}

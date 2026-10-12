@@ -362,21 +362,22 @@ func reportHistoryInterpretationContext(b ReportEvidenceBundle, selected map[str
 }
 
 type ReportDocument struct {
-	BuildRevision   string               `json:"build_revision,omitempty"`
-	ModelInputHash  string               `json:"model_input_hash,omitempty"`
-	SchemaVersion   string               `json:"schema_version"`
-	SummaryID       int64                `json:"summary_id"`
-	EventID         string               `json:"event_id"`
-	Title           string               `json:"title"`
-	AnalysisVersion int                  `json:"analysis_version"`
-	Kind            string               `json:"kind"`
-	CreatedAt       time.Time            `json:"created_at"`
-	Evidence        ReportEvidenceBundle `json:"evidence"`
-	Assessment      ReportAssessment     `json:"assessment"`
-	Markdown        string               `json:"markdown"`
-	Validation      string               `json:"validation"`
-	ModelIdentity   string               `json:"model_identity"`
-	AssetSection    string               `json:"asset_registry"`
+	BuildRevision     string               `json:"build_revision,omitempty"`
+	ModelInputHash    string               `json:"model_input_hash,omitempty"`
+	SchemaVersion     string               `json:"schema_version"`
+	SummaryID         int64                `json:"summary_id"`
+	EventID           string               `json:"event_id"`
+	Title             string               `json:"title"`
+	AnalysisVersion   int                  `json:"analysis_version"`
+	Kind              string               `json:"kind"`
+	CreatedAt         time.Time            `json:"created_at"`
+	Evidence          ReportEvidenceBundle `json:"evidence"`
+	Assessment        ReportAssessment     `json:"assessment"`
+	Markdown          string               `json:"markdown"`
+	TechnicalAppendix string               `json:"technical_appendix,omitempty"`
+	Validation        string               `json:"validation"`
+	ModelIdentity     string               `json:"model_identity"`
+	AssetSection      string               `json:"asset_registry"`
 }
 
 func reportDocumentKey(eventID string, summaryID int64) string {
