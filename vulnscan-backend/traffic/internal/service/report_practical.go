@@ -233,6 +233,8 @@ func collectReportPracticalEvidence(out *SnapshotEvidenceInput) {
 		refs := []string{}
 		used, excluded, dns, transport, sameIOC := 0, 0, 0, 0, 0
 		iocs, dates, kinds := map[string]int{}, map[string]int{}, map[string]int{}
+		sameDates, sameKinds, transportDates := map[string]int{}, map[string]int{}, map[string]int{}
+		transportRefs := []string{}
 		seen := map[string]bool{}
 		for _, r := range h.Events {
 			assetMatches := r.AssetID == i.Scope.AssetID
@@ -253,6 +255,12 @@ func collectReportPracticalEvidence(out *SnapshotEvidenceInput) {
 			}
 			if h.IOC != "" && r.IOC == h.IOC {
 				sameIOC++
+				sameDates[r.Time.In(reportDayLocation).Format("2006-01-02")]++
+				sameKinds[r.ObservationKind]++
+				if r.ObservationKind == "transport_contact" {
+					transportRefs = append(transportRefs, r.ID)
+					transportDates[r.Time.In(reportDayLocation).Format("2006-01-02")]++
+				}
 			}
 			if r.ObservationKind == "dns_record" {
 				dns++
@@ -261,9 +269,12 @@ func collectReportPracticalEvidence(out *SnapshotEvidenceInput) {
 				transport++
 			}
 		}
-		add(i, "history_association", "同资产历史活动与IOC分布", used, excluded, refs, map[string]any{"历史IOC主体": h.IOC, "相同IOC记录数": sameIOC, "历史事件首记录日期次数": dates, "IOC记录次数": iocs, "历史记录类别": kinds, "DNS记录": dns, "传输接触记录": transport}, "全部审核状态参与；逐日统计仅用每个历史事件已保存的首记录时间；同资产其他IOC作为背景，不推断同战役；DNS与通联分开；没有覆盖全平台就不称首次出现")
+		add(i, "history_association", "同资产历史活动与IOC分布", used, excluded, refs, map[string]any{"历史IOC主体": h.IOC, "相同IOC记录数": sameIOC, "相同IOC首记录日期次数": sameDates, "相同IOC记录类别": sameKinds, "历史事件首记录日期次数": dates, "IOC记录次数": iocs, "历史记录类别": kinds, "DNS记录": dns, "传输接触记录": transport, "历史检索完整": h.Complete}, "全部审核状态参与；逐日统计仅用每个历史事件已保存的首记录时间；同资产其他IOC作为背景，不推断同战役；DNS与通联分开；检索不完整时这些次数为已检索下界，不称首次出现")
 		if used > 0 {
 			out.Manifest.ReportPractical[len(out.Manifest.ReportPractical)-1].SavedDNSRecords = dns
+		}
+		if len(transportRefs) > 0 {
+			add(i, "history_association_transport", "同资产同IOC历史传输接触", len(transportRefs), 0, transportRefs, map[string]any{"IOC": h.IOC, "实际传输接触事件数": len(transportRefs), "事件首记录日期次数": transportDates, "历史检索完整": h.Complete}, "来源仅包含同资产同IOC的传输接触事件，不含DNS关联或其他IOC；每个日期都有实际首记录；仅说明接触复发，不证明持续攻击或攻击成功")
 		}
 	}
 	for _, i := range out.Request.AssetInputs {

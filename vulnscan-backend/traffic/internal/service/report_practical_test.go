@@ -102,3 +102,27 @@ func TestObservedGroupBatchesRetainAllMembersWithoutRoles(t *testing.T) {
 		t.Fatal("missing members")
 	}
 }
+
+func TestPracticalHistorySeparatesSameIOCTransportDatesAndSources(t *testing.T) {
+	at := time.Date(2026, 10, 12, 0, 0, 0, 0, time.UTC)
+	h := &evidence.HistoryData{Provenance: evidence.Provenance{Verified: true, Version: "platform", SourceIDs: []string{"t", "d", "other"}}, AsOf: at, LookbackStart: at.AddDate(0, 0, -30), IOC: "target", Events: []evidence.HistoryEvent{
+		{ID: "t", AssetID: "asset", IOC: "target", ObservationKind: "transport_contact", Time: at.AddDate(0, 0, -1)},
+		{ID: "d", AssetID: "asset", IOC: "target", ObservationKind: "dns_record", Time: at.AddDate(0, 0, -2)},
+		{ID: "other", AssetID: "asset", IOC: "other", ObservationKind: "transport_contact", Time: at.AddDate(0, 0, -3)},
+	}}
+	out := SnapshotEvidenceInput{Request: evidence.Request{EventID: "current", Inputs: []evidence.Input{{Scope: evidence.Scope{AssetID: "asset"}, PlatformHistory: h}}}}
+	collectReportPracticalEvidence(&out)
+	for _, e := range out.Manifest.ReportPractical {
+		if e.Family != "report_practical:history_association_transport" {
+			continue
+		}
+		if len(e.SourceIDs) != 1 || e.SourceIDs[0] != "t" || e.SavedDNSRecords != 0 || strings.Contains(e.Result, "2026-10-10") || strings.Contains(e.Result, "2026-10-09") {
+			t.Fatal("other IOC/DNS dates promoted to transport recurrence", e)
+		}
+		if err := validateReportBoundaries("历史通信记录于10月11日出现", []string{"transport"}, map[string]ReportEvidence{"transport": e}); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	t.Fatal("real same-IOC transport suppressed by incomplete history")
+}
