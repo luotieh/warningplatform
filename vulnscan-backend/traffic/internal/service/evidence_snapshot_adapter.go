@@ -24,7 +24,7 @@ import (
 )
 
 const snapshotAdapterVersion = "snapshot-evidence-adapter-0.4"
-const reportSnapshotAdapterVersion = "report-snapshot-adapter-1.4.1"
+const reportSnapshotAdapterVersion = "report-snapshot-adapter-1.5.0"
 
 // SnapshotEvidenceOptions limits the shared load, not each algorithm separately.
 // Large snapshots are explicitly deferred, never evaluated using model samples.
@@ -49,6 +49,8 @@ func DefaultSnapshotEvidenceOptions() SnapshotEvidenceOptions {
 }
 
 type SnapshotEvidenceManifest struct {
+	ReportPractical       []ReportEvidence                `json:"report_practical_evidence,omitempty"`
+	ReportPracticalChecks []ReportPracticalCheck          `json:"report_practical_checks,omitempty"`
 	ReportSchedules       map[string]ReportSchedulePolicy `json:"report_schedules,omitempty"`
 	ReportDuplicateHits   map[string]string               `json:"report_duplicate_hits,omitempty"`
 	ReportObservations    []ReportMaterialObservation     `json:"report_observations,omitempty"`
@@ -366,6 +368,9 @@ func (s Services) SnapshotEvidenceInput(ctx context.Context, snap EvidenceSnapsh
 	produceSnapshotSupplemental(&out, snap, opts.Sources)
 	applySnapshotSupplemental(&out, snap, opts.Supplemental)
 	applyPlatformHistory(&out, snap, opts.PlatformHistory)
+	if opts.ReportMaterialMode {
+		collectReportPracticalEvidence(&out)
+	}
 	return out, nil
 }
 

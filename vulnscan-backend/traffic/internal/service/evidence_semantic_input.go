@@ -273,6 +273,22 @@ func buildSnapshotSemanticRequest(snap EvidenceSnapshot, input SnapshotEvidenceI
 			if parsed, err := http.NewRequest(h.Method, h.URL, nil); err == nil {
 				s.Materials = append(s.Materials, material(&s, "host", parsed.URL.Hostname(), "http.url.host", p, true))
 			}
+			if strings.HasPrefix(input.Manifest.AdapterVersion, "report-snapshot-adapter-") {
+				brands := []string{}
+				for _, m := range s.Materials {
+					if m.Kind == "page" {
+						brands = append(brands, reportVisibleBrandWords(m.Text)...)
+					}
+				}
+				if h.BrandClaimVerified && h.DeclaredBrand != "" {
+					brands = append(brands, h.DeclaredBrand)
+				}
+				sort.Strings(brands)
+				brands = compactReportRefs(brands)
+				if len(brands) > 0 {
+					s.Materials = append(s.Materials, material(&s, "brand", "实际页面/字段出现的品牌词："+strings.Join(brands, "、")+"；词语出现不证明授权或仿冒", "http.visible_brand_words", p, true))
+				}
+			}
 			addSemanticSupplementalMaterials(&s, i, snap.EventID, material)
 		}
 		if o.StratumMethod != "" {
@@ -313,6 +329,9 @@ func buildSnapshotSemanticRequest(snap EvidenceSnapshot, input SnapshotEvidenceI
 			s.Materials = append(s.Materials, m)
 		}
 		r.Subjects = append(r.Subjects, s)
+	}
+	if strings.HasPrefix(input.Manifest.AdapterVersion, "report-snapshot-adapter-") {
+		addReportObservedGroupSubjects(&r, input, material)
 	}
 	return r
 }

@@ -19,22 +19,23 @@ var ReportBuildRevision = "development"
 // ReportEvidence is built from complete engine outputs BEFORE model projection.
 // Source identities stay in the immutable journal, not in the model's prose.
 type ReportEvidence struct {
-	Unified        *evidence.UnifiedEvidence `json:"normalized,omitempty"`
-	ID             string                    `json:"id"`
-	Kind           string                    `json:"kind"`
-	Name           string                    `json:"name"`
-	Status         string                    `json:"status"`
-	Result         string                    `json:"result"`
-	Source         string                    `json:"source"`
-	Scope          evidence.Scope            `json:"scope"`
-	Window         *evidence.Window          `json:"window,omitempty"`
-	FactID         evidence.FactID           `json:"fact_id,omitempty"`
-	SourceIDs      []string                  `json:"source_ids,omitempty"`
-	Dependencies   []evidence.Dependency     `json:"dependencies,omitempty"`
-	Finding        *evidence.Finding         `json:"finding,omitempty"`
-	Semantic       *evidence.SemanticFinding `json:"semantic,omitempty"`
-	Family         string                    `json:"family"`
-	RelatedFactIDs []string                  `json:"related_fact_ids,omitempty"`
+	SavedDNSRecords int                       `json:"saved_dns_records,omitempty"`
+	Unified         *evidence.UnifiedEvidence `json:"normalized,omitempty"`
+	ID              string                    `json:"id"`
+	Kind            string                    `json:"kind"`
+	Name            string                    `json:"name"`
+	Status          string                    `json:"status"`
+	Result          string                    `json:"result"`
+	Source          string                    `json:"source"`
+	Scope           evidence.Scope            `json:"scope"`
+	Window          *evidence.Window          `json:"window,omitempty"`
+	FactID          evidence.FactID           `json:"fact_id,omitempty"`
+	SourceIDs       []string                  `json:"source_ids,omitempty"`
+	Dependencies    []evidence.Dependency     `json:"dependencies,omitempty"`
+	Finding         *evidence.Finding         `json:"finding,omitempty"`
+	Semantic        *evidence.SemanticFinding `json:"semantic,omitempty"`
+	Family          string                    `json:"family"`
+	RelatedFactIDs  []string                  `json:"related_fact_ids,omitempty"`
 }
 
 type ReportEvidenceBundle struct {
@@ -72,6 +73,9 @@ func buildReportEvidence(event domain.Event, snap EvidenceSnapshot, f SnapshotFa
 		add(e)
 	}
 	for _, e := range reportScheduleEvidence(f.Manifest) {
+		add(e)
+	}
+	for _, e := range f.Manifest.ReportPractical {
 		add(e)
 	}
 	if len(history) > 0 {

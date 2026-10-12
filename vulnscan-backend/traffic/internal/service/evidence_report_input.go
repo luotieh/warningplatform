@@ -84,10 +84,20 @@ func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event
 	}
 	config := evidence.DefaultConfig()
 	config.Policies = map[evidence.FactID]map[string]float64{
-		"F_BEACON_JITTER": {"ljung_box_lags": 3, "median_relative_tolerance": 0.25},
-		"F_PORT_SEQUENCE": {"difference_entropy_threshold": 3},
-		"F_SMALL_PACKET":  {"small_payload_bytes": 64},
-		"F_RATE_RAMP":     {"window_seconds": 300},
+		"F_BEACON_JITTER":            {"ljung_box_lags": 3, "median_relative_tolerance": 0.25},
+		"F_PORT_SEQUENCE":            {"difference_entropy_threshold": 3},
+		"F_SMALL_PACKET":             {"small_payload_bytes": 64},
+		"F_RATE_RAMP":                {"window_seconds": 300},
+		"F_FAILED_TO_ACTIVE":         {"min_failures": 2},
+		"F_BRAND_IMPOSTOR":           {"max_edit_distance": 1},
+		"F_MULTI_ASSET_IOC":          {"cluster_window_seconds": 3600},
+		"F_MULTI_ASSET_DIST":         {"subnet_entropy_min": 1},
+		"F_TIME_COORDINATION":        {"bucket_seconds": 60, "max_lag_bins": 5},
+		"F_COORD_FANOUT":             {"handoff_seconds": 300},
+		"F_INFECTION_CHAIN":          {"chain_window_seconds": 300},
+		"F_COORD_PATTERN_RECURRENCE": {"bucket_seconds": 300},
+		"F_HIST_SCHEDULE_MATCH":      {"kl_threshold": 0.5},
+		"F_HIST_COORD_PARAM_MATCH":   {"parameter_relative_tolerance": 0.25},
 	}
 	history := s.loadReportHistory(ctx, event, snap, assets)
 	if ctx.Err() != nil {

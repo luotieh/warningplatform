@@ -76,6 +76,7 @@ func (s Services) prepareReportSemantics(ctx context.Context, snap EvidenceSnaps
 	}
 	opts.Config.ReportHistory = true
 	opts.Config.ReportSchedule = true
+	opts.Config.ReportPractical = true
 	opts.Config.CompactProvenance = true
 	out = ReportSemanticEvaluation{InputMode: opts.InputMode, AdapterVersion: semanticAdapterVersion, Status: "unavailable"}
 	if opts.InputMode == "" {

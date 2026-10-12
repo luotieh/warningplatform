@@ -22,7 +22,7 @@ func validateReportBoundaries(text string, refs []string, entries map[string]Rep
 	zeroPayload := false
 	for _, id := range refs {
 		e := entries[id]
-		if e.Finding != nil && e.Finding.Measurements.Values["dns_records"] > 0 && (strings.Contains(text, "持续通联") || strings.Contains(text, "历史通联") || strings.Contains(text, "历史通信")) {
+		if (e.SavedDNSRecords > 0 || (e.Finding != nil && e.Finding.Measurements.Values["dns_records"] > 0)) && (strings.Contains(text, "持续通联") || strings.Contains(text, "历史通联") || strings.Contains(text, "历史通信")) {
 			return fmt.Errorf("report_dns_association_not_transport_history")
 		}
 		if e.Finding != nil && e.Finding.Measurements.Values["zero_payload_fraction"] == 1 {

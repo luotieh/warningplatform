@@ -60,6 +60,7 @@ func (e *SemanticEngine) Plan(ctx context.Context, r SemanticRequest) (SemanticP
 		for _, subject := range r.Subjects {
 			subject.ReportHistory = e.config.ReportHistory
 			subject.ReportSchedule = e.config.ReportSchedule
+			subject.ReportPractical = e.config.ReportPractical
 			subject.InputMode = semanticMode(r.InputMode)
 			if err := ctx.Err(); err != nil {
 				return p, err
@@ -79,6 +80,16 @@ func (e *SemanticEngine) Plan(ctx context.Context, r SemanticRequest) (SemanticP
 			task := SemanticTask{ID: fmt.Sprintf("T%03d", len(p.Tasks)+1), Slot: spec.SemanticDefinition, SubjectID: subject.ID, PropositionID: subject.PropositionID, Scope: subject.Scope, Window: subject.Window, MaxStrength: maximum, Materials: []DeliveredMaterial{}, Facts: []SemanticFactRef{}, NonAdditiveWith: nil}
 			if e.config.ReportSchedule && spec.Key.ID == "SC01" {
 				task.Slot.Prerequisite = "实际命中时间与报告比较时段；角色可选；默认时段只解释非工作时段活动，不能证明资产作息异常或攻击；已证实全天运行和授权业务优先解释。"
+			}
+			if e.config.ReportPractical {
+				switch spec.Key.ID {
+				case "S03", "S05", "S06", "S14", "SC02", "SC03":
+					task.Slot.Prerequisite = "一期报告：解释实际送达材料；角色、任务和品牌授权为增强资料，未提供时不假定存在；字段和主体关联必须保留；未达到硬规则时只作有限特征解释，遵守max_strength，不认定攻击成功。"
+				case "S12":
+					if spec.Key.Subtype == "brand_semantic_impostor" {
+						task.Slot.Prerequisite = "实际品牌词和Host的关系解释；缺授权域资料最多weak，不认定品牌授权失败或恶意仿冒。"
+					}
+				}
 			}
 			task.InputMode = semanticMode(r.InputMode)
 			for _, m := range materials {

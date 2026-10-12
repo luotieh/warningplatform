@@ -80,15 +80,16 @@ type SemanticDecodeStep struct {
 // PropositionID is assigned by the adapter to one operation/transfer, not by the
 // model. Distinct operations must use distinct IDs, even within the same scope.
 type SemanticSubject struct {
-	ReportSchedule bool               `json:"-"`
-	ReportHistory  bool               `json:"-"`
-	InputMode      SemanticInputMode  `json:"-"` // assigned from request by the engine
-	ID             string             `json:"id"`
-	PropositionID  string             `json:"proposition_id"`
-	Scope          Scope              `json:"scope"`
-	Window         AnalysisWindow     `json:"window"`
-	Facts          []Finding          `json:"facts"`
-	Materials      []SemanticMaterial `json:"materials"`
+	ReportPractical bool               `json:"-"`
+	ReportSchedule  bool               `json:"-"`
+	ReportHistory   bool               `json:"-"`
+	InputMode       SemanticInputMode  `json:"-"` // assigned from request by the engine
+	ID              string             `json:"id"`
+	PropositionID   string             `json:"proposition_id"`
+	Scope           Scope              `json:"scope"`
+	Window          AnalysisWindow     `json:"window"`
+	Facts           []Finding          `json:"facts"`
+	Materials       []SemanticMaterial `json:"materials"`
 }
 
 type SemanticRequest struct {
@@ -101,7 +102,8 @@ type SemanticRequest struct {
 }
 
 type SemanticConfig struct {
-	ReportSchedule bool
+	ReportPractical bool
+	ReportSchedule  bool
 	// Report-only bounded batches avoid truncating a large multi-slot reply.
 	ReportBatchSize   int
 	ReportHistory     bool
