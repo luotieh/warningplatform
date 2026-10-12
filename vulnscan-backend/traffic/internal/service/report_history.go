@@ -13,7 +13,7 @@ import (
 	"vulnscan-backend/traffic/internal/store"
 )
 
-const reportHistoryVersion = "platform-history-0.2"
+const reportHistoryVersion = "platform-history-0.3"
 
 type ReportHistoryDiagnostics struct {
 	Status     string `json:"status"`
@@ -24,6 +24,8 @@ type ReportHistoryDiagnostics struct {
 	Truncated  bool   `json:"truncated"`
 }
 type ReportHistoryRow struct {
+	SourceAddress      string         `json:"source_address,omitempty"`
+	DestinationAddress string         `json:"destination_address,omitempty"`
 	DeviceID           string         `json:"device_id"`
 	Application        map[string]any `json:"application,omitempty"`
 	ActivityType       string         `json:"activity_type"`
@@ -56,7 +58,7 @@ type ReportHistory struct {
 }
 
 func historyIOCs(event domain.Event, c map[string]any) []domain.IOC {
-	terms := append([]domain.IOC(nil), event.Observables...)
+	terms := []domain.IOC{}
 	for _, key := range []string{"ioc", "ioc_evidence"} {
 		if m, ok := c[key].(map[string]any); ok {
 			terms = append(terms, domain.IOC{Type: asString(m["ioc_type"]), Value: asString(m["ioc_value"])})
@@ -71,10 +73,19 @@ func historyIOCs(event domain.Event, c map[string]any) []domain.IOC {
 			}
 		}
 	}
+	// Source/destination observables include assets and recursive resolvers.
+	// They describe transport, not the IOC that triggered this event. Only use
+	// observables as a legacy fallback when no explicit IOC is available.
+	if len(terms) == 0 {
+		terms = append(terms, event.Observables...)
+	}
 	unique := map[string]domain.IOC{}
 	for _, ioc := range terms {
 		ioc.Type = strings.ToLower(strings.TrimSpace(ioc.Type))
 		ioc.Value = strings.TrimSpace(ioc.Value)
+		if ioc.Type == "domain" {
+			ioc.Value = strings.ToLower(strings.TrimSuffix(ioc.Value, "."))
+		}
 		if ip, err := netip.ParseAddr(ioc.Value); err == nil {
 			ioc.Value = ip.Unmap().String()
 		}
@@ -198,6 +209,7 @@ func (s Services) loadReportHistory(ctx context.Context, event domain.Event, sna
 		row.ActivityType = e.Category
 		row.DeviceID = asString(c["device_id"])
 		row.Application = nestedMap(c, "app")
+		row.SourceAddress, row.DestinationAddress = asString(c["src_ip"]), asString(c["dst_ip"])
 		row.ActivityIOCs = historyIOCs(e, c)
 		for _, key := range []string{"src_ip", "dst_ip"} {
 			if id, ok := registeredSnapshotAsset(assets, asString(c[key])); ok && !slices.Contains(row.AllAssetIDs, id) {
@@ -255,11 +267,21 @@ func applyPlatformHistory(out *SnapshotEvidenceInput, snap EvidenceSnapshot, his
 		}
 		p := evidence.Provenance{Verified: true, Complete: !history.Truncated && history.ExcludedCount == 0, Version: history.Version + ":" + digest(history), SourceIDs: []string{snapshotKey(snap.EventID, snap.Version)}}
 		h := &evidence.HistoryData{Provenance: p, PlatformRecords: true, AsOf: history.End, LookbackStart: history.Start, Endpoint: i.Scope.EndpointID}
-		// Bind only a unique IOC at this endpoint; never copy another scope's IOC.
+		// Prefer the actual queried domain over its recursive resolver endpoint.
+		for _, target := range history.MatchIOCs {
+			if target.Type == "domain" && i.DNS != nil {
+				for _, row := range i.DNS.Records {
+					if strings.EqualFold(strings.TrimSuffix(row.Domain, "."), strings.TrimSuffix(target.Value, ".")) {
+						h.IOC = target.Value
+					}
+				}
+			}
+		}
+		// Bind only an IOC at this endpoint; never copy another scope's IOC.
 		endpoint := strings.TrimPrefix(strings.TrimPrefix(i.Scope.EndpointID, "tcp://"), "udp://")
 		host, _, _ := net.SplitHostPort(endpoint)
 		for _, target := range history.MatchIOCs {
-			if target.Value == host {
+			if h.IOC == "" && target.Type == "ip" && target.Value == host {
 				h.IOC = target.Value
 			}
 		}
@@ -295,7 +317,13 @@ func applyPlatformHistory(out *SnapshotEvidenceInput, snap EvidenceSnapshot, his
 			if ioc == "" && len(row.ActivityIOCs) == 1 {
 				ioc = row.ActivityIOCs[0].Value
 			}
-			h.Events = append(h.Events, evidence.HistoryEvent{ID: row.EventID, AssetID: asset, AssetIDs: row.AllAssetIDs, IOC: ioc, Time: row.First, Relation: row.Relation, ActivityType: row.ActivityType})
+			kind := "ioc_record"
+			if asString(row.Application["dns_query"]) != "" {
+				kind = "dns_record"
+			} else if row.SourceAddress == ioc || row.DestinationAddress == ioc {
+				kind = "transport_contact"
+			}
+			h.Events = append(h.Events, evidence.HistoryEvent{ID: row.EventID, AssetID: asset, AssetIDs: row.AllAssetIDs, IOC: ioc, Time: row.First, Relation: row.Relation, ActivityType: row.ActivityType, ObservationKind: kind})
 			h.SourceIDs = append(h.SourceIDs, row.EventID)
 		}
 		i.PlatformHistory = h

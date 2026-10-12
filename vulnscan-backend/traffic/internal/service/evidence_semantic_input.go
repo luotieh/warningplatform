@@ -22,7 +22,7 @@ import (
 	"vulnscan-backend/traffic/internal/store"
 )
 
-const semanticAdapterVersion = "snapshot-semantic-adapter-1.3.2"
+const semanticAdapterVersion = "snapshot-semantic-adapter-1.3.3"
 const maxSemanticObservations = 128
 const maxSemanticObservationBytes = 2 << 20
 const maxSemanticMessageBytes = 32 << 10
@@ -66,7 +66,7 @@ func collectSnapshotSemanticObservation(out *SnapshotEvidenceInput, input *evide
 		}
 	}
 	packet := nestedMap(m, "raw_packet")
-	if child := nestedMap(packet, "request"); len(child) > 0 {
+	if child := nestedMap(packet, "request"); len(child) > 0 && packet["report_quality_derivation"] == nil {
 		packet = child
 	}
 	packet, frameProblem := snapshotFramePayload(packet, m, input)
@@ -382,7 +382,7 @@ func addSemanticSupplementalMaterials(s *evidence.SemanticSubject, i evidence.In
 			types := map[string]int{}
 			for _, row := range rows {
 				types[row.ActivityType]++
-				days[row.Time.UTC().Format("2006-01-02")] = true
+				days[row.Time.In(time.FixedZone("Asia/Shanghai", 8*3600)).Format("2006-01-02")] = true
 				if row.AssetID != "" {
 					assets[row.AssetID] = true
 				}
@@ -392,9 +392,9 @@ func addSemanticSupplementalMaterials(s *evidence.SemanticSubject, i evidence.In
 				refs = append(refs, row.ID)
 			}
 			p := h.Provenance
-			p.SourceIDs = refs[:min(3, len(refs))]
+			p.SourceIDs = refs
 			typeText, _ := json.Marshal(types)
-			text := fmt.Sprintf("关联=%s；历史事件数=%d；活跃日期数=%d；已绑定资产数=%d；最近示例事件=%s；时间=%s；历史检索完整=%t。全部关联记录参与统计；相似关系不自动证明同战役或误报。事件类型分布=%s", relation, len(rows), len(days), len(assets), rows[0].ID, rows[0].Time.UTC().Format(time.RFC3339), h.Complete, typeText)
+			text := fmt.Sprintf("关联=%s；关联IOC主体=%s；历史事件数=%d；活跃日期数=%d；已绑定资产数=%d；最近示例事件=%s；时间=%s；历史检索完整=%t。same_asset仅同资产背景，不是当前IOC关联。全部关联记录参与统计；相似关系不自动证明同战役或误报。事件类型分布=%s", relation, h.IOC, len(rows), len(days), len(assets), rows[0].ID, rows[0].Time.UTC().Format(time.RFC3339), h.Complete, typeText)
 			m := makeMaterial(s, "history", text, "history.events."+relation, p, true)
 			m.ID += ":" + relation
 			m.EventID = rows[0].ID
@@ -404,7 +404,7 @@ func addSemanticSupplementalMaterials(s *evidence.SemanticSubject, i evidence.In
 		if total > 0 {
 			p := h.Provenance
 			p.SourceIDs = []string{currentEventID}
-			text := fmt.Sprintf("当前范围=%s；IOC=%s；关联历史总数=%d；当前已核验事实数=%d。比较关联复发、基础设施复用与正常业务解释，不按审核状态筛选。", s.Scope.EndpointID, h.IOC, total, len(s.Facts))
+			text := fmt.Sprintf("当前范围=%s；IOC=%s；历史候选背景总数=%d（包含仅同资产记录，不得称为当前IOC事件数）；同资产同IOC=%d；仅同IOC=%d；仅同资产=%d；当前已核验事实数=%d。比较关联复发、基础设施复用与正常业务解释，不按审核状态筛选。", s.Scope.EndpointID, h.IOC, total, len(groups["same_asset_ioc"]), len(groups["same_ioc"]), len(groups["same_asset"]), len(s.Facts))
 			observed := 0
 			for _, f := range s.Facts {
 				if f.Status != evidence.Observed {

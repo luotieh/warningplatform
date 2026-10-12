@@ -148,6 +148,7 @@ type TLSData struct {
 	TrustRootsDER        [][]byte          `json:"trust_roots_der"`
 }
 type HistoryEvent struct {
+	ObservationKind    string             `json:"observation_kind,omitempty"`
 	AssetIDs           []string           `json:"asset_ids,omitempty"`
 	ActivityType       string             `json:"activity_type,omitempty"`
 	Relation           string             `json:"relation,omitempty"`

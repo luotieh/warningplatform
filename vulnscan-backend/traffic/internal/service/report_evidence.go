@@ -12,7 +12,7 @@ import (
 	"vulnscan-backend/traffic/internal/domain"
 )
 
-const reportEvidenceVersion = "evidence-report-1.3"
+const reportEvidenceVersion = "evidence-report-1.3.1"
 
 var ReportBuildRevision = "development"
 
@@ -38,6 +38,7 @@ type ReportEvidence struct {
 }
 
 type ReportEvidenceBundle struct {
+	PolicyVersion     string                       `json:"policy_version,omitempty"`
 	Digest            evidence.EvidenceDigest      `json:"evidence_digest"`
 	Normalized        evidence.NormalizedEvidence  `json:"normalized_evidence"`
 	History           *ReportHistory               `json:"platform_history,omitempty"`
@@ -58,6 +59,7 @@ type ReportEvidenceBundle struct {
 
 func buildReportEvidence(event domain.Event, snap EvidenceSnapshot, f SnapshotFactEvaluation, sem ReportSemanticEvaluation, history ...ReportHistory) ReportEvidenceBundle {
 	b := ReportEvidenceBundle{SnapshotVersion: snap.Version, FactStatus: f.Status, FactCounts: map[string]int{}, SemanticCounts: map[string]int{}, Entries: []ReportEvidence{}, SelectedIDs: []string{}, FactChecks: []evidence.Finding{}, SemanticChecks: []evidence.SemanticExecution{}}
+	b.PolicyVersion = reportEvidenceVersion
 	b.FactCoverage = append([]SnapshotFactCoverage(nil), f.Manifest.FactCoverage...)
 	b.Watermark, b.RevisionWatermark, b.SourceEvents = snap.Watermark, snap.RevisionWatermark, append([]string(nil), snap.Sources...)
 	add := func(e ReportEvidence) {
@@ -106,6 +108,7 @@ func buildReportEvidence(event domain.Event, snap EvidenceSnapshot, f SnapshotFa
 	for _, d := range evidence.Definitions() {
 		names[d.ID] = d.Description
 	}
+	names["F_SMALL_PACKET"] = "已保存报文的小载荷分布"
 	if f.Result != nil {
 		b.FactChecks = append(b.FactChecks, f.Result.Findings...)
 		// Stable identities independent of map traversal and display priority.
@@ -202,6 +205,14 @@ func buildReportEvidence(event domain.Event, snap EvidenceSnapshot, f SnapshotFa
 	b.Digest = evidence.Compress(b.Normalized, evidence.CompressionOptions{MaxItems: len(b.Entries), MaxRunes: 1 << 30,
 		Eligible: func(u evidence.UnifiedEvidence) bool {
 			e := entriesByID[u.ReportID]
+			// Execution diagnostics and neutral semantic repeats are retained in
+			// the immutable bundle/appendix, not promoted to judgement evidence.
+			if e.Semantic != nil && (e.Semantic.ExplanationOnly || e.Semantic.Judgement == "neutral") {
+				return false
+			}
+			if e.FactID == "F_MULTI_DAY_PERSIST" && e.Status == "not_observed" {
+				return false // a short current window cannot exclude historical recurrence
+			}
 			return e.Status != "not_observed" || reportFactRelevant(e.FactID, event, snap)
 		},
 		Project: func(u evidence.UnifiedEvidence) any { return reportEvidencePromptEntry(entriesByID[u.ReportID]) },

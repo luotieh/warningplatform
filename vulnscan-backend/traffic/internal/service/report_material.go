@@ -20,6 +20,8 @@ import (
 // One entry per immutable hit. Kept with the fact cache so cache hits retain
 // metadata from the entire membership, rather than representative packets.
 type ReportMaterialObservation struct {
+	PayloadBytes     *int            `json:"verified_transport_payload_bytes,omitempty"`
+	TCPFlags         string          `json:"verified_tcp_flags,omitempty"`
 	PhysicalPacketID string          `json:"physical_packet_id,omitempty"`
 	Direction        string          `json:"direction"`
 	HitID            string          `json:"hit_id"`
@@ -43,6 +45,13 @@ func reportMaterialObservation(h store.Hit, m map[string]any, scope evidence.Sco
 		}
 	}
 	packet := nestedMap(m, "raw_packet")
+	if packet["report_quality_derivation"] != nil {
+		if raw, err := hex.DecodeString(asString(packet["payload_hex"])); err == nil {
+			n := len(raw)
+			o.PayloadBytes = &n
+		}
+		o.TCPFlags = asString(packet["report_tcp_flags"])
+	}
 	if raw := asString(packet["packet_hex"]); raw != "" && asString(packet["capture_time"]) != "" {
 		sum := sha256.Sum256([]byte(fmt.Sprint(packet["capture_time_usec"]) + ":" + asString(packet["capture_time"]) + ":" + raw))
 		o.PhysicalPacketID = hex.EncodeToString(sum[:])
@@ -64,7 +73,7 @@ func reportMaterialObservation(h store.Hit, m map[string]any, scope evidence.Sco
 // nothing about completeness of a TCP stream or the total traffic window.
 func reportVerifyDatagram(m map[string]any) {
 	packet := nestedMap(m, "raw_packet")
-	if _, known := packet["capture_truncated"].(bool); known {
+	if truncated, known := packet["capture_truncated"].(bool); known && truncated {
 		return
 	}
 	raw, err := hex.DecodeString(asString(packet["packet_hex"]))
@@ -88,6 +97,19 @@ func reportVerifyDatagram(m map[string]any) {
 		// application preview is not proof of a payload-free packet.
 		if transport := p.TransportLayer(); transport != nil {
 			packet["payload_hex"] = hex.EncodeToString(transport.LayerPayload())
+		}
+		if layer := p.Layer(layers.LayerTypeTCP); layer != nil {
+			tcp := layer.(*layers.TCP)
+			flags := []string{}
+			for _, bit := range []struct {
+				on   bool
+				name string
+			}{{tcp.SYN, "SYN"}, {tcp.ACK, "ACK"}, {tcp.FIN, "FIN"}, {tcp.RST, "RST"}, {tcp.PSH, "PSH"}, {tcp.URG, "URG"}} {
+				if bit.on {
+					flags = append(flags, bit.name)
+				}
+			}
+			packet["report_tcp_flags"] = strings.Join(flags, "+")
 		}
 	}
 }
@@ -119,7 +141,18 @@ func reportMaterialEvidence(rows []ReportMaterialObservation) []ReportEvidence {
 		unknownPhysical := 0
 		apps := map[string]bool{}
 		refs := []string{}
+		payloadSamples, payloadTotal := 0, 0
+		payloadSeen := map[string]bool{}
+		flagCounts := map[string]int{}
 		for _, r := range rs {
+			if r.PhysicalPacketID != "" && !payloadSeen[r.PhysicalPacketID] && r.PayloadBytes != nil {
+				payloadSeen[r.PhysicalPacketID] = true
+				payloadSamples++
+				payloadTotal += *r.PayloadBytes
+				if r.TCPFlags != "" {
+					flagCounts[r.TCPFlags]++
+				}
+			}
 			ports[r.Source+" → "+r.Destination+" / "+r.Protocol]++
 			remotePorts[r.Direction+" "+r.Scope.EndpointID]++
 			remoteEndpoints[r.Scope.EndpointID] = true
@@ -174,12 +207,33 @@ func reportMaterialEvidence(rows []ReportMaterialObservation) []ReportEvidence {
 		}
 		sort.Strings(locals)
 		result := fmt.Sprintf("资产地址=%s；资产/设备=%s；已保存命中%d条；已保存去重物理报文%d份，无法建立物理身份%d条；涉及%d个远端端点、%d种协议端口；时间UTC=%s 至 %s；跨度=%.6f秒；远端与方向完整分布：%s", strings.Join(locals, ","), k, len(rs), len(physical), unknownPhysical, len(remoteEndpoints), len(protocolPorts), first.Format(time.RFC3339Nano), last.Format(time.RFC3339Nano), last.Sub(first).Seconds(), strings.Join(remoteParts, "；"))
+		loc := time.FixedZone("Asia/Shanghai", 8*3600)
+		result += fmt.Sprintf("；北京时间=%s 至 %s", first.In(loc).Format(time.RFC3339Nano), last.In(loc).Format(time.RFC3339Nano))
+		if payloadSamples > 0 {
+			result += fmt.Sprintf("；完成原文核验的去重报文%d份，核验应用载荷总字节=%d（只覆盖这些报文，不代表整个会话流量）", payloadSamples, payloadTotal)
+			if len(flagCounts) > 0 {
+				flagParts := []string{}
+				for _, flag := range sortedReportKeysInt(flagCounts) {
+					flagParts = append(flagParts, fmt.Sprintf("%s:%d份", flag, flagCounts[flag]))
+				}
+				result += "；TCP标志分布=" + strings.Join(flagParts, "、")
+			}
+		}
 		out = append(out, ReportEvidence{Kind: "observation", Name: "全量命中通联与时间分布", Status: "observed", Result: result, Source: "固定快照全部绑定命中的时间与五元组", SourceIDs: refs, Scope: rs[0].Scope, Family: "saved_activity:" + k, Window: &evidence.Window{Start: first, End: last, Convention: "observed_first_last_inclusive"}})
 		if len(ak) > 0 {
 			out = append(out, ReportEvidence{Kind: "observation", Name: "实际应用层字段", Status: "observed", Result: strings.Join(ak, "；"), Source: "全量命中保存的应用字段；不继承情报关联域名", SourceIDs: refs, Scope: rs[0].Scope, Family: "application:" + k})
 		}
 	}
 	return out
+}
+
+func sortedReportKeysInt(m map[string]int) []string {
+	keys := []string{}
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func reportDNSConnectionEvidence(rows []ReportMaterialObservation, h *ReportHistory) []ReportEvidence {

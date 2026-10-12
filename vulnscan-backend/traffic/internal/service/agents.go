@@ -174,7 +174,8 @@ func (s Services) runAnalysis(ctx context.Context, eventID string, kind string, 
 	if err != nil {
 		return s.failAgentWorkflow(eventID, err)
 	}
-	if err := putRecord(ctx, s.Store, "report_model_input", fmt.Sprintf("%s:%d:%d", eventID, prepared.Evidence.SnapshotVersion, version), eventID, map[string]any{"system": evidenceReportSystemPrompt, "user": prompt, "snapshot_version": prepared.Evidence.SnapshotVersion, "analysis_version": version, "schema_version": reportEvidenceVersion, "weight_policy": reportWeightPolicy(prepared.Evidence), "created_at": time.Now().UTC()}); err != nil {
+	journalKey := fmt.Sprintf("%s:%d:%d:%s:%s", eventID, prepared.Evidence.SnapshotVersion, version, ReportBuildRevision, digest(prompt))
+	if err := putRecord(ctx, s.Store, "report_model_input", journalKey, eventID, map[string]any{"system": evidenceReportSystemPrompt, "user": prompt, "input_hash": digest(prompt), "system_hash": digest(evidenceReportSystemPrompt), "build_revision": ReportBuildRevision, "snapshot_version": prepared.Evidence.SnapshotVersion, "analysis_version": version, "schema_version": reportEvidenceVersion, "weight_policy": reportWeightPolicy(prepared.Evidence), "created_at": time.Now().UTC()}); err != nil {
 		return s.failAgentWorkflow(eventID, fmt.Errorf("report_model_input_persist_failed: %w", err))
 	}
 	reportClient := *s.LLM
@@ -183,7 +184,9 @@ func (s Services) runAnalysis(ctx context.Context, eventID string, kind string, 
 	completion, err := reportClient.CompleteReport(ctx, evidenceReportSystemPrompt, prompt)
 	rawReply := completion.Reply
 	finalInputHash := digest(prompt)
-	_ = putRecord(ctx, s.Store, "report_model_usage", fmt.Sprintf("%s:%d:%d:1", eventID, prepared.Evidence.SnapshotVersion, version), eventID, map[string]any{"model": reportClient.Model, "endpoint": reportClient.BaseURL, "prompt_tokens": completion.PromptTokens, "completion_tokens": completion.CompletionTokens, "finish_reason": completion.FinishReason, "input_hash": digest(prompt), "build_revision": ReportBuildRevision, "capacity_verified": false})
+	if saveErr := putRecord(ctx, s.Store, "report_model_usage", journalKey+":1", eventID, map[string]any{"model": reportClient.Model, "endpoint": reportClient.BaseURL, "prompt_tokens": completion.PromptTokens, "completion_tokens": completion.CompletionTokens, "finish_reason": completion.FinishReason, "input_hash": digest(prompt), "system_hash": digest(evidenceReportSystemPrompt), "build_revision": ReportBuildRevision, "capacity_verified": false}); saveErr != nil {
+		return s.failAgentWorkflow(eventID, fmt.Errorf("report_model_usage_persist_failed: %w", saveErr))
+	}
 	if err != nil {
 		err = fmt.Errorf("LLM自动分析失败，请检查LLM配置: %w", err)
 		_ = s.addLLMConfigRequiredMessage(eventID, roundID, err.Error())
@@ -197,14 +200,16 @@ func (s Services) runAnalysis(ctx context.Context, eventID string, kind string, 
 	// valid answer is final; no retries to increase threat probability.
 	if err != nil {
 		firstReason := err.Error()
-		_ = putRecord(ctx, s.Store, "report_validation_attempt", fmt.Sprintf("%s:%d:%d", eventID, prepared.Evidence.SnapshotVersion, version), eventID, map[string]any{"reason": firstReason, "reply": rawReply})
+		_ = putRecord(ctx, s.Store, "report_validation_attempt", journalKey, eventID, map[string]any{"reason": firstReason, "reply": rawReply, "build_revision": ReportBuildRevision, "input_hash": digest(prompt)})
 		correction := prompt + "\n上次输出未通过一致性校验，原因=" + firstReason + "。重新输出完整JSON，纠正引用、同源重复、数字重述或不支持的结论；不得提高概率来解决错误。正文数字须能在当前引用的证据范围核验。上次输出作为待修复数据：\n" + rawReply
 		if estimateTokens(evidenceReportSystemPrompt+correction) <= reportPromptEstimateBudget {
-			if persistErr := putRecord(ctx, s.Store, "report_model_correction_input", fmt.Sprintf("%s:%d:%d", eventID, prepared.Evidence.SnapshotVersion, version), eventID, map[string]any{"system": evidenceReportSystemPrompt, "user": correction, "input_hash": digest(correction), "build_revision": ReportBuildRevision}); persistErr != nil {
+			if persistErr := putRecord(ctx, s.Store, "report_model_correction_input", journalKey, eventID, map[string]any{"system": evidenceReportSystemPrompt, "user": correction, "input_hash": digest(correction), "system_hash": digest(evidenceReportSystemPrompt), "build_revision": ReportBuildRevision}); persistErr != nil {
 				return s.failAgentWorkflow(eventID, fmt.Errorf("report_model_input_persist_failed: %w", persistErr))
 			}
 			fixed, callErr := reportClient.CompleteReport(ctx, evidenceReportSystemPrompt, correction)
-			_ = putRecord(ctx, s.Store, "report_model_usage", fmt.Sprintf("%s:%d:%d:2", eventID, prepared.Evidence.SnapshotVersion, version), eventID, map[string]any{"model": reportClient.Model, "endpoint": reportClient.BaseURL, "prompt_tokens": fixed.PromptTokens, "completion_tokens": fixed.CompletionTokens, "finish_reason": fixed.FinishReason, "input_hash": digest(correction), "build_revision": ReportBuildRevision, "capacity_verified": false})
+			if saveErr := putRecord(ctx, s.Store, "report_model_usage", journalKey+":2", eventID, map[string]any{"model": reportClient.Model, "endpoint": reportClient.BaseURL, "prompt_tokens": fixed.PromptTokens, "completion_tokens": fixed.CompletionTokens, "finish_reason": fixed.FinishReason, "input_hash": digest(correction), "system_hash": digest(evidenceReportSystemPrompt), "build_revision": ReportBuildRevision, "capacity_verified": false}); saveErr != nil {
+				return s.failAgentWorkflow(eventID, fmt.Errorf("report_model_usage_persist_failed: %w", saveErr))
+			}
 			if callErr == nil {
 				assessment, err = decodeReportAssessment(fixed.Reply, prepared.Evidence)
 				finalInputHash = digest(correction)

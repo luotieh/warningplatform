@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"sort"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -196,10 +197,25 @@ func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event
 	}
 	manifest["semantic_evidence"] = map[string]any{"result_key": semantics.ResultKey, "adapter_version": semantics.AdapterVersion, "input_mode": semantics.InputMode, "status": semantics.Status, "result_persisted": semantics.ResultPersisted}
 	projected, err := projectReportEvidence(snap, evaluation, semantics)
-	return preparedReportInput{Context: projected, AssetSection: assetMatchContext(event, assets), Evaluation: evaluation, Semantics: semantics, Evidence: buildReportEvidence(event, snap, evaluation, semantics, history)}, err
+	assetSection := strings.ReplaceAll(assetMatchContext(event, assets), "受害侧", "观测资产")
+	return preparedReportInput{Context: projected, AssetSection: assetSection, Evaluation: evaluation, Semantics: semantics, Evidence: buildReportEvidence(event, snap, evaluation, semantics, history)}, err
 }
 
 func projectReportEvidence(snap EvidenceSnapshot, facts SnapshotFactEvaluation, semantics ReportSemanticEvaluation) (string, error) {
+	// The report uses its own normalized evidence and budget. Do not run the
+	// shared dialogue projection, which discards records under a 6000-rune cap.
+	context := map[string]any{"event_id": snap.EventID, "snapshot_version": snap.Version, "input_manifest": snap.Manifest, "algorithm_evidence": snapshotFactSummary(facts), "semantic_evidence": reportSemanticSummary(semantics)}
+	for _, key := range []string{"ioc", "ioc_evidence"} {
+		if value, ok := snap.Context[key]; ok {
+			context[key] = value
+		}
+	}
+	raw, err := json.Marshal(context)
+	return string(raw), err
+}
+
+// Legacy projection retained for callers explicitly using its old envelope.
+func projectLegacyReportEvidence(snap EvidenceSnapshot, facts SnapshotFactEvaluation, semantics ReportSemanticEvaluation) (string, error) {
 	factSummary, semanticSummary := snapshotFactSummary(facts), reportSemanticSummary(semantics)
 	// Whole entries compete under the existing shared 6000-character envelope;
 	// retain explicit omission totals and status instead of slicing JSON/text.

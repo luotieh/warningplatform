@@ -236,7 +236,7 @@ func (s Services) prepareReportSemantics(ctx context.Context, snap EvidenceSnaps
 		}
 		if model != nil {
 			model = reportSemanticAuditModel{Model: model, Save: func(ctx context.Context, call evidence.SemanticCall) error {
-				return putRecord(ctx, s.Store, "semantic_model_input", digest([]any{snap.EventID, snap.Version, call.Prompt}), snap.EventID, map[string]any{"snapshot_version": snap.Version, "system": call.System, "user": call.Prompt, "max_output_tokens": call.MaxOutputTokens, "input_hash": digest(call.Prompt), "build_revision": ReportBuildRevision, "capacity_verified": false})
+				return putRecord(ctx, s.Store, "semantic_model_input", digest([]any{snap.EventID, snap.Version, call.System, call.Prompt, ReportBuildRevision}), snap.EventID, map[string]any{"snapshot_version": snap.Version, "system": call.System, "user": call.Prompt, "max_output_tokens": call.MaxOutputTokens, "input_hash": digest(call.Prompt), "system_hash": digest(call.System), "build_revision": ReportBuildRevision, "capacity_verified": false})
 			}}
 		}
 	}
