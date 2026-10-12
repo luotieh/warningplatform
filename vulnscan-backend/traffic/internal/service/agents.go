@@ -148,14 +148,19 @@ func (s Services) runAnalysis(ctx context.Context, eventID string, kind string, 
 
 	if s.LLM == nil {
 		err := fmt.Errorf("LLM未配置")
+		s.recordReportPipelineFailure(eventID, "model_configuration", err)
 		_ = s.addLLMConfigRequiredMessage(eventID, roundID, err.Error())
 		_, _ = s.Store.UpdateEvent(eventID, map[string]any{"event_status": "pending"})
 		realtime.BroadcastStatus(eventID, map[string]any{"event_id": eventID, "status": "llm_config_required", "message": err.Error()})
 		return err
 	}
-	health := s.LLM.HealthCheck(ctx)
+	reportClient := *s.LLM
+	reportClient.DisableThinking = true
+	reportClient.ReportThinkingDisabled = true
+	health := reportClient.HealthCheck(ctx)
 	if !health.Configured || !health.OK {
 		err := fmt.Errorf("LLM不可用，请先在配置页面填写并验证可用的LLM参数: %s", firstNonEmpty(health.Error, "health check failed"))
+		s.recordReportPipelineFailure(eventID, "model_health", err)
 		_ = s.addLLMConfigRequiredMessage(eventID, roundID, err.Error())
 		// 事件状态回到 pending：列表里显示「未分析/待分析」而不是「需配置LLM」。
 		// LLM 修好后会自动重试（RoleSystem 提示消息不计入 hasAgentWorkflowMessages）；
@@ -174,13 +179,12 @@ func (s Services) runAnalysis(ctx context.Context, eventID string, kind string, 
 	if err != nil {
 		return s.failAgentWorkflow(eventID, err)
 	}
-	journalKey := fmt.Sprintf("%s:%d:%d:%s:%s", eventID, prepared.Evidence.SnapshotVersion, version, ReportBuildRevision, digest(prompt))
+	// One key per actual attempt: bounded for the existing column and immutable
+	// across repeated refreshes with identical inputs, snapshot and analysis.
+	journalKey := digest(fmt.Sprintf("%s:%d:%d:%s:%s:%d", eventID, prepared.Evidence.SnapshotVersion, version, ReportBuildRevision, digest(prompt), time.Now().UnixNano()))
 	if err := putRecord(ctx, s.Store, "report_model_input", journalKey, eventID, map[string]any{"system": evidenceReportSystemPrompt, "user": prompt, "input_hash": digest(prompt), "system_hash": digest(evidenceReportSystemPrompt), "build_revision": ReportBuildRevision, "snapshot_version": prepared.Evidence.SnapshotVersion, "analysis_version": version, "schema_version": reportEvidenceVersion, "weight_policy": reportWeightPolicy(prepared.Evidence), "created_at": time.Now().UTC()}); err != nil {
 		return s.failAgentWorkflow(eventID, fmt.Errorf("report_model_input_persist_failed: %w", err))
 	}
-	reportClient := *s.LLM
-	reportClient.DisableThinking = true
-	reportClient.ReportThinkingDisabled = true
 	completion, err := reportClient.CompleteReport(ctx, evidenceReportSystemPrompt, prompt)
 	rawReply := completion.Reply
 	finalInputHash := digest(prompt)
@@ -189,6 +193,7 @@ func (s Services) runAnalysis(ctx context.Context, eventID string, kind string, 
 	}
 	if err != nil {
 		err = fmt.Errorf("LLM自动分析失败，请检查LLM配置: %w", err)
+		s.recordReportPipelineFailure(eventID, "report_model_call", err)
 		_ = s.addLLMConfigRequiredMessage(eventID, roundID, err.Error())
 		// 同上：保持 pending（列表显示未分析），等 LLM 恢复后自动重试。
 		_, _ = s.Store.UpdateEvent(eventID, map[string]any{"event_status": "pending"})
@@ -280,11 +285,18 @@ func (s Services) runAnalysis(ctx context.Context, eventID string, kind string, 
 // failAgentWorkflow 把事件置为 failed 并广播失败详情；列表显示“分析失败”，
 // 且不阻断重试（专家消息未落库时 hasAgentWorkflowMessages 仍为 false，重推可再跑）。
 func (s Services) failAgentWorkflow(eventID string, err error) error {
-	_ = putRecord(context.Background(), s.Store, "report_pipeline_failure", fmt.Sprintf("%s:%d", eventID, time.Now().UnixNano()), eventID, map[string]any{"reason": err.Error(), "build_revision": ReportBuildRevision, "at": time.Now().UTC()})
+	s.recordReportPipelineFailure(eventID, "report_pipeline", err)
 	_, _ = s.Store.UpdateEvent(eventID, map[string]any{"event_status": "failed"})
 	realtime.BroadcastStatus(eventID, map[string]any{"event_id": eventID, "status": "failed", "message": err.Error()})
 	realtime.BroadcastEventListUpdate(map[string]any{"event_id": eventID, "status": "failed"})
 	return err
+}
+
+func (s Services) recordReportPipelineFailure(eventID, stage string, err error) {
+	if err == nil {
+		return
+	}
+	_ = putRecord(context.Background(), s.Store, "report_pipeline_failure", digest([]any{eventID, stage, time.Now().UnixNano()}), eventID, map[string]any{"stage": stage, "reason": err.Error(), "build_revision": ReportBuildRevision, "at": time.Now().UTC()})
 }
 
 func (s Services) addLLMConfigRequiredMessage(eventID string, roundID int, text string) error {

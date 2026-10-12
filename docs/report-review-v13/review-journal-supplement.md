@@ -27,3 +27,15 @@
 ## 闭环状态
 
 R1-IP117-006中“缺本次report_id/input_hash/revision及用量绑定”的缺交事实可记录为补交已解决；其完整文本核查受上述读取限制，不声称已经全面通过。其他R1-IP117-001—005、007及首例问题未复验、未关闭。报告1308总体仍为不通过；本次补交不是新报告，不计第二轮评审。后续系统修复、180重新生成与独立复验仍须执行。
+
+## 追加：原始UTF-8留档复核
+
+新增补交文件source-journal-raw-utf8.jsonl及journal-utf8-validation.json。实施者说明此前显示异常来自Windows Python默认GBK标准输出被工具按UTF-8解释，而非数据库文件损坏；本次以mysql HEX提取value_json并严格UTF-8解码。本评审使用Get-Content -Encoding UTF8读取和JSON解析复核，未修改前述原意见。
+
+独立对比原始journal中的report_document.markdown与既有API report.json的markdown：summary_id=1307、1308均逐字符完全相同，U+FFFD替换字符数量均为0；此结果与validation文件一致。1308的correction_input、report_document和最终usage的hash e4e9e06afc5c5fa396ab73880a2404d39db88691fe60370bdd0da1cf82f16a76及revision 39a5a71ff11f6194938c12b1702866415fffd510再次一致，记录字符串检查替换字符为0。
+
+最终correction_input中文系统提示与正文可读；user是首行结构化JSON加后续中文纠正指令/上次输出，不能将整个user误当单一JSON解析。首行可解析并送达E001—E010十项证据和report-weights-1.3；后续指令明确上次失败原因为report_fact_numbers_not_in_cited_scope: value=104.21.57.117 refs=E008，要求纠正引用、同源重复和不支持结论，且不得提高概率。本次可读取这些真实输入文字，前述“中文留档读取限制”已解除，不再作为缺交保留。
+
+据此R1-IP117-006关闭（补交材料关闭，关闭人/root/client_report_review）。这是输入/用量可追溯问题的关闭，并非承认模型推理正确，也不是再次评审报告质量。其他所有首轮实质问题仍待系统修复后新报告复验。
+
+状态说明：实施者通知180已部署b7c4032，但模型上游403七日额度耗尽，当前未取得可评审的第二轮合格新报告。本评审未用旧1307/1308计算第二轮，未认可当前系统问题已修复；第一轮批次及至少两轮闭环仍未完成。

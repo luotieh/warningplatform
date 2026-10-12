@@ -12,7 +12,7 @@ import (
 	"vulnscan-backend/traffic/internal/domain"
 )
 
-const reportEvidenceVersion = "evidence-report-1.3.1"
+const reportEvidenceVersion = "evidence-report-1.3.2"
 
 var ReportBuildRevision = "development"
 
@@ -205,6 +205,9 @@ func buildReportEvidence(event domain.Event, snap EvidenceSnapshot, f SnapshotFa
 	b.Digest = evidence.Compress(b.Normalized, evidence.CompressionOptions{MaxItems: len(b.Entries), MaxRunes: 1 << 30,
 		Eligible: func(u evidence.UnifiedEvidence) bool {
 			e := entriesByID[u.ReportID]
+			if strings.HasPrefix(e.Family, "saved_packet:") {
+				return false
+			} // raw auxiliary bytes stay in the appendix; verified typed observations are above
 			// Execution diagnostics and neutral semantic repeats are retained in
 			// the immutable bundle/appendix, not promoted to judgement evidence.
 			if e.Semantic != nil && (e.Semantic.ExplanationOnly || e.Semantic.Judgement == "neutral") {
@@ -317,6 +320,40 @@ func reportEvidencePromptEntry(e ReportEvidence) map[string]any {
 		out["gaps"] = e.Semantic.Gaps
 	}
 	return out
+}
+
+// History interpretations describe already-counted facts. Keep their full
+// validated content even when neutrality excludes them from scoring rows.
+func reportHistoryInterpretationContext(b ReportEvidenceBundle, selected map[string]bool) []map[string]any {
+	rows := []map[string]any{}
+	for _, entry := range b.Entries {
+		sem := entry.Semantic
+		if sem == nil || selected[entry.ID] || (sem.Slot.ID != "R06" && sem.Slot.ID != "R07") {
+			continue
+		}
+		row := reportEvidencePromptEntry(entry)
+		row["result"] = sem.Explanation
+		row["context_only"] = true
+		row["non_additive_with"] = sem.NonAdditiveWith
+		refs := []string{}
+		for _, fact := range b.Entries {
+			if fact.Finding == nil || !selected[fact.ID] || fact.Scope != entry.Scope {
+				continue
+			}
+			for _, id := range sem.FactRefs {
+				if id == string(fact.FactID) {
+					refs = append(refs, fact.ID)
+					break
+				}
+			}
+		}
+		row["fact_report_ids"] = refs
+		// Gaps remain in the immutable technical appendix. They are neither
+		// established alternatives nor report judgement evidence.
+		delete(row, "gaps")
+		rows = append(rows, row)
+	}
+	return rows
 }
 
 type ReportDocument struct {

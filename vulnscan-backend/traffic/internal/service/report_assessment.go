@@ -62,6 +62,8 @@ func evidenceReportPrompt(event domain.Event, p preparedReportInput, b ReportEvi
 			entries = append(entries, reportEvidencePromptEntry(e))
 		}
 	}
+	historyInterpretations := reportHistoryInterpretationContext(b, selected)
+	allRows := append(append([]map[string]any{}, entries...), historyInterpretations...)
 	context := decodeEventContext(p.Context)
 	// Full rule lists and raw hex are not sent twice. Actual measurements are in
 	// selected entries, compact semantics retain actual verified quotations.
@@ -75,6 +77,7 @@ func evidenceReportPrompt(event domain.Event, p preparedReportInput, b ReportEvi
 	}
 	eventMetadata := map[string]any{"id": event.EventID, "title": truncateRunes(event.EventName, 300), "severity": event.Severity, "observables": event.Observables}
 	input := map[string]any{"schema_version": reportEvidenceVersion, "event": eventMetadata, "asset_registry": p.AssetSection, "context": sanitizeEvidenceForPrompt(context), "selected_evidence": entries, "fact_counts": b.FactCounts, "semantic_counts": b.SemanticCounts, "selection_omitted": b.SelectionOmitted, "snapshot_version": b.SnapshotVersion, "dialogue": dialogue}
+	input["validated_history_interpretations"] = historyInterpretations
 	input["evidence_digest"] = map[string]any{"version": b.Digest.Version, "total_instances": b.Digest.TotalInstances, "status_counts": b.Digest.Counts, "gap_reasons": b.Digest.GapReasons, "compression_omitted": b.Digest.Omitted}
 	// Intern complete source lists. Each row retains its entire source binding
 	// without repeating long hit hashes across every measurement and slot.
@@ -82,7 +85,7 @@ func evidenceReportPrompt(event domain.Event, p preparedReportInput, b ReportEvi
 	sourceCatalog := map[string]string{}
 	sourceSets := map[string][]string{}
 	setIDs := map[string]string{}
-	for _, row := range entries {
+	for _, row := range allRows {
 		for _, original := range b.Entries {
 			if row["id"] != original.ID {
 				continue
@@ -113,7 +116,7 @@ func evidenceReportPrompt(event domain.Event, p preparedReportInput, b ReportEvi
 	for _, field := range []string{"scope", "window"} {
 		catalog := map[string]any{}
 		identities := map[string]string{}
-		for _, row := range entries {
+		for _, row := range allRows {
 			value := row[field]
 			encoded, err := json.Marshal(value)
 			if err != nil {
@@ -131,11 +134,16 @@ func evidenceReportPrompt(event domain.Event, p preparedReportInput, b ReportEvi
 		}
 		input[field+"_catalog"] = catalog
 	}
+	for n, row := range historyInterpretations {
+		delete(row, "id")
+		row["context_id"] = fmt.Sprintf("H%d", n+1)
+	}
 	input["report_weight_policy"] = reportWeightPolicy(b)
 	if b.History != nil {
 		input["history_lookup"] = map[string]any{"diagnostics": ReportHistoryDiagnostics{Status: b.History.Status, Reason: b.History.Reason, Candidates: b.History.CandidateCount, Matched: len(b.History.Rows), Excluded: b.History.ExcludedCount, Truncated: b.History.Truncated}, "lookback_start": b.History.Start, "as_of": b.History.End}
 	}
 	input["history_usage"] = "历史关联由事实规则和R06/R07提供，所有匹配历史均参与，不按审核状态筛选。复发、基础设施复用可作为实际行为依据；同资产不等于同IOC或同战役，语义解释与其依赖事实不重复计证。"
+	input["history_interpretation_usage"] = "validated_history_interpretations为通过引用核验的R06/R07解释，保留完整解释、摘录、材料与来源绑定。H编号仅用于上下文追溯，不是独立证据，不单独加权；报告必须引用fact_report_ids中实际支持该判断的E编号，数字与主体仍以对应事实的范围为准。"
 	raw, err := json.Marshal(input)
 	if err != nil {
 		return "", err
@@ -496,6 +504,9 @@ func reportCell(s string) string {
 var reportThreatTypeNames = map[string]string{"phishing_related": "钓鱼相关线索", "c2_related": "指令控制相关线索", "botnet_related": "群体协同相关线索", "mining_related": "挖矿通信相关线索", "dns_related": "DNS异常相关线索", "exfiltration_related": "数据传输异常相关线索", "scanning_related": "扫描行为相关线索", "suspicious_contact": "可疑目标通联", "normal_business": "正常业务倾向", "undetermined": "威胁类型待核查"}
 
 func renderReportMarkdown(doc ReportDocument) string {
+	if doc.SchemaVersion == "evidence-report-1.3.1" {
+		return renderV131ReportMarkdown(doc)
+	}
 	if doc.SchemaVersion == "evidence-report-1.3" {
 		return renderV13ReportMarkdown(doc)
 	}
@@ -553,6 +564,9 @@ func renderReportMarkdown(doc ReportDocument) string {
 	fmt.Fprint(&w, "\n## 技术附录：材料缺项与核验记录\n\n")
 	fmt.Fprint(&w, "来源索引（对应上文证据编号，可按命中ID或历史事件ID核查原始记录）：\n\n")
 	for _, e := range b.Entries {
+		if strings.HasPrefix(e.Family, "saved_packet:") {
+			fmt.Fprintf(&w, "- %s 原文核对片段：%s\n", e.ID, reportCell(e.Result))
+		}
 		if len(e.SourceIDs) > 0 {
 			fmt.Fprintf(&w, "- %s：%s\n", e.ID, reportCell(strings.Join(e.SourceIDs, "、")))
 		}

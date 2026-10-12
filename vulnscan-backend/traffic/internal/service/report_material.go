@@ -20,6 +20,7 @@ import (
 // One entry per immutable hit. Kept with the fact cache so cache hits retain
 // metadata from the entire membership, rather than representative packets.
 type ReportMaterialObservation struct {
+	TLSRecordType    string          `json:"verified_tls_record_header_type,omitempty"`
 	PayloadBytes     *int            `json:"verified_transport_payload_bytes,omitempty"`
 	TCPFlags         string          `json:"verified_tcp_flags,omitempty"`
 	PhysicalPacketID string          `json:"physical_packet_id,omitempty"`
@@ -51,6 +52,7 @@ func reportMaterialObservation(h store.Hit, m map[string]any, scope evidence.Sco
 			o.PayloadBytes = &n
 		}
 		o.TCPFlags = asString(packet["report_tcp_flags"])
+		o.TLSRecordType = asString(packet["report_tls_record_type"])
 	}
 	if raw := asString(packet["packet_hex"]); raw != "" && asString(packet["capture_time"]) != "" {
 		sum := sha256.Sum256([]byte(fmt.Sprint(packet["capture_time_usec"]) + ":" + asString(packet["capture_time"]) + ":" + raw))
@@ -97,6 +99,12 @@ func reportVerifyDatagram(m map[string]any) {
 		// application preview is not proof of a payload-free packet.
 		if transport := p.TransportLayer(); transport != nil {
 			packet["payload_hex"] = hex.EncodeToString(transport.LayerPayload())
+			payload := transport.LayerPayload()
+			if p.Layer(layers.LayerTypeTCP) != nil && len(payload) >= 5 && payload[1] == 3 && payload[2] <= 4 {
+				if name := map[byte]string{20: "ChangeCipherSpec", 21: "Alert", 22: "Handshake", 23: "ApplicationData"}[payload[0]]; name != "" {
+					packet["report_tls_record_type"] = name
+				}
+			}
 		}
 		if layer := p.Layer(layers.LayerTypeTCP); layer != nil {
 			tcp := layer.(*layers.TCP)
@@ -144,6 +152,7 @@ func reportMaterialEvidence(rows []ReportMaterialObservation) []ReportEvidence {
 		payloadSamples, payloadTotal := 0, 0
 		payloadSeen := map[string]bool{}
 		flagCounts := map[string]int{}
+		tlsHeaderCounts := map[string]int{}
 		for _, r := range rs {
 			if r.PhysicalPacketID != "" && !payloadSeen[r.PhysicalPacketID] && r.PayloadBytes != nil {
 				payloadSeen[r.PhysicalPacketID] = true
@@ -151,6 +160,9 @@ func reportMaterialEvidence(rows []ReportMaterialObservation) []ReportEvidence {
 				payloadTotal += *r.PayloadBytes
 				if r.TCPFlags != "" {
 					flagCounts[r.TCPFlags]++
+				}
+				if r.TLSRecordType != "" {
+					tlsHeaderCounts[r.TLSRecordType]++
 				}
 			}
 			ports[r.Source+" → "+r.Destination+" / "+r.Protocol]++
@@ -218,6 +230,13 @@ func reportMaterialEvidence(rows []ReportMaterialObservation) []ReportEvidence {
 				}
 				result += "；TCP标志分布=" + strings.Join(flagParts, "、")
 			}
+			if len(tlsHeaderCounts) > 0 {
+				parts := []string{}
+				for _, kind := range sortedReportKeysInt(tlsHeaderCounts) {
+					parts = append(parts, fmt.Sprintf("%s:%d份", kind, tlsHeaderCounts[kind]))
+				}
+				result += "；TLS记录头类型分布=" + strings.Join(parts, "、") + "（仅核验记录头字段，不据此认定协商版本、完整会话或内容恶意性）"
+			}
 		}
 		out = append(out, ReportEvidence{Kind: "observation", Name: "全量命中通联与时间分布", Status: "observed", Result: result, Source: "固定快照全部绑定命中的时间与五元组", SourceIDs: refs, Scope: rs[0].Scope, Family: "saved_activity:" + k, Window: &evidence.Window{Start: first, End: last, Convention: "observed_first_last_inclusive"}})
 		if len(ak) > 0 {
@@ -258,6 +277,9 @@ func reportDNSConnectionEvidence(rows []ReportMaterialObservation, h *ReportHist
 			continue
 		}
 		for _, prior := range h.Rows {
+			if h.RawDNSVerificationRequired && len(prior.VerifiedDNSHitIDs) == 0 {
+				continue
+			}
 			if prior.DeviceID != current.Scope.DeviceID || !slices.Contains(prior.AllAssetIDs, current.Scope.AssetID) || !prior.First.Equal(prior.Last) {
 				continue
 			}
@@ -284,7 +306,8 @@ func reportDNSConnectionEvidence(rows []ReportMaterialObservation, h *ReportHist
 				continue
 			}
 			seen[key] = true
-			out = append(out, ReportEvidence{Kind: "observation", Name: "DNS解析与后续目标连接关联", Status: "observed", Result: fmt.Sprintf("同资产、同设备；历史事件%s保存DNS查询=%s、应答包含%s（UTC %s）；当前命中%s在%.6f秒后连接该IP且SNI=%s。关联为解析→连接，未将情报域名当作实际查询域名。", prior.EventID, domain, remote, prior.Last.Format(time.RFC3339Nano), current.HitID, delta.Seconds(), sni), Source: "平台历史事件应用字段＋当前固定快照五元组及SNI；5分钟精确匹配", SourceIDs: []string{prior.EventID, current.HitID}, Scope: current.Scope, Family: "dns_connection:" + key})
+			refs := append([]string{prior.EventID, current.HitID}, prior.VerifiedDNSHitIDs...)
+			out = append(out, ReportEvidence{Kind: "observation", Name: "DNS解析与后续目标连接关联", Status: "observed", Result: fmt.Sprintf("同资产、同设备；历史事件%s保存DNS查询=%s、应答包含%s（UTC %s）；当前命中%s在%.6f秒后连接该IP且SNI=%s。关联为解析→连接，未将情报域名当作实际查询域名。", prior.EventID, domain, remote, prior.Last.Format(time.RFC3339Nano), current.HitID, delta.Seconds(), sni), Source: "平台历史DNS原始命中＋当前固定快照五元组及SNI；5分钟精确匹配", SourceIDs: refs, Scope: current.Scope, Family: "dns_connection:" + key})
 		}
 	}
 	return out

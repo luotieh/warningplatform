@@ -13,7 +13,7 @@ import (
 	"vulnscan-backend/traffic/internal/store"
 )
 
-const reportHistoryVersion = "platform-history-0.3"
+const reportHistoryVersion = "platform-history-0.4"
 
 type ReportHistoryDiagnostics struct {
 	Status     string `json:"status"`
@@ -24,6 +24,7 @@ type ReportHistoryDiagnostics struct {
 	Truncated  bool   `json:"truncated"`
 }
 type ReportHistoryRow struct {
+	VerifiedDNSHitIDs  []string       `json:"verified_dns_hit_ids,omitempty"`
 	SourceAddress      string         `json:"source_address,omitempty"`
 	DestinationAddress string         `json:"destination_address,omitempty"`
 	DeviceID           string         `json:"device_id"`
@@ -43,18 +44,21 @@ type ReportHistoryRow struct {
 	AdjudicationSource string         `json:"adjudication_source,omitempty"`
 }
 type ReportHistory struct {
-	MatchAddresses []string            `json:"match_addresses"`
-	MatchIOCs      []domain.IOC        `json:"match_iocs"`
-	Version        string              `json:"version"`
-	Status         string              `json:"status"`
-	Reason         string              `json:"reason,omitempty"`
-	Start          time.Time           `json:"lookback_start"`
-	End            time.Time           `json:"as_of"`
-	Issue          *SnapshotInputIssue `json:"-"`
-	CandidateCount int                 `json:"candidate_count"`
-	ExcludedCount  int                 `json:"excluded_count"`
-	Truncated      bool                `json:"truncated"`
-	Rows           []ReportHistoryRow  `json:"rows"`
+	RawDNSVerificationRequired bool                `json:"raw_dns_verification_required,omitempty"`
+	RawDNSStatus               string              `json:"raw_dns_status,omitempty"`
+	RawDNSReadHits             int                 `json:"raw_dns_read_hits,omitempty"`
+	MatchAddresses             []string            `json:"match_addresses"`
+	MatchIOCs                  []domain.IOC        `json:"match_iocs"`
+	Version                    string              `json:"version"`
+	Status                     string              `json:"status"`
+	Reason                     string              `json:"reason,omitempty"`
+	Start                      time.Time           `json:"lookback_start"`
+	End                        time.Time           `json:"as_of"`
+	Issue                      *SnapshotInputIssue `json:"-"`
+	CandidateCount             int                 `json:"candidate_count"`
+	ExcludedCount              int                 `json:"excluded_count"`
+	Truncated                  bool                `json:"truncated"`
+	Rows                       []ReportHistoryRow  `json:"rows"`
 }
 
 func historyIOCs(event domain.Event, c map[string]any) []domain.IOC {
@@ -69,6 +73,20 @@ func historyIOCs(event domain.Event, c map[string]any) []domain.IOC {
 			for _, row := range rows {
 				if m, ok := row.(map[string]any); ok {
 					terms = append(terms, domain.IOC{Type: asString(m["ioc_type"]), Value: asString(m["ioc_value"])})
+				}
+			}
+		}
+	}
+	// Actual parsed DNS fields are typed observations, independent of which IOC
+	// rule triggered the hit. Retain query/answer associations, not resolver IPs.
+	if app, ok := c["app"].(map[string]any); ok {
+		if query := asString(app["dns_query"]); query != "" {
+			terms = append(terms, domain.IOC{Type: "domain", Value: query})
+		}
+		if answers, ok := app["dns_answers"].([]any); ok {
+			for _, answer := range answers {
+				if value := asString(answer); value != "" {
+					terms = append(terms, domain.IOC{Type: "ip", Value: value})
 				}
 			}
 		}
@@ -249,6 +267,7 @@ func (s Services) loadReportHistory(ctx context.Context, event domain.Event, sna
 	if len(h.Rows) == 0 && !h.Truncated {
 		h.Reason = "no_matching_platform_history"
 	}
+	s.verifyReportHistoricalDNS(ctx, snap, &h)
 	// Ordinary approval/rejection is a workflow state, not an independently
 	// verified malicious/false-positive adjudication; do not synthesize one.
 	return h

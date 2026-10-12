@@ -44,7 +44,7 @@ func (s Services) ReportDocument(ctx context.Context, eventID string, summaryID 
 		return ReportDocument{}, fmt.Errorf("legacy_report_without_evidence_document")
 	}
 	var doc ReportDocument
-	if len(record.Value) > 16<<20 || json.Unmarshal(record.Value, &doc) != nil || doc.SummaryID != summary.ID || doc.EventID != eventID || doc.Markdown != summary.EventSummary || (doc.SchemaVersion != reportEvidenceVersion && doc.SchemaVersion != "evidence-report-1.3" && doc.SchemaVersion != "evidence-report-1.0") || doc.AnalysisVersion != summary.Version || doc.Kind != summary.Kind {
+	if len(record.Value) > 16<<20 || json.Unmarshal(record.Value, &doc) != nil || doc.SummaryID != summary.ID || doc.EventID != eventID || doc.Markdown != summary.EventSummary || (doc.SchemaVersion != reportEvidenceVersion && doc.SchemaVersion != "evidence-report-1.3.1" && doc.SchemaVersion != "evidence-report-1.3" && doc.SchemaVersion != "evidence-report-1.0") || doc.AnalysisVersion != summary.Version || doc.Kind != summary.Kind {
 		return ReportDocument{}, fmt.Errorf("report_document_binding_invalid")
 	}
 	if err := validateReportAssessment(doc.Assessment, doc.Evidence); err != nil {
