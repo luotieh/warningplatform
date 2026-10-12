@@ -31,7 +31,8 @@ type Services struct {
 	Queue mq.Queue
 	// Optional per-deployment budgets; defaults retain bounded raw local inputs.
 	ReportSemantics *ReportSemanticOptions
-	SemanticModel   evidence.SemanticModel // optional injected transport for tests/deployment
+	ReportSchedules map[string]ReportSchedulePolicy // report-only overrides keyed by asset ID
+	SemanticModel   evidence.SemanticModel          // optional injected transport for tests/deployment
 }
 
 func (s Services) ProcessLyEvent(ctx context.Context, ly map[string]any) (map[string]any, error) {

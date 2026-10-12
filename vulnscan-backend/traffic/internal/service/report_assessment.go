@@ -303,6 +303,9 @@ func validateReportAssessment(a ReportAssessment, b ReportEvidenceBundle) error 
 		if strings.TrimSpace(s) == "" || len([]rune(s)) > 500 {
 			return fmt.Errorf("report_text_bounds")
 		}
+		if (strings.Contains(s, "项发现") || strings.Contains(s, "事实规则") || strings.Contains(s, "语义槽位") || strings.Contains(s, "证据算法")) && (strings.Contains(s, "未产出") || strings.Contains(s, "缺材料") || strings.Contains(s, "无法执行") || strings.Contains(s, "跳过")) {
+			return fmt.Errorf("report_execution_diagnostics_require_appendix")
+		}
 		if reportOverclaims.MatchString(reportNegatedOverclaims.ReplaceAllString(s, "")) {
 			return fmt.Errorf("report_success_or_exclusion_overclaim")
 		}

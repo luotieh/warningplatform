@@ -191,6 +191,9 @@ func buildSnapshotSemanticRequest(snap EvidenceSnapshot, input SnapshotEvidenceI
 		}
 		s.Materials = []evidence.SemanticMaterial{material(&s, "visibility", fmt.Sprintf("保存命中%d条，绑定%d条，覆盖=%s；这是告警命中快照，不代表全部通信", input.Manifest.LoadedHits, input.Manifest.BoundHits, input.Manifest.Coverage), "snapshot.input_manifest", p, p.Complete), material(&s, "gaps", strings.Join(gaps, ";"), "facts.reason_code", p, true)}
 		addSemanticSupplementalMaterials(&s, i, snap.EventID, material)
+		if strings.HasPrefix(input.Manifest.AdapterVersion, "report-snapshot-adapter-") {
+			addReportScheduleMaterials(&s, input.Manifest, material)
+		}
 		r.Subjects = append(r.Subjects, s)
 	}
 	for _, o := range input.SemanticObservations {

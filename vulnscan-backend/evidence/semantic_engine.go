@@ -59,6 +59,7 @@ func (e *SemanticEngine) Plan(ctx context.Context, r SemanticRequest) (SemanticP
 	for _, spec := range specs {
 		for _, subject := range r.Subjects {
 			subject.ReportHistory = e.config.ReportHistory
+			subject.ReportSchedule = e.config.ReportSchedule
 			subject.InputMode = semanticMode(r.InputMode)
 			if err := ctx.Err(); err != nil {
 				return p, err
@@ -76,6 +77,9 @@ func (e *SemanticEngine) Plan(ctx context.Context, r SemanticRequest) (SemanticP
 				continue
 			}
 			task := SemanticTask{ID: fmt.Sprintf("T%03d", len(p.Tasks)+1), Slot: spec.SemanticDefinition, SubjectID: subject.ID, PropositionID: subject.PropositionID, Scope: subject.Scope, Window: subject.Window, MaxStrength: maximum, Materials: []DeliveredMaterial{}, Facts: []SemanticFactRef{}, NonAdditiveWith: nil}
+			if e.config.ReportSchedule && spec.Key.ID == "SC01" {
+				task.Slot.Prerequisite = "实际命中时间与报告比较时段；角色可选；默认时段只解释非工作时段活动，不能证明资产作息异常或攻击；已证实全天运行和授权业务优先解释。"
+			}
 			task.InputMode = semanticMode(r.InputMode)
 			for _, m := range materials {
 				text := m.Text

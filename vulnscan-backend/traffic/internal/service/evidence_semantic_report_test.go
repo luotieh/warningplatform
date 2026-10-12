@@ -105,8 +105,12 @@ func TestSemanticReportSharesReadAndReusesIndependentCache(t *testing.T) {
 		if json.Unmarshal([]byte(call.Prompt), &batch) != nil || len(batch.Tasks) < 1 || len(batch.Tasks) > 3 {
 			t.Fatal("report semantic batch exceeds bounded reply capacity")
 		}
-		if !strings.Contains(call.Prompt, "LOCAL_PASSWORD_") {
-			t.Fatal("raw material missing")
+		for _, task := range batch.Tasks {
+			for _, material := range task.Materials {
+				if material.Kind == "protocol_request" && !strings.Contains(material.Text, "LOCAL_PASSWORD_") {
+					t.Fatal("raw request material missing")
+				}
+			}
 		}
 		return acceptedSemanticResponse(t, call), nil
 	})

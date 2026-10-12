@@ -71,6 +71,9 @@ func buildReportEvidence(event domain.Event, snap EvidenceSnapshot, f SnapshotFa
 	for _, e := range reportMaterialEvidence(f.Manifest.ReportObservations) {
 		add(e)
 	}
+	for _, e := range reportScheduleEvidence(f.Manifest) {
+		add(e)
+	}
 	if len(history) > 0 {
 		b.History = &history[0]
 		for _, e := range reportDNSConnectionEvidence(f.Manifest.ReportObservations, b.History) {

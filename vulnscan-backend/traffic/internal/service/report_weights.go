@@ -11,6 +11,9 @@ import (
 func reportWeightPolicy(b ReportEvidenceBundle) map[string]any {
 	items := []map[string]any{}
 	for _, e := range b.Entries {
+		if e.Family == "saved_schedule" && e.Status == "observed" {
+			items = append(items, map[string]any{"evidence_id": e.ID, "relative_influence": 1.15, "dependency_group": "temporal:" + scopeKey(e.Scope), "rule": "实际非工作时段/跨日记录作为辅助依据；默认时段不证明实际作息；与同范围时间算法和SC01不重复叠加；已证实全天运行或授权业务优先解释。"})
+		}
 		if e.Finding == nil || e.Finding.Status != evidence.Observed || e.Finding.Eligibility != "eligible" {
 			continue
 		}
@@ -19,7 +22,7 @@ func reportWeightPolicy(b ReportEvidenceBundle) map[string]any {
 			items = append(items, map[string]any{"evidence_id": e.ID, "relative_influence": 1.25, "dependency_group": "temporal:" + scopeKey(e.Scope), "rule": "同范围时间规律取最强依据，禁止叠加；须结合业务任务和作息替代解释，不单独证明恶意。"})
 		}
 	}
-	return map[string]any{"version": "report-weights-1.3", "enhanced_temporal": items, "ordinary_relative_influence": 1.0, "night_access": "只有已核验角色和业务作息相冲突才增强；夜间时间戳不构成异常证据。", "high_probability": "80至90必须有恶意内容/指令/凭据/异常传输等直接证据，并有独立行为或关联证据支持；单一情报、TLS接触或时间规律不能支持该区间。", "no_floor": true, "probability_nature": "证据约束的模型研判估计，不是统计校准概率；禁止将相对影响直接换算百分比。"}
+	return map[string]any{"version": "report-weights-1.4", "enhanced_temporal": items, "ordinary_relative_influence": 1.0, "night_access": "默认北京时间08:00—20:00为比较时段，不强制资产角色；实际非工作时段记录可作辅助依据，不能写成已核验作息异常；已配置专用时段优先，全天运行和授权业务优先解释。", "high_probability": "80至90必须有恶意内容/指令/凭据/异常传输等直接证据，并有独立行为或关联证据支持；单一情报、TLS接触或时间规律不能支持该区间。", "no_floor": true, "probability_nature": "证据约束的模型研判估计，不是统计校准概率；禁止将相对影响直接换算百分比。"}
 }
 
 func validateHighReportProbability(a ReportAssessment, entries map[string]ReportEvidence) error {

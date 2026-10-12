@@ -97,6 +97,14 @@ func resolveSemanticSlot(spec slotSpec, s SemanticSubject, eventID string) (mate
 			byKind[m.Kind] = append(byKind[m.Kind], m)
 		}
 	}
+	defaultSchedule := spec.Key.ID == "SC01" && s.ReportSchedule && len(byKind["business_schedule"]) == 1 && byKind["business_schedule"][0].Role == "report_default_workhours"
+	if defaultSchedule {
+		// Report policy is an explicit comparison baseline, not an invented role.
+		spec.Kinds = []string{"business_schedule", "time_distribution"}
+		if len(byKind["asset_role"]) > 0 {
+			spec.Kinds = append(spec.Kinds, "asset_role")
+		}
+	}
 	for _, kind := range spec.Kinds {
 		if kind != "chunk" && kind != "volume" && kind != "group_member" && kind != "history" && len(byKind[kind]) > 1 {
 			return nil, nil, "", "ambiguous_" + kind, nil
@@ -242,8 +250,12 @@ func resolveSemanticSlot(spec slotSpec, s SemanticSubject, eventID string) (mate
 		}
 		nonAdditive = append(nonAdditive, "protocol.stratum")
 	case "SC01":
-		if byKind["asset_role"][0].Role == "" {
+		if !defaultSchedule && byKind["asset_role"][0].Role == "" {
 			return nil, nil, "", "missing_verified_asset_role", nil
+		}
+		if defaultSchedule {
+			maxStrength = "weak"
+			nonAdditive = append(nonAdditive, "report.schedule")
 		}
 	case "S14", "S15":
 		if len(s.Facts) == 0 {
