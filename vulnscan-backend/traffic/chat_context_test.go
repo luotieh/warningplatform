@@ -57,3 +57,14 @@ func TestEngineerContextBoundsLegacyAndLargeContexts(t *testing.T) {
 		}
 	}
 }
+
+func TestEngineerEvidenceTimeUsesBeijing(t *testing.T) {
+	raw := `{"snapshot_version":1,"first_time":"2026-10-12T06:53:00Z","last_time":"2026-10-12T06:56:00Z"}`
+	prompt := buildEngineerEvidenceContext("timezone-event", raw)
+	if !strings.Contains(prompt, "2026-10-12T14:53:00+08:00") || !strings.Contains(prompt, "2026-10-12T14:56:00+08:00") {
+		t.Fatal(prompt)
+	}
+	if strings.Contains(prompt, "06:53:00Z") {
+		t.Fatal("UTC leaked into model event time")
+	}
+}

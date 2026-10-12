@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	trafficservice "vulnscan-backend/traffic/internal/service"
 )
 
 const engineerContextMaxRunes = 6000
@@ -27,6 +28,7 @@ func compactEngineerContext(raw string) string { return buildEngineerEvidenceCon
 // buildEngineerEvidenceContext scans every occurrence and creates a stable,
 // model-facing evidence index. Full packet/detail APIs remain untouched.
 func buildEngineerEvidenceContext(eventID, raw string) string {
+	raw = trafficservice.ModelTimeContext(raw)
 	if strings.TrimSpace(raw) == "" {
 		return "无上下文"
 	}

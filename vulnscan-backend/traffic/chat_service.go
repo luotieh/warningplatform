@@ -125,7 +125,7 @@ func (s *ChatService) engineerPromptParts(event domain.Event, question string) [
 		parts = append(parts, engineerPromptPart{name, b.String()})
 		b.Reset()
 	}
-	b.WriteString("# 安全事件完整信息\n\n")
+	b.WriteString("# 安全事件完整信息\n\n时间口径：报告和回答统一使用北京时间（Asia/Shanghai，UTC+08:00）；带Z的原始时间为UTC，须转换后引用，禁止直接去掉时区。\n\n")
 	b.WriteString(fmt.Sprintf("事件ID: %s\n", event.EventID))
 	b.WriteString(fmt.Sprintf("事件名称: %s\n", firstNonEmpty(event.EventName, event.Title, "未命名事件")))
 	b.WriteString(fmt.Sprintf("事件描述: %s\n", firstNonEmpty(event.Message, "无描述")))
@@ -133,7 +133,7 @@ func (s *ChatService) engineerPromptParts(event domain.Event, question string) [
 	b.WriteString(fmt.Sprintf("事件来源: %s\n", firstNonEmpty(event.Source, "未知")))
 	b.WriteString(fmt.Sprintf("事件状态: %s\n", firstNonEmpty(event.EventStatus, "未知")))
 	b.WriteString(fmt.Sprintf("当前轮次: %d\n", event.CurrentRound))
-	b.WriteString(fmt.Sprintf("创建时间: %s\n\n", event.CreatedAt.Format("2006-01-02 15:04:05")))
+	b.WriteString(fmt.Sprintf("创建时间（北京时间）: %s\n\n", event.CreatedAt.In(time.FixedZone("Asia/Shanghai", 8*3600)).Format("2006-01-02 15:04:05")))
 	flush("事件基本信息")
 	evidenceContext := event.Context
 	var evidenceErr error
