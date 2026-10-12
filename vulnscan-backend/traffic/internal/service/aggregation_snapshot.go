@@ -407,7 +407,14 @@ func (s Services) drainAggregation(ctx context.Context, limit int, eventTimeout 
 		if err := ctx.Err(); err != nil {
 			return errors.Join(append(failures, err)...)
 		}
-		eventCtx, cancel := context.WithTimeout(ctx, eventTimeout)
+		var previous struct {
+			FailedAttempts int `json:"failed_attempts"`
+		}
+		_ = json.Unmarshal(r.Value, &previous)
+		// Large events get progressively more time after short attempts fail.
+		// Cooldown and queue rotation still let smaller events finish first.
+		budget := min(eventTimeout*time.Duration(1<<min(max(previous.FailedAttempts, 0), 3)), 2*time.Minute)
+		eventCtx, cancel := context.WithTimeout(ctx, budget)
 		err = s.RebuildAggregation(eventCtx, r.Key)
 		cancel()
 		if err != nil {
