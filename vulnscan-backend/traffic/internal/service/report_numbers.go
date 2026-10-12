@@ -6,10 +6,12 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 var reportNumericTokens = regexp.MustCompile(`[0-9]+(?:\.[0-9]+)*`)
 var reportChineseCounts = regexp.MustCompile(`[零〇一二三四五六七八九十百千万亿两]+\s*(次|条|个|包|字节|秒|分钟|小时|天|%|％)`)
+var reportSourceTimestamps = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})`)
 
 // Check numbers against the cited evidence's actual scope. Longest tokens keep
 // an address or decimal indivisible; another row's numbers cannot authorize it.
@@ -21,8 +23,13 @@ func validateReportNumbers(text string, refs []string, entries map[string]Report
 		if e.Finding != nil {
 			raw, _ := json.Marshal(e.Finding.Measurements)
 			source += " " + string(raw)
-			raw, _ = json.Marshal(e.Finding.Parameters)
-			source += " " + string(raw)
+		}
+		// Prose commonly omits subsecond precision. Normalize only parsed source
+		// timestamps, never truncate arbitrary measurements to authorize a count.
+		for _, stamp := range reportSourceTimestamps.FindAllString(source, -1) {
+			if at, err := time.Parse(time.RFC3339Nano, stamp); err == nil {
+				source += " " + at.Truncate(time.Second).Format(time.RFC3339)
+			}
 		}
 		for _, n := range reportNumericTokens.FindAllString(source, -1) {
 			allowed[n] = true

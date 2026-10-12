@@ -119,7 +119,7 @@ func collectReportPracticalEvidence(out *SnapshotEvidenceInput) {
 					mismatch[fmt.Sprintf("%s:%d", r.AppProtocol, r.Port)]++
 				}
 			}
-			add(i, "network_fields", "服务端口、协议与TCP状态", used, excluded, refs, map[string]any{"目标端口次数": ports, "已有TCP状态次数": states, "已解析应用协议记录": parsed, "偏离常见或专用端口": mismatch}, "协议解析来自实际记录；常见端口是报告默认规则，专用服务配置优先；SYN_SENT不等于超时，单条RST不等于会话失败率")
+			add(i, "network_fields", "远端服务端口、协议与TCP状态", used, excluded, refs, map[string]any{"远端端点端口次数": ports, "已有TCP状态次数": states, "已解析应用协议记录": parsed, "偏离常见或专用端口": mismatch}, "这里端口属于Scope远端端点，不是资产监听端口；五元组按原始来源与目标解释；协议解析来自实际记录；常见端口是报告默认规则，专用服务配置优先；SYN_SENT不等于超时，单条RST不等于会话失败率")
 			if n.ASN != "" || n.Country != "" || n.Reputation != "" {
 				add(i, "infrastructure_fields", "目标基础设施已有信息", used, excluded, refs, map[string]string{"ASN": n.ASN, "国家": n.Country, "信誉字段": n.Reputation}, "使用已有属性；不宣称全平台稀有或据地域认定恶意")
 			}
