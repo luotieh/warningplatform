@@ -310,6 +310,9 @@ func reportEvidencePromptEntry(e ReportEvidence) map[string]any {
 		out["eligibility"] = e.Finding.Eligibility
 	}
 	if e.Semantic != nil {
+		// The table may use a display excerpt. The model must receive the full
+		// validated explanation; budget handling may not cut its conclusion.
+		out["result"] = e.Semantic.Explanation
 		out["judgement"] = e.Semantic.Judgement
 		out["strength"] = e.Semantic.Strength
 		out["explanation_only"] = e.Semantic.ExplanationOnly

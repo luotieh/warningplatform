@@ -140,6 +140,10 @@ func TestReportPayloadCountsDeduplicatePhysicalRecords(t *testing.T) {
 func TestReportNeutralHistoryInterpretationKeepsFullContextAndBinding(t *testing.T) {
 	scope := evidence.Scope{AssetID: "asset", EndpointID: "tls://target:443"}
 	explanation := strings.Repeat("经来源核验的历史关联解释。", 40)
+	projected := reportEvidencePromptEntry(ReportEvidence{Result: "展示用节选", Semantic: &evidence.SemanticFinding{SemanticItem: evidence.SemanticItem{Explanation: explanation}}})
+	if projected["result"] != explanation {
+		t.Fatal("validated semantic explanation was clipped")
+	}
 	b := ReportEvidenceBundle{SelectedIDs: []string{"E001"}, Entries: []ReportEvidence{
 		{ID: "E001", FactID: "F_HISTORY_RECURRENCE", Scope: scope, Finding: &evidence.Finding{}},
 		{ID: "E002", Scope: scope, SourceIDs: []string{"prior-event", "raw-hit"}, Semantic: &evidence.SemanticFinding{Slot: evidence.SlotKey{ID: "R06"}, ExplanationOnly: true, SemanticItem: evidence.SemanticItem{Judgement: "neutral", Explanation: explanation, FactRefs: []string{"F_HISTORY_RECURRENCE"}, Quotes: []evidence.SemanticQuote{{MaterialID: "history", Excerpt: "同资产同IOC"}}}}},
