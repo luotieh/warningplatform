@@ -58,10 +58,14 @@ func (s Services) RunFinalAnalysis(ctx context.Context, eventID string) error {
 	if !event.AggregationClosed {
 		return fmt.Errorf("事件尚未收敛，无法生成终版分析")
 	}
-	if event.AnalysisVersion >= 2 {
+	if s.finalReportCurrent(event) {
 		return nil
 	}
-	return s.runAnalysis(ctx, eventID, AnalysisKindFinal, 2)
+	version := event.AnalysisVersion + 1
+	if version < 2 {
+		version = 2
+	}
+	return s.runAnalysis(ctx, eventID, AnalysisKindFinal, version)
 }
 
 // RefreshAnalysis 按需手动刷新：基于当前最新 quant_stats 重新生成分析，
@@ -125,9 +129,13 @@ func (s Services) RunFinalAnalysisAsync(eventID string) {
 
 // runAnalysis 版本化分析主流程：
 //   - initial：已分析过（version>=1）则跳过；
-//   - final：已生成终版（version>=2）则跳过（调用方已检查，此处兜底）；
+//   - final：同数据版本已有终报则跳过；periodic：持续期间每半小时更新；
 //   - manual：强制重跑（冷却由 RefreshAnalysis 控制）。
 func (s Services) runAnalysis(ctx context.Context, eventID string, kind string, version int) error {
+	if _, running := reportExecutionInflight.LoadOrStore(eventID, struct{}{}); running {
+		return fmt.Errorf("该事件已有报告任务运行中")
+	}
+	defer reportExecutionInflight.Delete(eventID)
 	event, ok := s.Store.GetEvent(eventID)
 	if !ok {
 		return fmt.Errorf("event not found: %s", eventID)
@@ -136,33 +144,34 @@ func (s Services) runAnalysis(ctx context.Context, eventID string, kind string, 
 	if kind == AnalysisKindInitial && (event.AnalysisVersion >= 1 || hasAgentWorkflowMessages(s.Store.ListMessages(eventID))) {
 		return nil
 	}
-	if kind == AnalysisKindFinal && event.AnalysisVersion >= 2 {
+	if kind == AnalysisKindFinal && s.finalReportCurrent(event) {
 		return nil
+	}
+	if version <= event.AnalysisVersion {
+		version = event.AnalysisVersion + 1
 	}
 	roundID := event.CurrentRound
 	if roundID == 0 {
 		roundID = 1
 	}
 
-	_, _ = s.Store.UpdateEvent(eventID, map[string]any{"event_status": "processing"})
+	if err := s.setAnalysisJob(eventID, "running", kind); err != nil {
+		return err
+	}
 
 	if s.LLM == nil {
 		err := fmt.Errorf("LLM未配置")
 		_ = s.addLLMConfigRequiredMessage(eventID, roundID, err.Error())
-		_, _ = s.Store.UpdateEvent(eventID, map[string]any{"event_status": "pending"})
 		realtime.BroadcastStatus(eventID, map[string]any{"event_id": eventID, "status": "llm_config_required", "message": err.Error()})
-		return err
+		return s.failAgentWorkflow(eventID, err)
 	}
 	health := s.LLM.HealthCheck(ctx)
 	if !health.Configured || !health.OK {
 		err := fmt.Errorf("LLM不可用，请先在配置页面填写并验证可用的LLM参数: %s", firstNonEmpty(health.Error, "health check failed"))
 		_ = s.addLLMConfigRequiredMessage(eventID, roundID, err.Error())
-		// 事件状态回到 pending：列表里显示「未分析/待分析」而不是「需配置LLM」。
-		// LLM 修好后会自动重试（RoleSystem 提示消息不计入 hasAgentWorkflowMessages）；
-		// 「需配置LLM」的提示仍通过消息流与实时广播在报告详情里呈现。
-		_, _ = s.Store.UpdateEvent(eventID, map[string]any{"event_status": "pending"})
+		// 调用失败只更新任务状态，保留最近成功报告和概率。
 		realtime.BroadcastStatus(eventID, map[string]any{"event_id": eventID, "status": "llm_config_required", "message": err.Error()})
-		return err
+		return s.failAgentWorkflow(eventID, err)
 	}
 
 	prepared, err := s.prepareReportInput(ctx, event)
@@ -178,10 +187,9 @@ func (s Services) runAnalysis(ctx context.Context, eventID string, kind string, 
 	if err != nil {
 		err = fmt.Errorf("LLM自动分析失败，请检查LLM配置: %w", err)
 		_ = s.addLLMConfigRequiredMessage(eventID, roundID, err.Error())
-		// 同上：保持 pending（列表显示未分析），等 LLM 恢复后自动重试。
-		_, _ = s.Store.UpdateEvent(eventID, map[string]any{"event_status": "pending"})
+		// 等待重试时明确显示失败，不能把已有报告退回待分析。
 		realtime.BroadcastStatus(eventID, map[string]any{"event_id": eventID, "status": "llm_config_required", "message": err.Error()})
-		return err
+		return s.failAgentWorkflow(eventID, err)
 	}
 	assessment, err := decodeReportAssessment(rawReply, prepared.Evidence)
 	if err != nil {
@@ -208,34 +216,9 @@ func (s Services) runAnalysis(ctx context.Context, eventID string, kind string, 
 	if err := s.MarkReportSnapshot(ctx, eventID, event.Context); err != nil {
 		return s.failAgentWorkflow(eventID, err)
 	}
-	now := time.Now().UTC().Format(time.RFC3339)
-	patch := map[string]any{
-		"event_status":     "round_finished",
-		"analysis_version": version,
-		"last_analysis_at": now,
+	if err := s.publishAnalysisState(eventID, kind, version, assessment.Probability); err != nil {
+		return s.failAgentWorkflow(eventID, err)
 	}
-	// 提取模型输出的威胁概率并入事件 context 持久化（ai_probability，0-100），
-	// 供列表「研判概率」列展示与排序。注意合并进存储 context 而非 event.Context
-	// （后者是 EvidenceContext 生成的模型输入精简版，不含 src_ip 等入库字段）。
-	// null 表示本版暂不估计，清除旧版概率，避免列表继续显示旧结论。
-	if assessment.Probability != nil {
-		if stored, found := s.Store.GetEvent(eventID); found {
-			ctxMap := decodeEventContext(stored.Context)
-			ctxMap["ai_probability"] = *assessment.Probability
-			if raw, err := json.Marshal(ctxMap); err == nil {
-				patch["context"] = string(raw)
-			}
-		}
-	} else {
-		if stored, found := s.Store.GetEvent(eventID); found {
-			ctxMap := decodeEventContext(stored.Context)
-			delete(ctxMap, "ai_probability")
-			if raw, e := json.Marshal(ctxMap); e == nil {
-				patch["context"] = string(raw)
-			}
-		}
-	}
-	_, _ = s.Store.UpdateEvent(eventID, patch)
 	realtime.BroadcastStatus(eventID, map[string]any{"event_id": eventID, "status": "round_finished"})
 	realtime.BroadcastEventListUpdate(map[string]any{"event_id": eventID, "status": "round_finished"})
 	return nil
@@ -244,7 +227,9 @@ func (s Services) runAnalysis(ctx context.Context, eventID string, kind string, 
 // failAgentWorkflow 把事件置为 failed 并广播失败详情；列表显示“分析失败”，
 // 且不阻断重试（专家消息未落库时 hasAgentWorkflowMessages 仍为 false，重推可再跑）。
 func (s Services) failAgentWorkflow(eventID string, err error) error {
-	_, _ = s.Store.UpdateEvent(eventID, map[string]any{"event_status": "failed"})
+	if saveErr := s.setAnalysisJob(eventID, "failed", "", err.Error()); saveErr != nil {
+		err = fmt.Errorf("%w；保存失败原因失败：%v", err, saveErr)
+	}
 	realtime.BroadcastStatus(eventID, map[string]any{"event_id": eventID, "status": "failed", "message": err.Error()})
 	realtime.BroadcastEventListUpdate(map[string]any{"event_id": eventID, "status": "failed"})
 	return err

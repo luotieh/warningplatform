@@ -83,6 +83,7 @@ func (s Services) acceptHitRevision(ctx context.Context, tx store.Store, old, in
 	c["data_version"] = seg.Version
 	c["report_stale"] = true
 	c["statistics_quality"] = "rebuilding"
+	projectSegmentActivity(c, seg)
 	b, _ := json.Marshal(c)
 	if _, ok = tx.UpdateEvent(id, map[string]any{"context": string(b)}); !ok {
 		return "", errors.New("save revision failed")

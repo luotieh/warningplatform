@@ -58,16 +58,18 @@ func ParseEventTime(value any) time.Time {
 func LastActivity(e Event) time.Time {
 	ctx := map[string]any{}
 	_ = json.Unmarshal([]byte(e.Context), &ctx)
-	for _, key := range []string{"last_time", "occurrence_time"} {
-		if t := ParseEventTime(ctx[key]); !t.IsZero() {
-			return t
+	var last time.Time
+	if e.LastSeenAt != nil {
+		last = e.LastSeenAt.UTC()
+	}
+	// A statistics snapshot may lag ingestion. Never let it move activity back.
+	for _, key := range []string{"last_time", "last_seen_at", "occurrence_time"} {
+		if t := ParseEventTime(ctx[key]); t.After(last) {
+			last = t
 		}
 	}
-	if e.LastSeenAt != nil {
-		return e.LastSeenAt.UTC()
-	}
-	if t := ParseEventTime(ctx["last_seen_at"]); !t.IsZero() {
-		return t
+	if !last.IsZero() {
+		return last
 	}
 	return e.CreatedAt
 }

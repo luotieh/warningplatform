@@ -163,7 +163,10 @@ func TestAggregationSnapshotReportInvalidation(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := decodeEventContext(mustEvent(t, svc, id).Context)
-	if c["report_stale"] != true || toInt(c["report_data_version"]) != 1 || toInt(c["occurrence_count"]) != 1 || toInt(c["data_version"]) != 2 {
+	// Live list membership advances immediately; immutable report statistics
+	// still belong to the previously published snapshot until rebuilding.
+	q := c["quant_stats"].(map[string]any)
+	if c["report_stale"] != true || toInt(c["report_data_version"]) != 1 || toInt(c["occurrence_count"]) != 2 || toInt(q["occurrence_count"]) != 1 || c["hit_count_current"] != true || toInt(c["data_version"]) != 2 {
 		t.Fatalf("mixed published versions: %v", c)
 	}
 	if err = svc.RebuildAggregation(ctx, id); err != nil {

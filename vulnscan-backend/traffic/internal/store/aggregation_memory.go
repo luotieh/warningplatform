@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"time"
 	"vulnscan-backend/traffic/internal/domain"
 )
 
@@ -162,6 +163,15 @@ func (s *MemoryStore) AggregateRecords(ctx context.Context, kind, group string, 
 	out := []AggregateRecord{}
 	for _, r := range s.aggregateRecords {
 		if r.Kind == kind && (group == "" || r.Group == group) {
+			if kind == "outbox" && group == "pending" {
+				var task struct {
+					RetryNotBefore int64 `json:"retry_not_before"`
+				}
+				_ = json.Unmarshal(r.Value, &task)
+				if task.RetryNotBefore > time.Now().UnixMilli() {
+					continue
+				}
+			}
 			r.Value = append([]byte(nil), r.Value...)
 			out = append(out, r)
 		}

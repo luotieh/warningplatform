@@ -2,7 +2,7 @@
 import { computed, h, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
-import { NButton, NDataTable, NDropdown, NModal, NSpace, NTag } from 'naive-ui';
+import { NButton, NDataTable, NDropdown, NModal, NSpace, NTag, NTooltip } from 'naive-ui';
 
 import { IconifyIcon } from '@vben/icons';
 import { useUserStore } from '@vben/stores';
@@ -271,6 +271,7 @@ async function ensureAnalysis(row: Record<string, any>) {
   } catch (error) {
     row.analysisStatus = 'failed';
     row.analysisStatusText = '分析失败';
+    row.analysis_failure_reason = '提交分析任务失败，请稍后重试';
     throw error;
   } finally {
     state.analyzingIds.delete(rowId);
@@ -501,7 +502,14 @@ const columns = computed(() => [
       const status = analyzing ? 'processing' : row.analysisStatus;
       const type = status === 'completed' ? 'success' : status === 'failed' || status === 'llm_config_required' ? 'error' : status === 'processing' ? 'warning' : 'default';
       const text = analyzing ? '分析中' : row.analysisStatusText || '待分析';
-      return h(NTag, { size: 'small', round: true, bordered: true, type }, { default: () => text });
+      const tag = () => h(NTag, { size: 'small', round: true, bordered: true, type }, { default: () => text });
+      if (status === 'failed' || status === 'llm_config_required') {
+        return h(NTooltip, { placement: 'top', style: 'max-width:300px;white-space:normal' }, {
+          trigger: tag,
+          default: () => row.analysis_failure_reason || '未记录失败原因，请重新分析后查看',
+        });
+      }
+      return tag();
     },
   },
   {
@@ -518,7 +526,7 @@ const columns = computed(() => [
       const type = prob >= 80 ? 'error' : prob >= 50 ? 'warning' : 'info';
       return h(
         NTag,
-        { size: 'small', round: true, bordered: false, type, title: '大模型研判的威胁概率（非攻击成功概率）' },
+        { size: 'small', round: true, bordered: false, type, title: '最近一次成功报告的威胁概率；更新失败时保留原值（非攻击成功概率）' },
         { default: () => text },
       );
     },

@@ -442,6 +442,7 @@ func (s Services) ingestHit(ctx context.Context, ly map[string]any) (map[string]
 			c["merged_event_ids"] = seg.Sources
 			c["merge_review_required"] = true
 		}
+		projectSegmentActivity(c, seg)
 		b, _ := json.Marshal(c)
 		patch := map[string]any{"context": string(b), "last_seen_at": seg.Last.Format(time.RFC3339Nano), "aggregation_closed": !now.Before(seg.Last.Add(domain.ConvergenceIdleWindow)), "archive_date": nil}
 		if seg.Last.In(domain.Beijing).Format("2006-01-02") < now.In(domain.Beijing).Format("2006-01-02") && !now.Before(seg.Last.Add(domain.ConvergenceIdleWindow)) {

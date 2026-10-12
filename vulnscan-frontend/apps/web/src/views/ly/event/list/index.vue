@@ -262,6 +262,7 @@ function onRankTagClose() {
 // 订阅事件列表广播：分析完成/失败等行级状态变化时防抖刷新当前页，
 // 研判概率、分析状态等列无需手动刷新即可看到最新值。
 let listUpdateTimer: ReturnType<typeof setTimeout> | undefined;
+let listPollTimer: ReturnType<typeof setInterval> | undefined;
 const handleEventListUpdate = () => {
   clearTimeout(listUpdateTimer);
   listUpdateTimer = setTimeout(() => void loadEvents(), 800);
@@ -272,11 +273,14 @@ onMounted(async () => {
   deepflowSocket.join('events');
   deepflowSocket.on('event_list_update', handleEventListUpdate);
   await loadEvents();
+  // Also refresh statistics/task state when websocket notifications are unavailable.
+  listPollTimer = setInterval(() => { if (!document.hidden && !lyStore.loading) void loadEvents(); }, 15000);
   void loadAssets();
 });
 
 onUnmounted(() => {
   clearTimeout(listUpdateTimer);
+  clearInterval(listPollTimer);
   deepflowSocket.off('event_list_update', handleEventListUpdate);
   deepflowSocket.leave('events');
 });
