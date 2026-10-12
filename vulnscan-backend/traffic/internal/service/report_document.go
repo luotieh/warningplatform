@@ -276,6 +276,7 @@ func styleEvidenceDOCX(raw []byte) ([]byte, error) {
 			tables := regexp.MustCompile(`(?s)<w:tbl>.*?</w:tbl>`)
 			rows := regexp.MustCompile(`(?s)<w:tr>.*?</w:tr>`)
 			xml = tables.ReplaceAllStringFunc(xml, func(table string) string {
+				table = layoutReportTable(table)
 				loc := rows.FindStringIndex(table)
 				if loc == nil {
 					return table
@@ -308,4 +309,60 @@ func styleEvidenceDOCX(raw []byte) ([]byte, error) {
 		return nil, err
 	}
 	return output.Bytes(), nil
+}
+
+// Word's automatic widths can turn short evidence names into vertical text
+// when a measurement cell contains long hashes or metrics. Fix the report's
+// actual column grid and each cell width, while keeping every cell's content.
+func layoutReportTable(table string) string {
+	rows := regexp.MustCompile(`(?s)<w:tr>.*?</w:tr>`)
+	cells := regexp.MustCompile(`(?s)<w:tc>.*?</w:tc>`)
+	first := rows.FindString(table)
+	count := len(cells.FindAllString(first, -1))
+	var widths []int
+	switch count {
+	case 5:
+		widths = []int{700, 1500, 3500, 1300, 3000}
+	case 4:
+		widths = []int{2100, 2800, 1000, 4100}
+		if strings.Contains(first, "历史事件ID") {
+			widths = []int{2600, 2700, 1000, 3700}
+		}
+	case 3:
+		widths = []int{1000, 4500, 4500}
+	default:
+		if count == 0 {
+			return table
+		}
+		for n := 0; n < count; n++ {
+			widths = append(widths, 10000/count)
+		}
+	}
+	grid := "<w:tblGrid>"
+	for _, width := range widths {
+		grid += fmt.Sprintf(`<w:gridCol w:w="%d"/>`, width)
+	}
+	grid += "</w:tblGrid>"
+	table = regexp.MustCompile(`(?s)<w:tblGrid[^>]*>.*?</w:tblGrid>`).ReplaceAllString(table, grid)
+	table = regexp.MustCompile(`<w:tblW\b[^>]*/>|<w:tblLayout\b[^>]*/>`).ReplaceAllString(table, "")
+	table = strings.Replace(table, "<w:tblPr>", `<w:tblPr><w:tblW w:w="10000" w:type="dxa"/><w:tblLayout w:type="fixed"/>`, 1)
+	table = rows.ReplaceAllStringFunc(table, func(row string) string {
+		index := 0
+		return cells.ReplaceAllStringFunc(row, func(cell string) string {
+			width := widths[index%len(widths)]
+			index++
+			cell = regexp.MustCompile(`<w:tcW\b[^>]*/>|<w:vAlign\b[^>]*/>`).ReplaceAllString(cell, "")
+			properties := fmt.Sprintf(`<w:tcW w:w="%d" w:type="dxa"/><w:vAlign w:val="center"/><w:tcMar><w:top w:w="80" w:type="dxa"/><w:left w:w="80" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:right w:w="80" w:type="dxa"/></w:tcMar>`, width)
+			if strings.Contains(cell, "<w:tcPr>") {
+				cell = strings.Replace(cell, "<w:tcPr>", "<w:tcPr>"+properties, 1)
+			} else if strings.Contains(cell, "<w:tcPr/>") {
+				cell = strings.Replace(cell, "<w:tcPr/>", "<w:tcPr>"+properties+"</w:tcPr>", 1)
+			} else {
+				cell = strings.Replace(cell, "<w:tc>", "<w:tc><w:tcPr>"+properties+"</w:tcPr>", 1)
+			}
+			cell = strings.ReplaceAll(cell, "<w:r><w:t", `<w:r><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:eastAsia="微软雅黑"/><w:sz w:val="20"/></w:rPr><w:t`)
+			return cell
+		})
+	})
+	return table
 }

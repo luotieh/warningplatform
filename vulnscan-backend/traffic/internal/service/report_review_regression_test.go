@@ -231,3 +231,20 @@ func TestReportRecordedProjectionBudget(t *testing.T) {
 		t.Logf("%s actual_fact_adapter=%s semantics=%s selected=%d bytes=%d estimated_tokens=%d", id, f.Manifest.AdapterVersion, semantics[id].AdapterVersion, len(b.SelectedIDs), len(prompt), estimateTokens(prompt))
 	}
 }
+
+func TestReportTableWidthsPreserveContentAndFitPage(t *testing.T) {
+	input := `<w:tbl><w:tblPr></w:tblPr><w:tblGrid></w:tblGrid><w:tr><w:trPr></w:trPr>`
+	for _, value := range []string{"编号", "证据项", "核验结果", "来源", "研判意义"} {
+		input += "<w:tc><w:p><w:r><w:t>" + value + "</w:t></w:r></w:p></w:tc>"
+	}
+	input += "</w:tr></w:tbl>"
+	output := layoutReportTable(input)
+	for _, field := range []string{`<w:tblLayout w:type="fixed"/>`, `<w:tblW w:w="10000"`, `<w:gridCol w:w="1500"/>`, `<w:tcW w:w="3500"`, "核验结果", "研判意义"} {
+		if !strings.Contains(output, field) {
+			t.Fatal("missing table geometry or altered content", field)
+		}
+	}
+	if strings.Count(output, "<w:gridCol ") != 5 || strings.Count(output, "<w:tcW ") != 5 {
+		t.Fatal("grid/cell widths disagree")
+	}
+}
