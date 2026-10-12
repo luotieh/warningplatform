@@ -93,9 +93,28 @@ func (s Services) RefreshAnalysis(ctx context.Context, eventID string) (int, err
 	return version, nil
 }
 
-// RefreshAnalysisAsync 后台异步手动刷新：使用 context.Background() 运行分析，
-// 避免前端请求超时/断开导致 LLM 调用被取消（context canceled while reading body）。
-// 返回是否已开始（false 表示该事件正在分析中或事件不存在）。
+// RequestReportRefresh is the shared report-button/chat submission path. Return
+// cooldown errors to the caller instead of silently discarding them in a goroutine.
+func (s Services) RequestReportRefresh(eventID string) (bool, error) {
+	event, ok := s.Store.GetEvent(eventID)
+	if !ok {
+		return false, fmt.Errorf("事件不存在")
+	}
+	if _, running := agentWorkflowInflight.Load(eventID); running {
+		return false, nil
+	}
+	if _, running := reportExecutionInflight.Load(eventID); running {
+		return false, nil
+	}
+	if event.LastAnalysisAt != nil && time.Since(*event.LastAnalysisAt) < manualRefreshCooldown {
+		remaining := int64((manualRefreshCooldown - time.Since(*event.LastAnalysisAt)).Seconds()) + 1
+		return false, fmt.Errorf("手动刷新过于频繁，请 %d 秒后重试", remaining)
+	}
+	return s.RefreshAnalysisAsync(eventID), nil
+}
+
+// RefreshAnalysisAsync 后台异步刷新，脱离HTTP请求上下文。
+// 返回是否已开始；false表示事件不存在或已有任务运行中。
 func (s Services) RefreshAnalysisAsync(eventID string) bool {
 	if strings.TrimSpace(eventID) == "" {
 		return false
@@ -447,7 +466,7 @@ const (
 func (s Services) dialogueEvidenceSection(eventID string) string {
 	lines := []string{}
 	for _, m := range s.Store.ListMessages(eventID) {
-		if m.MessageCategory != "engineer_chat" {
+		if m.MessageCategory != "engineer_chat" || m.MessageType == "report_request" || m.MessageType == "report_request_status" {
 			continue
 		}
 		text := dialogueMessageText(m)
