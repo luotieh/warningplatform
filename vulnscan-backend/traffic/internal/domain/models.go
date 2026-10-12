@@ -46,7 +46,7 @@ type Event struct {
 	ReviewedBy    string     `json:"reviewed_by,omitempty"`
 	ReviewedAt    *time.Time `json:"reviewed_at,omitempty"`
 	CircularCode  string     `json:"circular_code,omitempty"`
-	// AnalysisVersion 分析版本：0=未分析，1=初版快报，2=收敛终报，>=3=手动刷新。
+	// AnalysisVersion 已保存报告的递增版本；分析类型由 report_kind/Summary.Kind 标识。
 	AnalysisVersion int `json:"analysis_version"`
 	// AggregationClosed 聚合是否已收敛（quant_stats 冻结）。
 	AggregationClosed bool `json:"aggregation_closed"`
@@ -238,7 +238,7 @@ type Summary struct {
 	EventSummary string `json:"event_summary"`
 	// Version 分析版本（与 Event.AnalysisVersion 对应）。
 	Version int `json:"version"`
-	// Kind 分析类型：initial / final / manual。
+	// Kind 分析类型：initial / periodic / final / manual。
 	Kind      string    `json:"kind"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
@@ -305,14 +305,14 @@ type QuantStats struct {
 	DestIPs         map[string]int64 `json:"dest_ips,omitempty"`
 	TotalWireBytes  int64            `json:"total_wire_bytes"`
 	// TotalPayloadBytes 载荷总字节（ta_node bytes 字段累加），列表「总载荷」排序口径。
-	TotalPayloadBytes int64          `json:"total_payload_bytes"`
-	TotalPackets    int64            `json:"total_packets"`
-	RatePerMin      float64          `json:"rate_per_min"`
-	ByRule          map[string]int64 `json:"by_rule"`
-	ByDirection     map[string]int64 `json:"by_direction"`
-	ByIOC           []IocHitStat     `json:"by_ioc"`
-	PeakWindow      PeakWindowStat   `json:"peak_window"`
-	UpdatedAt       string           `json:"updated_at"`
+	TotalPayloadBytes int64            `json:"total_payload_bytes"`
+	TotalPackets      int64            `json:"total_packets"`
+	RatePerMin        float64          `json:"rate_per_min"`
+	ByRule            map[string]int64 `json:"by_rule"`
+	ByDirection       map[string]int64 `json:"by_direction"`
+	ByIOC             []IocHitStat     `json:"by_ioc"`
+	PeakWindow        PeakWindowStat   `json:"peak_window"`
+	UpdatedAt         string           `json:"updated_at"`
 }
 
 type IocHitStat struct {

@@ -405,7 +405,7 @@ func lyCompatibleEvent(event domain.Event) map[string]any {
 		duration = 0
 	}
 	startTime := first.Unix()
-	analysisStatus := analysisStatusForEvent(event.EventStatus)
+	analysisStatus := domain.AnalysisState(event, now)
 	// 聚合快照基于全量命中计算的心跳结论优先；旧数据（无快照字段）回退到
 	// 用 context 里的 occurrences（可能仅是最近 10 条 UI 预览）本地判定。
 	heartbeat, heartbeatPeriod, persisted := persistedHeartbeat(context)
@@ -464,6 +464,7 @@ func lyCompatibleEvent(event domain.Event) map[string]any {
 		"source":            event.Source,
 		// 聚合信息：发生次数与首/末次时间（同来源+目标+类型、仅时间不同的事件已合并为一条）
 		"event_count":         context["occurrence_count"],
+		"hit_count_current":   context["hit_count_current"],
 		"aggregation_version": context["aggregation_version"],
 		"data_version":        context["data_version"],
 		"stats_version":       context["stats_version"],
@@ -491,10 +492,14 @@ func lyCompatibleEvent(event domain.Event) map[string]any {
 		"review_status": event.ReviewStatus,
 		"circular_code": event.CircularCode,
 		// 量化分析版本与收敛状态（供前端展示初版/终版/手动刷新）。
-		"analysis_version":   event.AnalysisVersion,
-		"aggregation_closed": isFinal,
-		"last_analysis_at":   event.LastAnalysisAt,
-		"archive_date":       event.ArchiveDate,
+		"analysis_version":        event.AnalysisVersion,
+		"analysis_job_kind":       context["analysis_job_kind"],
+		"analysis_failure_reason": context["analysis_failure_reason"],
+		"analysis_failed_at":      context["analysis_failed_at"],
+		"report_kind":             context["report_kind"],
+		"aggregation_closed":      isFinal,
+		"last_analysis_at":        event.LastAnalysisAt,
+		"archive_date":            event.ArchiveDate,
 		// 研判概率：LLM 报告提取的威胁概率（0-100）；未研判/提取失败为 nil，
 		// 前端「研判概率」列据此显示百分比或「-」。
 		"ai_probability": context["ai_probability"],

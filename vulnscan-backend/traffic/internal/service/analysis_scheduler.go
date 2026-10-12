@@ -40,7 +40,7 @@ func (s Services) ScanConverged(ctx context.Context) (int, error) {
 				lock.Unlock()
 				return scheduled, fmt.Errorf("保存事件 %s 收敛状态失败", ev.EventID)
 			}
-			if ev.AnalysisVersion < 2 {
+			if !s.finalReportCurrent(ev) {
 				scheduled++
 			}
 		}

@@ -20,3 +20,15 @@ func TestEventTimeFormatsAndQuietBoundary(t *testing.T) {
 		t.Fatal("analysis timestamp changed activity")
 	}
 }
+
+func TestStaleSnapshotDoesNotPrematurelyConverge(t *testing.T) {
+	now := time.Now().UTC()
+	latest := now.Add(-5 * time.Minute)
+	e := Event{Context: `{"last_time":"2026-01-01T00:00:00Z"}`, LastSeenAt: &latest}
+	if !LastActivity(e).Equal(latest) || IsConverged(e, now) {
+		t.Fatal("old statistics overrode latest activity")
+	}
+	if IsConverged(e, latest.Add(ConvergenceIdleWindow-time.Nanosecond)) || !IsConverged(e, latest.Add(ConvergenceIdleWindow)) {
+		t.Fatal("incorrect 30-minute boundary")
+	}
+}

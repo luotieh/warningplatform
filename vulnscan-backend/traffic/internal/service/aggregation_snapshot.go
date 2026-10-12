@@ -27,6 +27,15 @@ type EvidenceSnapshot struct {
 
 func snapshotKey(id string, version int64) string { return fmt.Sprintf("%s:%d", id, version) }
 
+// Membership metadata is transactional and does not depend on statistics scans.
+func projectSegmentActivity(c map[string]any, seg EventSegment) {
+	c["occurrence_count"] = seg.Count
+	c["hit_count_current"] = true
+	c["first_time"] = seg.First.Format(time.RFC3339Nano)
+	c["last_time"] = seg.Last.Format(time.RFC3339Nano)
+	c["last_seen_at"] = seg.Last.Format(time.RFC3339Nano)
+}
+
 func (s Services) EvidenceSnapshot(ctx context.Context, id string, version int64) (EvidenceSnapshot, error) {
 	seg, ok, err := readSegment(ctx, s.Store, id)
 	if err != nil {
@@ -291,6 +300,29 @@ func (s Services) RebuildAggregation(ctx context.Context, id string) error {
 	if seg.Published == seg.Version {
 		return nil
 	}
+	// Repair projections left stale by older workers before starting a potentially
+	// expensive scan. Even a timed-out scan must not keep showing a single hit.
+	if err = s.Store.AggregationTransaction(ctx, "group-"+seg.AggregateKey, func(tx store.Store) error {
+		current, exists, e := readSegment(ctx, tx, id)
+		if e != nil || !exists || current.Disabled || current.CanonicalID != id {
+			return e
+		}
+		ev, exists := tx.GetEvent(id)
+		if !exists {
+			return errors.New("event disappeared")
+		}
+		c := decodeEventContext(ev.Context)
+		projectSegmentActivity(c, current)
+		c["data_version"], c["stats_version"] = current.Version, current.Published
+		c["statistics_quality"] = "rebuilding"
+		b, _ := json.Marshal(c)
+		if _, ok := tx.UpdateEvent(id, map[string]any{"context": string(b), "last_seen_at": current.Last.Format(time.RFC3339Nano)}); !ok {
+			return errors.New("save live membership failed")
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
 	snap, err := s.buildSnapshot(ctx, seg)
 	if err != nil {
 		return err
@@ -328,6 +360,9 @@ func (s Services) RebuildAggregation(ctx context.Context, id string) error {
 			c["statistics_quality"] = "rebuilding"
 		}
 		c["input_manifest"] = snap.Manifest
+		// Hits may arrive during the scan. Keep live membership separate from
+		// the immutable snapshot used by reports and paginated detail cursors.
+		projectSegmentActivity(c, current)
 		b, _ := json.Marshal(c)
 		patch := map[string]any{"context": string(b), "last_seen_at": current.Last.Format(time.RFC3339Nano)}
 		if _, ok = tx.UpdateEvent(id, patch); !ok {
@@ -359,6 +394,10 @@ func (s Services) RebuildAggregation(ctx context.Context, id string) error {
 }
 
 func (s Services) DrainAggregation(ctx context.Context, limit int) error {
+	return s.drainAggregation(ctx, limit, 20*time.Second)
+}
+
+func (s Services) drainAggregation(ctx context.Context, limit int, eventTimeout time.Duration) error {
 	records, err := s.Store.AggregateRecords(ctx, "outbox", "pending", limit)
 	if err != nil {
 		return err
@@ -368,16 +407,24 @@ func (s Services) DrainAggregation(ctx context.Context, limit int) error {
 		if err := ctx.Err(); err != nil {
 			return errors.Join(append(failures, err)...)
 		}
-		if err = s.RebuildAggregation(ctx, r.Key); err != nil {
-			failures = append(failures, err)
-			seg, ok, readErr := readSegment(ctx, s.Store, r.Key)
+		eventCtx, cancel := context.WithTimeout(ctx, eventTimeout)
+		err = s.RebuildAggregation(eventCtx, r.Key)
+		cancel()
+		if err != nil {
+			failures = append(failures, fmt.Errorf("event %s: %w", r.Key, err))
+			// Record failures even when the scan exhausted its deadline. Otherwise
+			// the same expensive event stays at the head of every subsequent batch.
+			retryCtx, retryCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+			seg, ok, readErr := readSegment(retryCtx, s.Store, r.Key)
 			if readErr != nil {
 				failures = append(failures, readErr)
+				retryCancel()
 				continue
 			}
 			if ok {
-				err := s.Store.AggregationTransaction(ctx, "group-"+seg.AggregateKey, func(tx store.Store) error {
-					latest, exists, e := tx.AggregateRecord(ctx, "outbox", r.Key)
+				runErr := err
+				err := s.Store.AggregationTransaction(retryCtx, "group-"+seg.AggregateKey, func(tx store.Store) error {
+					latest, exists, e := tx.AggregateRecord(retryCtx, "outbox", r.Key)
 					if e != nil || !exists {
 						return e
 					}
@@ -385,13 +432,23 @@ func (s Services) DrainAggregation(ctx context.Context, limit int) error {
 					if e = json.Unmarshal(latest.Value, &task); e != nil {
 						return e
 					}
-					task["last_attempt"] = time.Now().UnixMilli()
-					return putRecord(ctx, tx, "outbox", r.Key, latest.Group, task)
+					if latest.Group != "pending" {
+						return nil
+					}
+					attempts := toInt(task["failed_attempts"]) + 1
+					delay := time.Duration(min(attempts, 5)) * time.Minute
+					now := time.Now()
+					task["last_attempt"] = now.UnixMilli()
+					task["failed_attempts"] = attempts
+					task["retry_not_before"] = now.Add(delay).UnixMilli()
+					task["last_error"] = runErr.Error()
+					return putRecord(retryCtx, tx, "outbox", r.Key, latest.Group, task)
 				})
 				if err != nil {
 					failures = append(failures, err)
 				}
 			}
+			retryCancel()
 		}
 	}
 	return errors.Join(failures...)

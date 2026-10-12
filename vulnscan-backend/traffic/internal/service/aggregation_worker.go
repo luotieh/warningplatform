@@ -30,6 +30,9 @@ func (s Services) convergeAggregation(ctx context.Context, id string, now time.T
 		if !ok || asBool(decodeEventContext(ev.Context)["suppress_auto_analysis"]) {
 			return nil
 		}
+		if s.finalReportCurrent(ev) {
+			return nil
+		}
 		if r, exists, e := tx.AggregateRecord(ctx, "analysis_outbox", id); e != nil {
 			return e
 		} else if exists {
@@ -37,6 +40,14 @@ func (s Services) convergeAggregation(ctx context.Context, id string, now time.T
 			_ = json.Unmarshal(r.Value, &task)
 			if task["kind"] == "final" && int64(toInt(task["version"])) == current.Version {
 				return nil
+			}
+		}
+		c := decodeEventContext(ev.Context)
+		if c["analysis_job_state"] != "running" {
+			c["analysis_job_state"], c["analysis_job_kind"] = "queued", AnalysisKindFinal
+			b, _ := json.Marshal(c)
+			if _, ok := tx.UpdateEvent(id, map[string]any{"context": string(b)}); !ok {
+				return errors.New("save final queued state failed")
 			}
 		}
 		return putRecord(ctx, tx, "analysis_outbox", id, "pending", map[string]any{"kind": "final", "version": current.Version})
@@ -58,6 +69,7 @@ func (s Services) DrainAggregationAnalysis(ctx context.Context) error {
 		var task map[string]any
 		_ = json.Unmarshal(r.Value, &task)
 		claimed := false
+		recoverFailed := false
 		err = s.Store.AggregationTransaction(ctx, "analysis-"+r.Key, func(tx store.Store) error {
 			latest, ok, e := tx.AggregateRecord(ctx, "analysis_outbox", r.Key)
 			if e != nil {
@@ -68,10 +80,12 @@ func (s Services) DrainAggregationAnalysis(ctx context.Context) error {
 			}
 			_ = json.Unmarshal(latest.Value, &task)
 			if until := domain.ParseEventTime(task["lease_until"]); until.After(time.Now()) {
+				recoverFailed = asString(task["last_error"]) != ""
 				return nil
 			}
 			task["lease_until"] = time.Now().UTC().Add(2 * time.Hour).Format(time.RFC3339Nano)
 			task["last_attempt"] = time.Now().UnixMilli()
+			delete(task, "last_error")
 			claimed = true
 			return putRecord(ctx, tx, "analysis_outbox", r.Key, "pending", task)
 		})
@@ -79,6 +93,9 @@ func (s Services) DrainAggregationAnalysis(ctx context.Context) error {
 			return err
 		}
 		if !claimed {
+			if recoverFailed {
+				_ = s.setAnalysisJob(r.Key, "failed", asString(task["kind"]), asString(task["last_error"]))
+			}
 			continue
 		}
 		seg, ok, err := readSegment(ctx, s.Store, r.Key)
@@ -86,14 +103,25 @@ func (s Services) DrainAggregationAnalysis(ctx context.Context) error {
 			return err
 		}
 		ev, eventExists := s.Store.GetEvent(r.Key)
-		if ok && !seg.Disabled && seg.CanonicalID == r.Key && eventExists && !asBool(decodeEventContext(ev.Context)["suppress_auto_analysis"]) {
-			if task["kind"] == "final" {
-				err = s.RunFinalAnalysis(ctx, r.Key)
-			} else {
-				err = s.RunAgentWorkflow(ctx, r.Key)
+		if eventExists && (!ok || !seg.Disabled && seg.CanonicalID == r.Key) && !asBool(decodeEventContext(ev.Context)["suppress_auto_analysis"]) {
+			if ok && seg.Published < seg.Version {
+				err = s.RebuildAggregation(ctx, r.Key)
+			}
+			if err == nil {
+				if task["kind"] == "final" {
+					err = s.RunFinalAnalysis(ctx, r.Key)
+				} else if task["kind"] == AnalysisKindPeriodic {
+					err = s.RunPeriodicAnalysis(ctx, r.Key)
+				} else {
+					err = s.RunAgentWorkflow(ctx, r.Key)
+				}
 			}
 		}
 		runErr := err
+		if runErr != nil {
+			// Includes failures before model execution, such as snapshot rebuilding.
+			_ = s.setAnalysisJob(r.Key, "failed", asString(task["kind"]), runErr.Error())
+		}
 		if err = s.Store.AggregationTransaction(ctx, "analysis-"+r.Key, func(tx store.Store) error {
 			latest, ok, e := tx.AggregateRecord(ctx, "analysis_outbox", r.Key)
 			if e != nil {

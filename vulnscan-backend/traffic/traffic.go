@@ -115,6 +115,9 @@ func NewTraffic(moduleCfg Config) *Traffic {
 		ticker := time.NewTicker(15 * time.Second)
 		defer ticker.Stop()
 		for range ticker.C {
+			if _, err := services.ScanPeriodicAnalysis(context.Background()); err != nil {
+				log.Printf("traffic: periodic analysis schedule: %v", err)
+			}
 			if err := services.DrainAggregationAnalysis(context.Background()); err != nil {
 				log.Printf("traffic: aggregation analysis: %v", err)
 			}

@@ -87,6 +87,10 @@ func (s *MySQLStore) AggregateRecords(ctx context.Context, kind, group string, l
 		q += " AND group_key=?"
 		args = append(args, group)
 	}
+	if kind == "outbox" && group == "pending" {
+		q += " AND COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(value_json, '$.retry_not_before')) AS UNSIGNED),0)<=?"
+		args = append(args, time.Now().UnixMilli())
+	}
 	if kind == "outbox" || kind == "analysis_outbox" {
 		q += " ORDER BY COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(value_json, '$.last_attempt')) AS UNSIGNED),0), record_key"
 	} else {

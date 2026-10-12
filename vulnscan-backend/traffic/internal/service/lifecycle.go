@@ -45,7 +45,7 @@ func (s Services) closeEvent(ev domain.Event) bool {
 		"context": string(raw), "aggregation_closed": true,
 		"last_seen_at": last.UTC().Format(time.RFC3339Nano),
 	})
-	if ok && ev.AnalysisVersion < 2 {
+	if ok && !s.finalReportCurrent(ev) {
 		s.RunFinalAnalysisAsync(ev.EventID)
 	}
 	return ok
