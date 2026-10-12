@@ -12,7 +12,7 @@ import (
 	"vulnscan-backend/traffic/internal/domain"
 )
 
-const reportEvidenceVersion = "evidence-report-1.3.2"
+const reportEvidenceVersion = "evidence-report-1.4"
 
 var ReportBuildRevision = "development"
 
@@ -38,6 +38,7 @@ type ReportEvidence struct {
 }
 
 type ReportEvidenceBundle struct {
+	Overview          ReportEventOverview          `json:"event_overview"`
 	PolicyVersion     string                       `json:"policy_version,omitempty"`
 	Digest            evidence.EvidenceDigest      `json:"evidence_digest"`
 	Normalized        evidence.NormalizedEvidence  `json:"normalized_evidence"`
@@ -60,6 +61,7 @@ type ReportEvidenceBundle struct {
 func buildReportEvidence(event domain.Event, snap EvidenceSnapshot, f SnapshotFactEvaluation, sem ReportSemanticEvaluation, history ...ReportHistory) ReportEvidenceBundle {
 	b := ReportEvidenceBundle{SnapshotVersion: snap.Version, FactStatus: f.Status, FactCounts: map[string]int{}, SemanticCounts: map[string]int{}, Entries: []ReportEvidence{}, SelectedIDs: []string{}, FactChecks: []evidence.Finding{}, SemanticChecks: []evidence.SemanticExecution{}}
 	b.PolicyVersion = reportEvidenceVersion
+	b.Overview = buildReportEventOverview(snap, f.Manifest)
 	b.FactCoverage = append([]SnapshotFactCoverage(nil), f.Manifest.FactCoverage...)
 	b.Watermark, b.RevisionWatermark, b.SourceEvents = snap.Watermark, snap.RevisionWatermark, append([]string(nil), snap.Sources...)
 	add := func(e ReportEvidence) {

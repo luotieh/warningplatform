@@ -110,6 +110,7 @@ func validReportAssessment(b ReportEvidenceBundle) ReportAssessment {
 		if allowed[e.ID] && (e.Kind == "observation" || e.Kind == "fact" && e.Status == "observed") {
 			a.Supporting = append(a.Supporting, ReportReason{[]string{e.ID}, "已核验的行为记录支撑进一步调查"})
 			a.Actions = append(a.Actions, ReportAction{[]string{e.ID}, "核查该资产的业务关联", "区分正常业务与异常通信"})
+			a.Risks = []ReportRisk{{EvidenceIDs: []string{e.ID}, Exposure: "已保存通联涉及外部目标", Impact: "若该通联被用于未经授权的控制，资产的服务与数据访问安全将受到影响"}}
 			probability := 35
 			a.Probability = &probability
 			break
@@ -118,6 +119,10 @@ func validReportAssessment(b ReportEvidenceBundle) ReportAssessment {
 	if a.Probability == nil {
 		a.Verdict = "insufficient"
 		a.Stage = "undetermined"
+		if len(b.SelectedIDs) > 0 {
+			a.Risks = []ReportRisk{{EvidenceIDs: []string{b.SelectedIDs[0]}, Exposure: "通信归属是当前防护关注点", Impact: "若通信通道被滥用，资产的服务安全将受到影响"}}
+			a.Actions = []ReportAction{{EvidenceIDs: []string{b.SelectedIDs[0]}, Action: "核查该资产的业务关联并保留网络访问日志", Purpose: "明确通信归属并保留处置依据"}}
+		}
 	}
 	return a
 }

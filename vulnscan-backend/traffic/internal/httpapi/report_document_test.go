@@ -47,7 +47,11 @@ func TestReportAPIAuthenticationPinnedVersionAndExport(t *testing.T) {
 			for _, e := range input.Entries {
 				interpretations = append(interpretations, map[string]string{"evidence_id": e.ID, "meaning": "提供当前通信的核验依据"})
 			}
-			raw, _ := json.Marshal(map[string]any{"target": "malicious_activity", "threat_type": "undetermined", "verdict": "insufficient", "stage": "undetermined", "probability": nil, "probability_reason": "需要结合业务背景判断", "supporting": []any{}, "opposing": []any{}, "alternatives": []any{}, "interpretations": interpretations, "gaps": []string{"补充业务归属"}, "actions": []any{}})
+			risks := []any{}
+			if len(input.Entries) > 0 {
+				risks = append(risks, map[string]any{"evidence_ids": []string{input.Entries[0].ID}, "exposure": "事件记录涉及外部通信目标", "impact": "若通信通道被滥用，资产的服务安全将受到影响"})
+			}
+			raw, _ := json.Marshal(map[string]any{"target": "malicious_activity", "threat_type": "undetermined", "verdict": "insufficient", "stage": "undetermined", "probability": nil, "probability_reason": "需要结合业务背景判断", "supporting": []any{}, "opposing": []any{}, "alternatives": []any{}, "interpretations": interpretations, "gaps": []string{"补充业务归属"}, "actions": []any{}, "risks": risks})
 			reply = string(raw)
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"finish_reason": "stop", "message": map[string]any{"content": reply}}}})
@@ -87,7 +91,7 @@ func TestReportAPIAuthenticationPinnedVersionAndExport(t *testing.T) {
 		{base + "?summary_id=0", "report-token", 400, "正整数"},
 		{base + "?summary_id=garbage", "report-token", 400, "正整数"},
 		{base, "report-token", 400, "legacy_report_without_evidence_document"},
-		{base + fmt.Sprintf("?summary_id=%d", summary.ID), "report-token", 200, "evidence-report-1.3"},
+		{base + fmt.Sprintf("?summary_id=%d", summary.ID), "report-token", 200, "evidence-report-1.4"},
 		{base + "/export" + fmt.Sprintf("?summary_id=%d", summary.ID), "report-token", 200, ""},
 		{"/api/events/detail/another-event/report" + fmt.Sprintf("?summary_id=%d", summary.ID), "report-token", 400, "report_not_found"},
 	} {

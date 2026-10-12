@@ -44,7 +44,7 @@ func (s Services) ReportDocument(ctx context.Context, eventID string, summaryID 
 		return ReportDocument{}, fmt.Errorf("legacy_report_without_evidence_document")
 	}
 	var doc ReportDocument
-	if len(record.Value) > 16<<20 || json.Unmarshal(record.Value, &doc) != nil || doc.SummaryID != summary.ID || doc.EventID != eventID || doc.Markdown != summary.EventSummary || (doc.SchemaVersion != reportEvidenceVersion && doc.SchemaVersion != "evidence-report-1.3.1" && doc.SchemaVersion != "evidence-report-1.3" && doc.SchemaVersion != "evidence-report-1.0") || doc.AnalysisVersion != summary.Version || doc.Kind != summary.Kind {
+	if len(record.Value) > 16<<20 || json.Unmarshal(record.Value, &doc) != nil || doc.SummaryID != summary.ID || doc.EventID != eventID || doc.Markdown != summary.EventSummary || (doc.SchemaVersion != reportEvidenceVersion && doc.SchemaVersion != "evidence-report-1.3.2" && doc.SchemaVersion != "evidence-report-1.3.1" && doc.SchemaVersion != "evidence-report-1.3" && doc.SchemaVersion != "evidence-report-1.0") || doc.AnalysisVersion != summary.Version || doc.Kind != summary.Kind {
 		return ReportDocument{}, fmt.Errorf("report_document_binding_invalid")
 	}
 	if err := validateReportAssessment(doc.Assessment, doc.Evidence); err != nil {
@@ -114,17 +114,27 @@ func ExportEvidenceReportDOCX(report ReportDocument) ([]byte, error) {
 	}
 	p := doc.AddParagraph("")
 	p.Justification(stypes.JustificationCenter)
-	p.AddText(report.Title).Bold(true).Size(18)
+	if report.SchemaVersion == reportEvidenceVersion {
+		p.AddText("安全事件研判报告").Bold(true).Size(18)
+		doc.AddParagraph("研判对象：" + report.Title)
+	} else {
+		p.AddText(report.Title).Bold(true).Size(18)
+	}
 	metadata := fmt.Sprintf("报告版本 %d · 快照版本 %d · %s（北京时间）", report.AnalysisVersion, report.Evidence.SnapshotVersion, report.CreatedAt.In(time.FixedZone("Asia/Shanghai", 8*3600)).Format("2006-01-02 15:04:05"))
 	if report.SchemaVersion == "" {
 		metadata = fmt.Sprintf("报告版本 %d · %s（北京时间）", report.AnalysisVersion, report.CreatedAt.In(time.FixedZone("Asia/Shanghai", 8*3600)).Format("2006-01-02 15:04:05"))
 	}
 	doc.AddParagraph(metadata).AddText("").Size(9)
 	lines := strings.Split(report.Markdown, "\n")
+	appendixStarted := false
 	for n := 0; n < len(lines); n++ {
 		line := strings.TrimSpace(lines[n])
 		if line == "" {
 			continue
+		}
+		if report.SchemaVersion == reportEvidenceVersion && !appendixStarted && strings.HasPrefix(line, "## 附录") {
+			doc.AddPageBreak()
+			appendixStarted = true
 		}
 		if strings.HasPrefix(line, "|") {
 			table := doc.AddTable()
@@ -325,6 +335,9 @@ func layoutReportTable(table string) string {
 		widths = []int{700, 1500, 3500, 1300, 3000}
 	case 4:
 		widths = []int{2100, 2800, 1000, 4100}
+		if strings.Contains(first, "源地址与端口") {
+			widths = []int{3800, 3800, 1200, 1200}
+		}
 		if strings.Contains(first, "历史事件ID") {
 			widths = []int{2600, 2700, 1000, 3700}
 		}

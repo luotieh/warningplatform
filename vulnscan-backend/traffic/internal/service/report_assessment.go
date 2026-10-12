@@ -1,12 +1,10 @@
 package service
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"regexp"
-	"strconv"
 	"strings"
 
 	"vulnscan-backend/traffic/internal/domain"
@@ -25,6 +23,12 @@ type ReportAction struct {
 	Action      string   `json:"action"`
 	Purpose     string   `json:"purpose"`
 }
+
+type ReportRisk struct {
+	EvidenceIDs []string `json:"evidence_ids"`
+	Exposure    string   `json:"exposure"`
+	Impact      string   `json:"impact"`
+}
 type ReportAssessment struct {
 	Target            string                 `json:"target"`
 	ThreatType        string                 `json:"threat_type"`
@@ -38,6 +42,7 @@ type ReportAssessment struct {
 	Interpretations   []ReportInterpretation `json:"interpretations"`
 	Gaps              []string               `json:"gaps"`
 	Actions           []ReportAction         `json:"actions"`
+	Risks             []ReportRisk           `json:"risks,omitempty"`
 }
 
 // Dedicated report bounds. Legacy dialogue/analysis budgets stay unchanged.
@@ -49,7 +54,7 @@ const evidenceReportSystemPrompt = `你是证据驱动的流量研判报告分�
 必须遵守以下事实边界：小载荷不等于无载荷；只有明确零载荷测量才可称无应用载荷。单日短窗口未满足跨日规则，不可用于否定历史持续或作为良性依据。固定告警快照读取完整不表示会话、应用或全部网络观测完整。没有正常流量基线，不评价规模正常或无异常。自有基础设施登记不等于本次行为已授权，不据此确认正常业务或直接建议白名单；只能建议核对本资产、时间、进程、业务任务，再考虑限定范围和有效期的例外。历史引用必须写清主体与关系：同资产背景不是同IOC，DNS回答包含IP不是对该IP建立连接，解析器相同不是域名相同。历史总候选数不能充当当前IOC复发数。短窗口、少量小包或缺失恶意内容均不得作排除恶意的反证。不要写握手、心跳等未核验的替代剧情。所有具体数值和地址仅在引用证据的result或measurements中取用，不从其他条目移用。处置建议应给出实际资产、北京时间、对象和待查日志或进程。
 正文的理由、意义与行动只写已核验事实和据此成立的判断，使用清晰的因果及关联关系。未证实的恶意剧情不写；缺项仅写入gaps技术附录。不能把未证实判断改为肯定句。端口分布、时间规律、实际DNS/SNI字段、历史关联须依据给定证据解释。历史模型结论不是事实，同资产不证明同战役。对情报关联域名和实际查询域名作明确区分。支持理由按独立证据族归并，同源情报只列一次。report_weight_policy仅用于有效证据的相对影响，不是加减分公式或概率保底。仅有接触与情报时不得认定恶意活动；80至90需要直接恶意证据及独立支持。正文可引用核验数字与地址，但必须来自所引用证据的对应范围。
 threat_type只能为phishing_related、c2_related、botnet_related、mining_related、dns_related、exfiltration_related、scanning_related、suspicious_contact、normal_business、undetermined；只选择引用证据实际支持的类型，不能只看事件标题猜测。固定判断命题target=malicious_activity，表示本次通信属于恶意活动的可能性，不是主机失陷概率。verdict只能为suspicious、likely_malicious、likely_benign、insufficient；stage只能为contact、behavior、undetermined。probability为0到100整数或null，属于模型研判估计。没有有效支持依据时应使用null。不得把已保存命中数当作会话数、包数、真实流量；不能改写核验状态或数值。missing是未能核验，不是不存在；selection_omitted是正文省略，不是算法未执行。情报是有来源的背景；语义是经过引用检查的模型解释，不能重复作为独立事实累计。
-返回字段且仅这些字段：target、threat_type、verdict、stage、probability、probability_reason、supporting([{evidence_ids,explanation}])、opposing(同结构)、alternatives(同结构)、interpretations([{evidence_id,meaning}])、gaps([字符串])、actions([{evidence_ids,action,purpose}])。所有引用只能使用selected_evidence中的编号；interpretations为每条证据给出研判意义，引用数字必须匹配该证据范围。supporting用于已成立事实或情报背景；opposing只用于明确、充分核验的反向事实，不得使用缺材料。alternatives必须引用具体证据。概率依据须说明支持理由、替代解释与判断把握，不能杜撰公式或加减分。判断文字可引用证据表中对应范围的次数、地址、时间、端口与指标，禁止新增数字、错误单位或跨范围移用。禁止输出攻击成功、已失陷、已植入等成功性结论。禁止声称从本例自动排除C2或外传。行动仅为建议，不宣称已经执行；封禁共享基础设施应先核查业务关联。无材料时准确列出具体待查项，不猜测不存在的证据。probability_reason不超过120字，不重复概率数字或80至90等内部政策阈值；每项meaning及理由不超过80字，直接解释对应证据。alternatives只写已证实的域名不一致、自有资产等具体替代依据，不列出待证实的CDN、代理、扫描剧情；未证实项放gaps。verdict、stage的中文显示由程序完成。`
+返回字段且仅这些字段：target、threat_type、verdict、stage、probability、probability_reason、supporting([{evidence_ids,explanation}])、opposing(同结构)、alternatives(同结构)、interpretations([{evidence_id,meaning}])、gaps([字符串])、actions([{evidence_ids,action,purpose}])、risks([{evidence_ids,exposure,impact}])。所有引用只能使用selected_evidence中的编号；interpretations为每条证据写一句简短的自然语言事实描述，解释实际发生的行为、时间或分布；不要写算法指标名、核验状态、模型流程或只有限制的句子，引用数字必须匹配该证据范围。supporting用于已成立事实或情报背景；opposing只用于明确、充分核验的反向事实，不得使用缺材料。alternatives必须引用具体证据。概率依据须说明支持理由、替代解释与判断把握，不能杜撰公式或加减分。判断文字可引用证据表中对应范围的次数、地址、时间、端口与指标，禁止新增数字、错误单位或跨范围移用。禁止输出攻击成功、已失陷、已植入等成功性结论。禁止声称从本例自动排除C2或外传。行动仅为建议，不宣称已经执行；封禁共享基础设施应先核查业务关联。无材料时准确列出具体待查项，不猜测不存在的证据。probability_reason不超过120字，不重复概率数字或80至90等内部政策阈值；每项meaning及理由不超过80字，直接解释对应证据。alternatives只写已证实的域名不一致、自有资产等具体替代依据，不列出待证实的CDN、代理、扫描剧情；未证实项放gaps。报告正文按结论、事件总览、关键证据、风险分析、建议处置组织。probability_reason要连接实际行为、关键关联及结论，不写缺项清单。risks必须给出1至3项：exposure为引用证据支持的当前风险入口或需要保护的对象；impact只分析此类攻击对该资产或账号、数据、服务的影响，必须以“若”或“一旦”开头描述条件及后果，不得声称后果已发生，也不引入新的IP、统计或攻击证据。无法确立具体攻击类型时，只讨论该通联被滥用时的资产影响，不编造钓鱼、外传或植入链。actions面向资产责任方写可执行的安全防护，说明对象、核查位置、触发隔离/阻断的条件；不能只有补材料建议。verdict、stage的中文显示由程序完成。`
 
 func evidenceReportPrompt(event domain.Event, p preparedReportInput, b ReportEvidenceBundle, dialogue string) (string, error) {
 	entries := []map[string]any{}
@@ -78,6 +83,7 @@ func evidenceReportPrompt(event domain.Event, p preparedReportInput, b ReportEvi
 	eventMetadata := map[string]any{"id": event.EventID, "title": truncateRunes(event.EventName, 300), "severity": event.Severity, "observables": event.Observables}
 	input := map[string]any{"schema_version": reportEvidenceVersion, "event": eventMetadata, "asset_registry": p.AssetSection, "context": sanitizeEvidenceForPrompt(context), "selected_evidence": entries, "fact_counts": b.FactCounts, "semantic_counts": b.SemanticCounts, "selection_omitted": b.SelectionOmitted, "snapshot_version": b.SnapshotVersion, "dialogue": dialogue}
 	input["validated_history_interpretations"] = historyInterpretations
+	input["event_overview"] = reportOverviewPrompt(b.Overview)
 	input["evidence_digest"] = map[string]any{"version": b.Digest.Version, "total_instances": b.Digest.TotalInstances, "status_counts": b.Digest.Counts, "gap_reasons": b.Digest.GapReasons, "compression_omitted": b.Digest.Omitted}
 	// Intern complete source lists. Each row retains its entire source binding
 	// without repeating long hit hashes across every measurement and slot.
@@ -264,6 +270,12 @@ func validateReportAssessment(a ReportAssessment, b ReportEvidenceBundle) error 
 	if len(a.Supporting) > 8 || len(a.Opposing) > 8 || len(a.Alternatives) > 5 || len(a.Actions) > 8 || len(a.Gaps) > 8 {
 		return fmt.Errorf("report_response_bounds")
 	}
+	if b.PolicyVersion == reportEvidenceVersion && (len(a.Risks) > 3 || len(b.SelectedIDs) > 0 && len(a.Risks) < 1) {
+		return fmt.Errorf("report_risk_analysis_required")
+	}
+	if b.PolicyVersion == reportEvidenceVersion && len(b.SelectedIDs) > 0 && len(a.Actions) == 0 {
+		return fmt.Errorf("report_protection_actions_required")
+	}
 	if a.Interpretations == nil || a.Supporting == nil || a.Opposing == nil || a.Alternatives == nil || a.Gaps == nil || a.Actions == nil {
 		return fmt.Errorf("report_required_arrays_missing")
 	}
@@ -364,6 +376,18 @@ func validateReportAssessment(a ReportAssessment, b ReportEvidenceBundle) error 
 	}
 	if err := reasons(a.Alternatives, "alternatives"); err != nil {
 		return err
+	}
+	for _, risk := range a.Risks {
+		if err := reasons([]ReportReason{{EvidenceIDs: risk.EvidenceIDs, Explanation: risk.Exposure}}, "risk"); err != nil {
+			return err
+		}
+		if !strings.HasPrefix(risk.Impact, "若") && !strings.HasPrefix(risk.Impact, "一旦") {
+			return fmt.Errorf("report_risk_impact_must_be_conditional")
+		}
+		textRefs = risk.EvidenceIDs
+		if err := checkText(risk.Impact); err != nil {
+			return err
+		}
 	}
 	if !reportTypeSupported(a, entries) {
 		return fmt.Errorf("report_threat_type_without_evidence")
@@ -504,85 +528,8 @@ func reportCell(s string) string {
 var reportThreatTypeNames = map[string]string{"phishing_related": "钓鱼相关线索", "c2_related": "指令控制相关线索", "botnet_related": "群体协同相关线索", "mining_related": "挖矿通信相关线索", "dns_related": "DNS异常相关线索", "exfiltration_related": "数据传输异常相关线索", "scanning_related": "扫描行为相关线索", "suspicious_contact": "可疑目标通联", "normal_business": "正常业务倾向", "undetermined": "威胁类型待核查"}
 
 func renderReportMarkdown(doc ReportDocument) string {
-	if doc.SchemaVersion == "evidence-report-1.3.1" {
-		return renderV131ReportMarkdown(doc)
+	if doc.SchemaVersion == reportEvidenceVersion {
+		return renderNarrativeReportMarkdown(doc)
 	}
-	if doc.SchemaVersion == "evidence-report-1.3" {
-		return renderV13ReportMarkdown(doc)
-	}
-	if doc.SchemaVersion == "evidence-report-1.0" {
-		return renderLegacyReportMarkdown(doc)
-	}
-	var w bytes.Buffer
-	a, b := doc.Assessment, doc.Evidence
-	verdict := map[string]string{"suspicious": "可疑通联，建议核查", "likely_malicious": "证据支持恶意活动研判", "likely_benign": "现有证据支持正常业务解释", "insufficient": "已确认通联，按证据表开展核查"}[a.Verdict]
-	probability := "暂不估计"
-	if a.Probability != nil {
-		probability = strconv.Itoa(*a.Probability) + "%"
-	}
-	fmt.Fprintf(&w, "【结论】%s；%s。威胁事件概率：%s。\n\n## 研判摘要\n\n判断命题：本次通信是否属于恶意活动。\n\n概率性质：基于当前证据的模型研判估计。\n\n%s\n\n", reportThreatTypeNames[a.ThreatType], verdict, probability, reportCell(a.ProbabilityReason))
-	fmt.Fprintf(&w, "资产清单匹配：\n\n%s\n\n", doc.AssetSection)
-	fmt.Fprint(&w, "## 实际发生的行为\n\n")
-	for _, e := range b.Entries {
-		if strings.HasPrefix(e.Family, "saved_activity:") || strings.HasPrefix(e.Family, "dns_connection:") {
-			fmt.Fprintf(&w, "- %s：%s\n", e.ID, reportCell(e.Result))
-		}
-	}
-	fmt.Fprint(&w, "\n## 事实证据与研判意义\n\n| 编号 | 证据项 | 核验结果 | 来源 | 研判意义 |\n| --- | --- | --- | --- | --- |\n")
-	meanings := map[string]string{}
-	for _, i := range a.Interpretations {
-		meanings[i.EvidenceID] = i.Meaning
-	}
-	for _, id := range b.SelectedIDs {
-		for _, e := range b.Entries {
-			if e.ID == id {
-				fmt.Fprintf(&w, "| %s | %s | %s | %s | %s |\n", id, reportCell(e.Name), reportCell(reportReadableResult(e)), reportCell(e.Source), reportCell(meanings[id]))
-			}
-		}
-	}
-	fmt.Fprint(&w, "\n## 判断与概率依据\n\n")
-	for _, group := range []struct {
-		name string
-		rs   []ReportReason
-	}{{"主要支持", a.Supporting}, {"反向事实", a.Opposing}, {"替代解释", a.Alternatives}} {
-		if len(group.rs) == 0 {
-			continue
-		}
-		fmt.Fprintf(&w, "### %s\n\n", group.name)
-		if len(group.rs) == 0 {
-			fmt.Fprint(&w, "本次未列入此类依据。\n\n")
-		}
-		for _, r := range group.rs {
-			fmt.Fprintf(&w, "- %s：%s\n", strings.Join(r.EvidenceIDs, "、"), reportCell(r.Explanation))
-		}
-		fmt.Fprintln(&w)
-	}
-	fmt.Fprint(&w, "## 核查及处置建议\n\n")
-	for _, action := range a.Actions {
-		fmt.Fprintf(&w, "- %s：%s；目的：%s。\n", strings.Join(action.EvidenceIDs, "、"), reportCell(action.Action), reportCell(action.Purpose))
-	}
-	fmt.Fprint(&w, "\n## 技术附录：材料缺项与核验记录\n\n")
-	fmt.Fprint(&w, "来源索引（对应上文证据编号，可按命中ID或历史事件ID核查原始记录）：\n\n")
-	for _, e := range b.Entries {
-		if strings.HasPrefix(e.Family, "saved_packet:") {
-			fmt.Fprintf(&w, "- %s 原文核对片段：%s\n", e.ID, reportCell(e.Result))
-		}
-		if len(e.SourceIDs) > 0 {
-			fmt.Fprintf(&w, "- %s：%s\n", e.ID, reportCell(strings.Join(e.SourceIDs, "、")))
-		}
-	}
-	for _, g := range a.Gaps {
-		fmt.Fprintf(&w, "- %s\n", reportCell(g))
-	}
-	fmt.Fprintf(&w, "\n## 附录：证据核验概况\n\n报告版本：%d；快照版本：%d。\n\n事实检查（按规则与范围计数）：成立%d项，当前范围未满足%d项，材料不足%d项；正文省略%d条可展示证据。省略不等于未执行，材料不足不等于行为不存在。\n\n语义任务（按槽位与命题计数）：引用校验通过%d项，跳过%d项，不可用%d项，拒绝%d项。\n", doc.AnalysisVersion, b.SnapshotVersion, b.FactCounts["observed"], b.FactCounts["not_observed"], b.FactCounts["missing"], b.SelectionOmitted, b.SemanticCounts["accepted"], b.SemanticCounts["skipped"], b.SemanticCounts["unavailable"], b.SemanticCounts["rejected"])
-	if b.Normalized.Version != "" {
-		fmt.Fprintf(&w, "\n统一证据索引：%d个实例；正文使用%d项精华；完整状态、指标与来源仍保存在本版本报告中。\n", len(b.Normalized.Items), len(b.SelectedIDs))
-	}
-	if b.FactStatus != "evaluated" {
-		fmt.Fprintf(&w, "\n事实引擎本次未发布计算结果，状态：%s；相关规则的未执行原因见完整检查清单。\n", reportCell(b.FactStatus))
-	}
-	if b.History != nil {
-		fmt.Fprintf(&w, "\n平台历史检索：状态=%s，匹配%d条，排除%d条；诊断=%s。历史活动不等于同战役或独立恶意结论。\n", reportCell(b.History.Status), len(b.History.Rows), b.History.ExcludedCount, reportCell(b.History.Reason))
-	}
-	return w.String()
+	return renderV132ReportMarkdown(doc)
 }

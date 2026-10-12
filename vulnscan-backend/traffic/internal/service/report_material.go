@@ -220,6 +220,7 @@ func reportMaterialEvidence(rows []ReportMaterialObservation) []ReportEvidence {
 		sort.Strings(locals)
 		result := fmt.Sprintf("资产地址=%s；资产/设备=%s；已保存命中%d条；已保存去重物理报文%d份，无法建立物理身份%d条；涉及%d个远端端点、%d种协议端口；时间UTC=%s 至 %s；跨度=%.6f秒；远端与方向完整分布：%s", strings.Join(locals, ","), k, len(rs), len(physical), unknownPhysical, len(remoteEndpoints), len(protocolPorts), first.Format(time.RFC3339Nano), last.Format(time.RFC3339Nano), last.Sub(first).Seconds(), strings.Join(remoteParts, "；"))
 		loc := time.FixedZone("Asia/Shanghai", 8*3600)
+		result += "；五元组完整分布：" + strings.Join(parts, "；")
 		result += fmt.Sprintf("；北京时间=%s 至 %s", first.In(loc).Format(time.RFC3339Nano), last.In(loc).Format(time.RFC3339Nano))
 		if payloadSamples > 0 {
 			result += fmt.Sprintf("；完成原文核验的去重报文%d份，核验应用载荷总字节=%d（只覆盖这些报文，不代表整个会话流量）", payloadSamples, payloadTotal)
