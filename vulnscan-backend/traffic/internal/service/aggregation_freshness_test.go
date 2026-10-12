@@ -116,12 +116,22 @@ func TestRebuildTimeoutDoesNotBlockOtherEvents(t *testing.T) {
 		t.Fatal("failed task not delayed", err)
 	}
 	// Once the dependency recovers and the retry is due, catch up successfully.
-	st.hook = nil
+	st.hook = func(ctx context.Context, q store.HitQuery) error {
+		if len(q.Sources) > 0 && q.Sources[0] == slow {
+			select {
+			case <-time.After(15 * time.Millisecond):
+				st.hook = nil
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+		return nil
+	}
 	retry["retry_not_before"] = time.Now().Add(-time.Second).UnixMilli()
 	if err = putRecord(context.Background(), st, "outbox", slow, "pending", retry); err != nil {
 		t.Fatal(err)
 	}
-	if err = svc.DrainAggregation(context.Background(), 20); err != nil {
+	if err = svc.drainAggregation(context.Background(), 20, 10*time.Millisecond); err != nil {
 		t.Fatal(err)
 	}
 	seg, _, _ = readSegment(context.Background(), st, slow)
