@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"sort"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -50,7 +51,7 @@ func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event
 		semantics := ReportSemanticEvaluation{Status: "unavailable", Reason: "legacy_snapshot_unverified", InputMode: evidence.SemanticRaw, AdapterVersion: semanticAdapterVersion}
 		c["semantic_evidence"] = reportSemanticSummary(semantics)
 		b, err := json.Marshal(c)
-		manifest := SnapshotEvidenceManifest{AdapterVersion: snapshotAdapterVersion, Coverage: "unverified", FactCoverage: snapshotUnavailableCoverage(evidence.SupportedFacts(), "legacy_snapshot_unverified")}
+		manifest := SnapshotEvidenceManifest{AdapterVersion: reportSnapshotAdapterVersion, Coverage: "unverified", FactCoverage: snapshotUnavailableCoverage(evidence.SupportedFacts(), "legacy_snapshot_unverified")}
 		manifest.addIssue(SnapshotInputIssue{Code: "legacy_snapshot_unverified", Stage: "load_snapshot"})
 		evaluation := SnapshotFactEvaluation{Status: "unavailable", Reason: "legacy_snapshot_unverified", Manifest: manifest}
 		return preparedReportInput{Context: string(b), AssetSection: assetMatchContext(event, s.Store.ListAssets()), Evaluation: evaluation, Semantics: semantics, Evidence: buildReportEvidence(event, EvidenceSnapshot{EventID: event.EventID, Context: c}, evaluation, semantics)}, err
@@ -64,6 +65,8 @@ func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event
 		return preparedReportInput{}, ctx.Err()
 	}
 	options := DefaultSnapshotEvidenceOptions()
+	options.ReportMaterialMode = true
+	options.ReportSchedules = s.ReportSchedules
 	if assetErr != nil {
 		issue := snapshotIssueCause(SnapshotInputIssue{Code: "asset_registry_read_failed", Stage: "load_assets", Retryable: true}, assetErr)
 		options.RegistryIssue = &issue
@@ -80,6 +83,22 @@ func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event
 		return preparedReportInput{}, err
 	}
 	config := evidence.DefaultConfig()
+	config.Policies = map[evidence.FactID]map[string]float64{
+		"F_BEACON_JITTER":            {"ljung_box_lags": 3, "median_relative_tolerance": 0.25},
+		"F_PORT_SEQUENCE":            {"difference_entropy_threshold": 3},
+		"F_SMALL_PACKET":             {"small_payload_bytes": 64},
+		"F_RATE_RAMP":                {"window_seconds": 300},
+		"F_FAILED_TO_ACTIVE":         {"min_failures": 2},
+		"F_BRAND_IMPOSTOR":           {"max_edit_distance": 1},
+		"F_MULTI_ASSET_IOC":          {"cluster_window_seconds": 3600},
+		"F_MULTI_ASSET_DIST":         {"subnet_entropy_min": 1},
+		"F_TIME_COORDINATION":        {"bucket_seconds": 60, "max_lag_bins": 5},
+		"F_COORD_FANOUT":             {"handoff_seconds": 300},
+		"F_INFECTION_CHAIN":          {"chain_window_seconds": 300},
+		"F_COORD_PATTERN_RECURRENCE": {"bucket_seconds": 300},
+		"F_HIST_SCHEDULE_MATCH":      {"kl_threshold": 0.5},
+		"F_HIST_COORD_PARAM_MATCH":   {"parameter_relative_tolerance": 0.25},
+	}
 	history := s.loadReportHistory(ctx, event, snap, assets)
 	if ctx.Err() != nil {
 		return preparedReportInput{}, ctx.Err()
@@ -87,7 +106,7 @@ func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event
 	options.PlatformHistory = &history
 	assetVersions := append([]domain.Asset(nil), assets...)
 	sort.Slice(assetVersions, func(i, j int) bool { return assetVersions[i].ID < assetVersions[j].ID })
-	key := digest([]any{snap.EventID, snap.Version, snap.Watermark, snap.RevisionWatermark, evidence.RuleVersion, snapshotAdapterVersion, config, options, assetVersions, options.Supplemental, options.SupplementalIssue, options.Sources, options.SourceIssue, options.RegistryIssue})
+	key := digest([]any{snap.EventID, snap.Version, snap.Watermark, snap.RevisionWatermark, evidence.RuleVersion, reportSnapshotAdapterVersion, config, options, assetVersions, options.Supplemental, options.SupplementalIssue, options.Sources, options.SourceIssue, options.RegistryIssue})
 	record, exists, err := s.Store.AggregateRecord(ctx, "evidence_result", key)
 	cacheAvailable := err == nil
 	if err != nil {
@@ -101,7 +120,7 @@ func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event
 		if err := json.Unmarshal(record.Value, &evaluation); err != nil {
 			exists = false
 		}
-		if evaluation.Manifest.SnapshotVersion != snap.Version || evaluation.Manifest.AdapterVersion != snapshotAdapterVersion || (evaluation.Result != nil && evaluation.Result.RuleVersion != evidence.RuleVersion) || evaluation.Status == "evaluated" && evaluation.Result == nil || len(evaluation.Manifest.FactCoverage) < len(evidence.SupportedFacts()) {
+		if evaluation.Manifest.SnapshotVersion != snap.Version || evaluation.Manifest.AdapterVersion != reportSnapshotAdapterVersion || (evaluation.Result != nil && evaluation.Result.RuleVersion != evidence.RuleVersion) || evaluation.Status == "evaluated" && evaluation.Result == nil || len(evaluation.Manifest.FactCoverage) < len(evidence.SupportedFacts()) {
 			exists = false
 		}
 		if exists {
@@ -129,7 +148,7 @@ func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event
 			// Evidence is an independent subsystem: fail closed for its claims,
 			// preserve the original report data and persist a correlated failure.
 			failureKey := snapshotKey(snap.EventID, snap.Version)
-			failure := map[string]any{"event_id": snap.EventID, "snapshot_version": snap.Version, "at": time.Now().UTC(), "adapter_version": snapshotAdapterVersion, "reason": evaluation.Reason, "manifest": evaluation.Manifest}
+			failure := map[string]any{"event_id": snap.EventID, "snapshot_version": snap.Version, "at": time.Now().UTC(), "adapter_version": reportSnapshotAdapterVersion, "reason": evaluation.Reason, "manifest": evaluation.Manifest}
 			if persist {
 				if saveErr := putRecord(ctx, s.Store, "evidence_failure", failureKey, snap.EventID, failure); saveErr != nil {
 					log.Printf("[evidence] failure_record_write_failed event=%s snapshot=%d", snap.EventID, snap.Version)
@@ -173,7 +192,7 @@ func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event
 		manifest[k] = v
 	}
 	manifest["algorithm_evidence"] = map[string]any{
-		"evidence_result_key": key, "adapter_version": snapshotAdapterVersion,
+		"evidence_result_key": key, "adapter_version": reportSnapshotAdapterVersion,
 		"rule_version": evidence.RuleVersion, "registry_version": evaluation.Manifest.RegistryVersion,
 		"status": evaluation.Status, "reason": evaluation.Reason,
 		"read_pages": evaluation.Manifest.ReadPages, "revision_batches": evaluation.Manifest.RevisionBatches,
@@ -183,16 +202,42 @@ func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event
 		"evidence_result_persisted": resultPersisted, "diagnostics_key": snapshotKey(snap.EventID, snap.Version),
 	}
 	snap.Manifest = manifest
+	if audit := reportLogFrom(ctx); audit != nil {
+		audit.meta["snapshot_version"] = snap.Version
+		audit.write("fact-preparation.json", evaluation)
+		audit.write("snapshot-materials.json", map[string]any{"snapshot": snap, "history": history, "material_cache_key": key})
+	}
 	semantics, semanticErr := s.prepareReportSemantics(ctx, snap, evaluation, key, sharedInput, persist, resultPersisted, func() (SnapshotEvidenceInput, error) { return s.SnapshotEvidenceInput(ctx, snap, assets, options) })
 	if semanticErr != nil && ctx.Err() != nil {
 		return preparedReportInput{}, ctx.Err()
 	}
 	manifest["semantic_evidence"] = map[string]any{"result_key": semantics.ResultKey, "adapter_version": semantics.AdapterVersion, "input_mode": semantics.InputMode, "status": semantics.Status, "result_persisted": semantics.ResultPersisted}
 	projected, err := projectReportEvidence(snap, evaluation, semantics)
-	return preparedReportInput{Context: projected, AssetSection: assetMatchContext(event, assets), Evaluation: evaluation, Semantics: semantics, Evidence: buildReportEvidence(event, snap, evaluation, semantics, history)}, err
+	assetSection := normalizeReportAssetSection(assetMatchContext(event, assets))
+	return preparedReportInput{Context: projected, AssetSection: assetSection, Evaluation: evaluation, Semantics: semantics, Evidence: buildReportEvidence(event, snap, evaluation, semantics, history)}, err
+}
+
+// Report-only wording: packet direction and an IOC label do not establish an
+// attacking source or a compromised asset. Other callers retain their labels.
+func normalizeReportAssetSection(s string) string {
+	return strings.NewReplacer("受害侧", "观测资产", "威胁侧", "通联对端").Replace(s)
 }
 
 func projectReportEvidence(snap EvidenceSnapshot, facts SnapshotFactEvaluation, semantics ReportSemanticEvaluation) (string, error) {
+	// The report uses its own normalized evidence and budget. Do not run the
+	// shared dialogue projection, which discards records under a 6000-rune cap.
+	context := map[string]any{"event_id": snap.EventID, "snapshot_version": snap.Version, "input_manifest": snap.Manifest, "algorithm_evidence": snapshotFactSummary(facts), "semantic_evidence": reportSemanticSummary(semantics)}
+	for _, key := range []string{"ioc", "ioc_evidence"} {
+		if value, ok := snap.Context[key]; ok {
+			context[key] = value
+		}
+	}
+	raw, err := json.Marshal(context)
+	return string(raw), err
+}
+
+// Legacy projection retained for callers explicitly using its old envelope.
+func projectLegacyReportEvidence(snap EvidenceSnapshot, facts SnapshotFactEvaluation, semantics ReportSemanticEvaluation) (string, error) {
 	factSummary, semanticSummary := snapshotFactSummary(facts), reportSemanticSummary(semantics)
 	// Whole entries compete under the existing shared 6000-character envelope;
 	// retain explicit omission totals and status instead of slicing JSON/text.
@@ -227,7 +272,7 @@ func projectReportEvidence(snap EvidenceSnapshot, facts SnapshotFactEvaluation, 
 func snapshotFactSummary(evaluation SnapshotFactEvaluation) map[string]any {
 	summary := map[string]any{
 		"status": evaluation.Status, "reason": evaluation.Reason,
-		"rule_version": evidence.RuleVersion, "adapter_version": snapshotAdapterVersion,
+		"rule_version": evidence.RuleVersion, "adapter_version": reportSnapshotAdapterVersion,
 		"snapshot_version": evaluation.Manifest.SnapshotVersion, "cache_hit": evaluation.CacheHit,
 		"declared_hits": evaluation.Manifest.DeclaredHits, "loaded_hits": evaluation.Manifest.LoadedHits,
 		"bound_hits": evaluation.Manifest.BoundHits, "unresolved_hits": evaluation.Manifest.UnresolvedHits,

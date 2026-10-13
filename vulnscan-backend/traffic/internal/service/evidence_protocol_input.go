@@ -55,7 +55,7 @@ func snapshotPayload(packet map[string]any) ([]byte, bool, string) {
 
 func enrichSnapshotProtocols(input *evidence.Input, hit store.Hit, m map[string]any, manifest *SnapshotEvidenceManifest) {
 	packet := nestedMap(m, "raw_packet")
-	if child := nestedMap(packet, "request"); len(child) > 0 {
+	if child := nestedMap(packet, "request"); len(child) > 0 && packet["report_quality_derivation"] == nil {
 		packet = child
 	}
 	packet, frameProblem := snapshotFramePayload(packet, m, input)

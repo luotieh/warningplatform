@@ -21,6 +21,10 @@ type LLMClient struct {
 	// DisableThinking 为 Qwen 系模型关闭思考链(chat_template_kwargs.enable_thinking=false)，
 	// 避免推理过程耗尽输出预算导致报告被截断。
 	DisableThinking bool
+	// Explicit report-only provider control; unset for all existing callers.
+	ReportThinkingDisabled bool
+	// Set only on a report-local copy; receives no headers or credentials.
+	ReportObserver func(string, any)
 }
 
 // effectiveMaxTokens 返回本次调用实际使用的输出 token 预算。

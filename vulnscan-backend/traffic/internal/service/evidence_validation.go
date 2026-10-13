@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"vulnscan-backend/traffic/internal/config"
 	"vulnscan-backend/traffic/internal/domain"
 	"vulnscan-backend/traffic/internal/store"
 )
@@ -15,6 +16,8 @@ type EvidenceReadMetric struct {
 	ElapsedMS float64 `json:"elapsed_ms"`
 }
 type EvidenceValidation struct {
+	Availability   map[string]any                `json:"report_availability"`
+	ReportEvidence *ReportEvidenceBundle         `json:"report_evidence,omitempty"`
 	EventID        string                        `json:"event_id"`
 	ElapsedMS      float64                       `json:"elapsed_ms"`
 	Reads          map[string]EvidenceReadMetric `json:"reads"`
@@ -84,6 +87,11 @@ func (s Services) ValidateReportEvidence(ctx context.Context, eventID string) (E
 		return out, &SnapshotInputError{Code: "validation_event_not_found", Stage: "load_event", EventID: eventID}
 	}
 	p, err := s.prepareReportInputMode(ctx, event, false)
+	if audit := reportLogFrom(ctx); audit != nil {
+		audit.prepared(p)
+	}
+	out.Availability = reportAvailability(p)
+	out.ReportEvidence = &p.Evidence
 	out.Evaluation = p.Evaluation
 	out.SemanticPlan = reportSemanticSummary(p.Semantics)
 	out.ElapsedMS = float64(time.Since(start).Microseconds()) / 1000
@@ -97,4 +105,14 @@ func (s Services) ValidateReportEvidence(ctx context.Context, eventID string) (E
 		}
 	}
 	return out, err
+}
+
+// Explicit file-log variant. Still no database writes and no model calls.
+func (s Services) ValidateReportEvidenceLogged(ctx context.Context, eventID, dir string) (out EvidenceValidation, err error) {
+	opts, _ := (config.ReportOptions{LogDir: dir}).Resolve(6000)
+	ctx, audit := beginReportLog(ctx, eventID, "read_only_material_validation", 0, opts)
+	audit.meta["report_generated"] = false
+	audit.meta["model_called"] = false
+	defer func() { audit.finish(err) }()
+	return s.ValidateReportEvidence(ctx, eventID)
 }

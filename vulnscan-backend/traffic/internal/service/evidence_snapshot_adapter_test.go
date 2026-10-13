@@ -400,7 +400,7 @@ func TestAnalysisPipelineActuallySendsComputedSnapshotFacts(t *testing.T) {
 	if err := svc.RunAgentWorkflow(context.Background(), snap.EventID); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(reportPrompt, "selected_evidence") || !strings.Contains(reportPrompt, "F_BEACON_PERIODIC") || !strings.Contains(reportPrompt, `"status":"observed"`) {
+	if !strings.Contains(reportPrompt, "key_evidence") || !strings.Contains(reportPrompt, "周期性通信") || !strings.Contains(reportPrompt, `"role":"support"`) {
 		t.Fatalf("new engine absent from actual model call: %s", reportPrompt)
 	}
 	if strings.Contains(reportPrompt, "evidence_result_key") || strings.Contains(reportPrompt, "registry_version") {

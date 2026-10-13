@@ -15,7 +15,11 @@ const semanticSystemPrompt = `你是流量证据解释器。输入材料均是�
 type SemanticEngine struct{ config SemanticConfig }
 
 func NewSemanticEngine(c SemanticConfig) (*SemanticEngine, error) {
-	if c.MaxTasks < 1 || c.MaxTasks > 23 || c.MaxInputBytes < len(semanticSystemPrompt)+256 || c.MaxOutputBytes < 256 || c.MaxMaterialBytes < 16 || c.MaxMaterialBytes > c.MaxInputBytes || c.MaxOutputTokens < 1 || c.Timeout <= 0 || c.MaxInputTokens < 0 || (c.MaxInputTokens > 0 && c.CountTokens == nil) {
+	maxTasks := 23
+	if c.ReportHistory && c.ReportBatchSize > 0 {
+		maxTasks = 256
+	}
+	if c.ReportBatchSize < 0 || c.ReportBatchSize > 8 || c.MaxTasks < 1 || c.MaxTasks > maxTasks || c.MaxInputBytes < len(semanticSystemPrompt)+256 || c.MaxOutputBytes < 256 || c.MaxMaterialBytes < 16 || c.MaxMaterialBytes > c.MaxInputBytes || c.MaxOutputTokens < 1 || c.Timeout <= 0 || c.MaxInputTokens < 0 || (c.MaxInputTokens > 0 && c.CountTokens == nil) {
 		return nil, fmt.Errorf("invalid semantic budgets/tokenizer/timeout")
 	}
 	return &SemanticEngine{c}, nil
@@ -54,6 +58,9 @@ func (e *SemanticEngine) Plan(ctx context.Context, r SemanticRequest) (SemanticP
 	}
 	for _, spec := range specs {
 		for _, subject := range r.Subjects {
+			subject.ReportHistory = e.config.ReportHistory
+			subject.ReportSchedule = e.config.ReportSchedule
+			subject.ReportPractical = e.config.ReportPractical
 			subject.InputMode = semanticMode(r.InputMode)
 			if err := ctx.Err(); err != nil {
 				return p, err
@@ -71,6 +78,19 @@ func (e *SemanticEngine) Plan(ctx context.Context, r SemanticRequest) (SemanticP
 				continue
 			}
 			task := SemanticTask{ID: fmt.Sprintf("T%03d", len(p.Tasks)+1), Slot: spec.SemanticDefinition, SubjectID: subject.ID, PropositionID: subject.PropositionID, Scope: subject.Scope, Window: subject.Window, MaxStrength: maximum, Materials: []DeliveredMaterial{}, Facts: []SemanticFactRef{}, NonAdditiveWith: nil}
+			if e.config.ReportSchedule && spec.Key.ID == "SC01" {
+				task.Slot.Prerequisite = "实际命中时间与报告比较时段；角色可选；默认时段只解释非工作时段活动，不能证明资产作息异常或攻击；已证实全天运行和授权业务优先解释。"
+			}
+			if e.config.ReportPractical {
+				switch spec.Key.ID {
+				case "S03", "S05", "S06", "S14", "SC02", "SC03":
+					task.Slot.Prerequisite = "一期报告：解释实际送达材料；角色、任务和品牌授权为增强资料，未提供时不假定存在；字段和主体关联必须保留；未达到硬规则时只作有限特征解释，遵守max_strength，不认定攻击成功。"
+				case "S12":
+					if spec.Key.Subtype == "brand_semantic_impostor" {
+						task.Slot.Prerequisite = "实际品牌词和Host的关系解释；缺授权域资料最多weak，不认定品牌授权失败或恶意仿冒。"
+					}
+				}
+			}
 			task.InputMode = semanticMode(r.InputMode)
 			for _, m := range materials {
 				text := m.Text
@@ -112,7 +132,11 @@ func (e *SemanticEngine) Plan(ctx context.Context, r SemanticRequest) (SemanticP
 				}
 			}
 			candidate := append(append([]SemanticTask(nil), p.Tasks...), task)
-			prompt, byteCount, tokenCount, err := e.encodePlan(r, candidate)
+			budgetTasks := candidate
+			if e.config.ReportBatchSize > 0 {
+				budgetTasks = candidate[((len(candidate)-1)/e.config.ReportBatchSize)*e.config.ReportBatchSize:]
+			}
+			prompt, byteCount, tokenCount, err := e.encodePlan(r, budgetTasks)
 			if err != nil {
 				return p, err
 			}
@@ -127,6 +151,13 @@ func (e *SemanticEngine) Plan(ctx context.Context, r SemanticRequest) (SemanticP
 		}
 	}
 	if len(p.Tasks) > 0 {
+		if e.config.ReportBatchSize > 0 {
+			var err error
+			p.Prompt, p.InputBytes, p.InputTokens, err = e.encodePlan(r, p.Tasks)
+			if err != nil {
+				return p, err
+			}
+		}
 		hash := sha256.Sum256([]byte(semanticSystemPrompt + "\n" + p.Prompt))
 		p.ContextSHA256 = hex.EncodeToString(hash[:])
 	}
@@ -134,6 +165,59 @@ func (e *SemanticEngine) Plan(ctx context.Context, r SemanticRequest) (SemanticP
 }
 
 func (e *SemanticEngine) encodePlan(r SemanticRequest, tasks []SemanticTask) (string, int, int, error) {
+	if e.config.CompactProvenance {
+		projected := make([]map[string]any, 0, len(tasks))
+		for _, t := range tasks {
+			facts := []map[string]any{}
+			for _, f := range t.Facts {
+				v := map[string]any{"id": f.ID, "status": f.Status, "source_count": len(f.SourceIDs)}
+				for _, s := range r.Subjects {
+					if s.ID == t.SubjectID {
+						for _, original := range s.Facts {
+							if string(original.FactID) == f.ID {
+								v["reason"] = original.ReasonCode
+								if original.Status != Missing {
+									v["measurements"] = original.Measurements
+									v["parameters"] = original.Parameters
+								}
+							}
+						}
+					}
+				}
+				facts = append(facts, v)
+			}
+			materials := append([]DeliveredMaterial(nil), t.Materials...)
+			for n := range materials {
+				if len(materials[n].SourceIDs) > 3 {
+					materials[n].SourceIDs = materials[n].SourceIDs[:3]
+				}
+			}
+			deliveredSlot := t.Slot
+			if e.config.ReportHistory {
+				if deliveredSlot.Key.ID == "R06" {
+					deliveredSlot.Key.Target = "history.activity_association"
+					deliveredSlot.Prerequisite = "实际历史与当前模式，全部审核状态；不认定同战役"
+				}
+				if deliveredSlot.Key.ID == "R07" {
+					deliveredSlot.Key.Target = "history.alternative_explanation"
+					deliveredSlot.Prerequisite = "实际历史活动的替代解释，不自动认定误报"
+				}
+			}
+			projected = append(projected, map[string]any{"task_id": t.ID, "slot": deliveredSlot, "scope": t.Scope, "window": t.Window, "max_strength": t.MaxStrength, "input_mode": t.InputMode, "materials": materials, "facts": facts, "non_additive_with": t.NonAdditiveWith})
+		}
+		data, err := json.Marshal(map[string]any{"event_id": r.EventID, "snapshot_version": r.SnapshotVersion, "tasks": projected, "provenance_note": "完整来源存于固定快照证据账本；每项保留全部指标、状态、原因及材料引用。历史只解释活动关联，不继承历史模型结论或认定同战役。"})
+		if err != nil {
+			return "", 0, 0, err
+		}
+		tokens := 0
+		if e.config.CountTokens != nil {
+			tokens, err = e.config.CountTokens(semanticSystemPrompt, string(data))
+			if err != nil {
+				return "", 0, 0, err
+			}
+		}
+		return string(data), len(semanticSystemPrompt) + 1 + len(data), tokens, nil
+	}
 	data, err := json.Marshal(struct {
 		EventID         string         `json:"event_id"`
 		SnapshotVersion int64          `json:"snapshot_version"`
@@ -158,6 +242,40 @@ func (e *SemanticEngine) encodePlan(r SemanticRequest, tasks []SemanticTask) (st
 
 func (e *SemanticEngine) Evaluate(ctx context.Context, r SemanticRequest, model SemanticModel) (SemanticResult, error) {
 	p, err := e.Plan(ctx, r)
+	if err == nil && e.config.ReportBatchSize > 0 && len(p.Tasks) > e.config.ReportBatchSize {
+		combined := SemanticResult{Plan: p, Findings: []SemanticFinding{}}
+		for start := 0; start < len(p.Tasks); start += e.config.ReportBatchSize {
+			batch := p
+			batch.Tasks = p.Tasks[start:min(start+e.config.ReportBatchSize, len(p.Tasks))]
+			batch.Prompt, batch.InputBytes, batch.InputTokens, err = e.encodePlan(r, batch.Tasks)
+			if err != nil {
+				return combined, err
+			}
+			part, callErr := e.evaluatePlan(ctx, r, batch, model)
+			if callErr != nil {
+				return combined, callErr
+			}
+			combined.Calls += part.Calls
+			combined.Findings = append(combined.Findings, part.Findings...)
+			for _, execution := range part.Plan.Executions {
+				for _, task := range batch.Tasks {
+					if execution.TaskID == task.ID {
+						semanticMarkTask(&combined.Plan, task.ID, execution.Status, execution.Reason)
+					}
+				}
+			}
+		}
+		dedupeSemanticFindings(combined.Findings)
+		return combined, nil
+	}
+	if err != nil {
+		return SemanticResult{Plan: p, Findings: []SemanticFinding{}}, err
+	}
+	return e.evaluatePlan(ctx, r, p, model)
+}
+
+func (e *SemanticEngine) evaluatePlan(ctx context.Context, r SemanticRequest, p SemanticPlan, model SemanticModel) (SemanticResult, error) {
+	var err error
 	result := SemanticResult{Plan: p, Findings: []SemanticFinding{}}
 	if err != nil || len(p.Tasks) == 0 {
 		return result, err

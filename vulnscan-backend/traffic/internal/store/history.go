@@ -100,7 +100,7 @@ func (s *MemoryStore) HistoryCandidates(ctx context.Context, q HistoryQuery) ([]
 		var c map[string]any
 		_ = json.Unmarshal([]byte(rows[index].Context), &c)
 		minimal := map[string]any{}
-		for _, key := range []string{"src_ip", "dst_ip", "first_time", "last_time", "occurrence_time", "canonical_event_id"} {
+		for _, key := range []string{"src_ip", "dst_ip", "src_port", "dst_port", "device_id", "app", "detection_method", "first_time", "last_time", "occurrence_time", "canonical_event_id"} {
 			minimal[key] = c[key]
 		}
 		for _, key := range []string{"ioc", "ioc_evidence"} {
@@ -140,7 +140,11 @@ func historySQL(q HistoryQuery) (string, []any, error) {
 	where = append(where, "("+strings.Join(match, " OR ")+")")
 	args = append(args, q.Limit)
 	projected := []string{}
-	for _, key := range []string{"src_ip", "dst_ip", "first_time", "last_time", "occurrence_time", "canonical_event_id"} {
+	for _, key := range []string{"src_ip", "dst_ip", "src_port", "dst_port", "device_id", "app", "detection_method", "first_time", "last_time", "occurrence_time", "canonical_event_id"} {
+		if key == "app" {
+			projected = append(projected, "'app',CASE WHEN JSON_VALID(context) THEN JSON_EXTRACT(context,'$.app') ELSE NULL END")
+			continue
+		}
 		projected = append(projected, "'"+key+"',"+field("$."+key))
 	}
 	for _, key := range []string{"ioc", "ioc_evidence"} {

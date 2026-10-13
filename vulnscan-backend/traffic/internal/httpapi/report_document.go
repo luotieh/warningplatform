@@ -46,7 +46,22 @@ func (s *Server) exportReportDocument(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	data, err := service.ExportEvidenceReportDOCX(doc)
+	includeAppendix := false
+	if raw := r.URL.Query().Get("include_appendix"); raw != "" {
+		var err error
+		includeAppendix, err = strconv.ParseBool(raw)
+		if err != nil {
+			writeJSON(w, 400, domain.APIResponse{Status: "error", Message: "include_appendix必须为布尔值"})
+			return
+		}
+	}
+	var data []byte
+	var err error
+	if includeAppendix {
+		data, err = service.ExportEvidenceReportDOCXWithAppendix(doc)
+	} else {
+		data, err = service.ExportEvidenceReportDOCX(doc)
+	}
 	if err != nil {
 		writeJSON(w, 500, domain.APIResponse{Status: "error", Message: "报告导出失败"})
 		return

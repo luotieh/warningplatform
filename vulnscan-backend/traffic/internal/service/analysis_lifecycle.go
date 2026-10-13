@@ -53,6 +53,11 @@ func (s Services) setAnalysisJob(id, state, kind string, failure ...string) erro
 		return nil
 	})
 	realtime.BroadcastEventListUpdate(map[string]any{"event_id": id})
+	if err == nil && state == "failed" {
+		if notifyErr := s.notifyReportFailure(id); notifyErr != nil {
+			s.recordReportPipelineFailure(id, "chat_failure_notification", notifyErr)
+		}
+	}
 	return err
 }
 
@@ -105,6 +110,10 @@ func analysisFailureSummary(raw string) string {
 		needles []string
 		text    string
 	}{
+		{[]string{"report_count_requires_numeric_citation"}, "报告中的中文数量未通过引用证据核验"},
+		{[]string{"report_fact_numbers_not_in_cited_scope"}, "报告中的数量或时间与引用证据不一致"},
+		{[]string{"report_success_or_exclusion_overclaim"}, "报告包含证据未支持的攻击成功或排除结论"},
+		{[]string{"report_probability_required", "report_probability_reason_required"}, "模型未提供合格的研判概率及依据"},
 		{[]string{"额度", "余额", "quota", "usage limit", "insufficient_quota"}, "模型额度不足，恢复额度后重试"},
 		{[]string{"401", "403", "认证", "权限", "unauthorized", "forbidden"}, "模型认证或访问权限异常，请检查配置"},
 		{[]string{"未配置", "not configured"}, "未配置可用模型，请检查配置"},

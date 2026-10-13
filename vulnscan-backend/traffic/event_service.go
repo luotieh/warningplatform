@@ -307,7 +307,11 @@ func (s *EventService) RefreshReport(ctx context.Context, eventID string) (map[s
 		return nil, errors.New("事件不存在")
 	}
 	status := "refresh_submitted"
-	if !s.core.RefreshAnalysisAsync(eventID) {
+	started, err := s.core.RequestReportRefresh(eventID)
+	if err != nil {
+		return nil, err
+	}
+	if !started {
 		status = "already_running"
 	}
 	return map[string]any{

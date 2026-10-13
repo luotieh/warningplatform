@@ -13,11 +13,13 @@ import (
 func TestFivePartReportLayoutAndPinnedExport(t *testing.T) {
 	svc, event, b := reportTestBundle(t)
 	a := validReportAssessment(b)
-	a.RiskAnalysis = []ReportReason{{EvidenceIDs: []string{b.SelectedIDs[0]}, Explanation: "需要核实通信业务归属及潜在业务影响"}}
+	a.Risks = []ReportRisk{{EvidenceIDs: []string{b.SelectedIDs[0]}, Exposure: "通信归属", Impact: "若通联被滥用，可能影响资产业务"}}
 	if err := validateReportAssessment(a, b); err != nil {
 		t.Fatal(err)
 	}
 	doc := ReportDocument{SchemaVersion: reportEvidenceVersion, LayoutVersion: reportFivePartLayout, EventID: event.EventID, Title: "研判报告", CreatedAt: time.Now(), AnalysisVersion: 1, Kind: AnalysisKindInitial, Evidence: b, Assessment: a, Validation: "references_and_facts_validated"}
+	doc.Evidence.Overview.First = time.Date(2026, 10, 13, 6, 53, 0, 0, time.UTC)
+	doc.Evidence.Overview.Last = time.Date(2026, 10, 13, 6, 56, 0, 0, time.UTC)
 	doc.EventOverview = reportEventOverview(event, `{"first_time":"2026-10-13T06:53:00Z","last_time":"2026-10-13T06:56:00Z","src_ip":"180.104.100.118","dst_ip":"172.67.190.89","dst_port":443,"protocol":"TCP","occurrence_count":6}`, "业务归属未确认")
 	doc.Markdown = renderReportMarkdown(doc)
 	previous := -1
@@ -28,7 +30,7 @@ func TestFivePartReportLayoutAndPinnedExport(t *testing.T) {
 		}
 		previous = pos
 	}
-	if strings.Count(doc.Markdown, "## ") != 5 || strings.Contains(doc.Markdown, "模型估计") || strings.Contains(doc.Markdown, "附录") || !strings.Contains(doc.Markdown, "14:53:00+08:00") {
+	if strings.Count(doc.Markdown, "## ") != 5 || strings.Contains(doc.Markdown, "模型估计") || strings.Contains(doc.Markdown, "附录") || !strings.Contains(doc.Markdown, "14:53:00") {
 		t.Fatal(doc.Markdown)
 	}
 	summary, err := svc.saveReportDocument(context.Background(), doc, 1)
@@ -63,7 +65,7 @@ func TestFivePartReportLayoutAndPinnedExport(t *testing.T) {
 			}
 		}
 	}
-	a.RiskAnalysis[0].EvidenceIDs = []string{"E-unknown"}
+	a.Risks[0].EvidenceIDs = []string{"E-unknown"}
 	if validateReportAssessment(a, b) == nil {
 		t.Fatal("unbound risk accepted")
 	}

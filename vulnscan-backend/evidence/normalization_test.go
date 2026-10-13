@@ -16,7 +16,12 @@ func TestUnreviewedHistoryRunsBothSemanticSlotsWithValidatedSources(t *testing.T
 			m.AdjudicationSource = ""
 			m.FalsePositive = false
 		}
-		e := semanticTestEngine(t)
+		cfg := DefaultSemanticConfig()
+		cfg.ReportHistory = true
+		e, engineErr := NewSemanticEngine(cfg)
+		if engineErr != nil {
+			t.Fatal(engineErr)
+		}
 		result, err := e.Evaluate(context.Background(), r, semanticModelFunc(func(ctx context.Context, call SemanticCall) (string, error) { return semanticResponse(call, nil), nil }))
 		if err != nil || len(result.Findings) != 1 || result.Plan.Executions[0].Status != "accepted" {
 			t.Fatalf("unreviewed history rejected: %v %+v", err, result)

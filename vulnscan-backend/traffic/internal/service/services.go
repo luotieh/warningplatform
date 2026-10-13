@@ -11,6 +11,7 @@ import (
 	"vulnscan-backend/evidence"
 
 	"vulnscan-backend/traffic/internal/client"
+	"vulnscan-backend/traffic/internal/config"
 	"vulnscan-backend/traffic/internal/domain"
 	"vulnscan-backend/traffic/internal/mq"
 	"vulnscan-backend/traffic/internal/store"
@@ -27,11 +28,13 @@ type Services struct {
 	// LLM 为指针：Services 以值语义被复制进各子服务（EventService/InternalService/
 	// SystemService 等），共享同一个 LLM 客户端，使配置页保存(SetLLMConfig)的 base_url/
 	// api_key/model 能即时对”分析引擎”(RunAgentWorkflow)生效，无需重启。
-	LLM   *client.LLMClient
-	Queue mq.Queue
+	LLM           *client.LLMClient
+	ReportOptions *config.ReportOptions // report-local override; nil loads file/environment
+	Queue         mq.Queue
 	// Optional per-deployment budgets; defaults retain bounded raw local inputs.
 	ReportSemantics *ReportSemanticOptions
-	SemanticModel   evidence.SemanticModel // optional injected transport for tests/deployment
+	ReportSchedules map[string]ReportSchedulePolicy // report-only overrides keyed by asset ID
+	SemanticModel   evidence.SemanticModel          // optional injected transport for tests/deployment
 }
 
 func (s Services) ProcessLyEvent(ctx context.Context, ly map[string]any) (map[string]any, error) {

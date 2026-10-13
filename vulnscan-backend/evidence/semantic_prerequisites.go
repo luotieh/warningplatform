@@ -97,6 +97,53 @@ func resolveSemanticSlot(spec slotSpec, s SemanticSubject, eventID string) (mate
 			byKind[m.Kind] = append(byKind[m.Kind], m)
 		}
 	}
+	defaultSchedule := spec.Key.ID == "SC01" && s.ReportSchedule && len(byKind["business_schedule"]) == 1 && byKind["business_schedule"][0].Role == "report_default_workhours"
+	practicalWeak := false
+	if s.ReportPractical {
+		optional := []string{}
+		switch spec.Key.ID {
+		case "S03":
+			spec.AllFacts = nil
+			practicalWeak = true
+		case "S06":
+			spec.AnyFacts = nil
+			practicalWeak = true
+			for _, f := range s.Facts {
+				if observedSemanticFact(f) && (f.FactID == "F_CRED_POST_STRUCTURE" || f.FactID == "F_FORM_CROSSSITE" || f.FactID == "F_REDIRECT_CHAIN") {
+					practicalWeak = false
+				}
+			}
+		case "S14":
+			spec.Kinds = []string{"protocol_request"}
+			optional = []string{"asset_role", "task_context"}
+		case "S05":
+			spec.Kinds = []string{"page", "host"}
+			optional = []string{"brand_authorization"}
+			practicalWeak = len(byKind["brand_authorization"]) == 0
+		case "S12":
+			if spec.Key.Subtype == "brand_semantic_impostor" {
+				spec.Kinds = []string{"brand", "host"}
+				optional = []string{"brand_authorization"}
+				practicalWeak = len(byKind["brand_authorization"]) == 0
+			}
+		case "SC03":
+			spec.Kinds = []string{"brand", "credential_fields"}
+			optional = []string{"brand_authorization"}
+			practicalWeak = len(byKind["brand_authorization"]) == 0
+		}
+		for _, kind := range optional {
+			if len(byKind[kind]) > 0 {
+				spec.Kinds = append(spec.Kinds, kind)
+			}
+		}
+	}
+	if defaultSchedule {
+		// Report policy is an explicit comparison baseline, not an invented role.
+		spec.Kinds = []string{"business_schedule", "time_distribution"}
+		if len(byKind["asset_role"]) > 0 {
+			spec.Kinds = append(spec.Kinds, "asset_role")
+		}
+	}
 	for _, kind := range spec.Kinds {
 		if kind != "chunk" && kind != "volume" && kind != "group_member" && kind != "history" && len(byKind[kind]) > 1 {
 			return nil, nil, "", "ambiguous_" + kind, nil
@@ -147,6 +194,8 @@ func resolveSemanticSlot(spec slotSpec, s SemanticSubject, eventID string) (mate
 	maxStrength = "strong"
 	if spec.ExplanationOnly {
 		maxStrength = "none"
+	} else if practicalWeak {
+		maxStrength = "weak"
 	}
 	// Pair proof is useful to S01/S13 even though it is not required at weak level.
 	pair, pairMaterials := false, []SemanticMaterial(nil)
@@ -242,8 +291,12 @@ func resolveSemanticSlot(spec slotSpec, s SemanticSubject, eventID string) (mate
 		}
 		nonAdditive = append(nonAdditive, "protocol.stratum")
 	case "SC01":
-		if byKind["asset_role"][0].Role == "" {
+		if !defaultSchedule && byKind["asset_role"][0].Role == "" {
 			return nil, nil, "", "missing_verified_asset_role", nil
+		}
+		if defaultSchedule {
+			maxStrength = "weak"
+			nonAdditive = append(nonAdditive, "report.schedule")
 		}
 	case "S14", "S15":
 		if len(s.Facts) == 0 {
@@ -257,7 +310,7 @@ func resolveSemanticSlot(spec slotSpec, s SemanticSubject, eventID string) (mate
 		}
 		assets := map[string]bool{}
 		for _, m := range members {
-			if m.AssetID == "" || m.Role == "" || assets[m.AssetID] {
+			if m.AssetID == "" || (!s.ReportPractical && m.Role == "") || assets[m.AssetID] {
 				return nil, nil, "", "unresolved_group_members", nil
 			}
 			assets[m.AssetID] = true
@@ -267,12 +320,16 @@ func resolveSemanticSlot(spec slotSpec, s SemanticSubject, eventID string) (mate
 		if len(history) > 5 {
 			return nil, nil, "", "history_limit_exceeded", nil
 		}
-		events := map[string]bool{}
+		events, adjudications := map[string]bool{}, map[string]bool{}
 		for _, m := range history {
+			if !s.ReportHistory && (m.EventID == "" || m.EventID == eventID || events[m.EventID] || adjudications[m.AdjudicationID] || m.AdjudicationID == "" || (m.AdjudicationSource != "human" && m.AdjudicationSource != "host_evidence" && m.AdjudicationSource != "authoritative_external") || (spec.Key.ID == "R07" && !m.FalsePositive)) {
+				return nil, nil, "", "invalid_independent_adjudication", nil
+			}
 			if m.EventID == "" || m.EventID == eventID || events[m.EventID] {
 				return nil, nil, "", "invalid_history_reference", nil
 			}
 			events[m.EventID] = true
+			adjudications[m.AdjudicationID] = true
 		}
 	}
 	if spec.Key.ID == "S01" || (spec.Key.ID == "S13" && spec.Key.Subtype == "command") {
@@ -285,7 +342,7 @@ func resolveSemanticSlot(spec slotSpec, s SemanticSubject, eventID string) (mate
 	if spec.Key.ID == "S05" || (spec.Key.ID == "S12" && spec.Key.Subtype == "brand_semantic_impostor") {
 		if len(byKind["brand_relation"]) == 0 {
 			maxStrength = "weak"
-		} else {
+		} else if len(byKind["brand_authorization"]) > 0 {
 			for _, m := range byKind["brand_relation"] {
 				if len(m.RelatedIDs) < 2 {
 					return nil, nil, "", "unresolved_brand_relation", nil
@@ -313,7 +370,7 @@ func resolveSemanticSlot(spec slotSpec, s SemanticSubject, eventID string) (mate
 	// Actual parsed fields and authoritative records must be complete for these tasks.
 	for _, m := range materials {
 		if !m.Provenance.Complete || m.Truncated {
-			if spec.Key.ID == "S07" || spec.Key.ID == "S08" || spec.Key.ID == "S06" {
+			if spec.Key.ID == "S07" || spec.Key.ID == "S08" || (spec.Key.ID == "S06" && !s.ReportPractical) {
 				return nil, nil, "", "incomplete_required_material", nil
 			}
 			if !spec.ExplanationOnly {

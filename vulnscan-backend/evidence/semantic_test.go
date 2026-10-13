@@ -343,8 +343,8 @@ func TestSemanticPrerequisiteBoundaries(t *testing.T) {
 			}
 		}, "unresolved_decoded_request"},
 		{"history_no_source", 21, func(s *SemanticSubject) { s.Materials[0].Provenance.Verified = false }, "missing_or_unverified_history"},
-		{"history_current", 21, func(s *SemanticSubject) { s.Materials[0].EventID = "event" }, "invalid_history_reference"},
-		{"history_no_event", 22, func(s *SemanticSubject) { s.Materials[0].EventID = "" }, "invalid_history_reference"},
+		{"history_current", 21, func(s *SemanticSubject) { s.Materials[0].EventID = "event" }, "invalid_independent_adjudication"},
+		{"history_no_event", 22, func(s *SemanticSubject) { s.Materials[0].EventID = "" }, "invalid_independent_adjudication"},
 		{"duplicate_member", 17, func(s *SemanticSubject) {
 			for i := range s.Materials {
 				if s.Materials[i].Kind == "group_member" {
@@ -426,13 +426,20 @@ func TestSemanticStrengthCaps(t *testing.T) {
 
 func TestHistoryUsesAllVerdicts(t *testing.T) {
 	r := semanticFixture(semanticSpecs[22])
+	r.Subjects[0].ReportHistory = true
 	other := r.Subjects[0].Materials[0]
 	other.ID = "malicious-history"
 	other.EventID = "other-event"
 	other.AdjudicationID = "other-review"
 	other.FalsePositive = false
 	r.Subjects[0].Materials = append(r.Subjects[0].Materials, other)
-	plan, err := semanticTestEngine(t).Plan(context.Background(), r)
+	cfg := DefaultSemanticConfig()
+	cfg.ReportHistory = true
+	engine, err := NewSemanticEngine(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := engine.Plan(context.Background(), r)
 	if err != nil || len(plan.Tasks) != 1 {
 		t.Fatalf("mixed reviewed history blocked R07: %v %+v", err, plan)
 	}

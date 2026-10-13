@@ -14,7 +14,7 @@ func TestReportEvidenceUsesTypedReferencesAndRegistryNames(t *testing.T) {
 		names[definition.ID] = definition.Description
 	}
 	for _, entry := range bundle.Entries {
-		prefix := map[string]string{"fact": "F", "semantic": "S", "intelligence": "I"}[entry.Kind]
+		prefix := map[string]string{"fact": "F", "semantic": "S", "intelligence": "I", "observation": "O"}[entry.Kind]
 		if prefix == "" || !strings.HasPrefix(entry.ID, prefix) {
 			t.Fatalf("invalid report evidence: %+v", entry)
 		}
@@ -27,7 +27,8 @@ func TestReportEvidenceUsesTypedReferencesAndRegistryNames(t *testing.T) {
 	}
 	doc := ReportDocument{LayoutVersion: reportFivePartLayout, Evidence: bundle, Assessment: validReportAssessment(bundle)}
 	text := renderReportMarkdown(doc)
-	for _, id := range bundle.SelectedIDs {
+	for _, item := range bundle.Essence.Items {
+		id := item.ID
 		for _, entry := range bundle.Entries {
 			if entry.ID == id && !strings.Contains(text, id+"【"+entry.Name+"】") {
 				t.Fatalf("missing title: %s", id)
@@ -36,7 +37,7 @@ func TestReportEvidenceUsesTypedReferencesAndRegistryNames(t *testing.T) {
 	}
 	snap := EvidenceSnapshot{Version: 1, Count: 1, Context: map[string]any{"ioc": map[string]any{"ioc_value": "example.org"}}, Evidence: []map[string]any{{"payload_hex": "0102", "protocol": "UDP"}}}
 	intel := buildReportEvidence(domain.Event{}, snap, SnapshotFactEvaluation{}, ReportSemanticEvaluation{})
-	if len(intel.Entries) != 1 || intel.Entries[0].Kind != "intelligence" || intel.Entries[0].ID != "I001" {
+	if len(intel.Essence.Items) != 1 || intel.Essence.Items[0].ID != "I001" {
 		t.Fatalf("raw observation entered key evidence: %+v", intel.Entries)
 	}
 }

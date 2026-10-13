@@ -22,3 +22,5 @@ public/dist/*
 !public/dist/.gitkeep
 
 frontend/dist
+data/repLogs/
+**/data/repLogs/

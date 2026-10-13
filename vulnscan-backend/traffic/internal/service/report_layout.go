@@ -3,6 +3,7 @@ package service
 import (
 	"fmt"
 	"strings"
+	"time"
 	"vulnscan-backend/traffic/internal/domain"
 )
 
@@ -37,9 +38,39 @@ func renderFivePartReport(doc ReportDocument) string {
 		probability = fmt.Sprintf("%d%%", *a.Probability)
 	}
 	fmt.Fprintf(&w, "## 一、研判结论\n\n本次事件判断为%s，属于恶意活动的概率为%s。\n\n%s\n\n", verdict, probability, reportCell(a.ProbabilityReason))
+	overview := map[string]string{}
+	for k, v := range doc.EventOverview {
+		overview[k] = v
+	}
+	o := b.Overview
+	if !o.First.IsZero() {
+		zone := time.FixedZone("Asia/Shanghai", 8*3600)
+		overview["首次活动（北京时间）"] = o.First.In(zone).Format("2006-01-02 15:04:05")
+		overview["末次活动（北京时间）"] = o.Last.In(zone).Format("2006-01-02 15:04:05")
+	}
+	if len(o.Tuples) > 0 {
+		sources, destinations, protocols := []string{}, []string{}, []string{}
+		for _, t := range o.Tuples {
+			sources = append(sources, t.Source)
+			destinations = append(destinations, t.Destination)
+			protocols = append(protocols, t.Protocol)
+		}
+		overview["通信源"] = strings.Join(compactReportRefs(sources), "、")
+		overview["通信目标"] = strings.Join(compactReportRefs(destinations), "、")
+		overview["协议"] = strings.Join(compactReportRefs(protocols), "、")
+	}
+	if o.SavedHits > 0 {
+		overview["已保存命中记录数"] = fmt.Sprint(o.SavedHits)
+	}
 	w.WriteString("## 二、事件概览\n\n| 项目 | 内容 |\n| --- | --- |\n")
 	for _, key := range []string{"事件ID", "事件名称", "资产与业务归属", "通信源", "通信目标", "目标端口", "协议", "首次活动（北京时间）", "末次活动（北京时间）", "已保存命中记录数"} {
-		fmt.Fprintf(&w, "| %s | %s |\n", key, reportCell(firstNonEmpty(doc.EventOverview[key], "未提供")))
+		fmt.Fprintf(&w, "| %s | %s |\n", key, reportCell(firstNonEmpty(overview[key], "未提供")))
+	}
+	if len(o.Tuples) > 0 {
+		w.WriteString("\n| 源地址与端口 | 目的地址与端口 | 协议 | 告警命中次数 |\n| --- | --- | --- | --- |\n")
+		for _, tuple := range o.Tuples {
+			fmt.Fprintf(&w, "| %s | %s | %s | %d |\n", reportCell(tuple.Source), reportCell(tuple.Destination), reportCell(tuple.Protocol), tuple.Hits)
+		}
 	}
 	w.WriteString("\n## 三、关键证据\n\n")
 	meanings := map[string][]string{}
@@ -59,19 +90,34 @@ func renderFivePartReport(doc ReportDocument) string {
 			}
 		}
 	}
-	for number, id := range b.SelectedIDs {
+	ids := b.SelectedIDs
+	if b.Essence != nil {
+		ids = nil
+		for _, item := range b.Essence.Items {
+			ids = append(ids, item.ID)
+		}
+	}
+	for number, id := range ids {
 		for _, e := range b.Entries {
 			if e.ID == id {
-				fmt.Fprintf(&w, "%d. %s【%s】：%s。%s（来源：%s）\n", number+1, id, reportCell(e.Name), reportCell(e.Result), reportCell(strings.Join(meanings[id], "；")), reportCell(e.Source))
+				result := e.Result
+				if b.Essence != nil {
+					for _, item := range b.Essence.Items {
+						if item.ID == id {
+							result = item.Summary
+						}
+					}
+				}
+				fmt.Fprintf(&w, "%d. %s【%s】：%s。%s（来源：%s）\n", number+1, id, reportCell(e.Name), reportCell(result), reportCell(strings.Join(meanings[id], "；")), reportCell(e.Source))
 			}
 		}
 	}
 	w.WriteString("\n## 四、风险分析\n\n")
-	if len(a.RiskAnalysis) == 0 {
+	if len(a.Risks) == 0 {
 		w.WriteString("现有材料不足以确认攻击成功或主机失陷，需结合业务归属和应用、主机记录核实风险范围。\n\n")
 	}
-	for _, r := range a.RiskAnalysis {
-		fmt.Fprintf(&w, "- %s：%s\n", strings.Join(r.EvidenceIDs, "、"), reportCell(r.Explanation))
+	for _, r := range a.Risks {
+		fmt.Fprintf(&w, "- %s：%s\n", strings.Join(r.EvidenceIDs, "、"), reportCell(r.Impact))
 	}
 	w.WriteString("\n## 五、处置建议\n\n")
 	for i, action := range a.Actions {

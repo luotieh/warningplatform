@@ -42,6 +42,9 @@ func (s *ChatService) Send(ctx context.Context, body map[string]any) (map[string
 	if !ok {
 		return nil, errors.New("事件不存在")
 	}
+	if isFormalReportCommand(message) {
+		return s.requestFormalReport(ctx, event, body, message)
+	}
 
 	// Build before persisting the current question so it is not duplicated in history.
 	evidenceContext, err := s.core.EvidenceContext(ctx, event)

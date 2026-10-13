@@ -20,6 +20,14 @@ func (s *ChatService) Estimate(eventID, question string) (map[string]any, error)
 	if !ok {
 		return nil, errors.New("事件不存在")
 	}
+	if isFormalReportCommand(question) {
+		return map[string]any{
+			"route": "formal_report", "is_estimate": false,
+			"estimate_deferred": true, "timeout_seconds": 180,
+			"sections": []map[string]any{},
+			"note":     "正式报告在后台读取专用材料并计算证据，实际模型输入及用量记录在报告任务中；此处不使用聊天提示词估算。",
+		}, nil
+	}
 	parts := append([]engineerPromptPart{{"系统提示词", trafficservice.EngineerChatSystemPrompt}}, s.engineerPromptParts(event, question)...)
 	sections := make([]map[string]any, 0, len(parts))
 	var whole strings.Builder

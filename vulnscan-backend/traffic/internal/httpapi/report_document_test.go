@@ -21,6 +21,9 @@ import (
 
 func TestReportAPIAuthenticationPinnedVersionAndExport(t *testing.T) {
 	st := store.NewMemoryStore()
+	if _, err := st.CreateAsset(domain.Asset{ID: "api-report-asset", Address: "192.0.2.1", Status: 1}); err != nil {
+		t.Fatal(err)
+	}
 	model := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			Messages []struct {
@@ -47,7 +50,14 @@ func TestReportAPIAuthenticationPinnedVersionAndExport(t *testing.T) {
 			for _, e := range input.Entries {
 				interpretations = append(interpretations, map[string]string{"evidence_id": e.ID, "meaning": "提供当前通信的核验依据"})
 			}
-			raw, _ := json.Marshal(map[string]any{"target": "malicious_activity", "threat_type": "undetermined", "verdict": "insufficient", "stage": "undetermined", "probability": nil, "probability_reason": "需要结合业务背景判断", "supporting": []any{}, "opposing": []any{}, "alternatives": []any{}, "interpretations": interpretations, "gaps": []string{"补充业务归属"}, "actions": []any{}})
+			risks := []any{}
+			supporting, actions := []any{}, []any{}
+			if len(input.Entries) > 0 {
+				risks = append(risks, map[string]any{"evidence_ids": []string{input.Entries[0].ID}, "exposure": "事件记录涉及外部通信目标", "impact": "若通信通道被滥用，资产的服务安全将受到影响"})
+				supporting = append(supporting, map[string]any{"evidence_ids": []string{input.Entries[0].ID}, "explanation": "已保存记录提供通信依据"})
+				actions = append(actions, map[string]any{"evidence_ids": []string{input.Entries[0].ID}, "action": "核查资产连接日志及相关进程，发现未授权通信后限制出站访问", "purpose": "保护资产通信安全"})
+			}
+			raw, _ := json.Marshal(map[string]any{"target": "malicious_activity", "threat_type": "undetermined", "verdict": "suspicious", "stage": "contact", "probability": 55, "probability_reason": "已保存的通信记录提供接触依据", "supporting": supporting, "opposing": []any{}, "alternatives": []any{}, "interpretations": interpretations, "gaps": []string{"补充业务归属"}, "actions": actions, "risks": risks})
 			reply = string(raw)
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"finish_reason": "stop", "message": map[string]any{"content": reply}}}})
@@ -55,7 +65,7 @@ func TestReportAPIAuthenticationPinnedVersionAndExport(t *testing.T) {
 	defer model.Close()
 	svc := service.Services{Store: st, LLM: &client.LLMClient{BaseURL: model.URL, Model: "api-fixture", HTTP: model.Client()}}
 	ctx := context.Background()
-	result, err := svc.ProcessLyEvent(ctx, map[string]any{"event_id": "api-report", "device_id": "node", "src_ip": "192.0.2.1", "dst_ip": "192.0.2.2", "event_type": "scan", "rule_id": "r", "event_time": time.Now().Add(-time.Hour).Format(time.RFC3339Nano)})
+	result, err := svc.ProcessLyEvent(ctx, map[string]any{"event_id": "api-report", "device_id": "node", "src_ip": "192.0.2.1", "dst_ip": "192.0.2.2", "src_port": 40000, "dst_port": 80, "protocol": "tcp", "event_type": "scan", "rule_id": "r", "event_time": time.Now().Add(-time.Hour).Format(time.RFC3339Nano)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,8 +97,10 @@ func TestReportAPIAuthenticationPinnedVersionAndExport(t *testing.T) {
 		{base + "?summary_id=0", "report-token", 400, "正整数"},
 		{base + "?summary_id=garbage", "report-token", 400, "正整数"},
 		{base, "report-token", 400, "legacy_report_without_evidence_document"},
-		{base + fmt.Sprintf("?summary_id=%d", summary.ID), "report-token", 200, "evidence-report-1.0"},
+		{base + fmt.Sprintf("?summary_id=%d", summary.ID), "report-token", 200, "evidence-report-1.6"},
 		{base + "/export" + fmt.Sprintf("?summary_id=%d", summary.ID), "report-token", 200, ""},
+		{base + "/export" + fmt.Sprintf("?summary_id=%d&include_appendix=true", summary.ID), "report-token", 200, ""},
+		{base + "/export" + fmt.Sprintf("?summary_id=%d&include_appendix=wrong", summary.ID), "report-token", 400, "布尔值"},
 		{"/api/events/detail/another-event/report" + fmt.Sprintf("?summary_id=%d", summary.ID), "report-token", 400, "report_not_found"},
 	} {
 		req := httptest.NewRequest("GET", tc.path, nil)

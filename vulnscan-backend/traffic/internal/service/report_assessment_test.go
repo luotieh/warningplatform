@@ -22,21 +22,25 @@ import (
 
 func TestReportPromptBudgetPreservesAuthoritativeEntries(t *testing.T) {
 	_, event, bundle := reportTestBundle(t)
-	event.EventName = strings.Repeat("长标题", 10000)
-	p := preparedReportInput{Context: `{"auxiliary":"` + strings.Repeat("辅助材料", 20000) + `"}`, AssetSection: strings.Repeat("资产", 20000)}
-	prompt, err := evidenceReportPrompt(event, p, bundle, strings.Repeat("对话", 20000))
+	event.EventName = strings.Repeat("long title", 10000)
+	p := preparedReportInput{Context: strings.Repeat("auxiliary", 20000), AssetSection: "registered asset role"}
+	prompt, err := evidenceReportPrompt(event, p, bundle, strings.Repeat("dialogue", 20000))
 	if err != nil {
 		t.Fatal(err)
 	}
 	var input struct {
-		Entries        []ReportEvidence `json:"selected_evidence"`
-		ContextOmitted bool             `json:"context_omitted_for_budget"`
+		Entries []ReportEssence `json:"key_evidence"`
+		Asset   string          `json:"asset_context"`
 	}
-	if json.Unmarshal([]byte(prompt), &input) != nil || !input.ContextOmitted || len(input.Entries) != len(bundle.SelectedIDs) {
-		t.Fatal("budget reduction removed authoritative entries or omission marker")
+	if json.Unmarshal([]byte(prompt), &input) != nil || len(input.Entries) != len(bundle.Essence.Items) || input.Asset != p.AssetSection {
+		t.Fatal("essential data changed")
 	}
-	if estimateTokens(prompt) > eventDataBudgetTokens || estimateTokens(evidenceReportSystemPrompt+prompt) > promptBudgetTokens {
-		t.Fatal("prompt budget exceeded")
+	if strings.Contains(prompt, "source_catalog") || strings.Contains(prompt, "auxiliary") || strings.Contains(prompt, "dialogue") {
+		t.Fatal("audit metadata leaked")
+	}
+	p.AssetSection = strings.Repeat("core asset information", 20000)
+	if _, err = evidenceReportPrompt(event, p, bundle, ""); err == nil {
+		t.Fatal("oversize core materials silently discarded")
 	}
 }
 
@@ -75,7 +79,7 @@ func TestInvalidModelReportFailsWithoutPublishingSummary(t *testing.T) {
 		reply := "OK"
 		for _, m := range request.Messages {
 			if m.Role == "user" && m.Content != "health" {
-				reply = `{"target":"malicious_activity","probability":99}`
+				reply = `{"target":"malicious_activity","probability":101}`
 			}
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"finish_reason": "stop", "message": map[string]any{"content": reply}}}})
@@ -93,7 +97,7 @@ func TestInvalidModelReportFailsWithoutPublishingSummary(t *testing.T) {
 		t.Fatalf("unexpected failure state: %s", event.EventStatus)
 	}
 	record, exists, err := svc.Store.AggregateRecord(context.Background(), "report_validation_failure", snapshotKey(snap.EventID, snap.Version))
-	if err != nil || !exists || !strings.Contains(string(record.Value), "report_threat_type_invalid") {
+	if err != nil || !exists || !strings.Contains(string(record.Value), "report_probability_out_of_range") {
 		t.Fatal("validation diagnostic missing")
 	}
 }
@@ -110,6 +114,7 @@ func validReportAssessment(b ReportEvidenceBundle) ReportAssessment {
 		if allowed[e.ID] && (e.Kind == "observation" || e.Kind == "fact" && e.Status == "observed") {
 			a.Supporting = append(a.Supporting, ReportReason{[]string{e.ID}, "已核验的行为记录支撑进一步调查"})
 			a.Actions = append(a.Actions, ReportAction{[]string{e.ID}, "核查该资产的业务关联", "区分正常业务与异常通信"})
+			a.Risks = []ReportRisk{{EvidenceIDs: []string{e.ID}, Exposure: "已保存通联涉及外部目标", Impact: "若该通联被用于未经授权的控制，资产的服务与数据访问安全将受到影响"}}
 			probability := 35
 			a.Probability = &probability
 			break
@@ -118,6 +123,10 @@ func validReportAssessment(b ReportEvidenceBundle) ReportAssessment {
 	if a.Probability == nil {
 		a.Verdict = "insufficient"
 		a.Stage = "undetermined"
+		if len(b.SelectedIDs) > 0 {
+			a.Risks = []ReportRisk{{EvidenceIDs: []string{b.SelectedIDs[0]}, Exposure: "通信归属是当前防护关注点", Impact: "若通信通道被滥用，资产的服务安全将受到影响"}}
+			a.Actions = []ReportAction{{EvidenceIDs: []string{b.SelectedIDs[0]}, Action: "核查该资产的业务关联并保留网络访问日志", Purpose: "明确通信归属并保留处置依据"}}
+		}
 	}
 	return a
 }
@@ -125,13 +134,15 @@ func validReportAssessment(b ReportEvidenceBundle) ReportAssessment {
 func acceptedReportResponse(t *testing.T, prompt string) string {
 	t.Helper()
 	var request struct {
-		Entries []ReportEvidence `json:"selected_evidence"`
+		Entries []ReportEvidence `json:"key_evidence"`
 	}
 	if json.Unmarshal([]byte(prompt), &request) != nil {
 		t.Fatal("invalid report JSON")
 	}
 	b := ReportEvidenceBundle{Entries: request.Entries, SelectedIDs: []string{}}
-	for _, e := range b.Entries {
+	for n, e := range b.Entries {
+		b.Entries[n].Kind = "observation"
+		b.Entries[n].Status = "observed"
 		b.SelectedIDs = append(b.SelectedIDs, e.ID)
 	}
 	raw, _ := json.Marshal(validReportAssessment(b))
@@ -171,7 +182,7 @@ func TestReportUsesCompleteFindingsNotCompressedProjection(t *testing.T) {
 	raw, _ := json.Marshal(b)
 	var copy ReportEvidenceBundle
 	json.Unmarshal(raw, &copy)
-	if len(copy.FactChecks) != len(b.FactChecks) || len(copy.SelectedIDs) > 12 {
+	if len(copy.FactChecks) != len(b.FactChecks) || len(copy.SelectedIDs) != len(b.SelectedIDs) {
 		t.Fatal("journal/projection contract failed")
 	}
 }
@@ -247,7 +258,7 @@ func TestReportDocumentPinnedAndDOCXHasAuthoritativeAppendix(t *testing.T) {
 	if _, err := svc.ReportDocument(context.Background(), "unrelated-event", summary.ID); err == nil {
 		t.Fatal("cross-event summary accepted")
 	}
-	data, err := ExportEvidenceReportDOCX(pinned)
+	data, err := ExportEvidenceReportDOCXWithAppendix(pinned)
 	if err != nil {
 		t.Fatal(err)
 	}

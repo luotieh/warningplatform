@@ -100,12 +100,26 @@ func (e *Engine) historyFact(f Finding, g *observations) Finding {
 			return absent(f, MissingInput)
 		}
 		days := map[string]bool{}
+		if h.PlatformRecords {
+			refs = nil
+			f.Measurements.Labels = append(f.Measurements.Labels, "历史复发主体="+h.IOC, "仅统计相同资产与该IOC的已检索历史事件")
+		}
 		count, malicious, benign, unknown := 0, 0, 0, 0
+		dnsRecords, transportRecords := 0, 0
 		for _, r := range rows {
 			if !historyAssetMatches(r, g.scope.AssetID) || r.IOC != h.IOC || r.Time.Before(h.AsOf.AddDate(0, 0, -30)) {
 				continue
 			}
 			count++
+			if h.PlatformRecords {
+				refs = append(refs, r.ID)
+				if r.ObservationKind == "dns_record" {
+					dnsRecords++
+				}
+				if r.ObservationKind == "transport_contact" {
+					transportRecords++
+				}
+			}
 			days[r.Time.In(e.dayLocation).Format("2006-01-02")] = true
 			switch r.Adjudication {
 			case "malicious":
@@ -117,7 +131,12 @@ func (e *Engine) historyFact(f Finding, g *observations) Finding {
 			}
 		}
 		f.Limitations = append(f.Limitations, "复发反映已保存历史活动；不执行旧版加减分")
-		return finishHistory(f, h, count >= 2 && len(days) >= 2, map[string]float64{"independent_events": float64(count), "days_active": float64(len(days)), "malicious_adjudications": float64(malicious), "false_positive_adjudications": float64(benign), "unreviewed_events": float64(unknown)}, refs...)
+		values := map[string]float64{"independent_events": float64(count), "days_active": float64(len(days)), "malicious_adjudications": float64(malicious), "false_positive_adjudications": float64(benign), "unreviewed_events": float64(unknown)}
+		if h.PlatformRecords {
+			values["dns_records"], values["transport_contact_records"] = float64(dnsRecords), float64(transportRecords)
+			f.Measurements.Labels = append(f.Measurements.Labels, "DNS记录与传输通联分开统计；包含IOC的DNS回答不证明与该IP建立连接；日期口径=北京时间")
+		}
+		return finishHistory(f, h, count >= 2 && len(days) >= 2, values, refs...)
 	case "F_HIST_GROUP_RECURRENCE":
 		if h.GroupID == "" || !h.GroupMembershipVerified || len(unique(h.CurrentMemberIDs)) < 3 {
 			return absent(f, UnresolvedBinding)

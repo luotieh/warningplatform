@@ -181,6 +181,10 @@ func (e *Engine) Evaluate(ctx context.Context, request Request) (Result, error) 
 			execution := Execution{FactID: id, Scope: scope, Status: "skipped", ReasonCode: NotRequested}
 			if selected[id] {
 				var finding Finding
+				packetComplete := g.complete
+				if (id == BeaconPeriodic || id == MultiDayPersist || id == "F_FIXED_DAILY_WINDOW" || id == "F_BEACON_JITTER" || id == "F_RATE_BURST" || id == "F_RATE_RAMP") && request.Quality.SavedTimelineComplete != nil {
+					g.complete = request.Quality.Coverage == CoverageComplete && *request.Quality.SavedTimelineComplete
+				}
 				if id == BeaconPeriodic {
 					finding = e.periodic(g)
 				} else if id == MultiDayPersist {
@@ -188,6 +192,7 @@ func (e *Engine) Evaluate(ctx context.Context, request Request) (Result, error) 
 				} else {
 					finding = e.additional(id, g)
 				}
+				g.complete = packetComplete
 				finding.SnapshotVersion = request.SnapshotVersion
 				execution.ReasonCode = finding.ReasonCode
 				if finding.Eligibility == "eligible" || finding.ReasonCode == IncompleteNegative {

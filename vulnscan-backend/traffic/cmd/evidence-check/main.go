@@ -12,17 +12,39 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
+	"vulnscan-backend/evidence"
 	"vulnscan-backend/traffic/internal/config"
 	"vulnscan-backend/traffic/internal/service"
 	"vulnscan-backend/traffic/internal/store"
 )
 
 func main() {
+	catalog := flag.Bool("catalog", false, "print read-only fact/semantic dependency catalog; no database or model")
+	logDir := flag.String("rep-logs", "", "explicitly write report material diagnostics to this directory; no database writes or LLM")
 	event := flag.String("event", "", "validate one real event ID")
 	sample := flag.Int("sample", 10, "maximum snapshot records to sample, 1..100 (record-key order)")
 	output := flag.String("output", "", "save JSON results to this local path")
 	importPath := flag.String("import-sources", "", "explicitly replace the trusted source registry from an audited JSON file")
 	flag.Parse()
+	if *catalog {
+		facts := []map[string]any{}
+		for _, d := range evidence.Definitions() {
+			facts = append(facts, map[string]any{"definition": d, "required_inputs": evidence.FactInputs(d.ID)})
+		}
+		value := map[string]any{"facts": facts, "semantic_slots": evidence.SemanticDependencyDefinitions()}
+		if *output != "" {
+			raw, err := json.MarshalIndent(value, "", "  ")
+			if err != nil {
+				fail("catalog serialization failed")
+			}
+			if err = os.WriteFile(*output, append(raw, '\n'), 0600); err != nil {
+				fail("catalog output unavailable")
+			}
+		} else {
+			_ = json.NewEncoder(os.Stdout).Encode(value)
+		}
+		return
+	}
 	if *sample < 1 || *sample > 100 {
 		fail("sample must be 1..100")
 	}
@@ -105,7 +127,13 @@ func main() {
 	}
 	results := []service.EvidenceValidation{}
 	for _, id := range ids {
-		r, err := svc.ValidateReportEvidence(ctx, id)
+		var r service.EvidenceValidation
+		var err error
+		if *logDir != "" {
+			r, err = svc.ValidateReportEvidenceLogged(ctx, id, *logDir)
+		} else {
+			r, err = svc.ValidateReportEvidence(ctx, id)
+		}
 		if err != nil {
 			fail("validation failed; inspect typed service diagnostics")
 		}

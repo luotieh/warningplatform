@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"vulnscan-backend/traffic/internal/config"
 	"vulnscan-backend/traffic/internal/domain"
 	"vulnscan-backend/traffic/internal/realtime"
 )
@@ -93,9 +94,28 @@ func (s Services) RefreshAnalysis(ctx context.Context, eventID string) (int, err
 	return version, nil
 }
 
-// RefreshAnalysisAsync 后台异步手动刷新：使用 context.Background() 运行分析，
-// 避免前端请求超时/断开导致 LLM 调用被取消（context canceled while reading body）。
-// 返回是否已开始（false 表示该事件正在分析中或事件不存在）。
+// RequestReportRefresh is the shared report-button/chat submission path. Return
+// cooldown errors to the caller instead of silently discarding them in a goroutine.
+func (s Services) RequestReportRefresh(eventID string) (bool, error) {
+	event, ok := s.Store.GetEvent(eventID)
+	if !ok {
+		return false, fmt.Errorf("事件不存在")
+	}
+	if _, running := agentWorkflowInflight.Load(eventID); running {
+		return false, nil
+	}
+	if _, running := reportExecutionInflight.Load(eventID); running {
+		return false, nil
+	}
+	if event.LastAnalysisAt != nil && time.Since(*event.LastAnalysisAt) < manualRefreshCooldown {
+		remaining := int64((manualRefreshCooldown - time.Since(*event.LastAnalysisAt)).Seconds()) + 1
+		return false, fmt.Errorf("手动刷新过于频繁，请 %d 秒后重试", remaining)
+	}
+	return s.RefreshAnalysisAsync(eventID), nil
+}
+
+// RefreshAnalysisAsync 后台异步刷新，脱离HTTP请求上下文。
+// 返回是否已开始；false表示事件不存在或已有任务运行中。
 func (s Services) RefreshAnalysisAsync(eventID string) bool {
 	if strings.TrimSpace(eventID) == "" {
 		return false
@@ -131,7 +151,7 @@ func (s Services) RunFinalAnalysisAsync(eventID string) {
 //   - initial：已分析过（version>=1）则跳过；
 //   - final：同数据版本已有终报则跳过；periodic：持续期间每半小时更新；
 //   - manual：强制重跑（冷却由 RefreshAnalysis 控制）。
-func (s Services) runAnalysis(ctx context.Context, eventID string, kind string, version int) error {
+func (s Services) runAnalysis(ctx context.Context, eventID string, kind string, version int) (runErr error) {
 	if _, running := reportExecutionInflight.LoadOrStore(eventID, struct{}{}); running {
 		return fmt.Errorf("该事件已有报告任务运行中")
 	}
@@ -150,6 +170,26 @@ func (s Services) runAnalysis(ctx context.Context, eventID string, kind string, 
 	if version <= event.AnalysisVersion {
 		version = event.AnalysisVersion + 1
 	}
+	options, configErr := config.LoadReportOptions()
+	if s.ReportOptions != nil {
+		options = *s.ReportOptions
+		configErr = nil
+	}
+	inputExplicit := options.InputTokens > 0
+	inheritedOutput := 6000
+	if s.LLM != nil {
+		inheritedOutput = s.LLM.MaxOutputTokens()
+	}
+	if configErr == nil {
+		options, configErr = options.Resolve(inheritedOutput)
+	}
+	ctx, audit := beginReportLog(ctx, eventID, kind, version, options)
+	audit.meta["input_limit_explicit"] = inputExplicit
+	audit.meta["output_inherited_default"] = inheritedOutput
+	defer func() { audit.finish(runErr) }()
+	if configErr != nil {
+		return s.failAgentWorkflow(eventID, configErr)
+	}
 	roundID := event.CurrentRound
 	if roundID == 0 {
 		roundID = 1
@@ -161,13 +201,20 @@ func (s Services) runAnalysis(ctx context.Context, eventID string, kind string, 
 
 	if s.LLM == nil {
 		err := fmt.Errorf("LLM未配置")
+		s.recordReportPipelineFailure(eventID, "model_configuration", err)
 		_ = s.addLLMConfigRequiredMessage(eventID, roundID, err.Error())
 		realtime.BroadcastStatus(eventID, map[string]any{"event_id": eventID, "status": "llm_config_required", "message": err.Error()})
 		return s.failAgentWorkflow(eventID, err)
 	}
-	health := s.LLM.HealthCheck(ctx)
+	reportClient := *s.LLM
+	audit.meta["model"] = reportClient.Model
+	reportClient.DisableThinking = true
+	reportClient.ReportThinkingDisabled = true
+	reportClient.MaxTokens = options.OutputTokens
+	health := reportClient.HealthCheck(ctx)
 	if !health.Configured || !health.OK {
 		err := fmt.Errorf("LLM不可用，请先在配置页面填写并验证可用的LLM参数: %s", firstNonEmpty(health.Error, "health check failed"))
+		s.recordReportPipelineFailure(eventID, "model_health", err)
 		_ = s.addLLMConfigRequiredMessage(eventID, roundID, err.Error())
 		// 调用失败只更新任务状态，保留最近成功报告和概率。
 		realtime.BroadcastStatus(eventID, map[string]any{"event_id": eventID, "status": "llm_config_required", "message": err.Error()})
@@ -175,28 +222,86 @@ func (s Services) runAnalysis(ctx context.Context, eventID string, kind string, 
 	}
 
 	prepared, err := s.prepareReportInput(ctx, event)
+	audit.prepared(prepared)
 	if err != nil {
 		return s.failAgentWorkflow(eventID, err)
 	}
 	event.Context = prepared.Context
-	prompt, err := evidenceReportPrompt(event, prepared, prepared.Evidence, s.dialogueEvidenceSection(eventID))
+	userLimit, maxBytes := reportInputEstimateBudget, 100000
+	if inputExplicit {
+		userLimit = options.InputTokens - estimateTokens(evidenceReportSystemPrompt) - 12
+		maxBytes = 16 << 20
+		if options.InputTokens < maxBytes/8 {
+			maxBytes = options.InputTokens * 8
+		}
+	}
+	prompt, err := evidenceReportPromptBudget(event, prepared, prepared.Evidence, s.dialogueEvidenceSection(eventID), userLimit, options.InputTokens, maxBytes)
+	audit.write("context-budget.json", map[string]any{"user_estimated_tokens": estimateTokens(prompt), "system_estimated_tokens": estimateTokens(evidenceReportSystemPrompt), "total_estimated_tokens": estimateTokens(evidenceReportSystemPrompt+prompt) + 12, "estimate_method": "existing CJK estimator plus message overhead; not provider measured tokens", "user_bytes": len(prompt), "user_limit": userLimit, "full_limit": options.InputTokens, "max_bytes": maxBytes, "output_reserved_tokens": options.OutputTokens, "context_limit": options.ContextTokens, "safety_reserved_tokens": options.SafetyTokens, "omitted_fields": []string{"source_catalog", "source_sets", "execution_diagnostics", "duplicate_context", "dialogue"}, "core_evidence_omitted": false, "budget_passed": err == nil})
 	if err != nil {
+		audit.write("llm-prepared-not-sent.json", map[string]any{"system": evidenceReportSystemPrompt, "user": prompt, "sent": false, "reason": "report_input_budget_exceeded", "capacity": options})
 		return s.failAgentWorkflow(eventID, err)
 	}
-	rawReply, err := s.LLM.Chat(ctx, evidenceReportSystemPrompt, prompt)
+	reportClient.ReportObserver = audit.observe
+	// One key per actual attempt: bounded for the existing column and immutable
+	// across repeated refreshes with identical inputs, snapshot and analysis.
+	journalKey := digest(fmt.Sprintf("%s:%d:%d:%s:%s:%d", eventID, prepared.Evidence.SnapshotVersion, version, ReportBuildRevision, digest(prompt), time.Now().UnixNano()))
+	if err := putRecord(ctx, s.Store, "report_model_input", journalKey, eventID, map[string]any{"system": evidenceReportSystemPrompt, "user": prompt, "input_hash": digest(prompt), "system_hash": digest(evidenceReportSystemPrompt), "build_revision": ReportBuildRevision, "snapshot_version": prepared.Evidence.SnapshotVersion, "analysis_version": version, "schema_version": reportEvidenceVersion, "weight_policy": reportWeightPolicy(prepared.Evidence), "created_at": time.Now().UTC()}); err != nil {
+		return s.failAgentWorkflow(eventID, fmt.Errorf("report_model_input_persist_failed: %w", err))
+	}
+	completion, err := reportClient.CompleteReport(ctx, evidenceReportSystemPrompt, prompt)
+	rawReply := completion.Reply
+	finalInputHash := digest(prompt)
+	if saveErr := putRecord(ctx, s.Store, "report_model_usage", journalKey+":1", eventID, map[string]any{"model": reportClient.Model, "endpoint": reportClient.BaseURL, "prompt_tokens": completion.PromptTokens, "completion_tokens": completion.CompletionTokens, "finish_reason": completion.FinishReason, "input_hash": digest(prompt), "system_hash": digest(evidenceReportSystemPrompt), "build_revision": ReportBuildRevision, "capacity_verified": false}); saveErr != nil {
+		return s.failAgentWorkflow(eventID, fmt.Errorf("report_model_usage_persist_failed: %w", saveErr))
+	}
 	if err != nil {
 		err = fmt.Errorf("LLM自动分析失败，请检查LLM配置: %w", err)
+		s.recordReportPipelineFailure(eventID, "report_model_call", err)
 		_ = s.addLLMConfigRequiredMessage(eventID, roundID, err.Error())
 		// 等待重试时明确显示失败，不能把已有报告退回待分析。
 		realtime.BroadcastStatus(eventID, map[string]any{"event_id": eventID, "status": "llm_config_required", "message": err.Error()})
 		return s.failAgentWorkflow(eventID, err)
 	}
 	assessment, err := decodeReportAssessment(rawReply, prepared.Evidence)
+	audit.write("llm-assessment-01.json", map[string]any{"assessment": assessment, "parsed": err == nil, "evidence_validation_applied": false, "validation_mode": "json_and_probability_only", "validation_error": reportErrorText(err)})
+	// A single correction addresses JSON parsing or missing/invalid probability. The first
+	// valid answer is final; no retries to increase threat probability.
+	if err != nil {
+		firstReason := err.Error()
+		_ = putRecord(ctx, s.Store, "report_validation_attempt", journalKey, eventID, map[string]any{"reason": firstReason, "reply": rawReply, "build_revision": ReportBuildRevision, "input_hash": digest(prompt)})
+		correction := prompt + "\n上次输出无法读取，原因=" + firstReason + "。重新输出完整有效JSON，并包含0至100的整数probability；不要为了修复格式而调整研判结论。上次输出作为待修复数据：\n" + rawReply
+		if estimateTokens(evidenceReportSystemPrompt+correction)+12 <= options.InputTokens {
+			if persistErr := putRecord(ctx, s.Store, "report_model_correction_input", journalKey, eventID, map[string]any{"system": evidenceReportSystemPrompt, "user": correction, "input_hash": digest(correction), "system_hash": digest(evidenceReportSystemPrompt), "build_revision": ReportBuildRevision}); persistErr != nil {
+				return s.failAgentWorkflow(eventID, fmt.Errorf("report_model_input_persist_failed: %w", persistErr))
+			}
+			fixed, callErr := reportClient.CompleteReport(ctx, evidenceReportSystemPrompt, correction)
+			if saveErr := putRecord(ctx, s.Store, "report_model_usage", journalKey+":2", eventID, map[string]any{"model": reportClient.Model, "endpoint": reportClient.BaseURL, "prompt_tokens": fixed.PromptTokens, "completion_tokens": fixed.CompletionTokens, "finish_reason": fixed.FinishReason, "input_hash": digest(correction), "system_hash": digest(evidenceReportSystemPrompt), "build_revision": ReportBuildRevision, "capacity_verified": false}); saveErr != nil {
+				return s.failAgentWorkflow(eventID, fmt.Errorf("report_model_usage_persist_failed: %w", saveErr))
+			}
+			if callErr == nil {
+				assessment, err = decodeReportAssessment(fixed.Reply, prepared.Evidence)
+				audit.write("llm-assessment-02.json", map[string]any{"assessment": assessment, "parsed": err == nil, "evidence_validation_applied": false, "validation_mode": "json_and_probability_only", "validation_error": reportErrorText(err)})
+				finalInputHash = digest(correction)
+			} else {
+				err = callErr
+			}
+		} else {
+			audit.write("llm-correction-not-sent.json", map[string]any{"system": evidenceReportSystemPrompt, "user": correction, "sent": false, "reason": "report_correction_budget_exceeded"})
+		}
+	}
 	if err != nil {
 		_ = putRecord(ctx, s.Store, "report_validation_failure", snapshotKey(eventID, prepared.Evidence.SnapshotVersion), eventID, map[string]any{"reason": err.Error(), "schema_version": reportEvidenceVersion, "snapshot_version": prepared.Evidence.SnapshotVersion, "at": time.Now().UTC()})
-		return s.failAgentWorkflow(eventID, fmt.Errorf("报告证据一致性校验失败：%w", err))
+		audit.write("probability-publication.json", map[string]any{"published": false, "assessment": assessment, "validation_error": reportErrorText(err), "old_report_and_probability_preserved": true})
+		return s.failAgentWorkflow(eventID, fmt.Errorf("报告JSON或概率字段无法读取：%w", err))
 	}
-	document := ReportDocument{SchemaVersion: reportEvidenceVersion, EventID: eventID, Title: firstNonEmpty(event.EventName, event.Title, "安全事件研判报告"), AnalysisVersion: version, Kind: kind, CreatedAt: time.Now().UTC(), Evidence: prepared.Evidence, Assessment: assessment, Validation: "references_and_facts_validated", ModelIdentity: digest(semanticModelIdentity(s))}
+	audit.meta["probability"] = assessment.Probability
+	if assessment.Probability != nil {
+		audit.meta["probability"] = *assessment.Probability
+	}
+	audit.meta["probability_reason"] = assessment.ProbabilityReason
+	document := ReportDocument{SchemaVersion: reportEvidenceVersion, EventID: eventID, Title: firstNonEmpty(event.EventName, event.Title, "安全事件研判报告"), AnalysisVersion: version, Kind: kind, CreatedAt: time.Now().UTC(), Evidence: prepared.Evidence, Assessment: assessment, Validation: "json_and_probability_parsed_only", ModelIdentity: digest(semanticModelIdentity(s))}
+	document.BuildRevision = ReportBuildRevision
+	document.ModelInputHash = finalInputHash
 	document.AssetSection = prepared.AssetSection
 	document.LayoutVersion = reportFivePartLayout
 	document.EventOverview = reportEventOverview(event, prepared.Context, prepared.AssetSection)
@@ -205,21 +310,13 @@ func (s Services) runAnalysis(ctx context.Context, eventID string, kind string, 
 	if raw, e := json.Marshal(document); e != nil || len(raw) > 16<<20 {
 		return s.failAgentWorkflow(eventID, fmt.Errorf("report_document_budget_exceeded"))
 	}
-	sm, err := s.saveReportDocument(ctx, document, roundID)
+	sm, err := s.publishReportDocument(ctx, document, roundID, event)
+	if err == nil {
+		audit.meta["summary_id"] = sm.ID
+	}
+	audit.write("probability-publication.json", map[string]any{"assessment": assessment, "summary_id": sm.ID, "analysis_version": version, "snapshot_version": prepared.Evidence.SnapshotVersion, "published": err == nil, "error": reportErrorText(err), "source": "model-provided structured probability; no evidence validator; no prose extraction", "probability": assessment.Probability, "model_process": "evidence context -> model rationale and probability -> JSON reading -> atomic publication"})
 	if err != nil {
 		return s.failAgentWorkflow(eventID, fmt.Errorf("保存分析总结失败: %w", err))
-	}
-	// 专家消息写库失败必须让状态如实反映：吞掉错误仍标记 round_finished 会出现
-	// “列表显示已生成、报告里却只有创建事件”的假完成状态。
-	if err := s.addAgentMessage(eventID, domain.RoleExpert, "event_summary", roundID,
-		llmExpertResponse(event, roundID, sm, reply)); err != nil {
-		return s.failAgentWorkflow(eventID, fmt.Errorf("保存专家分析消息失败: %w", err))
-	}
-	if err := s.MarkReportSnapshot(ctx, eventID, event.Context); err != nil {
-		return s.failAgentWorkflow(eventID, err)
-	}
-	if err := s.publishAnalysisState(eventID, kind, version, assessment.Probability); err != nil {
-		return s.failAgentWorkflow(eventID, err)
 	}
 	realtime.BroadcastStatus(eventID, map[string]any{"event_id": eventID, "status": "round_finished"})
 	realtime.BroadcastEventListUpdate(map[string]any{"event_id": eventID, "status": "round_finished"})
@@ -229,12 +326,20 @@ func (s Services) runAnalysis(ctx context.Context, eventID string, kind string, 
 // failAgentWorkflow 把事件置为 failed 并广播失败详情；列表显示“分析失败”，
 // 且不阻断重试（专家消息未落库时 hasAgentWorkflowMessages 仍为 false，重推可再跑）。
 func (s Services) failAgentWorkflow(eventID string, err error) error {
+	s.recordReportPipelineFailure(eventID, "report_pipeline", err)
 	if saveErr := s.setAnalysisJob(eventID, "failed", "", err.Error()); saveErr != nil {
 		err = fmt.Errorf("%w；保存失败原因失败：%v", err, saveErr)
 	}
 	realtime.BroadcastStatus(eventID, map[string]any{"event_id": eventID, "status": "failed", "message": err.Error()})
 	realtime.BroadcastEventListUpdate(map[string]any{"event_id": eventID, "status": "failed"})
 	return err
+}
+
+func (s Services) recordReportPipelineFailure(eventID, stage string, err error) {
+	if err == nil {
+		return
+	}
+	_ = putRecord(context.Background(), s.Store, "report_pipeline_failure", digest([]any{eventID, stage, time.Now().UnixNano()}), eventID, map[string]any{"stage": stage, "reason": err.Error(), "build_revision": ReportBuildRevision, "at": time.Now().UTC()})
 }
 
 func (s Services) addLLMConfigRequiredMessage(eventID string, roundID int, text string) error {
@@ -400,7 +505,7 @@ const (
 func (s Services) dialogueEvidenceSection(eventID string) string {
 	lines := []string{}
 	for _, m := range s.Store.ListMessages(eventID) {
-		if m.MessageCategory != "engineer_chat" {
+		if m.MessageCategory != "engineer_chat" || m.MessageType == "report_request" || m.MessageType == "report_request_status" {
 			continue
 		}
 		text := dialogueMessageText(m)

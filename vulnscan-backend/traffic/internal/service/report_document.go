@@ -44,14 +44,14 @@ func (s Services) ReportDocument(ctx context.Context, eventID string, summaryID 
 		return ReportDocument{}, fmt.Errorf("legacy_report_without_evidence_document")
 	}
 	var doc ReportDocument
-	if len(record.Value) > 16<<20 || json.Unmarshal(record.Value, &doc) != nil || doc.SummaryID != summary.ID || doc.EventID != eventID || doc.Markdown != summary.EventSummary || doc.SchemaVersion != reportEvidenceVersion || doc.AnalysisVersion != summary.Version || doc.Kind != summary.Kind {
+	if len(record.Value) > 16<<20 || json.Unmarshal(record.Value, &doc) != nil || doc.SummaryID != summary.ID || doc.EventID != eventID || doc.Markdown != summary.EventSummary || (doc.SchemaVersion != reportEvidenceVersion && doc.SchemaVersion != "evidence-report-1.5" && doc.SchemaVersion != "evidence-report-1.4" && doc.SchemaVersion != "evidence-report-1.3.2" && doc.SchemaVersion != "evidence-report-1.3.1" && doc.SchemaVersion != "evidence-report-1.3" && doc.SchemaVersion != "evidence-report-1.0") || doc.AnalysisVersion != summary.Version || doc.Kind != summary.Kind {
 		return ReportDocument{}, fmt.Errorf("report_document_binding_invalid")
-	}
-	if err := validateReportAssessment(doc.Assessment, doc.Evidence); err != nil {
-		return ReportDocument{}, fmt.Errorf("stored_report_validation_failed")
 	}
 	if renderReportMarkdown(doc) != doc.Markdown {
 		return ReportDocument{}, fmt.Errorf("stored_report_render_mismatch")
+	}
+	if narrativeReportVersion(doc.SchemaVersion) && doc.TechnicalAppendix != renderReportTechnicalAppendix(doc) {
+		return ReportDocument{}, fmt.Errorf("stored_report_appendix_mismatch")
 	}
 	doc.SummaryID = summary.ID
 	return doc, nil
@@ -89,6 +89,9 @@ func (s Services) ReportDocumentForExport(ctx context.Context, eventID string, s
 }
 
 func (s Services) saveReportDocument(ctx context.Context, doc ReportDocument, roundID int) (summary domain.Summary, err error) {
+	if narrativeReportVersion(doc.SchemaVersion) {
+		doc.TechnicalAppendix = renderReportTechnicalAppendix(doc)
+	}
 	err = s.Store.AggregationTransaction(ctx, "report-"+doc.EventID, func(tx store.Store) error {
 		var e error
 		summary, e = tx.AddSummary(domain.Summary{EventID: doc.EventID, RoundID: roundID, Version: doc.AnalysisVersion, Kind: doc.Kind, EventSummary: doc.Markdown})
@@ -108,23 +111,45 @@ func (s Services) saveReportDocument(ctx context.Context, doc ReportDocument, ro
 }
 
 func ExportEvidenceReportDOCX(report ReportDocument) ([]byte, error) {
+	return exportEvidenceReportDOCX(report, false)
+}
+
+func ExportEvidenceReportDOCXWithAppendix(report ReportDocument) ([]byte, error) {
+	return exportEvidenceReportDOCX(report, true)
+}
+
+func exportEvidenceReportDOCX(report ReportDocument, includeAppendix bool) ([]byte, error) {
 	doc, err := godocx.NewDocument()
 	if err != nil {
 		return nil, err
 	}
 	p := doc.AddParagraph("")
 	p.Justification(stypes.JustificationCenter)
-	p.AddText(report.Title).Bold(true).Size(18)
+	if narrativeReportVersion(report.SchemaVersion) {
+		p.AddText("安全事件研判报告").Bold(true).Size(18)
+		doc.AddParagraph("研判对象：" + report.Title)
+	} else {
+		p.AddText(report.Title).Bold(true).Size(18)
+	}
 	metadata := fmt.Sprintf("报告版本 %d · 快照版本 %d · %s（北京时间）", report.AnalysisVersion, report.Evidence.SnapshotVersion, report.CreatedAt.In(time.FixedZone("Asia/Shanghai", 8*3600)).Format("2006-01-02 15:04:05"))
 	if report.SchemaVersion == "" {
 		metadata = fmt.Sprintf("报告版本 %d · %s（北京时间）", report.AnalysisVersion, report.CreatedAt.In(time.FixedZone("Asia/Shanghai", 8*3600)).Format("2006-01-02 15:04:05"))
 	}
 	doc.AddParagraph(metadata).AddText("").Size(9)
-	lines := strings.Split(report.Markdown, "\n")
+	markdown := report.Markdown
+	if includeAppendix && narrativeReportVersion(report.SchemaVersion) {
+		markdown += "\n" + renderReportTechnicalAppendix(report)
+	}
+	lines := strings.Split(markdown, "\n")
+	appendixStarted := false
 	for n := 0; n < len(lines); n++ {
 		line := strings.TrimSpace(lines[n])
 		if line == "" {
 			continue
+		}
+		if narrativeReportVersion(report.SchemaVersion) && !appendixStarted && strings.HasPrefix(line, "## 附录") {
+			doc.AddPageBreak()
+			appendixStarted = true
 		}
 		if strings.HasPrefix(line, "|") {
 			table := doc.AddTable()
@@ -158,7 +183,7 @@ func ExportEvidenceReportDOCX(report ReportDocument) ([]byte, error) {
 	}
 	// Detailed appendix comes from the SAME immutable bundle, no database
 	// queries and no regeneration of historical evidence on export.
-	if report.SchemaVersion != "" && report.LayoutVersion != reportFivePartLayout {
+	if report.SchemaVersion != "" && (includeAppendix || !narrativeReportVersion(report.SchemaVersion)) {
 		doc.AddPageBreak()
 		doc.AddParagraph("附录：正文证据来源定位").Style("Heading1")
 		doc.AddParagraph(fmt.Sprintf("事件：%s；快照版本：%d；命中水位：%d；修订水位：%d。", report.EventID, report.Evidence.SnapshotVersion, report.Evidence.Watermark, report.Evidence.RevisionWatermark))
@@ -276,6 +301,7 @@ func styleEvidenceDOCX(raw []byte) ([]byte, error) {
 			tables := regexp.MustCompile(`(?s)<w:tbl>.*?</w:tbl>`)
 			rows := regexp.MustCompile(`(?s)<w:tr>.*?</w:tr>`)
 			xml = tables.ReplaceAllStringFunc(xml, func(table string) string {
+				table = layoutReportTable(table)
 				loc := rows.FindStringIndex(table)
 				if loc == nil {
 					return table
@@ -308,4 +334,63 @@ func styleEvidenceDOCX(raw []byte) ([]byte, error) {
 		return nil, err
 	}
 	return output.Bytes(), nil
+}
+
+// Word's automatic widths can turn short evidence names into vertical text
+// when a measurement cell contains long hashes or metrics. Fix the report's
+// actual column grid and each cell width, while keeping every cell's content.
+func layoutReportTable(table string) string {
+	rows := regexp.MustCompile(`(?s)<w:tr>.*?</w:tr>`)
+	cells := regexp.MustCompile(`(?s)<w:tc>.*?</w:tc>`)
+	first := rows.FindString(table)
+	count := len(cells.FindAllString(first, -1))
+	var widths []int
+	switch count {
+	case 5:
+		widths = []int{700, 1500, 3500, 1300, 3000}
+	case 4:
+		widths = []int{2100, 2800, 1000, 4100}
+		if strings.Contains(first, "源地址与端口") {
+			widths = []int{3800, 3800, 1200, 1200}
+		}
+		if strings.Contains(first, "历史事件ID") {
+			widths = []int{2600, 2700, 1000, 3700}
+		}
+	case 3:
+		widths = []int{1000, 4500, 4500}
+	default:
+		if count == 0 {
+			return table
+		}
+		for n := 0; n < count; n++ {
+			widths = append(widths, 10000/count)
+		}
+	}
+	grid := "<w:tblGrid>"
+	for _, width := range widths {
+		grid += fmt.Sprintf(`<w:gridCol w:w="%d"/>`, width)
+	}
+	grid += "</w:tblGrid>"
+	table = regexp.MustCompile(`(?s)<w:tblGrid[^>]*>.*?</w:tblGrid>`).ReplaceAllString(table, grid)
+	table = regexp.MustCompile(`<w:tblW\b[^>]*/>|<w:tblLayout\b[^>]*/>`).ReplaceAllString(table, "")
+	table = strings.Replace(table, "<w:tblPr>", `<w:tblPr><w:tblW w:w="10000" w:type="dxa"/><w:tblLayout w:type="fixed"/>`, 1)
+	table = rows.ReplaceAllStringFunc(table, func(row string) string {
+		index := 0
+		return cells.ReplaceAllStringFunc(row, func(cell string) string {
+			width := widths[index%len(widths)]
+			index++
+			cell = regexp.MustCompile(`<w:tcW\b[^>]*/>|<w:vAlign\b[^>]*/>`).ReplaceAllString(cell, "")
+			properties := fmt.Sprintf(`<w:tcW w:w="%d" w:type="dxa"/><w:vAlign w:val="center"/><w:tcMar><w:top w:w="80" w:type="dxa"/><w:left w:w="80" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:right w:w="80" w:type="dxa"/></w:tcMar>`, width)
+			if strings.Contains(cell, "<w:tcPr>") {
+				cell = strings.Replace(cell, "<w:tcPr>", "<w:tcPr>"+properties, 1)
+			} else if strings.Contains(cell, "<w:tcPr/>") {
+				cell = strings.Replace(cell, "<w:tcPr/>", "<w:tcPr>"+properties+"</w:tcPr>", 1)
+			} else {
+				cell = strings.Replace(cell, "<w:tc>", "<w:tc><w:tcPr>"+properties+"</w:tcPr>", 1)
+			}
+			cell = strings.ReplaceAll(cell, "<w:r><w:t", `<w:r><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:eastAsia="微软雅黑"/><w:sz w:val="20"/></w:rPr><w:t`)
+			return cell
+		})
+	})
+	return table
 }

@@ -17,6 +17,7 @@ import (
 const maxLLMResponseBytes = 4 << 20
 
 type completionResult struct {
+	Usage            map[string]any
 	Endpoint         string
 	Status           int
 	Reply            string
@@ -73,8 +74,14 @@ func (c LLMClient) complete(ctx context.Context, system, prompt string, budget i
 		if !responses && c.DisableThinking {
 			payload["chat_template_kwargs"] = map[string]any{"enable_thinking": false}
 		}
+		if !responses && c.ReportThinkingDisabled {
+			payload["thinking"] = map[string]any{"type": "disabled"}
+		}
 		result := completionResult{Endpoint: endpoint}
 		fail := func(detail string) (completionResult, error) {
+			if c.ReportObserver != nil {
+				c.ReportObserver("failure", map[string]any{"endpoint": sanitizeEndpoint(endpoint), "http_status": result.Status, "elapsed_ms": time.Since(startedAt).Milliseconds(), "request_failed": true, "diagnostic": c.callError(endpoint, result.Status, detail).Error()})
+			}
 			err := c.callError(endpoint, result.Status, detail)
 			if e, ok := err.(*LLMCallError); ok {
 				e.MaxTokens = budget
@@ -88,6 +95,9 @@ func (c LLMClient) complete(ctx context.Context, system, prompt string, budget i
 		if err != nil {
 			return fail(err.Error())
 		}
+		if c.ReportObserver != nil {
+			c.ReportObserver("request", map[string]any{"endpoint": sanitizeEndpoint(endpoint), "payload": payload, "sent": false, "transport_attempt": attempt + 1, "started_at": time.Now().UTC()})
+		}
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 		if err != nil {
 			return fail(err.Error())
@@ -99,12 +109,18 @@ func (c LLMClient) complete(ctx context.Context, system, prompt string, budget i
 		if key := strings.TrimSpace(c.APIKey); key != "" {
 			req.Header.Set("Authorization", "Bearer "+key)
 		}
+		if c.ReportObserver != nil {
+			c.ReportObserver("dispatch", map[string]any{"sent": true, "meaning": "HTTP dispatch attempted; model receipt is confirmed only by response", "transport_attempt": attempt + 1})
+		}
 		resp, err := httpClient.Do(req)
 		if err != nil {
 			return fail(err.Error())
 		}
 		result.Status = resp.StatusCode
 		if resp.StatusCode >= 400 {
+			if c.ReportObserver != nil {
+				c.ReportObserver("response", map[string]any{"http_status": resp.StatusCode, "endpoint": sanitizeEndpoint(endpoint), "request_dispatched": true, "error": true, "usage": nil, "usage_available": false})
+			}
 			b, readErr := readLLMBody(resp.Body)
 			resp.Body.Close()
 			if readErr != nil {
@@ -118,12 +134,13 @@ func (c LLMClient) complete(ctx context.Context, system, prompt string, budget i
 			return fail(detail)
 		}
 		if responses {
-			result.Reply, err = readResponsesReply(resp, onDelta)
+			result.Reply, err = readResponsesReplyObserved(resp, onDelta, func(out responsesOutput) { result.Usage = out.Usage; result.FinishReason = out.Status })
 		} else if onDelta != nil && strings.Contains(resp.Header.Get("Content-Type"), "text/event-stream") {
 			var usage chatUsage
 			result.Reply, result.FinishReason, usage, err = readChatStream(resp, onDelta)
 			result.PromptTokens = usage.PromptTokens
 			result.CompletionTokens = usage.CompletionTokens
+			result.Usage = usage.Raw
 		} else {
 			var b []byte
 			b, err = readLLMBody(resp.Body)
@@ -132,9 +149,13 @@ func (c LLMClient) complete(ctx context.Context, system, prompt string, budget i
 				result.Reply, result.FinishReason, usage, err = readChatReply(b)
 				result.PromptTokens = usage.PromptTokens
 				result.CompletionTokens = usage.CompletionTokens
+				result.Usage = usage.Raw
 			}
 		}
 		resp.Body.Close()
+		if c.ReportObserver != nil {
+			c.ReportObserver("response", map[string]any{"reply": result.Reply, "usage": result.Usage, "usage_available": result.Usage != nil, "finish_reason": result.FinishReason, "http_status": result.Status, "elapsed_ms": time.Since(startedAt).Milliseconds(), "endpoint": sanitizeEndpoint(endpoint), "error": err != nil, "request_dispatched": true})
+		}
 		if err != nil {
 			return fail(err.Error())
 		}
@@ -180,9 +201,23 @@ func readLLMBody(r io.Reader) ([]byte, error) {
 }
 
 type chatUsage struct {
-	PromptTokens     int `json:"prompt_tokens"`
-	CompletionTokens int `json:"completion_tokens"`
-	TotalTokens      int `json:"total_tokens"`
+	Raw              map[string]any `json:"-"`
+	PromptTokens     int            `json:"prompt_tokens"`
+	CompletionTokens int            `json:"completion_tokens"`
+	TotalTokens      int            `json:"total_tokens"`
+}
+
+func (u *chatUsage) UnmarshalJSON(b []byte) error {
+	type plain chatUsage
+	var p plain
+	if err := json.Unmarshal(b, &p); err != nil {
+		return err
+	}
+	*u = chatUsage(p)
+	if string(b) != "null" {
+		return json.Unmarshal(b, &u.Raw)
+	}
+	return nil
 }
 
 func readChatReply(b []byte) (string, string, chatUsage, error) {
@@ -378,6 +413,7 @@ func readChatStream(resp *http.Response, onDelta func(string)) (string, string, 
 }
 
 type responsesOutput struct {
+	Usage             map[string]any  `json:"usage"`
 	Status            string          `json:"status"`
 	Error             json.RawMessage `json:"error"`
 	IncompleteDetails struct {
@@ -429,6 +465,10 @@ func (r responsesOutput) finalText() (string, error) {
 // Streaming-only gateways are supported, but partial deltas are never a report.
 // A completed response is required; cancellation and premature EOF remain errors.
 func readResponsesReply(resp *http.Response, onDelta func(string)) (string, error) {
+	return readResponsesReplyObserved(resp, onDelta, nil)
+}
+
+func readResponsesReplyObserved(resp *http.Response, onDelta func(string), observe func(responsesOutput)) (string, error) {
 	r := bufio.NewReader(io.LimitReader(resp.Body, maxLLMResponseBytes+1))
 	prefix, _ := r.Peek(5)
 	stream := strings.Contains(resp.Header.Get("Content-Type"), "text/event-stream") || string(prefix) == "data:" || string(prefix) == "event"
@@ -440,6 +480,9 @@ func readResponsesReply(resp *http.Response, onDelta func(string)) (string, erro
 		var out responsesOutput
 		if err := json.Unmarshal(b, &out); err != nil {
 			return "", fmt.Errorf("Responses响应解析失败: %w", err)
+		}
+		if observe != nil {
+			observe(out)
 		}
 		return out.finalText()
 	}
@@ -476,6 +519,9 @@ func readResponsesReply(resp *http.Response, onDelta func(string)) (string, erro
 			}
 		case "response.completed", "response.failed", "response.incomplete":
 			filter.flush()
+			if observe != nil {
+				observe(event.Response)
+			}
 			return event.Response.finalText()
 		case "error":
 			return "", fmt.Errorf("Responses流错误: %s", upstreamErrorDetail(b))

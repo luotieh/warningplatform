@@ -12,30 +12,44 @@ import (
 	"vulnscan-backend/traffic/internal/domain"
 )
 
-const reportEvidenceVersion = "evidence-report-1.0"
+const reportEvidenceVersion = "evidence-report-1.6"
+
+func narrativeReportVersion(v string) bool {
+	return v == reportEvidenceVersion || v == "evidence-report-1.4" || v == "evidence-report-1.5"
+}
+
+var ReportBuildRevision = "development"
 
 // ReportEvidence is built from complete engine outputs BEFORE model projection.
 // Source identities stay in the immutable journal, not in the model's prose.
 type ReportEvidence struct {
-	Unified        *evidence.UnifiedEvidence `json:"normalized,omitempty"`
-	ID             string                    `json:"id"`
-	Kind           string                    `json:"kind"`
-	Name           string                    `json:"name"`
-	Status         string                    `json:"status"`
-	Result         string                    `json:"result"`
-	Source         string                    `json:"source"`
-	Scope          evidence.Scope            `json:"scope"`
-	Window         *evidence.Window          `json:"window,omitempty"`
-	FactID         evidence.FactID           `json:"fact_id,omitempty"`
-	SourceIDs      []string                  `json:"source_ids,omitempty"`
-	Dependencies   []evidence.Dependency     `json:"dependencies,omitempty"`
-	Finding        *evidence.Finding         `json:"finding,omitempty"`
-	Semantic       *evidence.SemanticFinding `json:"semantic,omitempty"`
-	Family         string                    `json:"family"`
-	RelatedFactIDs []string                  `json:"related_fact_ids,omitempty"`
+	MaterialSourceIDs map[string][]string       `json:"material_source_ids,omitempty"`
+	Feature           string                    `json:"feature,omitempty"`
+	Measurements      map[string]any            `json:"measurements,omitempty"`
+	SavedDNSRecords   int                       `json:"saved_dns_records,omitempty"`
+	Unified           *evidence.UnifiedEvidence `json:"normalized,omitempty"`
+	ID                string                    `json:"id"`
+	Kind              string                    `json:"kind"`
+	Name              string                    `json:"name"`
+	Status            string                    `json:"status"`
+	Result            string                    `json:"result"`
+	Source            string                    `json:"source"`
+	Scope             evidence.Scope            `json:"scope"`
+	Window            *evidence.Window          `json:"window,omitempty"`
+	FactID            evidence.FactID           `json:"fact_id,omitempty"`
+	SourceIDs         []string                  `json:"source_ids,omitempty"`
+	Dependencies      []evidence.Dependency     `json:"dependencies,omitempty"`
+	Finding           *evidence.Finding         `json:"finding,omitempty"`
+	Semantic          *evidence.SemanticFinding `json:"semantic,omitempty"`
+	Family            string                    `json:"family"`
+	RelatedFactIDs    []string                  `json:"related_fact_ids,omitempty"`
 }
 
 type ReportEvidenceBundle struct {
+	CurrentSourceIDs  []string                     `json:"current_source_ids,omitempty"`
+	Essence           *ReportEssenceBundle         `json:"evidence_essence,omitempty"`
+	Overview          ReportEventOverview          `json:"event_overview"`
+	PolicyVersion     string                       `json:"policy_version,omitempty"`
 	Digest            evidence.EvidenceDigest      `json:"evidence_digest"`
 	Normalized        evidence.NormalizedEvidence  `json:"normalized_evidence"`
 	History           *ReportHistory               `json:"platform_history,omitempty"`
@@ -56,11 +70,18 @@ type ReportEvidenceBundle struct {
 
 func buildReportEvidence(event domain.Event, snap EvidenceSnapshot, f SnapshotFactEvaluation, sem ReportSemanticEvaluation, history ...ReportHistory) ReportEvidenceBundle {
 	b := ReportEvidenceBundle{SnapshotVersion: snap.Version, FactStatus: f.Status, FactCounts: map[string]int{}, SemanticCounts: map[string]int{}, Entries: []ReportEvidence{}, SelectedIDs: []string{}, FactChecks: []evidence.Finding{}, SemanticChecks: []evidence.SemanticExecution{}}
+	b.PolicyVersion = reportEvidenceVersion
+	b.Overview = buildReportEventOverview(snap, f.Manifest)
+	for _, row := range f.Manifest.ReportObservations {
+		b.CurrentSourceIDs = append(b.CurrentSourceIDs, row.HitID)
+	}
+	sort.Strings(b.CurrentSourceIDs)
+	b.CurrentSourceIDs = compactReportRefs(b.CurrentSourceIDs)
 	b.FactCoverage = append([]SnapshotFactCoverage(nil), f.Manifest.FactCoverage...)
 	b.Watermark, b.RevisionWatermark, b.SourceEvents = snap.Watermark, snap.RevisionWatermark, append([]string(nil), snap.Sources...)
 	counts := map[string]int{}
 	add := func(e ReportEvidence) {
-		prefix := map[string]string{"fact": "F", "semantic": "S", "intelligence": "I"}[e.Kind]
+		prefix := map[string]string{"fact": "F", "semantic": "S", "intelligence": "I", "observation": "O"}[e.Kind]
 		if prefix == "" {
 			return
 		}
@@ -68,8 +89,20 @@ func buildReportEvidence(event domain.Event, snap EvidenceSnapshot, f SnapshotFa
 		e.ID = fmt.Sprintf("%s%03d", prefix, counts[prefix])
 		b.Entries = append(b.Entries, e)
 	}
+	for _, e := range reportMaterialEvidence(f.Manifest.ReportObservations) {
+		add(e)
+	}
+	for _, e := range reportScheduleEvidence(f.Manifest) {
+		add(e)
+	}
+	for _, e := range f.Manifest.ReportPractical {
+		add(e)
+	}
 	if len(history) > 0 {
 		b.History = &history[0]
+		for _, e := range reportDNSConnectionEvidence(f.Manifest.ReportObservations, b.History) {
+			add(e)
+		}
 
 	}
 	if snap.Version > 0 && f.Manifest.LoadedHits == snap.Count && snap.Count > 0 {
@@ -77,14 +110,17 @@ func buildReportEvidence(event domain.Event, snap EvidenceSnapshot, f SnapshotFa
 	}
 	// Intel is attributed background, never upgraded to an independently verified
 	// malicious classification. Preserve its actual supplied fields and source.
+	intel := map[string]any{}
 	for _, key := range []string{"ioc", "ioc_evidence"} {
 		if v, ok := snap.Context[key]; ok && v != nil {
-			raw, _ := json.Marshal(boundedEvidenceValue(v, 0))
-			if string(raw) != "{}" && string(raw) != "null" {
-				add(ReportEvidence{Kind: "intelligence", Name: "已保存威胁情报背景", Status: "context", Result: semanticSummaryText(string(raw), 900), Source: "事件保存的情报字段（来源及置信度见记录）", Family: "ioc_intelligence"})
-			}
+			intel[key] = boundedEvidenceValue(v, 0)
 		}
 	}
+	if len(intel) > 0 {
+		raw, _ := json.Marshal(intel)
+		add(ReportEvidence{Feature: "ioc_background", Measurements: reportIOCMeasurements(snap.Context), Kind: "intelligence", Name: "有来源的IOC情报背景", Status: "context", Result: string(raw), Source: "事件保存的IOC与情报来源；同源信息合并", Family: "ioc_intelligence"})
+	}
+
 	// Actual saved bytes are observations, not automatically a TLS version,
 	// command, malicious payload or verified session volume.
 	for n, sample := range snap.Evidence {
@@ -129,11 +165,13 @@ func buildReportEvidence(event domain.Event, snap EvidenceSnapshot, f SnapshotFa
 			copy := finding
 			window := evidence.Window{Start: finding.Window.Start, End: finding.Window.End, Convention: "analysis_half_open"}
 			ids := []string{}
+			materialSources := map[string][]string{}
 			seenIDs := map[string]bool{}
 			dependencies := []evidence.Dependency{}
 			for _, task := range sem.Result.Plan.Tasks {
 				if task.ID == finding.TaskID {
 					for _, m := range task.Materials {
+						materialSources[m.ID] = append([]string(nil), m.SourceIDs...)
 						dependencies = append(dependencies, evidence.Dependency{Kind: m.Kind, Version: m.SourceVersion, SourceIDs: m.SourceIDs})
 						for _, id := range m.SourceIDs {
 							if !seenIDs[id] {
@@ -144,7 +182,7 @@ func buildReportEvidence(event domain.Event, snap EvidenceSnapshot, f SnapshotFa
 					}
 				}
 			}
-			add(ReportEvidence{Kind: "semantic", Name: reportSemanticName(finding.Slot), Status: finding.Judgement, Result: semanticSummaryText(finding.Explanation, 350), Source: "通过引用与强度校验的模型解释", Scope: finding.Scope, Window: &window, Semantic: &copy, SourceIDs: ids, Dependencies: dependencies, Family: "semantic:" + finding.PropositionID, RelatedFactIDs: finding.NonAdditiveWith})
+			add(ReportEvidence{MaterialSourceIDs: materialSources, Kind: "semantic", Name: reportSemanticName(finding.Slot), Status: finding.Judgement, Result: semanticSummaryText(finding.Explanation, 350), Source: "通过引用与强度校验的模型解释", Scope: finding.Scope, Window: &window, Semantic: &copy, SourceIDs: ids, Dependencies: dependencies, Family: "semantic:" + finding.PropositionID, RelatedFactIDs: finding.NonAdditiveWith})
 		}
 	}
 	executions := []evidence.Execution{}
@@ -194,24 +232,28 @@ func buildReportEvidence(event domain.Event, snap EvidenceSnapshot, f SnapshotFa
 	for _, entry := range b.Entries {
 		entriesByID[entry.ID] = entry
 	}
-	b.Digest = evidence.Compress(b.Normalized, evidence.CompressionOptions{MaxItems: 12, MaxRunes: 6000,
+	b.Digest = evidence.Compress(b.Normalized, evidence.CompressionOptions{MaxItems: len(b.Entries), MaxRunes: 1 << 30,
 		Eligible: func(u evidence.UnifiedEvidence) bool {
 			e := entriesByID[u.ReportID]
-			switch e.Kind {
-			case "fact":
-				return e.Status == "observed" || e.Status == "not_observed" && e.Finding != nil && e.Finding.Eligibility == "eligible" && e.Finding.Quality == "complete" && reportFactRelevant(e.FactID, event, snap)
-			case "semantic":
-				return e.Semantic != nil
-			case "intelligence":
-				return true
-			default:
+			if strings.HasPrefix(e.Family, "saved_packet:") {
+				return false
+			} // raw auxiliary bytes stay in the appendix; verified typed observations are above
+			// Execution diagnostics and neutral semantic repeats are retained in
+			// the immutable bundle/appendix, not promoted to judgement evidence.
+			if e.Semantic != nil && (e.Semantic.ExplanationOnly || e.Semantic.Judgement == "neutral") {
 				return false
 			}
+			if e.FactID == "F_MULTI_DAY_PERSIST" && e.Status == "not_observed" {
+				return false // a short current window cannot exclude historical recurrence
+			}
+			return e.Status != "not_observed" || reportFactRelevant(e.FactID, event, snap)
 		},
 		Project: func(u evidence.UnifiedEvidence) any { return reportEvidencePromptEntry(entriesByID[u.ReportID]) },
 	})
 	b.SelectedIDs = b.Digest.SelectedIDs
 	b.SelectionOmitted = len(b.Entries) - len(b.SelectedIDs)
+	essence := buildReportEssence(b)
+	b.Essence = &essence
 	return b
 }
 
@@ -283,7 +325,7 @@ func reportFactMeasurements(f evidence.Finding) string {
 }
 
 func reportEvidencePromptEntry(e ReportEvidence) map[string]any {
-	out := map[string]any{"id": e.ID, "kind": e.Kind, "name": e.Name, "required_title": e.Name, "status": e.Status, "result": e.Result, "source": e.Source, "scope": e.Scope, "window": e.Window, "family": e.Family, "related_fact_ids": e.RelatedFactIDs}
+	out := map[string]any{"id": e.ID, "kind": e.Kind, "name": e.Name, "status": e.Status, "result": e.Result, "source": e.Source, "scope": e.Scope, "window": e.Window, "family": e.Family, "related_fact_ids": e.RelatedFactIDs}
 	if e.Unified != nil {
 		u := e.Unified
 		out["normalized_id"], out["role"], out["quality"], out["reason"] = u.ID, u.Role, u.Quality, u.Reason
@@ -292,6 +334,7 @@ func reportEvidencePromptEntry(e ReportEvidence) map[string]any {
 		out["duplicate_of"], out["non_additive_with"] = u.DuplicateOf, u.NonAdditiveWith
 	}
 	if e.Finding != nil {
+		delete(out, "result") // the same values are retained below as typed metrics
 		out["fact_id"] = e.FactID
 		out["measurements"] = e.Finding.Measurements
 		out["parameters"] = e.Finding.Parameters
@@ -299,29 +342,74 @@ func reportEvidencePromptEntry(e ReportEvidence) map[string]any {
 		out["eligibility"] = e.Finding.Eligibility
 	}
 	if e.Semantic != nil {
+		// The table may use a display excerpt. The model must receive the full
+		// validated explanation; budget handling may not cut its conclusion.
+		out["result"] = e.Semantic.Explanation
 		out["judgement"] = e.Semantic.Judgement
 		out["strength"] = e.Semantic.Strength
 		out["explanation_only"] = e.Semantic.ExplanationOnly
+		out["validated_quotes"] = e.Semantic.Quotes
+		out["fact_refs"] = e.Semantic.FactRefs
+		out["material_refs"] = e.Semantic.MaterialRefs
+		out["alternatives"] = e.Semantic.Alternatives
+		out["gaps"] = e.Semantic.Gaps
 	}
 	return out
 }
 
+// History interpretations describe already-counted facts. Keep their full
+// validated content even when neutrality excludes them from scoring rows.
+func reportHistoryInterpretationContext(b ReportEvidenceBundle, selected map[string]bool) []map[string]any {
+	rows := []map[string]any{}
+	for _, entry := range b.Entries {
+		sem := entry.Semantic
+		if sem == nil || selected[entry.ID] || (sem.Slot.ID != "R06" && sem.Slot.ID != "R07") {
+			continue
+		}
+		row := reportEvidencePromptEntry(entry)
+		row["result"] = sem.Explanation
+		row["context_only"] = true
+		row["non_additive_with"] = sem.NonAdditiveWith
+		refs := []string{}
+		for _, fact := range b.Entries {
+			if fact.Finding == nil || !selected[fact.ID] || fact.Scope != entry.Scope {
+				continue
+			}
+			for _, id := range sem.FactRefs {
+				if id == string(fact.FactID) {
+					refs = append(refs, fact.ID)
+					break
+				}
+			}
+		}
+		row["fact_report_ids"] = refs
+		// Gaps remain in the immutable technical appendix. They are neither
+		// established alternatives nor report judgement evidence.
+		delete(row, "gaps")
+		rows = append(rows, row)
+	}
+	return rows
+}
+
 type ReportDocument struct {
-	LayoutVersion   string               `json:"layout_version,omitempty"`
-	EventOverview   map[string]string    `json:"event_overview,omitempty"`
-	SchemaVersion   string               `json:"schema_version"`
-	SummaryID       int64                `json:"summary_id"`
-	EventID         string               `json:"event_id"`
-	Title           string               `json:"title"`
-	AnalysisVersion int                  `json:"analysis_version"`
-	Kind            string               `json:"kind"`
-	CreatedAt       time.Time            `json:"created_at"`
-	Evidence        ReportEvidenceBundle `json:"evidence"`
-	Assessment      ReportAssessment     `json:"assessment"`
-	Markdown        string               `json:"markdown"`
-	Validation      string               `json:"validation"`
-	ModelIdentity   string               `json:"model_identity"`
-	AssetSection    string               `json:"asset_registry"`
+	LayoutVersion     string               `json:"layout_version,omitempty"`
+	EventOverview     map[string]string    `json:"event_overview,omitempty"`
+	BuildRevision     string               `json:"build_revision,omitempty"`
+	ModelInputHash    string               `json:"model_input_hash,omitempty"`
+	SchemaVersion     string               `json:"schema_version"`
+	SummaryID         int64                `json:"summary_id"`
+	EventID           string               `json:"event_id"`
+	Title             string               `json:"title"`
+	AnalysisVersion   int                  `json:"analysis_version"`
+	Kind              string               `json:"kind"`
+	CreatedAt         time.Time            `json:"created_at"`
+	Evidence          ReportEvidenceBundle `json:"evidence"`
+	Assessment        ReportAssessment     `json:"assessment"`
+	Markdown          string               `json:"markdown"`
+	TechnicalAppendix string               `json:"technical_appendix,omitempty"`
+	Validation        string               `json:"validation"`
+	ModelIdentity     string               `json:"model_identity"`
+	AssetSection      string               `json:"asset_registry"`
 }
 
 func reportDocumentKey(eventID string, summaryID int64) string {

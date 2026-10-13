@@ -117,6 +117,10 @@ func (s *MemoryStore) AggregationTransaction(ctx context.Context, _ string, fn f
 	tx.aggregateHits = cloneMap(s.aggregateHits)
 	tx.hitSeq = s.hitSeq
 	tx.summarySeq = s.summarySeq
+	tx.messageSeq = s.messageSeq
+	for id, items := range s.messagesByEvent {
+		tx.messagesByEvent[id] = append([]domain.Message(nil), items...)
+	}
 	for id, items := range s.summariesByEvent {
 		tx.summariesByEvent[id] = append([]domain.Summary(nil), items...)
 	}
@@ -134,6 +138,8 @@ func (s *MemoryStore) AggregationTransaction(ctx context.Context, _ string, fn f
 	s.hitSeq = tx.hitSeq
 	s.summarySeq = tx.summarySeq
 	s.summariesByEvent = tx.summariesByEvent
+	s.messageSeq = tx.messageSeq
+	s.messagesByEvent = tx.messagesByEvent
 	return nil
 }
 func (s *MemoryStore) AggregateRecord(ctx context.Context, kind, key string) (AggregateRecord, bool, error) {
