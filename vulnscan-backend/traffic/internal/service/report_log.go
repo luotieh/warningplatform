@@ -182,6 +182,10 @@ func (r *reportLog) prepared(p preparedReportInput) {
 	r.meta["evidence_counts"] = map[string]any{"fact_catalog": len(evidence.Definitions()), "semantic_slot_catalog": len(evidence.SemanticDefinitions()), "normalized_instances": len(p.Evidence.Normalized.Items), "report_entries": len(p.Evidence.Entries), "selected_report_entries": len(p.Evidence.SelectedIDs), "fact_status_counts": p.Evidence.FactCounts, "semantic_execution_counts": p.Evidence.SemanticCounts}
 	r.write("evidence-before.json", map[string]any{"facts": p.Evaluation, "semantics": p.Semantics})
 	r.write("evidence-normalized.json", p.Evidence.Normalized)
+	essence := reportEssenceFor(p.Evidence)
+	r.write("evidence-essence.json", map[string]any{"version": essence.Version, "items": essence.Items, "details": essence.Details})
+	r.write("evidence-essence-trace.json", map[string]any{"trace": essence.Trace, "original_entry_file": "evidence-selection.json", "catalog_adapters": reportEssenceAdapters(p.Evidence)})
+	r.meta["essence_count"] = len(essence.Items)
 	selected := map[string]bool{}
 	for _, id := range p.Evidence.SelectedIDs {
 		selected[id] = true
@@ -210,7 +214,7 @@ func (r *reportLog) prepared(p preparedReportInput) {
 		}
 		weights = append(weights, map[string]any{"evidence_id": e.ID, "kind": e.Kind, "family": e.Family, "source_ids": e.SourceIDs, "normalized": e.Unified, "selected": selected[e.ID], "relative_influence": influence, "dependency_group": group, "rule": rule, "role": e.Status})
 	}
-	r.write("evidence-weights.json", map[string]any{"policy": policy, "items": weights, "calibrated_formula": false, "probability_process": "actual evidence and relative influence -> model cited rationale -> validation -> publication; hidden model computation is unavailable"})
+	r.write("evidence-weights.json", map[string]any{"model_evidence": essence.Items, "policy": policy, "items": weights, "calibrated_formula": false, "probability_process": "actual evidence and relative influence -> model cited rationale -> JSON/probability parsing -> publication; hidden model computation is unavailable"})
 	r.write("material-coverage.json", reportAvailability(p))
 }
 func reportSelectionReason(e ReportEvidence, b ReportEvidenceBundle) string {

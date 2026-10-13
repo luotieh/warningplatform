@@ -213,8 +213,14 @@ func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event
 	}
 	manifest["semantic_evidence"] = map[string]any{"result_key": semantics.ResultKey, "adapter_version": semantics.AdapterVersion, "input_mode": semantics.InputMode, "status": semantics.Status, "result_persisted": semantics.ResultPersisted}
 	projected, err := projectReportEvidence(snap, evaluation, semantics)
-	assetSection := strings.ReplaceAll(assetMatchContext(event, assets), "受害侧", "观测资产")
+	assetSection := normalizeReportAssetSection(assetMatchContext(event, assets))
 	return preparedReportInput{Context: projected, AssetSection: assetSection, Evaluation: evaluation, Semantics: semantics, Evidence: buildReportEvidence(event, snap, evaluation, semantics, history)}, err
+}
+
+// Report-only wording: packet direction and an IOC label do not establish an
+// attacking source or a compromised asset. Other callers retain their labels.
+func normalizeReportAssetSection(s string) string {
+	return strings.NewReplacer("受害侧", "观测资产", "威胁侧", "通联对端").Replace(s)
 }
 
 func projectReportEvidence(snap EvidenceSnapshot, facts SnapshotFactEvaluation, semantics ReportSemanticEvaluation) (string, error) {

@@ -51,7 +51,11 @@ func collectReportPracticalEvidence(out *SnapshotEvidenceInput) {
 		sort.Strings(refs)
 		refs = compactReportRefs(refs)
 		raw, _ := json.Marshal(metrics)
-		out.Manifest.ReportPractical = append(out.Manifest.ReportPractical, ReportEvidence{Kind: "observation", Name: name, Status: "observed", Scope: i.Scope, Window: reportInputWindow(i), Source: "报告专用字段统计 / 固定快照", SourceIDs: refs, Family: "report_practical:" + feature, Result: fmt.Sprintf("已使用%d条，排除%d条；实际结果=%s；%s", used, excluded, raw, rule), Dependencies: []evidence.Dependency{{Kind: "report_measurement", Version: "report-practical-1.0", SourceIDs: refs}}})
+		measurements := map[string]any{}
+		_ = json.Unmarshal(raw, &measurements)
+		measurements["used_records"] = used
+		measurements["excluded_records"] = excluded
+		out.Manifest.ReportPractical = append(out.Manifest.ReportPractical, ReportEvidence{Feature: feature, Measurements: measurements, Kind: "observation", Name: name, Status: "observed", Scope: i.Scope, Window: reportInputWindow(i), Source: "报告专用字段统计 / 固定快照", SourceIDs: refs, Family: "report_practical:" + feature, Result: fmt.Sprintf("已使用%d条，排除%d条；实际结果=%s；%s", used, excluded, raw, rule), Dependencies: []evidence.Dependency{{Kind: "report_measurement", Version: "report-practical-1.0", SourceIDs: refs}}})
 	}
 	for _, i := range out.Request.Inputs {
 		refs := []string{}

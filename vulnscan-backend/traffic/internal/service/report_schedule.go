@@ -112,7 +112,7 @@ func reportScheduleEvidence(m SnapshotEvidenceManifest) []ReportEvidence {
 		if s.Outside > 0 {
 			name = "非工作时段通信与逐日分布"
 		}
-		out = append(out, ReportEvidence{Kind: "observation", Name: name, Status: "observed", Result: scheduleText(p, s), Scope: scope, Window: &evidence.Window{Start: s.First.UTC(), End: s.Last.UTC()}, Source: p.Source + " / 已保存命中时间", SourceIDs: s.Refs, Family: "saved_schedule", Dependencies: []evidence.Dependency{{Kind: "schedule_policy", Version: "report-schedule-1.0", SourceIDs: []string{p.Source}}}})
+		out = append(out, ReportEvidence{Feature: "schedule", Measurements: map[string]any{"policy_source": p.Source, "comparison_hours": fmt.Sprintf("%02d:%02d—%02d:%02d", p.StartMinute/60, p.StartMinute%60, p.EndMinute/60, p.EndMinute%60), "saved_hits": len(s.Rows), "outside_hits": s.Outside, "outside_percent": 100 * float64(s.Outside) / float64(len(s.Rows)), "active_days": len(s.Days), "longest_consecutive_days": s.Consecutive, "daily_counts": s.Counts}, Kind: "observation", Name: name, Status: "observed", Result: scheduleText(p, s), Scope: scope, Window: &evidence.Window{Start: s.First.UTC(), End: s.Last.UTC()}, Source: p.Source + " / 已保存命中时间", SourceIDs: s.Refs, Family: "saved_schedule", Dependencies: []evidence.Dependency{{Kind: "schedule_policy", Version: "report-schedule-1.0", SourceIDs: []string{p.Source}}}})
 	}
 	return out
 }

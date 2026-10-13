@@ -236,6 +236,7 @@ func (s Services) runAnalysis(ctx context.Context, eventID string, kind string, 
 		}
 	}
 	prompt, err := evidenceReportPromptBudget(event, prepared, prepared.Evidence, s.dialogueEvidenceSection(eventID), userLimit, options.InputTokens, maxBytes)
+	audit.write("context-budget.json", map[string]any{"user_estimated_tokens": estimateTokens(prompt), "system_estimated_tokens": estimateTokens(evidenceReportSystemPrompt), "total_estimated_tokens": estimateTokens(evidenceReportSystemPrompt+prompt) + 12, "estimate_method": "existing CJK estimator plus message overhead; not provider measured tokens", "user_bytes": len(prompt), "user_limit": userLimit, "full_limit": options.InputTokens, "max_bytes": maxBytes, "output_reserved_tokens": options.OutputTokens, "context_limit": options.ContextTokens, "safety_reserved_tokens": options.SafetyTokens, "omitted_fields": []string{"source_catalog", "source_sets", "execution_diagnostics", "duplicate_context", "dialogue"}, "core_evidence_omitted": false, "budget_passed": err == nil})
 	if err != nil {
 		audit.write("llm-prepared-not-sent.json", map[string]any{"system": evidenceReportSystemPrompt, "user": prompt, "sent": false, "reason": "report_input_budget_exceeded", "capacity": options})
 		return s.failAgentWorkflow(eventID, err)

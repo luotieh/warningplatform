@@ -41,7 +41,7 @@ func TestPlatformHistoryBudgetAndNormalizedDelivery(t *testing.T) {
 	}
 	bundle := p.Evidence
 	prompt, err := evidenceReportPrompt(event, p, bundle, "")
-	if err != nil || strings.Contains(prompt, "history_background") || !strings.Contains(prompt, "evidence_digest") {
+	if err != nil || strings.Contains(prompt, "history_background") || !strings.Contains(prompt, "key_evidence") {
 		t.Fatal("normalization not delivered", err)
 	}
 	doc := ReportDocument{SchemaVersion: reportEvidenceVersion, EventID: event.EventID, Evidence: bundle, Assessment: validReportAssessment(bundle)}
@@ -172,7 +172,7 @@ func TestHistoryActuallyFeedsAlgorithmsAndBothSemanticSlots(t *testing.T) {
 		}
 	}
 	prompt, err := evidenceReportPrompt(event, p, p.Evidence, "")
-	if err != nil || !strings.Contains(prompt, "F_HIST_ASSET_IOC_RECURRENCE") || !strings.Contains(prompt, "normalized_id") {
+	if err != nil || !strings.Contains(prompt, "key_evidence") || !strings.Contains(prompt, "同资产") {
 		t.Fatal("fact digest missing", err)
 	}
 }

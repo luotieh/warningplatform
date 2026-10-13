@@ -263,7 +263,7 @@ func TestAllReportKindsUseActualSemanticTransport(t *testing.T) {
 					reply = acceptedSemanticResponse(t, evidence.SemanticCall{System: system, Prompt: user})
 				} else if user != "health" {
 					reportCalls++
-					if !strings.Contains(user, `"kind":"semantic"`) || !strings.Contains(user, "正常业务也是替代解释") {
+					if !strings.Contains(user, `"key_evidence"`) || !strings.Contains(user, "正常业务也是替代解释") {
 						t.Error("validated semantics absent from report prompt")
 					}
 					reply = acceptedReportResponse(t, user)

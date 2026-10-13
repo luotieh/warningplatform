@@ -80,7 +80,7 @@ func TestFormalWorkflowLogsActualInputAndPublishesProbability(t *testing.T) {
 				t.Fatal(paths)
 			}
 			dir := filepath.Dir(paths[0])
-			for _, name := range []string{"evidence-before.json", "evidence-normalized.json", "evidence-selection.json", "evidence-weights.json", "material-coverage.json", "llm-call-01-request.json", "llm-call-01-response.json", "probability-publication.json", "summary.md"} {
+			for _, name := range []string{"evidence-before.json", "evidence-normalized.json", "evidence-essence.json", "evidence-essence-trace.json", "context-budget.json", "evidence-selection.json", "evidence-weights.json", "material-coverage.json", "llm-call-01-request.json", "llm-call-01-response.json", "probability-publication.json", "summary.md"} {
 				raw, e := os.ReadFile(filepath.Join(dir, name))
 				if e != nil {
 					t.Fatal(name, e)

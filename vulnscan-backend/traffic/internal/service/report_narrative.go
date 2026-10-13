@@ -114,37 +114,50 @@ func renderNarrativeReportMarkdown(doc ReportDocument) string {
 		}
 	}
 	fmt.Fprint(&w, "## 三、关键证据\n\n")
-	meanings := map[string]string{}
-	for _, item := range a.Interpretations {
-		meanings[item.EvidenceID] = item.Meaning
-	}
-	entries := map[string]ReportEvidence{}
-	for _, entry := range b.Entries {
-		entries[entry.ID] = entry
-	}
-	seen := map[string]bool{}
-	number := 0
-	keyReasons := append(append(append([]ReportReason{}, a.Supporting...), a.Opposing...), a.Alternatives...)
-	for _, risk := range a.Risks {
-		keyReasons = append(keyReasons, ReportReason{EvidenceIDs: risk.EvidenceIDs})
-	}
-	for _, action := range a.Actions {
-		keyReasons = append(keyReasons, ReportReason{EvidenceIDs: action.EvidenceIDs})
-	}
-	for _, reason := range keyReasons {
-		for _, id := range reason.EvidenceIDs {
-			entry := entries[id]
-			if seen[id] || entry.Family == "snapshot_membership" || strings.HasPrefix(entry.Family, "saved_packet:") {
-				continue
+	if b.Essence != nil {
+		for n, item := range b.Essence.Items {
+			fmt.Fprintf(&w, "%d. %s：%s。\n\n", n+1, item.ID, strings.TrimRight(reportCell(item.Summary), "。"))
+		}
+	} else {
+		meanings := map[string]string{}
+		for _, item := range a.Interpretations {
+			meanings[item.EvidenceID] = item.Meaning
+		}
+		entries := map[string]ReportEvidence{}
+		for _, entry := range b.Entries {
+			entries[entry.ID] = entry
+		}
+		seen := map[string]bool{}
+		number := 0
+		keyReasons := append(append(append([]ReportReason{}, a.Supporting...), a.Opposing...), a.Alternatives...)
+		for _, risk := range a.Risks {
+			keyReasons = append(keyReasons, ReportReason{EvidenceIDs: risk.EvidenceIDs})
+		}
+		for _, action := range a.Actions {
+			keyReasons = append(keyReasons, ReportReason{EvidenceIDs: action.EvidenceIDs})
+		}
+		for _, reason := range keyReasons {
+			for _, id := range reason.EvidenceIDs {
+				entry := entries[id]
+				if seen[id] || entry.Family == "snapshot_membership" || strings.HasPrefix(entry.Family, "saved_packet:") {
+					continue
+				}
+				seen[id] = true
+				number++
+				fmt.Fprintf(&w, "%d. %s：%s。\n\n", number, id, strings.TrimRight(reportCell(meanings[id]), "。"))
 			}
-			seen[id] = true
-			number++
-			fmt.Fprintf(&w, "%d. %s：%s。\n\n", number, id, strings.TrimRight(reportCell(meanings[id]), "。"))
 		}
 	}
 	fmt.Fprint(&w, "## 四、风险分析\n\n")
 	for _, risk := range a.Risks {
-		fmt.Fprintf(&w, "%s（依据：%s）。%s\n\n", strings.TrimRight(reportCell(risk.Exposure), "。"), strings.Join(risk.EvidenceIDs, "、"), reportCell(risk.Impact))
+		if b.Essence != nil {
+			// The preceding section already states the authoritative facts.
+			// Risk prose describes consequences, rather than repeating a model's
+			// free-form factual exposure which may enlarge those facts.
+			fmt.Fprintf(&w, "%s（依据：%s）。\n\n", strings.TrimRight(reportCell(risk.Impact), "。"), strings.Join(risk.EvidenceIDs, "、"))
+		} else {
+			fmt.Fprintf(&w, "%s（依据：%s）。%s\n\n", strings.TrimRight(reportCell(risk.Exposure), "。"), strings.Join(risk.EvidenceIDs, "、"), reportCell(risk.Impact))
+		}
 	}
 	fmt.Fprint(&w, "## 五、建议处置\n\n")
 	for n, action := range a.Actions {

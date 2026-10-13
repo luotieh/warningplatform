@@ -239,9 +239,9 @@ func reportMaterialEvidence(rows []ReportMaterialObservation) []ReportEvidence {
 				result += "；TLS记录头类型分布=" + strings.Join(parts, "、") + "（仅核验记录头字段，不据此认定协商版本、完整会话或内容恶意性）"
 			}
 		}
-		out = append(out, ReportEvidence{Kind: "observation", Name: "全量命中通联与时间分布", Status: "observed", Result: result, Source: "固定快照全部绑定命中的时间与五元组", SourceIDs: refs, Scope: rs[0].Scope, Family: "saved_activity:" + k, Window: &evidence.Window{Start: first, End: last, Convention: "observed_first_last_inclusive"}})
+		out = append(out, ReportEvidence{Feature: "saved_activity", Measurements: map[string]any{"saved_hits": len(rs), "remote_endpoint_count": len(remoteEndpoints), "remote_direction_distribution": remotePorts, "physical_packets": len(physical), "payload_samples": payloadSamples, "payload_total_bytes": payloadTotal, "tcp_flags": flagCounts, "tls_record_headers": tlsHeaderCounts, "first": first, "last": last}, Kind: "observation", Name: "全量命中通联与时间分布", Status: "observed", Result: result, Source: "固定快照全部绑定命中的时间与五元组", SourceIDs: refs, Scope: rs[0].Scope, Family: "saved_activity:" + k, Window: &evidence.Window{Start: first, End: last, Convention: "observed_first_last_inclusive"}})
 		if len(ak) > 0 {
-			out = append(out, ReportEvidence{Kind: "observation", Name: "实际应用层字段", Status: "observed", Result: strings.Join(ak, "；"), Source: "全量命中保存的应用字段；不继承情报关联域名", SourceIDs: refs, Scope: rs[0].Scope, Family: "application:" + k})
+			out = append(out, ReportEvidence{Feature: "application_fields", Measurements: reportApplicationMeasurements(ak), Kind: "observation", Name: "实际应用层字段", Status: "observed", Result: strings.Join(ak, "；"), Source: "全量命中保存的应用字段；不继承情报关联域名", SourceIDs: refs, Scope: rs[0].Scope, Family: "application:" + k})
 		}
 	}
 	return out
@@ -308,7 +308,7 @@ func reportDNSConnectionEvidence(rows []ReportMaterialObservation, h *ReportHist
 			}
 			seen[key] = true
 			refs := append([]string{prior.EventID, current.HitID}, prior.VerifiedDNSHitIDs...)
-			out = append(out, ReportEvidence{Kind: "observation", Name: "DNS解析与后续目标连接关联", Status: "observed", Result: fmt.Sprintf("同资产、同设备；历史事件%s保存DNS查询=%s、应答包含%s（UTC %s）；当前命中%s在%.6f秒后连接该IP且SNI=%s。关联为解析→连接，未将情报域名当作实际查询域名。", prior.EventID, domain, remote, prior.Last.Format(time.RFC3339Nano), current.HitID, delta.Seconds(), sni), Source: "平台历史DNS原始命中＋当前固定快照五元组及SNI；5分钟精确匹配", SourceIDs: refs, Scope: current.Scope, Family: "dns_connection:" + key})
+			out = append(out, ReportEvidence{Feature: "dns_connection", Measurements: map[string]any{"dns_query": domain, "answer_ip": remote, "delay_seconds": delta.Seconds(), "sni": sni, "dns_time": prior.Last, "connection_time": current.Time}, Kind: "observation", Name: "DNS解析与后续目标连接关联", Status: "observed", Result: fmt.Sprintf("同资产、同设备；历史事件%s保存DNS查询=%s、应答包含%s（UTC %s）；当前命中%s在%.6f秒后连接该IP且SNI=%s。关联为解析→连接，未将情报域名当作实际查询域名。", prior.EventID, domain, remote, prior.Last.Format(time.RFC3339Nano), current.HitID, delta.Seconds(), sni), Source: "平台历史DNS原始命中＋当前固定快照五元组及SNI；5分钟精确匹配", SourceIDs: refs, Scope: current.Scope, Family: "dns_connection:" + key})
 		}
 	}
 	return out

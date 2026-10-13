@@ -9,6 +9,9 @@ import (
 // Relative influence is an interpretation instruction, not arithmetic points
 // or a calibrated probability. It never changes alert severity/IOC scores.
 func reportWeightPolicy(b ReportEvidenceBundle) map[string]any {
+	if b.Essence != nil {
+		return essenceWeightPolicy(b)
+	}
 	items := []map[string]any{}
 	for _, e := range b.Entries {
 		if e.Family == "saved_schedule" && e.Status == "observed" {

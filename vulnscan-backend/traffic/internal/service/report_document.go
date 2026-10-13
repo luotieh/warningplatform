@@ -44,13 +44,13 @@ func (s Services) ReportDocument(ctx context.Context, eventID string, summaryID 
 		return ReportDocument{}, fmt.Errorf("legacy_report_without_evidence_document")
 	}
 	var doc ReportDocument
-	if len(record.Value) > 16<<20 || json.Unmarshal(record.Value, &doc) != nil || doc.SummaryID != summary.ID || doc.EventID != eventID || doc.Markdown != summary.EventSummary || (doc.SchemaVersion != reportEvidenceVersion && doc.SchemaVersion != "evidence-report-1.3.2" && doc.SchemaVersion != "evidence-report-1.3.1" && doc.SchemaVersion != "evidence-report-1.3" && doc.SchemaVersion != "evidence-report-1.0") || doc.AnalysisVersion != summary.Version || doc.Kind != summary.Kind {
+	if len(record.Value) > 16<<20 || json.Unmarshal(record.Value, &doc) != nil || doc.SummaryID != summary.ID || doc.EventID != eventID || doc.Markdown != summary.EventSummary || (doc.SchemaVersion != reportEvidenceVersion && doc.SchemaVersion != "evidence-report-1.4" && doc.SchemaVersion != "evidence-report-1.3.2" && doc.SchemaVersion != "evidence-report-1.3.1" && doc.SchemaVersion != "evidence-report-1.3" && doc.SchemaVersion != "evidence-report-1.0") || doc.AnalysisVersion != summary.Version || doc.Kind != summary.Kind {
 		return ReportDocument{}, fmt.Errorf("report_document_binding_invalid")
 	}
 	if renderReportMarkdown(doc) != doc.Markdown {
 		return ReportDocument{}, fmt.Errorf("stored_report_render_mismatch")
 	}
-	if doc.SchemaVersion == reportEvidenceVersion && doc.TechnicalAppendix != renderReportTechnicalAppendix(doc) {
+	if narrativeReportVersion(doc.SchemaVersion) && doc.TechnicalAppendix != renderReportTechnicalAppendix(doc) {
 		return ReportDocument{}, fmt.Errorf("stored_report_appendix_mismatch")
 	}
 	doc.SummaryID = summary.ID
@@ -89,7 +89,7 @@ func (s Services) ReportDocumentForExport(ctx context.Context, eventID string, s
 }
 
 func (s Services) saveReportDocument(ctx context.Context, doc ReportDocument, roundID int) (summary domain.Summary, err error) {
-	if doc.SchemaVersion == reportEvidenceVersion {
+	if narrativeReportVersion(doc.SchemaVersion) {
 		doc.TechnicalAppendix = renderReportTechnicalAppendix(doc)
 	}
 	err = s.Store.AggregationTransaction(ctx, "report-"+doc.EventID, func(tx store.Store) error {
@@ -125,7 +125,7 @@ func exportEvidenceReportDOCX(report ReportDocument, includeAppendix bool) ([]by
 	}
 	p := doc.AddParagraph("")
 	p.Justification(stypes.JustificationCenter)
-	if report.SchemaVersion == reportEvidenceVersion {
+	if narrativeReportVersion(report.SchemaVersion) {
 		p.AddText("安全事件研判报告").Bold(true).Size(18)
 		doc.AddParagraph("研判对象：" + report.Title)
 	} else {
@@ -137,7 +137,7 @@ func exportEvidenceReportDOCX(report ReportDocument, includeAppendix bool) ([]by
 	}
 	doc.AddParagraph(metadata).AddText("").Size(9)
 	markdown := report.Markdown
-	if includeAppendix && report.SchemaVersion == reportEvidenceVersion {
+	if includeAppendix && narrativeReportVersion(report.SchemaVersion) {
 		markdown += "\n" + renderReportTechnicalAppendix(report)
 	}
 	lines := strings.Split(markdown, "\n")
@@ -147,7 +147,7 @@ func exportEvidenceReportDOCX(report ReportDocument, includeAppendix bool) ([]by
 		if line == "" {
 			continue
 		}
-		if report.SchemaVersion == reportEvidenceVersion && !appendixStarted && strings.HasPrefix(line, "## 附录") {
+		if narrativeReportVersion(report.SchemaVersion) && !appendixStarted && strings.HasPrefix(line, "## 附录") {
 			doc.AddPageBreak()
 			appendixStarted = true
 		}
@@ -183,7 +183,7 @@ func exportEvidenceReportDOCX(report ReportDocument, includeAppendix bool) ([]by
 	}
 	// Detailed appendix comes from the SAME immutable bundle, no database
 	// queries and no regeneration of historical evidence on export.
-	if report.SchemaVersion != "" && (includeAppendix || report.SchemaVersion != reportEvidenceVersion) {
+	if report.SchemaVersion != "" && (includeAppendix || !narrativeReportVersion(report.SchemaVersion)) {
 		doc.AddPageBreak()
 		doc.AddParagraph("附录：正文证据来源定位").Style("Heading1")
 		doc.AddParagraph(fmt.Sprintf("事件：%s；快照版本：%d；命中水位：%d；修订水位：%d。", report.EventID, report.Evidence.SnapshotVersion, report.Evidence.Watermark, report.Evidence.RevisionWatermark))

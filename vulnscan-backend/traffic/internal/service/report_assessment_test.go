@@ -22,21 +22,25 @@ import (
 
 func TestReportPromptBudgetPreservesAuthoritativeEntries(t *testing.T) {
 	_, event, bundle := reportTestBundle(t)
-	event.EventName = strings.Repeat("长标题", 10000)
-	p := preparedReportInput{Context: `{"auxiliary":"` + strings.Repeat("辅助材料", 20000) + `"}`, AssetSection: strings.Repeat("资产", 20000)}
-	prompt, err := evidenceReportPrompt(event, p, bundle, strings.Repeat("对话", 20000))
+	event.EventName = strings.Repeat("long title", 10000)
+	p := preparedReportInput{Context: strings.Repeat("auxiliary", 20000), AssetSection: "registered asset role"}
+	prompt, err := evidenceReportPrompt(event, p, bundle, strings.Repeat("dialogue", 20000))
 	if err != nil {
 		t.Fatal(err)
 	}
 	var input struct {
-		Entries        []ReportEvidence `json:"selected_evidence"`
-		ContextOmitted bool             `json:"context_omitted_for_budget"`
+		Entries []ReportEssence `json:"key_evidence"`
+		Asset   string          `json:"asset_context"`
 	}
-	if json.Unmarshal([]byte(prompt), &input) != nil || !input.ContextOmitted || len(input.Entries) != len(bundle.SelectedIDs) {
-		t.Fatal("budget reduction removed authoritative entries or omission marker")
+	if json.Unmarshal([]byte(prompt), &input) != nil || len(input.Entries) != len(bundle.Essence.Items) || input.Asset != p.AssetSection {
+		t.Fatal("essential data changed")
 	}
-	if estimateTokens(prompt) > reportInputEstimateBudget || estimateTokens(evidenceReportSystemPrompt+prompt) > reportPromptEstimateBudget {
-		t.Fatal("prompt budget exceeded")
+	if strings.Contains(prompt, "source_catalog") || strings.Contains(prompt, "auxiliary") || strings.Contains(prompt, "dialogue") {
+		t.Fatal("audit metadata leaked")
+	}
+	p.AssetSection = strings.Repeat("core asset information", 20000)
+	if _, err = evidenceReportPrompt(event, p, bundle, ""); err == nil {
+		t.Fatal("oversize core materials silently discarded")
 	}
 }
 
@@ -130,13 +134,15 @@ func validReportAssessment(b ReportEvidenceBundle) ReportAssessment {
 func acceptedReportResponse(t *testing.T, prompt string) string {
 	t.Helper()
 	var request struct {
-		Entries []ReportEvidence `json:"selected_evidence"`
+		Entries []ReportEvidence `json:"key_evidence"`
 	}
 	if json.Unmarshal([]byte(prompt), &request) != nil {
 		t.Fatal("invalid report JSON")
 	}
 	b := ReportEvidenceBundle{Entries: request.Entries, SelectedIDs: []string{}}
-	for _, e := range b.Entries {
+	for n, e := range b.Entries {
+		b.Entries[n].Kind = "observation"
+		b.Entries[n].Status = "observed"
 		b.SelectedIDs = append(b.SelectedIDs, e.ID)
 	}
 	raw, _ := json.Marshal(validReportAssessment(b))

@@ -232,7 +232,7 @@ func TestAllReportKindsActuallySendProducedSourceFacts(t *testing.T) {
 			if err := svc.runAnalysis(context.Background(), snap.EventID, kind, version); err != nil {
 				t.Fatal(err)
 			}
-			if !strings.Contains(prompt, "F_DST_NOVELTY") || strings.Contains(prompt, `"registry_version":"independent-reviewed-history-export"`) {
+			if !strings.Contains(prompt, "目的端点新颖") || strings.Contains(prompt, `"registry_version":"independent-reviewed-history-export"`) {
 				t.Fatal("produced history absent or full registry leaked to model")
 			}
 			event := mustEvent(t, svc, snap.EventID)

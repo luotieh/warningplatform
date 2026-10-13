@@ -12,33 +12,42 @@ import (
 	"vulnscan-backend/traffic/internal/domain"
 )
 
-const reportEvidenceVersion = "evidence-report-1.4"
+const reportEvidenceVersion = "evidence-report-1.5"
+
+func narrativeReportVersion(v string) bool {
+	return v == reportEvidenceVersion || v == "evidence-report-1.4"
+}
 
 var ReportBuildRevision = "development"
 
 // ReportEvidence is built from complete engine outputs BEFORE model projection.
 // Source identities stay in the immutable journal, not in the model's prose.
 type ReportEvidence struct {
-	SavedDNSRecords int                       `json:"saved_dns_records,omitempty"`
-	Unified         *evidence.UnifiedEvidence `json:"normalized,omitempty"`
-	ID              string                    `json:"id"`
-	Kind            string                    `json:"kind"`
-	Name            string                    `json:"name"`
-	Status          string                    `json:"status"`
-	Result          string                    `json:"result"`
-	Source          string                    `json:"source"`
-	Scope           evidence.Scope            `json:"scope"`
-	Window          *evidence.Window          `json:"window,omitempty"`
-	FactID          evidence.FactID           `json:"fact_id,omitempty"`
-	SourceIDs       []string                  `json:"source_ids,omitempty"`
-	Dependencies    []evidence.Dependency     `json:"dependencies,omitempty"`
-	Finding         *evidence.Finding         `json:"finding,omitempty"`
-	Semantic        *evidence.SemanticFinding `json:"semantic,omitempty"`
-	Family          string                    `json:"family"`
-	RelatedFactIDs  []string                  `json:"related_fact_ids,omitempty"`
+	MaterialSourceIDs map[string][]string       `json:"material_source_ids,omitempty"`
+	Feature           string                    `json:"feature,omitempty"`
+	Measurements      map[string]any            `json:"measurements,omitempty"`
+	SavedDNSRecords   int                       `json:"saved_dns_records,omitempty"`
+	Unified           *evidence.UnifiedEvidence `json:"normalized,omitempty"`
+	ID                string                    `json:"id"`
+	Kind              string                    `json:"kind"`
+	Name              string                    `json:"name"`
+	Status            string                    `json:"status"`
+	Result            string                    `json:"result"`
+	Source            string                    `json:"source"`
+	Scope             evidence.Scope            `json:"scope"`
+	Window            *evidence.Window          `json:"window,omitempty"`
+	FactID            evidence.FactID           `json:"fact_id,omitempty"`
+	SourceIDs         []string                  `json:"source_ids,omitempty"`
+	Dependencies      []evidence.Dependency     `json:"dependencies,omitempty"`
+	Finding           *evidence.Finding         `json:"finding,omitempty"`
+	Semantic          *evidence.SemanticFinding `json:"semantic,omitempty"`
+	Family            string                    `json:"family"`
+	RelatedFactIDs    []string                  `json:"related_fact_ids,omitempty"`
 }
 
 type ReportEvidenceBundle struct {
+	CurrentSourceIDs  []string                     `json:"current_source_ids,omitempty"`
+	Essence           *ReportEssenceBundle         `json:"evidence_essence,omitempty"`
 	Overview          ReportEventOverview          `json:"event_overview"`
 	PolicyVersion     string                       `json:"policy_version,omitempty"`
 	Digest            evidence.EvidenceDigest      `json:"evidence_digest"`
@@ -63,6 +72,11 @@ func buildReportEvidence(event domain.Event, snap EvidenceSnapshot, f SnapshotFa
 	b := ReportEvidenceBundle{SnapshotVersion: snap.Version, FactStatus: f.Status, FactCounts: map[string]int{}, SemanticCounts: map[string]int{}, Entries: []ReportEvidence{}, SelectedIDs: []string{}, FactChecks: []evidence.Finding{}, SemanticChecks: []evidence.SemanticExecution{}}
 	b.PolicyVersion = reportEvidenceVersion
 	b.Overview = buildReportEventOverview(snap, f.Manifest)
+	for _, row := range f.Manifest.ReportObservations {
+		b.CurrentSourceIDs = append(b.CurrentSourceIDs, row.HitID)
+	}
+	sort.Strings(b.CurrentSourceIDs)
+	b.CurrentSourceIDs = compactReportRefs(b.CurrentSourceIDs)
 	b.FactCoverage = append([]SnapshotFactCoverage(nil), f.Manifest.FactCoverage...)
 	b.Watermark, b.RevisionWatermark, b.SourceEvents = snap.Watermark, snap.RevisionWatermark, append([]string(nil), snap.Sources...)
 	add := func(e ReportEvidence) {
@@ -98,7 +112,7 @@ func buildReportEvidence(event domain.Event, snap EvidenceSnapshot, f SnapshotFa
 	}
 	if len(intel) > 0 {
 		raw, _ := json.Marshal(intel)
-		add(ReportEvidence{Kind: "intelligence", Name: "有来源的IOC情报背景", Status: "context", Result: string(raw), Source: "事件保存的IOC与情报来源；同源信息合并", Family: "ioc_intelligence"})
+		add(ReportEvidence{Feature: "ioc_background", Measurements: reportIOCMeasurements(snap.Context), Kind: "intelligence", Name: "有来源的IOC情报背景", Status: "context", Result: string(raw), Source: "事件保存的IOC与情报来源；同源信息合并", Family: "ioc_intelligence"})
 	}
 
 	// Actual saved bytes are observations, not automatically a TLS version,
@@ -146,11 +160,13 @@ func buildReportEvidence(event domain.Event, snap EvidenceSnapshot, f SnapshotFa
 			copy := finding
 			window := evidence.Window{Start: finding.Window.Start, End: finding.Window.End, Convention: "analysis_half_open"}
 			ids := []string{}
+			materialSources := map[string][]string{}
 			seenIDs := map[string]bool{}
 			dependencies := []evidence.Dependency{}
 			for _, task := range sem.Result.Plan.Tasks {
 				if task.ID == finding.TaskID {
 					for _, m := range task.Materials {
+						materialSources[m.ID] = append([]string(nil), m.SourceIDs...)
 						dependencies = append(dependencies, evidence.Dependency{Kind: m.Kind, Version: m.SourceVersion, SourceIDs: m.SourceIDs})
 						for _, id := range m.SourceIDs {
 							if !seenIDs[id] {
@@ -161,7 +177,7 @@ func buildReportEvidence(event domain.Event, snap EvidenceSnapshot, f SnapshotFa
 					}
 				}
 			}
-			add(ReportEvidence{Kind: "semantic", Name: reportSemanticName(finding.Slot), Status: finding.Judgement, Result: semanticSummaryText(finding.Explanation, 350), Source: "通过引用与强度校验的模型解释", Scope: finding.Scope, Window: &window, Semantic: &copy, SourceIDs: ids, Dependencies: dependencies, Family: "semantic:" + finding.PropositionID, RelatedFactIDs: finding.NonAdditiveWith})
+			add(ReportEvidence{MaterialSourceIDs: materialSources, Kind: "semantic", Name: reportSemanticName(finding.Slot), Status: finding.Judgement, Result: semanticSummaryText(finding.Explanation, 350), Source: "通过引用与强度校验的模型解释", Scope: finding.Scope, Window: &window, Semantic: &copy, SourceIDs: ids, Dependencies: dependencies, Family: "semantic:" + finding.PropositionID, RelatedFactIDs: finding.NonAdditiveWith})
 		}
 	}
 	executions := []evidence.Execution{}
@@ -231,6 +247,8 @@ func buildReportEvidence(event domain.Event, snap EvidenceSnapshot, f SnapshotFa
 	})
 	b.SelectedIDs = b.Digest.SelectedIDs
 	b.SelectionOmitted = len(b.Entries) - len(b.SelectedIDs)
+	essence := buildReportEssence(b)
+	b.Essence = &essence
 	return b
 }
 

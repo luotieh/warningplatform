@@ -58,128 +58,26 @@ const legacyEvidenceReportSystemPrompt = `你是证据驱动的流量研判报�
 threat_type只能为phishing_related、c2_related、botnet_related、mining_related、dns_related、exfiltration_related、scanning_related、suspicious_contact、normal_business、undetermined；只选择引用证据实际支持的类型，不能只看事件标题猜测。固定判断命题target=malicious_activity，表示本次通信属于恶意活动的可能性，不是主机失陷概率。verdict只能为suspicious、likely_malicious、likely_benign、insufficient；stage只能为contact、behavior、undetermined。probability为0到100整数或null，属于模型研判估计。没有有效支持依据时应使用null。不得把已保存命中数当作会话数、包数、真实流量；不能改写核验状态或数值。missing是未能核验，不是不存在；selection_omitted是正文省略，不是算法未执行。情报是有来源的背景；语义是经过引用检查的模型解释，不能重复作为独立事实累计。
 返回字段且仅这些字段：target、threat_type、verdict、stage、probability、probability_reason、supporting([{evidence_ids,explanation}])、opposing(同结构)、alternatives(同结构)、interpretations([{evidence_id,meaning}])、gaps([字符串])、actions([{evidence_ids,action,purpose}])、risks([{evidence_ids,exposure,impact}])。所有引用只能使用selected_evidence中的编号；interpretations为每条证据写一句简短的自然语言事实描述，解释实际发生的行为、时间或分布；不要写算法指标名、核验状态、模型流程或只有限制的句子，引用数字必须匹配该证据范围。supporting用于已成立事实或情报背景；opposing只用于明确、充分核验的反向事实，不得使用缺材料。alternatives必须引用具体证据。概率依据须说明支持理由、替代解释与判断把握，不能杜撰公式或加减分。判断文字可引用证据表中对应范围的次数、地址、时间、端口与指标，禁止新增数字、错误单位或跨范围移用。禁止输出攻击成功、已失陷、已植入等成功性结论。禁止声称从本例自动排除C2或外传。行动仅为建议，不宣称已经执行；封禁共享基础设施应先核查业务关联。无材料时准确列出具体待查项，不猜测不存在的证据。probability_reason不超过120字，不重复概率数字或80至90等内部政策阈值；每项meaning及理由不超过80字，直接解释对应证据。alternatives只写已证实的域名不一致、自有资产等具体替代依据，不列出待证实的CDN、代理、扫描剧情；未证实项放gaps。报告正文按结论、事件总览、关键证据、风险分析、建议处置组织。probability_reason要连接实际行为、关键关联及结论，不写缺项清单。risks必须给出1至3项：exposure为引用证据支持的当前风险入口或需要保护的对象；impact只分析此类攻击对该资产或账号、数据、服务的影响，必须以“若”或“一旦”开头描述条件及后果，不得声称后果已发生，也不引入新的IP、统计或攻击证据。无法确立具体攻击类型时，只讨论该通联被滥用时的资产影响，不编造钓鱼、外传或植入链。actions面向资产责任方写可执行的安全防护，说明对象、核查位置、触发隔离/阻断的条件；不能只有补材料建议。verdict、stage的中文显示由程序完成。`
 
+func init() {
+	evidenceReportSystemPrompt += "数字口径必须逐项保持：告警命中只能写为命中记录，不能写成通联条数、连接数或会话数；DNS和传输混合活跃日期不能写成通信活跃日期；描述历史通信天数只用历史传输接触证据。单一情报来源只能称情报标注关联，不能称已知恶意基础设施。"
+	evidenceReportSystemPrompt += "跨日重复接触不等于持续连接或持久化通道，没有会话连续性或主机证据时，不这样描述。背景语义中的待核查或猜测部分不进入正文；正文不罗列审核状态和技术缺口。风险只分析已确定类型或通联被滥用对资产的影响，不能另造备用域名、跳转基础设施、周期恶意进程等未经证实的前提。"
+	evidenceReportSystemPrompt = strings.ReplaceAll(evidenceReportSystemPrompt, "selected_evidence", "key_evidence")
+	evidenceReportSystemPrompt = strings.ReplaceAll(evidenceReportSystemPrompt, "report_weight_policy", "weight_policy")
+	evidenceReportSystemPrompt = strings.ReplaceAll(evidenceReportSystemPrompt, "interpretations为每条证据写一句简短的自然语言事实描述，解释实际发生的行为、时间或分布；不要写算法指标名、核验状态、模型流程或只有限制的句子，引用数字必须匹配该证据范围。", "interpretations返回空数组；关键证据由后端key_evidence直接呈现。引用数值从对应证据的result和D编号measurements取用。")
+}
+
 func evidenceReportPrompt(event domain.Event, p preparedReportInput, b ReportEvidenceBundle, dialogue string) (string, error) {
 	return evidenceReportPromptBudget(event, p, b, dialogue, reportInputEstimateBudget, reportPromptEstimateBudget, 100000)
 }
 
 func evidenceReportPromptBudget(event domain.Event, p preparedReportInput, b ReportEvidenceBundle, dialogue string, userLimit, fullLimit, maxBytes int) (string, error) {
-	entries := []map[string]any{}
-	selected := map[string]bool{}
-	for _, id := range b.SelectedIDs {
-		selected[id] = true
-	}
-	for _, e := range b.Entries {
-		if selected[e.ID] {
-			entries = append(entries, reportEvidencePromptEntry(e))
-		}
-	}
-	historyInterpretations := reportHistoryInterpretationContext(b, selected)
-	allRows := append(append([]map[string]any{}, entries...), historyInterpretations...)
-	context := decodeEventContext(p.Context)
-	// Full rule lists and raw hex are not sent twice. Actual measurements are in
-	// selected entries, compact semantics retain actual verified quotations.
-	delete(context, "algorithm_evidence")
-	delete(context, "evidence_index")
-	delete(context, "input_manifest")
-	delete(context, "quant_stats") // only verified measurements enter evidence rows
-	delete(context, "semantic_evidence")
-	for _, key := range []string{"ai_probability", "heartbeat_detected", "heartbeat_period_sec", "recommended_action", "flow_stats", "session_summary", "data_exfil", "occurrences", "occurrences_preview"} {
-		delete(context, key)
-	}
-	eventMetadata := map[string]any{"id": event.EventID, "title": truncateRunes(event.EventName, 300), "severity": event.Severity, "observables": event.Observables}
-	input := map[string]any{"schema_version": reportEvidenceVersion, "event": eventMetadata, "asset_registry": p.AssetSection, "context": sanitizeEvidenceForPrompt(context), "selected_evidence": entries, "fact_counts": b.FactCounts, "semantic_counts": b.SemanticCounts, "selection_omitted": b.SelectionOmitted, "snapshot_version": b.SnapshotVersion, "dialogue": dialogue}
-	input["validated_history_interpretations"] = historyInterpretations
-	input["event_overview"] = reportOverviewPrompt(b.Overview)
-	input["evidence_digest"] = map[string]any{"version": b.Digest.Version, "total_instances": b.Digest.TotalInstances, "status_counts": b.Digest.Counts, "gap_reasons": b.Digest.GapReasons, "compression_omitted": b.Digest.Omitted}
-	// Intern complete source lists. Each row retains its entire source binding
-	// without repeating long hit hashes across every measurement and slot.
-	sources := map[string]string{}
-	sourceCatalog := map[string]string{}
-	sourceSets := map[string][]string{}
-	setIDs := map[string]string{}
-	for _, row := range allRows {
-		for _, original := range b.Entries {
-			if row["id"] != original.ID {
-				continue
-			}
-			refs := []string{}
-			for _, source := range original.SourceIDs {
-				alias, exists := sources[source]
-				if !exists {
-					alias = fmt.Sprintf("S%d", len(sources)+1)
-					sources[source] = alias
-					sourceCatalog[alias] = source
-				}
-				refs = append(refs, alias)
-			}
-			key := strings.Join(refs, ",")
-			setID, exists := setIDs[key]
-			if !exists {
-				setID = fmt.Sprintf("G%d", len(setIDs)+1)
-				setIDs[key] = setID
-				sourceSets[setID] = refs
-			}
-			delete(row, "source_refs")
-			row["source_set_id"] = setID
-		}
-	}
-	input["source_catalog"], input["source_sets"] = sourceCatalog, sourceSets
-	// Intern repeated typed scopes and windows without dropping any field.
-	for _, field := range []string{"scope", "window"} {
-		catalog := map[string]any{}
-		identities := map[string]string{}
-		for _, row := range allRows {
-			value := row[field]
-			encoded, err := json.Marshal(value)
-			if err != nil {
-				return "", err
-			}
-			key := string(encoded)
-			alias, exists := identities[key]
-			if !exists {
-				alias = fmt.Sprintf("%s%d", field, len(catalog)+1)
-				identities[key] = alias
-				catalog[alias] = value
-			}
-			delete(row, field)
-			row[field+"_ref"] = alias
-		}
-		input[field+"_catalog"] = catalog
-	}
-	for n, row := range historyInterpretations {
-		delete(row, "id")
-		row["context_id"] = fmt.Sprintf("H%d", n+1)
-	}
-	input["report_weight_policy"] = reportWeightPolicy(b)
-	if b.History != nil {
-		input["history_lookup"] = map[string]any{"diagnostics": ReportHistoryDiagnostics{Status: b.History.Status, Reason: b.History.Reason, Candidates: b.History.CandidateCount, Matched: len(b.History.Rows), Excluded: b.History.ExcludedCount, Truncated: b.History.Truncated}, "lookback_start": b.History.Start, "as_of": b.History.End}
-	}
-	input["history_usage"] = "历史关联由事实规则和R06/R07提供，所有匹配历史均参与，不按审核状态筛选。复发、基础设施复用可作为实际行为依据；同资产不等于同IOC或同战役，语义解释与其依赖事实不重复计证。"
-	input["history_interpretation_usage"] = "validated_history_interpretations为通过引用核验的R06/R07解释，保留完整解释、摘录、材料与来源绑定。H编号仅用于上下文追溯，不是独立证据，不单独加权；报告必须引用fact_report_ids中实际支持该判断的E编号，数字与主体仍以对应事实的范围为准。"
+	essence := reportEssenceFor(b)
+	input := map[string]any{"schema_version": reportEvidenceVersion, "event": map[string]any{"title": truncateRunes(event.EventName, 300)}, "event_overview": b.Overview, "asset_context": p.AssetSection, "key_evidence": essence.Items, "evidence_details": essence.Details, "weight_policy": essenceWeightPolicy(b), "report_requirements": "依据key_evidence的E编号形成结论、概率、风险和处置。D编号只是数据依据，不独立计证。正文关键证据由后端提供，不改写测量值。"}
+	// Report generation does not need an unbounded conversational transcript.
+	// Relevant asset, IOC and evidence data is already in authoritative fields.
 	raw, err := json.Marshal(input)
 	if err != nil {
 		return "", err
-	}
-	// Never truncate the authoritative evidence or its IDs. Reduce auxiliary
-	// material as whole fields, with an explicit omission marker, instead.
-	for _, field := range []string{"context", "dialogue", "asset_registry"} {
-		if estimateTokens(string(raw)) <= userLimit {
-			break
-		}
-		delete(input, field)
-		input[field+"_omitted_for_budget"] = true
-		raw, err = json.Marshal(input)
-		if err != nil {
-			return "", err
-		}
-	}
-	if estimateTokens(string(raw)) > userLimit {
-		delete(eventMetadata, "observables")
-		input["observables_omitted_for_budget"] = true
-		raw, err = json.Marshal(input)
-		if err != nil {
-			return "", err
-		}
 	}
 	if len(raw) > maxBytes || estimateTokens(string(raw)) > userLimit || estimateTokens(evidenceReportSystemPrompt+string(raw))+12 > fullLimit {
 		return string(raw), fmt.Errorf("report_input_budget_exceeded: bytes=%d estimated_tokens=%d", len(raw), estimateTokens(string(raw)))
@@ -263,7 +161,7 @@ func reportCell(s string) string {
 var reportThreatTypeNames = map[string]string{"phishing_related": "钓鱼相关线索", "c2_related": "指令控制相关线索", "botnet_related": "群体协同相关线索", "mining_related": "挖矿通信相关线索", "dns_related": "DNS异常相关线索", "exfiltration_related": "数据传输异常相关线索", "scanning_related": "扫描行为相关线索", "suspicious_contact": "可疑目标通联", "normal_business": "正常业务倾向", "undetermined": "威胁类型待核查"}
 
 func renderReportMarkdown(doc ReportDocument) string {
-	if doc.SchemaVersion == reportEvidenceVersion {
+	if narrativeReportVersion(doc.SchemaVersion) {
 		return renderNarrativeReportMarkdown(doc)
 	}
 	return renderV132ReportMarkdown(doc)

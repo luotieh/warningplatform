@@ -139,34 +139,23 @@ func TestReportPayloadCountsDeduplicatePhysicalRecords(t *testing.T) {
 
 func TestReportNeutralHistoryInterpretationKeepsFullContextAndBinding(t *testing.T) {
 	scope := evidence.Scope{AssetID: "asset", EndpointID: "tls://target:443"}
+	at := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	window := &evidence.Window{Start: at, End: at.Add(time.Hour)}
 	explanation := strings.Repeat("经来源核验的历史关联解释。", 40)
-	projected := reportEvidencePromptEntry(ReportEvidence{Result: "展示用节选", Semantic: &evidence.SemanticFinding{SemanticItem: evidence.SemanticItem{Explanation: explanation}}})
-	if projected["result"] != explanation {
-		t.Fatal("validated semantic explanation was clipped")
-	}
 	b := ReportEvidenceBundle{SelectedIDs: []string{"E001"}, Entries: []ReportEvidence{
-		{ID: "E001", FactID: "F_HISTORY_RECURRENCE", Scope: scope, Finding: &evidence.Finding{}},
-		{ID: "E002", Scope: scope, SourceIDs: []string{"prior-event", "raw-hit"}, Semantic: &evidence.SemanticFinding{Slot: evidence.SlotKey{ID: "R06"}, ExplanationOnly: true, SemanticItem: evidence.SemanticItem{Judgement: "neutral", Explanation: explanation, FactRefs: []string{"F_HISTORY_RECURRENCE"}, Quotes: []evidence.SemanticQuote{{MaterialID: "history", Excerpt: "同资产同IOC"}}}}},
-		{ID: "E003", Scope: scope, Semantic: &evidence.SemanticFinding{Slot: evidence.SlotKey{ID: "S15"}, ExplanationOnly: true}},
+		{ID: "E001", Name: "历史复发", Status: "observed", FactID: "F_HISTORY_RECURRENCE", Scope: scope, Window: window, Finding: &evidence.Finding{FactID: "F_HISTORY_RECURRENCE", Status: evidence.Observed, Scope: scope, Window: window}},
+		{ID: "E002", Scope: scope, Window: window, SourceIDs: []string{"prior-event", "raw-hit"}, Semantic: &evidence.SemanticFinding{Scope: scope, Window: evidence.AnalysisWindow{Start: window.Start, End: window.End}, Slot: evidence.SlotKey{ID: "R06"}, ExplanationOnly: true, SemanticItem: evidence.SemanticItem{Judgement: "neutral", Explanation: explanation, FactRefs: []string{"F_HISTORY_RECURRENCE"}, MaterialRefs: []string{"history"}, Quotes: []evidence.SemanticQuote{{MaterialID: "history", Excerpt: "同资产同IOC"}}}}},
 	}}
-	prompt, err := evidenceReportPrompt(domain.Event{EventID: "current"}, preparedReportInput{}, b, "")
-	if err != nil {
-		t.Fatal(err)
+	essence := buildReportEssence(b)
+	if len(essence.Items) != 1 || len(essence.Items[0].Interpretations) != 1 || essence.Items[0].Interpretations[0] != explanation {
+		t.Fatal("history content not bound", essence)
 	}
-	var input map[string]any
-	if err := json.Unmarshal([]byte(prompt), &input); err != nil {
-		t.Fatal(err)
+	prompt, err := evidenceReportPrompt(domain.Event{}, preparedReportInput{}, b, "")
+	if err != nil || !strings.Contains(prompt, explanation) || strings.Contains(prompt, "prior-event") || strings.Contains(prompt, "source_catalog") {
+		t.Fatal("history projection changed", err)
 	}
-	contexts := input["validated_history_interpretations"].([]any)
-	if len(contexts) != 1 {
-		t.Fatal("history dropped or diagnostics promoted", contexts)
-	}
-	row := contexts[0].(map[string]any)
-	if row["result"] != explanation || row["id"] != nil || row["context_only"] != true || row["fact_report_ids"].([]any)[0] != "E001" {
-		t.Fatal("history binding/content changed", row)
-	}
-	if len(input["source_catalog"].(map[string]any)) != 2 {
-		t.Fatal("history provenance clipped")
+	if len(essence.Trace[1].SourceIDs) != 2 || essence.Trace[1].EvidenceID != "E001" {
+		t.Fatal("complete provenance lost")
 	}
 }
 
