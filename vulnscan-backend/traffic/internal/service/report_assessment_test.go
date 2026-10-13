@@ -178,6 +178,8 @@ func TestReportUsesCompleteFindingsNotCompressedProjection(t *testing.T) {
 
 func TestReportRejectsUnboundOverclaimsAndChangedNumbers(t *testing.T) {
 	_, _, b := reportTestBundle(t)
+	b.Entries = append(b.Entries, ReportEvidence{ID: "I999", Kind: "intelligence", Status: "context", Family: "test_intelligence"})
+	b.SelectedIDs = append(b.SelectedIDs, "I999")
 	for _, tc := range []struct {
 		name, want string
 		mutate     func(*ReportAssessment)
@@ -191,7 +193,10 @@ func TestReportRejectsUnboundOverclaimsAndChangedNumbers(t *testing.T) {
 		{"no probability basis", "without_evidence", func(a *ReportAssessment) { a.Supporting = []ReportReason{} }},
 		{"unbound action", "action", func(a *ReportAssessment) { a.Actions[0].EvidenceIDs = []string{"E999"} }},
 		{"unbound threat type", "threat_type_without_evidence", func(a *ReportAssessment) { a.ThreatType = "botnet_related" }},
-		{"intelligence-only malicious", "without_behavior", func(a *ReportAssessment) { a.Verdict = "likely_malicious" }},
+		{"intelligence-only malicious", "without_behavior", func(a *ReportAssessment) {
+			a.Verdict = "likely_malicious"
+			a.Supporting = []ReportReason{{EvidenceIDs: []string{"I999"}, Explanation: "情报背景提示核查"}}
+		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			a := validReportAssessment(b)

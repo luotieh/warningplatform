@@ -19,6 +19,14 @@ const statuses: Record<string, string> = { observed: '成立', not_observed: '�
     <div v-if="document" class="report-version">报告版本 {{ document.analysis_version }} · 快照版本 {{ evidence.snapshot_version }} · 依据及引用已校验</div>
     <div v-else-if="legacyMarkdown" class="legacy-note">历史报告：没有绑定新版结构化证据清单，保留原报告内容。</div>
     <div class="report-content" v-html="html"></div>
+    <template v-if="document?.layout_version !== 'five-part-v1'">
+    <details v-if="evidence.normalized_evidence?.items" class="audit">
+      <summary>查看统一证据索引（事实、语义及全部执行状态）</summary>
+      <p>共 {{ evidence.normalized_evidence.items.length }} 个证据实例；正文采用 {{ evidence.selected_ids?.length || 0 }} 项精华。省略的结果与来源仍完整保存。</p>
+      <div class="audit-table"><table><thead><tr><th>规则 / 槽位</th><th>状态 / 质量</th><th>证据性质</th><th>正文引用</th><th>结果 / 原因</th><th>来源</th></tr></thead><tbody>
+        <tr v-for="row in evidence.normalized_evidence.items" :key="row.id"><td>{{ row.rule_id }}</td><td>{{ statuses[row.status] || row.status }} / {{ row.quality }}</td><td>{{ row.role }}</td><td>{{ row.report_id || '附录' }}</td><td>{{ row.interpretation || row.measurements?.values || row.reason }}</td><td>{{ row.source_ids?.join('、') }}</td></tr>
+      </tbody></table></div>
+    </details>
     <details v-if="document" class="audit"><summary>查看正文证据的原始来源与核验范围</summary>
       <div v-for="entry in selectedRows" :key="entry.id" class="source-entry">
         <strong>{{ entry.id }} · {{ entry.name }}</strong>
@@ -27,6 +35,12 @@ const statuses: Record<string, string> = { observed: '成立', not_observed: '�
         <button v-for="(hitId, index) in savedHitIds(entry).slice(0, 8)" :key="hitId" @click="openSource(hitId)">查看原始命中 {{ index + 1 }}</button>
         <p v-if="savedHitIds(entry).length > 8">共 {{ savedHitIds(entry).length }} 条来源，展示前8条定位入口。</p>
       </div>
+    </details>
+    <details v-if="evidence.platform_history" class="audit"><summary>查看平台历史活动（关联不等于同战役或恶意结论）</summary>
+      <p>检索状态：{{ evidence.platform_history.status }}；{{ evidence.platform_history.reason }}</p>
+      <div class="audit-table"><table><thead><tr><th>历史事件</th><th>活动时间</th><th>匹配关系</th><th>资产 / IOC</th></tr></thead><tbody>
+        <tr v-for="row in evidence.platform_history.rows || []" :key="row.event_id"><td>{{ row.event_id }}</td><td>{{ row.first_time }} 至 {{ row.last_time }}</td><td>{{ ({ same_asset_ioc: '同资产且同IOC', same_ioc: '仅同IOC', same_asset: '仅同资产' } as Record<string,string>)[row.relation] }}</td><td>{{ row.all_asset_ids?.join('、') }} / {{ row.activity_iocs?.map((ioc: Record<string, any>) => ioc.value).join('、') }}</td></tr>
+      </tbody></table></div>
     </details>
     <details v-if="document" class="audit">
       <summary>查看完整事实与语义检查清单（正文省略不等于未执行）</summary>
@@ -39,6 +53,7 @@ const statuses: Record<string, string> = { observed: '成立', not_observed: '�
         </table>
       </div>
     </details>
+    </template>
   </article>
   <EvidenceDialog v-model:visible="sourceDialogVisible" :event-id="eventId" :hit-id="sourceHitId" :version="Number(evidence.snapshot_version || 0)" />
 </template>

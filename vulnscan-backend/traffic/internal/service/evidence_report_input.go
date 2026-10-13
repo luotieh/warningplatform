@@ -80,6 +80,11 @@ func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event
 		return preparedReportInput{}, err
 	}
 	config := evidence.DefaultConfig()
+	history := s.loadReportHistory(ctx, event, snap, assets)
+	if ctx.Err() != nil {
+		return preparedReportInput{}, ctx.Err()
+	}
+	options.PlatformHistory = &history
 	assetVersions := append([]domain.Asset(nil), assets...)
 	sort.Slice(assetVersions, func(i, j int) bool { return assetVersions[i].ID < assetVersions[j].ID })
 	key := digest([]any{snap.EventID, snap.Version, snap.Watermark, snap.RevisionWatermark, evidence.RuleVersion, snapshotAdapterVersion, config, options, assetVersions, options.Supplemental, options.SupplementalIssue, options.Sources, options.SourceIssue, options.RegistryIssue})
@@ -145,6 +150,17 @@ func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event
 	if !cacheAvailable {
 		evaluation.Manifest.addIssue(SnapshotInputIssue{Code: "result_not_cached", Stage: "persist", Retryable: true})
 	}
+	if ctx.Err() != nil {
+		return preparedReportInput{}, ctx.Err()
+	}
+	evaluation.Manifest.History = &ReportHistoryDiagnostics{Status: history.Status, Reason: history.Reason, Candidates: history.CandidateCount, Matched: len(history.Rows), Excluded: history.ExcludedCount, Truncated: history.Truncated}
+	if history.Status == "unavailable" {
+		issue := SnapshotInputIssue{Code: history.Reason, Stage: "load_history", Retryable: history.Reason == "history_query_failed"}
+		if history.Issue != nil {
+			issue = *history.Issue
+		}
+		evaluation.Manifest.addIssue(issue)
+	}
 	diagnostic := SnapshotEvidenceDiagnostics{EventID: snap.EventID, SnapshotVersion: snap.Version, At: time.Now().UTC(), Status: evaluation.Status, Reason: evaluation.Reason, ResultKey: key, ResultPersisted: resultPersisted, Manifest: evaluation.Manifest}
 	if persist {
 		if saveErr := putRecord(ctx, s.Store, "evidence_diagnostics", snapshotKey(snap.EventID, snap.Version), snap.EventID, diagnostic); saveErr != nil {
@@ -173,7 +189,7 @@ func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event
 	}
 	manifest["semantic_evidence"] = map[string]any{"result_key": semantics.ResultKey, "adapter_version": semantics.AdapterVersion, "input_mode": semantics.InputMode, "status": semantics.Status, "result_persisted": semantics.ResultPersisted}
 	projected, err := projectReportEvidence(snap, evaluation, semantics)
-	return preparedReportInput{Context: projected, AssetSection: assetMatchContext(event, assets), Evaluation: evaluation, Semantics: semantics, Evidence: buildReportEvidence(event, snap, evaluation, semantics)}, err
+	return preparedReportInput{Context: projected, AssetSection: assetMatchContext(event, assets), Evaluation: evaluation, Semantics: semantics, Evidence: buildReportEvidence(event, snap, evaluation, semantics, history)}, err
 }
 
 func projectReportEvidence(snap EvidenceSnapshot, facts SnapshotFactEvaluation, semantics ReportSemanticEvaluation) (string, error) {

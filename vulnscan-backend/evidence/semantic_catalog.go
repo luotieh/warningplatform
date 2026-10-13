@@ -34,8 +34,8 @@ var semanticSpecs = []slotSpec{
 	semanticSpec("SC01", "c2.role_schedule_conflict", "", "核验角色、业务作息及实际时间分布；夜间服务器运行不自动异常", "schedule", false, []string{"asset_role", "business_schedule", "time_distribution"}, nil, nil),
 	semanticSpec("SC02", "botnet.group_alternative", "", "核验群体角色与实际行为摘要；供人工解释", "", true, []string{"group_member"}, nil, nil),
 	semanticSpec("SC03", "phishing.brand_field_conflict", "", "实际品牌、字段级引用及核验授权背景；不替代欺骗或行动门槛", "brand_field", false, []string{"brand", "credential_fields", "brand_authorization"}, nil, nil),
-	semanticSpec("R06", "history.same_campaign", "", "最多5条独立定谳历史及当前模式；必须引用定谳ID", "", true, []string{"history", "current_pattern"}, nil, nil),
-	semanticSpec("R07", "history.false_positive_match", "", "审核误报历史及实际当前模式；模型不能扣分", "", true, []string{"history", "current_pattern"}, nil, nil),
+	semanticSpec("R06", "history.activity_association", "", "引用历史活动与当前模式，解释同IOC/资产关联；相似不自动等于同战役", "", true, []string{"history", "current_pattern"}, nil, nil),
+	semanticSpec("R07", "history.alternative_explanation", "", "使用全部关联历史比较业务解释与异常解释，不按审核状态筛选，不以相似认定误报", "", true, []string{"history", "current_pattern"}, nil, nil),
 }
 
 func SemanticDefinitions() []SemanticDefinition {

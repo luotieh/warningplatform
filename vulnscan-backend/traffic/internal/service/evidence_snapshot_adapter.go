@@ -23,11 +23,12 @@ import (
 	"vulnscan-backend/traffic/internal/store"
 )
 
-const snapshotAdapterVersion = "snapshot-evidence-adapter-0.4"
+const snapshotAdapterVersion = "snapshot-evidence-adapter-0.5"
 
 // SnapshotEvidenceOptions limits the shared load, not each algorithm separately.
 // Large snapshots are explicitly deferred, never evaluated using model samples.
 type SnapshotEvidenceOptions struct {
+	PlatformHistory   *ReportHistory
 	CaptureSemantic   bool
 	Facts             []evidence.FactID
 	MaxHits           int64
@@ -45,29 +46,30 @@ func DefaultSnapshotEvidenceOptions() SnapshotEvidenceOptions {
 }
 
 type SnapshotEvidenceManifest struct {
-	AdapterVersion        string                 `json:"adapter_version"`
-	RegistryVersion       string                 `json:"registry_version"`
-	SnapshotVersion       int64                  `json:"snapshot_version"`
-	Watermark             int64                  `json:"watermark"`
-	RevisionWatermark     int64                  `json:"revision_watermark"`
-	DeclaredHits          int64                  `json:"declared_hits"`
-	LoadedHits            int64                  `json:"loaded_hits"`
-	BoundHits             int64                  `json:"bound_hits"`
-	UnresolvedHits        int64                  `json:"unresolved_hits"`
-	ReadPages             int                    `json:"read_pages"`
-	RevisionBatches       int                    `json:"revision_batches"`
-	RawBytes              int64                  `json:"raw_bytes"`
-	MaxHits               int64                  `json:"max_hits"`
-	MaxRawBytes           int64                  `json:"max_raw_bytes"`
-	MaxScopes             int                    `json:"max_scopes"`
-	Coverage              string                 `json:"coverage"`
-	MissingInputs         []string               `json:"missing_inputs"`
-	Issues                []SnapshotInputIssue   `json:"issues,omitempty"`
-	IssueCount            int                    `json:"issue_count"`
-	OmittedIssues         int                    `json:"omitted_issues"`
-	FactCoverage          []SnapshotFactCoverage `json:"fact_coverage,omitempty"`
-	SupplementalVersion   string                 `json:"supplemental_version,omitempty"`
-	SourceRegistryVersion string                 `json:"source_registry_version,omitempty"`
+	History               *ReportHistoryDiagnostics `json:"history,omitempty"`
+	AdapterVersion        string                    `json:"adapter_version"`
+	RegistryVersion       string                    `json:"registry_version"`
+	SnapshotVersion       int64                     `json:"snapshot_version"`
+	Watermark             int64                     `json:"watermark"`
+	RevisionWatermark     int64                     `json:"revision_watermark"`
+	DeclaredHits          int64                     `json:"declared_hits"`
+	LoadedHits            int64                     `json:"loaded_hits"`
+	BoundHits             int64                     `json:"bound_hits"`
+	UnresolvedHits        int64                     `json:"unresolved_hits"`
+	ReadPages             int                       `json:"read_pages"`
+	RevisionBatches       int                       `json:"revision_batches"`
+	RawBytes              int64                     `json:"raw_bytes"`
+	MaxHits               int64                     `json:"max_hits"`
+	MaxRawBytes           int64                     `json:"max_raw_bytes"`
+	MaxScopes             int                       `json:"max_scopes"`
+	Coverage              string                    `json:"coverage"`
+	MissingInputs         []string                  `json:"missing_inputs"`
+	Issues                []SnapshotInputIssue      `json:"issues,omitempty"`
+	IssueCount            int                       `json:"issue_count"`
+	OmittedIssues         int                       `json:"omitted_issues"`
+	FactCoverage          []SnapshotFactCoverage    `json:"fact_coverage,omitempty"`
+	SupplementalVersion   string                    `json:"supplemental_version,omitempty"`
+	SourceRegistryVersion string                    `json:"source_registry_version,omitempty"`
 }
 
 type SnapshotEvidenceInput struct {
@@ -330,6 +332,7 @@ func (s Services) SnapshotEvidenceInput(ctx context.Context, snap EvidenceSnapsh
 	buildSnapshotAssetInputs(&out.Request)
 	produceSnapshotSupplemental(&out, snap, opts.Sources)
 	applySnapshotSupplemental(&out, snap, opts.Supplemental)
+	applyPlatformHistory(&out, snap, opts.PlatformHistory)
 	return out, nil
 }
 

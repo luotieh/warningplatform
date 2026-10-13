@@ -240,6 +240,17 @@ WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'events' AND INDEX_NAME = 'idx_
 		}
 		log.Printf("traffic: added missing index events.idx_events_archive_date")
 	}
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='events' AND INDEX_NAME='idx_events_history_time'").Scan(&idxCount); err != nil {
+		return fmt.Errorf("traffic: check history index: %w", err)
+	}
+	if idxCount == 0 {
+		if _, err := db.ExecContext(ctx, "ALTER TABLE events ADD KEY idx_events_history_time (last_seen_at,event_id)"); err != nil {
+			var me *mysql.MySQLError
+			if !errors.As(err, &me) || me.Number != 1061 {
+				return fmt.Errorf("traffic: create history index: %w", err)
+			}
+		}
+	}
 	// 存量事件回填 last_seen_at（升级前该字段只存在 context JSON 中）。
 	if _, err := db.ExecContext(ctx, `
 UPDATE events

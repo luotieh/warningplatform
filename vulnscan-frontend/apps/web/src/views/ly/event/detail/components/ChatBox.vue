@@ -150,6 +150,28 @@ const visibleChatMessages = computed(() =>
 );
 const hiddenMessageCount = computed(() => chatMessages.value.length - visibleChatMessages.value.length);
 
+const suggestedQuestions = computed(() => {
+  if (loading.value) return [];
+  const latest = visibleChatMessages.value.at(-1);
+  if (!latest || latest.isUser || latest.thinking || latest.streaming ||
+      !['event_summary', 'assistant_response'].includes(latest.messageType)) return [];
+  return [
+    '支撑当前结论的关键证据是什么？有哪些不确定性？',
+    /误报|正常通信/.test(latest.content)
+      ? '如何核实通信对象的业务归属，进一步确认是否为正常通信？'
+      : '还需要补充哪些信息，才能进一步确认是否为误报？',
+    '针对这个事件，下一步应该如何排查和处置？请按优先级列出。',
+  ];
+});
+
+async function askSuggestedQuestion(question: string) {
+  // Keep a manually drafted question intact when sending a suggested follow-up.
+  const draft = messageInput.value;
+  const eventId = props.eventId;
+  await sendAIMessage(question);
+  if (props.eventId === eventId && !messageInput.value) messageInput.value = draft;
+}
+
 async function showHistory() {
   const el = chatScrollEl;
   const previousHeight = el?.scrollHeight || 0;
@@ -664,6 +686,20 @@ onUnmounted(() => {
       {{ sendError }}
     </NAlert>
     <div class="chat-input-container">
+      <div v-if="suggestedQuestions.length" class="suggested-questions" aria-label="继续提问">
+        <span class="suggested-questions-label">继续提问</span>
+        <div class="suggested-questions-list">
+          <NButton
+            v-for="question in suggestedQuestions"
+            :key="question"
+            class="suggested-question"
+            size="small"
+            secondary
+            round
+            @click="askSuggestedQuestion(question)"
+          >{{ question }}</NButton>
+        </div>
+      </div>
       <div class="chat-input-wrapper">
         <NInput
           v-model:value="messageInput"
@@ -982,6 +1018,36 @@ onUnmounted(() => {
   flex: 0 0 auto;
   padding: 10px 16px 16px;
   z-index: 2;
+}
+
+.suggested-questions {
+  max-width: 1000px;
+  margin: 0 auto 10px;
+}
+
+.suggested-questions-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--msg-muted);
+  font-size: 12px;
+}
+
+.suggested-questions-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.suggested-question {
+  max-width: 100%;
+  height: auto;
+  padding: 7px 12px;
+}
+
+.suggested-question :deep(.n-button__content) {
+  white-space: normal;
+  text-align: left;
+  line-height: 1.5;
 }
 
 .chat-input-wrapper {

@@ -21,6 +21,7 @@ type Store interface {
 	ListEvents() []domain.Event
 	ListEventsPage(q EventQuery) (EventPage, error)
 	ListEventsMatching(q EventQuery) ([]domain.Event, error)
+	HistoryCandidates(context.Context, HistoryQuery) ([]domain.Event, error)
 	ListEventsConvergedDue(threshold time.Time) []domain.Event
 	ListEventsByTargetIP(ip string, from time.Time, to time.Time) []domain.Event
 	ArchiveConvergedEvents(threshold time.Time, batchSize int) (int, error)

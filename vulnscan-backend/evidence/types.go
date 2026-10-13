@@ -9,7 +9,7 @@ type FactID string
 const (
 	BeaconPeriodic  FactID = "F_BEACON_PERIODIC"
 	MultiDayPersist FactID = "F_MULTI_DAY_PERSIST"
-	RuleVersion            = "evidence-algorithms-0.4"
+	RuleVersion            = "evidence-algorithms-0.5"
 )
 
 type Scope struct {

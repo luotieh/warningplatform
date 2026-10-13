@@ -3,6 +3,7 @@ package evidence
 import (
 	"math"
 	"net/netip"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -12,7 +13,7 @@ func reviewed(event HistoryEvent) bool {
 	return event.AdjudicationID != "" && (event.Adjudication == "malicious" || event.Adjudication == "false_positive") && (event.AdjudicationSource == "human" || event.AdjudicationSource == "host_evidence" || event.AdjudicationSource == "authoritative_external")
 }
 func validHistory(h *HistoryData, currentID string) bool {
-	if h == nil || !provenance(h.Provenance) || !h.Complete || h.AsOf.IsZero() || h.LookbackStart.IsZero() || !h.LookbackStart.Before(h.AsOf) {
+	if h == nil || !provenance(h.Provenance) || (!h.Complete && !h.PlatformRecords) || h.AsOf.IsZero() || h.LookbackStart.IsZero() || !h.LookbackStart.Before(h.AsOf) {
 		return false
 	}
 	seen := map[string]bool{}
@@ -31,10 +32,19 @@ func (e *Engine) historyFact(f Finding, g *observations) Finding {
 	if f.FactID == "F_EXCL_SCAN_TASK" || f.FactID == "F_EXCL_INFRA_ROLE" || f.FactID == "F_HIST_EXERCISE" {
 		return e.authorization(f, g)
 	}
-	if g.input == nil || !validHistory(g.input.History, g.request.EventID) {
+	if g.input == nil {
 		return absent(f, MissingInput)
 	}
 	h := g.input.History
+	if g.input.PlatformHistory != nil && f.FactID != "F_DST_NOVELTY" && f.FactID != "F_HIST_STAGE_PROGRESSION" && f.FactID != "F_HIST_COORD_PARAM_MATCH" && f.FactID != "F_HIST_GROUP_RECURRENCE" {
+		h = g.input.PlatformHistory
+	}
+	if !validHistory(h, g.request.EventID) {
+		return absent(f, MissingInput)
+	}
+	if !h.Complete && f.FactID != "F_HIST_ASSET_IOC_RECURRENCE" && f.FactID != "F_HIST_INFRA_PERSISTENCE" {
+		return absent(f, UnverifiedCoverage)
+	}
 	dependency(&f, "history", h.Provenance)
 	if !g.prepareTime() {
 		return absent(f, InvalidTime)
@@ -62,6 +72,11 @@ func (e *Engine) historyFact(f Finding, g *observations) Finding {
 	}
 	switch f.FactID {
 	case "F_IOC_NOVELTY", "F_DST_NOVELTY":
+		if h.PlatformRecords && f.FactID == "F_DST_NOVELTY" {
+			// Platform address/IOC matching does not establish an exact historical
+			// transport endpoint (protocol and port).
+			return absent(f, UnresolvedBinding)
+		}
 		target := h.IOC
 		if f.FactID == "F_DST_NOVELTY" {
 			target = h.Endpoint
@@ -87,7 +102,7 @@ func (e *Engine) historyFact(f Finding, g *observations) Finding {
 		days := map[string]bool{}
 		count, malicious, benign, unknown := 0, 0, 0, 0
 		for _, r := range rows {
-			if r.AssetID != g.scope.AssetID || r.IOC != h.IOC || r.Time.Before(h.AsOf.AddDate(0, 0, -30)) {
+			if !historyAssetMatches(r, g.scope.AssetID) || r.IOC != h.IOC || r.Time.Before(h.AsOf.AddDate(0, 0, -30)) {
 				continue
 			}
 			count++
@@ -101,8 +116,8 @@ func (e *Engine) historyFact(f Finding, g *observations) Finding {
 				unknown++
 			}
 		}
-		f.Limitations = append(f.Limitations, "复发与历史定谳分别记录；未审核历史不证明恶意，不执行旧版加减分")
-		return finish(f, count >= 2 && len(days) >= 2, map[string]float64{"independent_events": float64(count), "days_active": float64(len(days)), "malicious_adjudications": float64(malicious), "false_positive_adjudications": float64(benign), "unreviewed_events": float64(unknown)}, refs...)
+		f.Limitations = append(f.Limitations, "复发反映已保存历史活动；不执行旧版加减分")
+		return finishHistory(f, h, count >= 2 && len(days) >= 2, map[string]float64{"independent_events": float64(count), "days_active": float64(len(days)), "malicious_adjudications": float64(malicious), "false_positive_adjudications": float64(benign), "unreviewed_events": float64(unknown)}, refs...)
 	case "F_HIST_GROUP_RECURRENCE":
 		if h.GroupID == "" || !h.GroupMembershipVerified || len(unique(h.CurrentMemberIDs)) < 3 {
 			return absent(f, UnresolvedBinding)
@@ -132,15 +147,22 @@ func (e *Engine) historyFact(f Finding, g *observations) Finding {
 		days, assets := map[string]bool{}, map[string]bool{}
 		for _, r := range rows {
 			if r.IOC == h.IOC {
-				if r.AssetID == "" {
+				if r.AssetID == "" && len(r.AssetIDs) == 0 {
 					return absent(f, MissingInput)
 				}
 				days[r.Time.In(e.dayLocation).Format("2006-01-02")] = true
-				assets[r.AssetID] = true
+				if r.AssetID != "" {
+					assets[r.AssetID] = true
+				}
+				for _, id := range r.AssetIDs {
+					if id != "" {
+						assets[id] = true
+					}
+				}
 			}
 		}
 		consecutive := consecutiveDays(days, e.dayLocation)
-		return finish(f, consecutive >= 2 && len(assets) >= 2, map[string]float64{"days_active": float64(len(days)), "consecutive_days": float64(consecutive), "distinct_assets": float64(len(assets))}, refs...)
+		return finishHistory(f, h, consecutive >= 2 && len(assets) >= 2, map[string]float64{"days_active": float64(len(days)), "consecutive_days": float64(consecutive), "distinct_assets": float64(len(assets))}, refs...)
 	case "F_HIST_SCHEDULE_MATCH":
 		threshold, ok := e.policy(&f, "kl_threshold")
 		if !ok || threshold < 0 {
@@ -195,6 +217,20 @@ func (e *Engine) historyFact(f Finding, g *observations) Finding {
 		return finish(f, count >= 3 && float64(count) > b[0], map[string]float64{"distinct_iocs": float64(len(iocs)), "distinct_rule_families": float64(len(families))}, refs...)
 	}
 	return absent(f, MissingInput)
+}
+func historyAssetMatches(r HistoryEvent, assetID string) bool {
+	return assetID != "" && (r.AssetID == assetID || slices.Contains(r.AssetIDs, assetID))
+}
+func finishHistory(f Finding, h *HistoryData, observed bool, values map[string]float64, refs ...string) Finding {
+	f = finish(f, observed, values, refs...)
+	if !h.Complete {
+		f.Quality = "partial"
+		f.Limitations = append(f.Limitations, "历史检索覆盖不完整；统计为已检索记录下界")
+		if !observed {
+			f.Status, f.Eligibility, f.ReasonCode = Missing, "ineligible", IncompleteNegative
+		}
+	}
+	return f
 }
 func sameSet(a, b []string) bool {
 	x, y := unique(a), unique(b)

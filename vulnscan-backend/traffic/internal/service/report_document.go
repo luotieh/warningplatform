@@ -158,7 +158,7 @@ func ExportEvidenceReportDOCX(report ReportDocument) ([]byte, error) {
 	}
 	// Detailed appendix comes from the SAME immutable bundle, no database
 	// queries and no regeneration of historical evidence on export.
-	if report.SchemaVersion != "" {
+	if report.SchemaVersion != "" && report.LayoutVersion != reportFivePartLayout {
 		doc.AddPageBreak()
 		doc.AddParagraph("附录：正文证据来源定位").Style("Heading1")
 		doc.AddParagraph(fmt.Sprintf("事件：%s；快照版本：%d；命中水位：%d；修订水位：%d。", report.EventID, report.Evidence.SnapshotVersion, report.Evidence.Watermark, report.Evidence.RevisionWatermark))
@@ -200,6 +200,21 @@ func ExportEvidenceReportDOCX(report ReportDocument) ([]byte, error) {
 				row := table.AddRow()
 				for _, v := range []string{string(f.FactID), f.Scope.AssetID + " / " + f.Scope.EndpointID, f.Status, string(f.Reason)} {
 					row.AddCell().AddParagraph(v)
+				}
+			}
+		}
+		if history := report.Evidence.History; history != nil && len(history.Rows) > 0 {
+			doc.AddParagraph("平台历史活动清单（活动关联不代表同战役）").Style("Heading1")
+			historyTable := doc.AddTable()
+			historyTable.Style("TableGrid")
+			header := historyTable.AddRow()
+			for _, text := range []string{"历史事件ID", "活动时间（UTC）", "匹配关系", "资产 / IOC"} {
+				header.AddCell().AddParagraph(text)
+			}
+			for _, item := range history.Rows {
+				row := historyTable.AddRow()
+				for _, text := range []string{item.EventID, item.First.UTC().Format(time.RFC3339) + " 至 " + item.Last.UTC().Format(time.RFC3339), item.Relation, strings.Join(item.AllAssetIDs, ", ") + " / " + fmt.Sprint(item.ActivityIOCs)} {
+					row.AddCell().AddParagraph(text)
 				}
 			}
 		}

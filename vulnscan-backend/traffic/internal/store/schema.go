@@ -44,7 +44,8 @@ CREATE TABLE IF NOT EXISTS events (
     last_seen_at DATETIME(6) NULL,
     archive_date DATE NULL COMMENT '逻辑归档日（Asia/Shanghai 自然日，NULL=未归档/今日视图）',
     KEY idx_events_created_at (created_at DESC),
-    KEY idx_events_archive_date (archive_date, created_at DESC)
+    KEY idx_events_archive_date (archive_date, created_at DESC),
+    KEY idx_events_history_time (last_seen_at, event_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS messages (

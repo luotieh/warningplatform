@@ -198,6 +198,8 @@ func (s Services) runAnalysis(ctx context.Context, eventID string, kind string, 
 	}
 	document := ReportDocument{SchemaVersion: reportEvidenceVersion, EventID: eventID, Title: firstNonEmpty(event.EventName, event.Title, "安全事件研判报告"), AnalysisVersion: version, Kind: kind, CreatedAt: time.Now().UTC(), Evidence: prepared.Evidence, Assessment: assessment, Validation: "references_and_facts_validated", ModelIdentity: digest(semanticModelIdentity(s))}
 	document.AssetSection = prepared.AssetSection
+	document.LayoutVersion = reportFivePartLayout
+	document.EventOverview = reportEventOverview(event, prepared.Context, prepared.AssetSection)
 	reply := renderReportMarkdown(document)
 	document.Markdown = reply
 	if raw, e := json.Marshal(document); e != nil || len(raw) > 16<<20 {

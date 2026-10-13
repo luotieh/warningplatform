@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-const SemanticVersion = "evidence-semantics-0.2"
+const SemanticVersion = "evidence-semantics-0.4"
 
 type SemanticInputMode string
 
