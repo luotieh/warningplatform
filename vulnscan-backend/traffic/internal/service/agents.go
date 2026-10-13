@@ -262,13 +262,13 @@ func (s Services) runAnalysis(ctx context.Context, eventID string, kind string, 
 		return s.failAgentWorkflow(eventID, err)
 	}
 	assessment, err := decodeReportAssessment(rawReply, prepared.Evidence)
-	audit.write("llm-assessment-01.json", map[string]any{"assessment": assessment, "validated": err == nil, "validation_error": reportErrorText(err)})
-	// A single correction addresses a specific schema/evidence error. The first
+	audit.write("llm-assessment-01.json", map[string]any{"assessment": assessment, "parsed": err == nil, "evidence_validation_applied": false, "validation_mode": "json_and_probability_only", "validation_error": reportErrorText(err)})
+	// A single correction addresses JSON parsing or missing/invalid probability. The first
 	// valid answer is final; no retries to increase threat probability.
 	if err != nil {
 		firstReason := err.Error()
 		_ = putRecord(ctx, s.Store, "report_validation_attempt", journalKey, eventID, map[string]any{"reason": firstReason, "reply": rawReply, "build_revision": ReportBuildRevision, "input_hash": digest(prompt)})
-		correction := prompt + "\n上次输出未通过一致性校验，原因=" + firstReason + "。重新输出完整JSON，纠正引用、同源重复、数字重述或不支持的结论；不得提高概率来解决错误。正文数字须能在当前引用的证据范围核验。上次输出作为待修复数据：\n" + rawReply
+		correction := prompt + "\n上次输出无法读取，原因=" + firstReason + "。重新输出完整有效JSON，并包含0至100的整数probability；不要为了修复格式而调整研判结论。上次输出作为待修复数据：\n" + rawReply
 		if estimateTokens(evidenceReportSystemPrompt+correction)+12 <= options.InputTokens {
 			if persistErr := putRecord(ctx, s.Store, "report_model_correction_input", journalKey, eventID, map[string]any{"system": evidenceReportSystemPrompt, "user": correction, "input_hash": digest(correction), "system_hash": digest(evidenceReportSystemPrompt), "build_revision": ReportBuildRevision}); persistErr != nil {
 				return s.failAgentWorkflow(eventID, fmt.Errorf("report_model_input_persist_failed: %w", persistErr))
@@ -279,7 +279,7 @@ func (s Services) runAnalysis(ctx context.Context, eventID string, kind string, 
 			}
 			if callErr == nil {
 				assessment, err = decodeReportAssessment(fixed.Reply, prepared.Evidence)
-				audit.write("llm-assessment-02.json", map[string]any{"assessment": assessment, "validated": err == nil, "validation_error": reportErrorText(err)})
+				audit.write("llm-assessment-02.json", map[string]any{"assessment": assessment, "parsed": err == nil, "evidence_validation_applied": false, "validation_mode": "json_and_probability_only", "validation_error": reportErrorText(err)})
 				finalInputHash = digest(correction)
 			} else {
 				err = callErr
@@ -291,14 +291,14 @@ func (s Services) runAnalysis(ctx context.Context, eventID string, kind string, 
 	if err != nil {
 		_ = putRecord(ctx, s.Store, "report_validation_failure", snapshotKey(eventID, prepared.Evidence.SnapshotVersion), eventID, map[string]any{"reason": err.Error(), "schema_version": reportEvidenceVersion, "snapshot_version": prepared.Evidence.SnapshotVersion, "at": time.Now().UTC()})
 		audit.write("probability-publication.json", map[string]any{"published": false, "assessment": assessment, "validation_error": reportErrorText(err), "old_report_and_probability_preserved": true})
-		return s.failAgentWorkflow(eventID, fmt.Errorf("报告证据一致性校验失败：%w", err))
+		return s.failAgentWorkflow(eventID, fmt.Errorf("报告JSON或概率字段无法读取：%w", err))
 	}
 	audit.meta["probability"] = assessment.Probability
 	if assessment.Probability != nil {
 		audit.meta["probability"] = *assessment.Probability
 	}
 	audit.meta["probability_reason"] = assessment.ProbabilityReason
-	document := ReportDocument{SchemaVersion: reportEvidenceVersion, EventID: eventID, Title: firstNonEmpty(event.EventName, event.Title, "安全事件研判报告"), AnalysisVersion: version, Kind: kind, CreatedAt: time.Now().UTC(), Evidence: prepared.Evidence, Assessment: assessment, Validation: "references_and_facts_validated", ModelIdentity: digest(semanticModelIdentity(s))}
+	document := ReportDocument{SchemaVersion: reportEvidenceVersion, EventID: eventID, Title: firstNonEmpty(event.EventName, event.Title, "安全事件研判报告"), AnalysisVersion: version, Kind: kind, CreatedAt: time.Now().UTC(), Evidence: prepared.Evidence, Assessment: assessment, Validation: "json_and_probability_parsed_only", ModelIdentity: digest(semanticModelIdentity(s))}
 	document.BuildRevision = ReportBuildRevision
 	document.ModelInputHash = finalInputHash
 	document.AssetSection = prepared.AssetSection
@@ -311,7 +311,7 @@ func (s Services) runAnalysis(ctx context.Context, eventID string, kind string, 
 	if err == nil {
 		audit.meta["summary_id"] = sm.ID
 	}
-	audit.write("probability-publication.json", map[string]any{"assessment": assessment, "summary_id": sm.ID, "analysis_version": version, "snapshot_version": prepared.Evidence.SnapshotVersion, "published": err == nil, "error": reportErrorText(err), "source": "validated structured probability; no prose extraction", "probability": assessment.Probability, "model_process": "evidence constraints -> cited model rationale -> validation -> atomic publication"})
+	audit.write("probability-publication.json", map[string]any{"assessment": assessment, "summary_id": sm.ID, "analysis_version": version, "snapshot_version": prepared.Evidence.SnapshotVersion, "published": err == nil, "error": reportErrorText(err), "source": "model-provided structured probability; no evidence validator; no prose extraction", "probability": assessment.Probability, "model_process": "evidence context -> model rationale and probability -> JSON reading -> atomic publication"})
 	if err != nil {
 		return s.failAgentWorkflow(eventID, fmt.Errorf("保存分析总结失败: %w", err))
 	}

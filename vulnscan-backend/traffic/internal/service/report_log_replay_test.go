@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -48,13 +47,16 @@ func TestReportDownloadedAssessmentReplay(t *testing.T) {
 	if log.ValidationError != "report_count_requires_numeric_citation" {
 		t.Fatal("unexpected source regression")
 	}
-	// The old validator stopped at 五分钟桶. After fixing that false positive,
-	// this particular answer exposes a genuine unsupported claim: 17 days on
-	// E006, which lists 16 active dates. Do not approve it by widening scope.
-	_, err = decodeReportAssessment(string(log.Assessment), bundle)
-	if err == nil || !strings.Contains(err.Error(), "report_fact_numbers_not_in_cited_scope: value=17 refs=E006") {
-		t.Fatalf("real unsupported active-day claim was not retained: %v", err)
+	// The user disabled the report evidence checker. Replay must preserve the
+	// model result and allow publication without applying the historical rules.
+	a, err := decodeReportAssessment(string(log.Assessment), bundle)
+	if err != nil {
+		t.Fatalf("removed checker still blocked real report: %v", err)
 	}
+	if a.Probability == nil || *a.Probability != 55 {
+		t.Fatal("model probability changed")
+	}
+
 	entries := map[string]ReportEvidence{}
 	for _, e := range bundle.Entries {
 		entries[e.ID] = e

@@ -75,7 +75,7 @@ func TestInvalidModelReportFailsWithoutPublishingSummary(t *testing.T) {
 		reply := "OK"
 		for _, m := range request.Messages {
 			if m.Role == "user" && m.Content != "health" {
-				reply = `{"target":"malicious_activity","probability":99}`
+				reply = `{"target":"malicious_activity","probability":101}`
 			}
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"finish_reason": "stop", "message": map[string]any{"content": reply}}}})
@@ -93,7 +93,7 @@ func TestInvalidModelReportFailsWithoutPublishingSummary(t *testing.T) {
 		t.Fatalf("unexpected failure state: %s", event.EventStatus)
 	}
 	record, exists, err := svc.Store.AggregateRecord(context.Background(), "report_validation_failure", snapshotKey(snap.EventID, snap.Version))
-	if err != nil || !exists || !strings.Contains(string(record.Value), "report_threat_type_invalid") {
+	if err != nil || !exists || !strings.Contains(string(record.Value), "report_probability_out_of_range") {
 		t.Fatal("validation diagnostic missing")
 	}
 }

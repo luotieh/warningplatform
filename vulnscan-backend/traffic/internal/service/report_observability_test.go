@@ -41,6 +41,15 @@ func TestFormalWorkflowLogsActualInputAndPublishesProbability(t *testing.T) {
 				if user != "health" {
 					actual = payload
 					reply = acceptedReportResponse(t, user)
+					var assessment ReportAssessment
+					if err := json.Unmarshal([]byte(reply), &assessment); err != nil {
+						t.Fatal(err)
+					}
+					// This was rejected by the removed keyword checker. It must now
+					// publish, synchronize probability, and remain readable/exportable.
+					assessment.ProbabilityReason = "但无恶意内容、凭据或指令等直接证据"
+					raw, _ := json.Marshal(assessment)
+					reply = string(raw)
 				}
 				_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"finish_reason": "stop", "message": map[string]any{"content": reply}}}, "usage": map[string]any{"prompt_tokens": 1234, "completion_tokens": 456, "completion_tokens_details": map[string]any{"reasoning_tokens": 0}}})
 			}))
@@ -55,6 +64,9 @@ func TestFormalWorkflowLogsActualInputAndPublishesProbability(t *testing.T) {
 			doc, err := svc.ReportDocument(context.Background(), snap.EventID, 0)
 			if err != nil {
 				t.Fatal(err)
+			}
+			if doc.Validation != "json_and_probability_parsed_only" || doc.Assessment.ProbabilityReason != "但无恶意内容、凭据或指令等直接证据" {
+				t.Fatal("removed checker still applied or result changed")
 			}
 			event := mustEvent(t, svc, snap.EventID)
 			if doc.Assessment.Probability == nil || toInt(decodeEventContext(event.Context)["ai_probability"]) != *doc.Assessment.Probability {
@@ -149,8 +161,8 @@ func TestNewProbabilityRequiredButLegacyStillReadable(t *testing.T) {
 	a = validReportAssessment(bundle)
 	a.ProbabilityReason = ""
 	raw, _ = json.Marshal(a)
-	if _, err := decodeReportAssessment(string(raw), bundle); err == nil {
-		t.Fatal("reason missing accepted")
+	if _, err := decodeReportAssessment(string(raw), bundle); err != nil {
+		t.Fatal("optional reason blocked report", err)
 	}
 	for _, n := range []int{0, 55, 101, -1} {
 		a = validReportAssessment(bundle)
