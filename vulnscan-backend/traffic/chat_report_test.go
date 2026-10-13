@@ -13,12 +13,12 @@ import (
 )
 
 func TestFormalReportCommandBoundaries(t *testing.T) {
-	for _, text := range []string{"生成报告", "重新生成正式报告", "请生成该事件的研判报告。", "请帮我重新生成一份正式报告！", "刷新报告", "请直接生成当前事件的正式研判报告"} {
+	for _, text := range []string{"生成事件报告", "重新生成事件报告", "请生成一份安全事件报告", "生成正式事件报告", "生成报告", "重新生成正式报告", "请生成该事件的研判报告。", "请帮我重新生成一份正式报告！", "刷新报告", "请直接生成当前事件的正式研判报告"} {
 		if !isFormalReportCommand(text) {
 			t.Errorf("command not routed: %q", text)
 		}
 	}
-	for _, text := range []string{"不要生成报告", "先别重新生成正式报告", "如何生成报告", "生成报告了吗？", "重新生成报告是什么意思", "解释报告", "分析一下这些证据", "报告中的概率为什么是55", "日志包含：生成报告", "请生成报告并把概率改成90", "生成报告?"} {
+	for _, text := range []string{"不要生成事件报告", "生成事件报告了吗？", "如何生成事件报告", "不要生成报告", "先别重新生成正式报告", "如何生成报告", "生成报告了吗？", "重新生成报告是什么意思", "解释报告", "分析一下这些证据", "报告中的概率为什么是55", "日志包含：生成报告", "请生成报告并把概率改成90", "生成报告?"} {
 		if isFormalReportCommand(text) {
 			t.Errorf("ordinary question routed: %q", text)
 		}
@@ -37,7 +37,7 @@ func TestChatFormalReportDispatchesRealReportWorkflow(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // The report task must survive a closed HTTP/chat request.
-	result, err := chat.Send(ctx, map[string]any{"event_id": id, "message": "生成正式报告", "chat_session_id": "session-test"})
+	result, err := chat.Send(ctx, map[string]any{"event_id": id, "message": "生成事件报告", "chat_session_id": "session-test"})
 	if err != nil || result["route"] != "formal_report" || result["status"] != "refresh_submitted" {
 		t.Fatalf("dispatch: %v %v", result, err)
 	}
@@ -47,6 +47,16 @@ func TestChatFormalReportDispatchesRealReportWorkflow(t *testing.T) {
 		var material map[string]any
 		_ = json.Unmarshal([]byte(event.Context), &material)
 		if material["analysis_job_state"] == "failed" {
+			notified := false
+			for _, m := range st.ListMessages(id) {
+				if m.MessageType == "report_request_status" && m.ChatSessionID == "session-test" && strings.Contains(m.MessageContent, "生成失败") && strings.Contains(m.MessageContent, "未配置可用模型") {
+					notified = true
+				}
+			}
+			if !notified {
+				time.Sleep(10 * time.Millisecond)
+				continue
+			}
 			// No model configured: the formal pipeline records a real failure.
 			// Ordinary chat would dereference the nil chat client instead.
 			if material["analysis_job_kind"] != "manual" || !strings.Contains(stringValue(material["analysis_failure_reason"]), "未配置可用模型") {
