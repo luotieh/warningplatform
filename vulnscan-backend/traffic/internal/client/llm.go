@@ -23,6 +23,8 @@ type LLMClient struct {
 	DisableThinking bool
 	// Explicit report-only provider control; unset for all existing callers.
 	ReportThinkingDisabled bool
+	// Set only on a report-local copy; receives no headers or credentials.
+	ReportObserver func(string, any)
 }
 
 // effectiveMaxTokens 返回本次调用实际使用的输出 token 预算。

@@ -16,5 +16,18 @@ func (m reportSemanticAuditModel) Complete(ctx context.Context, call evidence.Se
 	if err := m.Save(ctx, call); err != nil {
 		return "", fmt.Errorf("semantic_input_audit_write_failed: %w", err)
 	}
-	return m.Model.Complete(ctx, call)
+	r := reportLogFrom(ctx)
+	n := 0
+	if r != nil {
+		r.mu.Lock()
+		r.semantic++
+		n = r.semantic
+		r.mu.Unlock()
+		r.write(fmt.Sprintf("semantic-call-%02d-request.json", n), map[string]any{"system": call.System, "user": call.Prompt, "max_output_tokens": call.MaxOutputTokens, "sent": false, "boundary": "semantic model adapter"})
+	}
+	reply, err := m.Model.Complete(ctx, call)
+	if r != nil {
+		r.write(fmt.Sprintf("semantic-call-%02d-response.json", n), map[string]any{"reply": reply, "error": err != nil, "usage_available": false, "request_invoked": true})
+	}
+	return reply, err
 }

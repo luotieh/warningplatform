@@ -234,7 +234,11 @@ func (s Services) prepareReportSemantics(ctx context.Context, snap EvidenceSnaps
 	if persist {
 		model = s.SemanticModel
 		if model == nil && s.LLM != nil {
-			model = client.EvidenceSemanticModel{Client: *s.LLM}
+			semanticClient := *s.LLM
+			if audit := reportLogFrom(ctx); audit != nil {
+				semanticClient.ReportObserver = audit.observeSemantic
+			}
+			model = client.EvidenceSemanticModel{Client: semanticClient}
 		}
 		if model != nil {
 			model = reportSemanticAuditModel{Model: model, Save: func(ctx context.Context, call evidence.SemanticCall) error {

@@ -4,6 +4,7 @@ import "context"
 
 // Dedicated report telemetry; Chat and other callers keep their existing API.
 type ReportCompletion struct {
+	Usage            map[string]any
 	Reply            string
 	PromptTokens     int
 	CompletionTokens int
@@ -12,5 +13,5 @@ type ReportCompletion struct {
 
 func (c LLMClient) CompleteReport(ctx context.Context, system, prompt string) (ReportCompletion, error) {
 	r, err := c.complete(ctx, system, prompt, c.effectiveMaxTokens(), nil)
-	return ReportCompletion{r.Reply, r.PromptTokens, r.CompletionTokens, r.FinishReason}, err
+	return ReportCompletion{Reply: r.Reply, PromptTokens: r.PromptTokens, CompletionTokens: r.CompletionTokens, FinishReason: r.FinishReason, Usage: r.Usage}, err
 }

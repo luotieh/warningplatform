@@ -45,3 +45,13 @@ func SemanticDefinitions() []SemanticDefinition {
 	}
 	return out
 }
+
+// Read-only dependency catalog for report diagnostics; execution gates remain
+// authoritative, including explicit report-practical overrides.
+func SemanticDependencyDefinitions() []map[string]any {
+	out := []map[string]any{}
+	for _, s := range semanticSpecs {
+		out = append(out, map[string]any{"definition": s.SemanticDefinition, "material_kinds": append([]string(nil), s.Kinds...), "all_facts": append([]FactID(nil), s.AllFacts...), "any_facts": append([]FactID(nil), s.AnyFacts...), "note": "baseline catalog; report-practical overrides and actual gates are recorded in execution plan"})
+	}
+	return out
+}

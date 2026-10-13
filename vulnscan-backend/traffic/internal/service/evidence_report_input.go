@@ -202,6 +202,11 @@ func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event
 		"evidence_result_persisted": resultPersisted, "diagnostics_key": snapshotKey(snap.EventID, snap.Version),
 	}
 	snap.Manifest = manifest
+	if audit := reportLogFrom(ctx); audit != nil {
+		audit.meta["snapshot_version"] = snap.Version
+		audit.write("fact-preparation.json", evaluation)
+		audit.write("snapshot-materials.json", map[string]any{"snapshot": snap, "history": history, "material_cache_key": key})
+	}
 	semantics, semanticErr := s.prepareReportSemantics(ctx, snap, evaluation, key, sharedInput, persist, resultPersisted, func() (SnapshotEvidenceInput, error) { return s.SnapshotEvidenceInput(ctx, snap, assets, options) })
 	if semanticErr != nil && ctx.Err() != nil {
 		return preparedReportInput{}, ctx.Err()
