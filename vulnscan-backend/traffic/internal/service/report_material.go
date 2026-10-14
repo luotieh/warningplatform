@@ -20,6 +20,7 @@ import (
 // One entry per immutable hit. Kept with the fact cache so cache hits retain
 // metadata from the entire membership, rather than representative packets.
 type ReportMaterialObservation struct {
+	PacketBytes      *int            `json:"verified_packet_bytes,omitempty"`
 	TLSRecordType    string          `json:"verified_tls_record_header_type,omitempty"`
 	PayloadBytes     *int            `json:"verified_transport_payload_bytes,omitempty"`
 	TCPFlags         string          `json:"verified_tcp_flags,omitempty"`
@@ -47,6 +48,10 @@ func reportMaterialObservation(h store.Hit, m map[string]any, scope evidence.Sco
 	}
 	packet := nestedMap(m, "raw_packet")
 	if packet["report_quality_derivation"] != nil {
+		if raw, err := hex.DecodeString(asString(packet["packet_hex"])); err == nil && len(raw) > 0 {
+			n := len(raw)
+			o.PacketBytes = &n
+		}
 		if raw, err := hex.DecodeString(asString(packet["payload_hex"])); err == nil {
 			n := len(raw)
 			o.PayloadBytes = &n

@@ -19,7 +19,7 @@ const statuses: Record<string, string> = { observed: '成立', not_observed: '�
     <div v-if="document" class="report-version">报告版本 {{ document.analysis_version }} · 快照版本 {{ evidence.snapshot_version }} · 依据及引用已校验</div>
     <div v-else-if="legacyMarkdown" class="legacy-note">历史报告：没有绑定新版结构化证据清单，保留原报告内容。</div>
     <div class="report-content" v-html="html"></div>
-    <template v-if="document?.layout_version !== 'five-part-v1'">
+    <template v-if="!['five-part-v1', 'five-part-v2'].includes(document?.layout_version)">
     <details v-if="evidence.normalized_evidence?.items" class="audit">
       <summary>查看统一证据索引（事实、语义及全部执行状态）</summary>
       <p>共 {{ evidence.normalized_evidence.items.length }} 个证据实例；正文采用 {{ evidence.selected_ids?.length || 0 }} 项精华。省略的结果与来源仍完整保存。</p>

@@ -162,7 +162,7 @@ func reportCell(s string) string {
 var reportThreatTypeNames = map[string]string{"phishing_related": "钓鱼相关线索", "c2_related": "指令控制相关线索", "botnet_related": "群体协同相关线索", "mining_related": "挖矿通信相关线索", "dns_related": "DNS异常相关线索", "exfiltration_related": "数据传输异常相关线索", "scanning_related": "扫描行为相关线索", "suspicious_contact": "可疑目标通联", "normal_business": "正常业务倾向", "undetermined": "威胁类型待核查"}
 
 func renderReportMarkdown(doc ReportDocument) string {
-	if doc.LayoutVersion == reportFivePartLayout {
+	if doc.LayoutVersion == reportFivePartLayout || doc.LayoutVersion == reportFivePartLegacyLayout {
 		return renderFivePartReport(doc)
 	}
 	if narrativeReportVersion(doc.SchemaVersion) {

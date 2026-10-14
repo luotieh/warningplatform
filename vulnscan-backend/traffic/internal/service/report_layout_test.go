@@ -70,3 +70,50 @@ func TestFivePartReportLayoutAndPinnedExport(t *testing.T) {
 		t.Fatal("unbound risk accepted")
 	}
 }
+
+func TestCompactEventOverviewKeepsOnlyEventEssentials(t *testing.T) {
+	doc := ReportDocument{EventOverview: map[string]string{"事件类型": "与钓鱼情报关联IP通联", "事件ID": "private-event-id", "资产与业务归属": "long registry details"}}
+	doc.Evidence.Overview = ReportEventOverview{
+		First: time.Date(2026, 10, 14, 6, 53, 0, 0, time.UTC), Last: time.Date(2026, 10, 14, 6, 56, 0, 0, time.UTC), SavedHits: 58,
+		Tuples: []ReportOverviewTuple{{Source: "180.104.100.118:52340", Destination: "172.67.190.89:443", Protocol: "TCP", Hits: 58}},
+		IOCs:   []ReportOverviewIOC{{Value: "172.67.190.89", Category: "钓鱼", Source: "OTX", Confidence: "high"}},
+	}
+	text := renderCompactEventOverview(doc)
+	for _, required := range []string{"事件类型 | 与钓鱼情报关联IP通联", "明文：未确认", "14:53:00 至 14:56:00", "180.104.100.118:52340 → 172.67.190.89:443（TCP）", "58条告警命中", "OTX", "钓鱼"} {
+		if !strings.Contains(text, required) {
+			t.Fatalf("missing %s: %s", required, text)
+		}
+	}
+	for _, excluded := range []string{"事件ID", "private-event-id", "资产与业务归属", "快照", "报告版本", "58次连接", "58个会话"} {
+		if strings.Contains(text, excluded) {
+			t.Fatalf("unexpected %s", excluded)
+		}
+	}
+	if strings.Count(text, "\n| ") != 8 {
+		t.Fatalf("unexpected overview rows: %s", text)
+	}
+}
+
+func TestCompactOverviewPacketTotalsDeduplicateAndPlaintext(t *testing.T) {
+	size, payload := 60, 0
+	row := ReportMaterialObservation{PhysicalPacketID: "packet-a", PacketBytes: &size, PayloadBytes: &payload}
+	o := buildReportEventOverview(EvidenceSnapshot{}, SnapshotEvidenceManifest{ReportObservations: []ReportMaterialObservation{row, row}})
+	if o.SizedPackets != 1 || o.PacketBytes != 60 || o.Plaintext != "无（无应用载荷）" {
+		t.Fatalf("incorrect summary: %+v", o)
+	}
+	text := renderCompactEventOverview(ReportDocument{Evidence: ReportEvidenceBundle{Overview: o}})
+	if !strings.Contains(text, "1包、60字节；明文：无") {
+		t.Fatal(text)
+	}
+	row.Application = []byte(`{"dns_query":"example.org"}`)
+	o = buildReportEventOverview(EvidenceSnapshot{}, SnapshotEvidenceManifest{ReportObservations: []ReportMaterialObservation{row}})
+	if o.Plaintext != "有" {
+		t.Fatal(o.Plaintext)
+	}
+	row.Application = []byte(`{"sni":"example.org"}`)
+	row.PayloadBytes = nil
+	o = buildReportEventOverview(EvidenceSnapshot{}, SnapshotEvidenceManifest{ReportObservations: []ReportMaterialObservation{row}})
+	if o.Plaintext != "未确认" {
+		t.Fatal("SNI alone cannot establish plaintext payload")
+	}
+}

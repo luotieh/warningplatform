@@ -28,6 +28,9 @@ type ReportOverviewIOC struct {
 // Overview is derived from every bound observation and frozen with the report.
 // Counts refer to saved hits/packets, never inferred sessions or all traffic.
 type ReportEventOverview struct {
+	PacketBytes           int                   `json:"packet_bytes,omitempty"`
+	SizedPackets          int                   `json:"sized_packets,omitempty"`
+	Plaintext             string                `json:"plaintext,omitempty"`
 	First                 time.Time             `json:"first"`
 	Last                  time.Time             `json:"last"`
 	SavedHits             int64                 `json:"saved_hits"`
@@ -42,7 +45,24 @@ func buildReportEventOverview(snap EvidenceSnapshot, manifest SnapshotEvidenceMa
 	o := ReportEventOverview{SavedHits: snap.Count, BoundHits: manifest.BoundHits, Tuples: []ReportOverviewTuple{}, IOCs: []ReportOverviewIOC{}}
 	tuples := map[string]*ReportOverviewTuple{}
 	physical := map[string]bool{}
+	sized := map[string]bool{}
+	hasPlaintext, allEmpty := false, len(manifest.ReportObservations) > 0
 	for _, observation := range manifest.ReportObservations {
+		if observation.PhysicalPacketID != "" && !sized[observation.PhysicalPacketID] && observation.PacketBytes != nil {
+			sized[observation.PhysicalPacketID] = true
+			o.SizedPackets++
+			o.PacketBytes += *observation.PacketBytes
+		}
+		fields := map[string]any{}
+		_ = json.Unmarshal(observation.Application, &fields)
+		for _, key := range []string{"dns_query", "method", "url", "host", "user_agent", "ssh_banner"} {
+			if v, ok := fields[key]; ok && asString(v) != "" {
+				hasPlaintext = true
+			}
+		}
+		if observation.PayloadBytes == nil || *observation.PayloadBytes != 0 {
+			allEmpty = false
+		}
 		if o.First.IsZero() || observation.Time.Before(o.First) {
 			o.First = observation.Time
 		}
@@ -61,6 +81,12 @@ func buildReportEventOverview(snap EvidenceSnapshot, manifest SnapshotEvidenceMa
 		tuples[key].Hits++
 	}
 	o.PhysicalPackets = len(physical)
+	o.Plaintext = "未确认"
+	if hasPlaintext {
+		o.Plaintext = "有"
+	} else if allEmpty {
+		o.Plaintext = "无（无应用载荷）"
+	}
 	keys := []string{}
 	for key := range tuples {
 		keys = append(keys, key)
