@@ -712,7 +712,9 @@ func (s *Server) engineerChatSend(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "事件不存在")
 		return
 	}
-	evidenceContext, evidenceErr := s.services.EvidenceContext(r.Context(), event)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 15*time.Minute)
+	defer cancel()
+	evidenceContext, evidenceErr := s.services.EvidenceContext(ctx, event)
 	if evidenceErr != nil {
 		writeError(w, http.StatusConflict, evidenceErr.Error())
 		return
@@ -720,7 +722,7 @@ func (s *Server) engineerChatSend(w http.ResponseWriter, r *http.Request) {
 	event.Context = evidenceContext
 	_, _ = s.services.Store.AddMessage(domain.Message{EventID: eventID, MessageFrom: domain.RoleUser, MessageType: "user_message", MessageContent: message, RoundID: 1, MessageCategory: "engineer_chat", SenderType: "user"})
 	prompt := s.engineerEventPrompt(event, message)
-	reply, err := s.services.LLM.Chat(r.Context(), service.EngineerChatSystemPrompt, prompt)
+	reply, err := s.services.LLM.Chat(ctx, service.EngineerChatSystemPrompt, prompt)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, err.Error())
 		return

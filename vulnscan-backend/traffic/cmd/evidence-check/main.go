@@ -31,7 +31,7 @@ func main() {
 		for _, d := range evidence.Definitions() {
 			facts = append(facts, map[string]any{"definition": d, "required_inputs": evidence.FactInputs(d.ID)})
 		}
-		value := map[string]any{"facts": facts, "semantic_slots": evidence.SemanticDependencyDefinitions()}
+		value := map[string]any{"facts": facts, "semantic_slots": evidence.SemanticDependencyDefinitions(), "phase_one": map[string]any{"version": evidence.PhaseOneVersion, "units": evidence.PhaseOneDefinitions(), "facts": evidence.PhaseOneFacts(), "semantic_slots": evidence.PhaseOneSlots(), "score_policy": evidence.DefaultPhaseOneConfig()}}
 		if *output != "" {
 			raw, err := json.MarshalIndent(value, "", "  ")
 			if err != nil {

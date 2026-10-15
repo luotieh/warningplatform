@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/pelletier/go-toml/v2"
 	"os"
@@ -9,13 +10,16 @@ import (
 
 // ReportOptions affect formal reports only. Zero budgets preserve old defaults.
 type ReportOptions struct {
-	InputTokens   int    `toml:"report_input_token_limit" json:"input_token_limit"`
-	OutputTokens  int    `toml:"report_output_token_limit" json:"output_token_limit"`
-	ContextTokens int    `toml:"report_context_window_tokens" json:"context_window_tokens"`
-	SafetyTokens  int    `toml:"report_token_safety_margin" json:"safety_margin_tokens"`
-	LogEnabled    *bool  `toml:"report_log_enabled" json:"log_enabled"`
-	LogDir        string `toml:"report_log_dir" json:"log_dir"`
-	RetentionDays int    `toml:"report_log_retention_days" json:"log_retention_days"`
+	PhaseOnePoints        map[string]int `toml:"phase_one_points" json:"phase_one_points,omitempty"`
+	PhaseOnePolicyVersion string         `toml:"phase_one_policy_version" json:"phase_one_policy_version,omitempty"`
+	PhaseOneMaxScore      int            `toml:"phase_one_max_score" json:"phase_one_max_score,omitempty"`
+	InputTokens           int            `toml:"report_input_token_limit" json:"input_token_limit"`
+	OutputTokens          int            `toml:"report_output_token_limit" json:"output_token_limit"`
+	ContextTokens         int            `toml:"report_context_window_tokens" json:"context_window_tokens"`
+	SafetyTokens          int            `toml:"report_token_safety_margin" json:"safety_margin_tokens"`
+	LogEnabled            *bool          `toml:"report_log_enabled" json:"log_enabled"`
+	LogDir                string         `toml:"report_log_dir" json:"log_dir"`
+	RetentionDays         int            `toml:"report_log_retention_days" json:"log_retention_days"`
 }
 
 func LoadReportOptions() (ReportOptions, error) {
@@ -32,12 +36,21 @@ func LoadReportOptions() (ReportOptions, error) {
 		}
 	}
 	o := file.Traffic
+	if v, ok := os.LookupEnv("PHASE_ONE_POINTS"); ok {
+		if err := json.Unmarshal([]byte(v), &o.PhaseOnePoints); err != nil {
+			return o, fmt.Errorf("invalid PHASE_ONE_POINTS")
+		}
+	}
+	if v, ok := os.LookupEnv("PHASE_ONE_POLICY_VERSION"); ok {
+		o.PhaseOnePolicyVersion = v
+	}
 	for _, pair := range []struct {
 		name  string
 		value *int
 	}{
 		{"REPORT_INPUT_TOKEN_LIMIT", &o.InputTokens}, {"REPORT_OUTPUT_TOKEN_LIMIT", &o.OutputTokens},
 		{"REPORT_CONTEXT_WINDOW_TOKENS", &o.ContextTokens}, {"REPORT_TOKEN_SAFETY_MARGIN", &o.SafetyTokens}, {"REPORT_LOG_RETENTION_DAYS", &o.RetentionDays},
+		{"PHASE_ONE_MAX_SCORE", &o.PhaseOneMaxScore},
 	} {
 		if v, ok := os.LookupEnv(pair.name); ok {
 			n, err := strconv.Atoi(v)

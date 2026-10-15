@@ -51,7 +51,7 @@ func (s *evidenceReadCounter) ListAssetsContext(ctx context.Context) ([]domain.A
 
 func evidenceAdapterFixture(t *testing.T, n int) (Services, EvidenceSnapshot, []domain.Asset) {
 	t.Helper()
-	svc := Services{Store: store.NewMemoryStore()}
+	svc := Services{Store: store.NewMemoryStore(), LegacyReportEvidence: true}
 	asset, err := svc.Store.CreateAsset(domain.Asset{ID: "asset-a", Address: "192.0.2.1", Name: "registered host", Status: 1})
 	if err != nil {
 		t.Fatal(err)

@@ -39,7 +39,11 @@ func renderFivePartReport(doc ReportDocument) string {
 	if a.Probability != nil {
 		probability = fmt.Sprintf("%d%%", *a.Probability)
 	}
-	fmt.Fprintf(&w, "## 一、研判结论\n\n本次事件判断为%s，属于恶意活动的概率为%s。\n\n%s\n\n", verdict, probability, reportCell(a.ProbabilityReason))
+	if b.PhaseOne != nil {
+		fmt.Fprintf(&w, "## 一、研判结论\n\n本次事件判断为%s，模型估计的恶意活动倾向为%s（未经概率校准）。\n\n%s\n\n", verdict, probability, reportCell(a.ProbabilityReason))
+	} else {
+		fmt.Fprintf(&w, "## 一、研判结论\n\n本次事件判断为%s，属于恶意活动的概率为%s。\n\n%s\n\n", verdict, probability, reportCell(a.ProbabilityReason))
+	}
 	if doc.LayoutVersion == reportFivePartLegacyLayout {
 		overview := map[string]string{}
 		for k, v := range doc.EventOverview {
@@ -79,6 +83,13 @@ func renderFivePartReport(doc ReportDocument) string {
 		w.WriteString(renderCompactEventOverview(doc))
 	}
 	w.WriteString("\n## 三、关键证据\n\n")
+	if b.PhaseOne != nil {
+		fmt.Fprintf(&w, "一期证据策略分：%d（策略版本：%s；该分数不是已校准概率）。\n\n", b.PhaseOne.Result.Score, reportCell(b.PhaseOne.Result.Policy.Version))
+		for _, u := range b.PhaseOne.Result.Units {
+			fmt.Fprintf(&w, "- %s：%s；加分%d；原因=%s。\n", u.ID, reportCell(u.Status), u.Score, reportCell(u.Reason))
+		}
+		w.WriteString("\n")
+	}
 	meanings := map[string][]string{}
 	for _, i := range a.Interpretations {
 		meanings[i.EvidenceID] = append(meanings[i.EvidenceID], i.Meaning)

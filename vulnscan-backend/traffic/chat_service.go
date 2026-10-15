@@ -45,6 +45,10 @@ func (s *ChatService) Send(ctx context.Context, body map[string]any) (map[string
 	if isFormalReportCommand(message) {
 		return s.requestFormalReport(ctx, event, body, message)
 	}
+	// Closing the dialog disconnects the HTTP request, but accepted questions
+	// must still finish and persist their replies. Keep a bounded job lifetime.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Minute)
+	defer cancel()
 
 	// Build before persisting the current question so it is not duplicated in history.
 	evidenceContext, err := s.core.EvidenceContext(ctx, event)

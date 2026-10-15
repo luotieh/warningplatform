@@ -48,6 +48,9 @@ type DNSData struct {
 	BigramLogProbabilities map[string]float64 `json:"bigram_log_probabilities"`
 }
 type HTTPRecord struct {
+	RequestID               string                    `json:"request_id,omitempty"`
+	RawRequest              string                    `json:"-"`
+	ParsedBody              string                    `json:"-"`
 	SourceID                string                    `json:"source_id"`
 	TransactionID           string                    `json:"transaction_id"`
 	SessionID               string                    `json:"session_id"`
@@ -82,9 +85,10 @@ type HTTPFieldEncodingSummary struct {
 }
 type HTTPData struct {
 	Provenance
-	Records        []HTTPRecord `json:"records"`
-	Brands         []Brand      `json:"brands"`
-	BrandsVerified bool         `json:"brands_verified"`
+	RequestCandidates int          `json:"request_candidates"`
+	Records           []HTTPRecord `json:"records"`
+	Brands            []Brand      `json:"brands"`
+	BrandsVerified    bool         `json:"brands_verified"`
 }
 type Connection struct {
 	SourceID       string    `json:"source_id"`

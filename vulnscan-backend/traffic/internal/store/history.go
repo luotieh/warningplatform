@@ -18,15 +18,33 @@ type HistoryQuery struct {
 	Addresses  []string
 	IOCs       []domain.IOC
 	Limit      int
+	// ExactRelations opt in to AND-bound transport/application history. Legacy
+	// callers retain the broad context search; phase-one never uses that OR path.
+	ExactRelations []HistoryRelation
+	DeviceID       string
+	BeforeTime     time.Time
+	AfterID        string
+}
+type HistoryRelation struct {
+	Address string
+	IOC     domain.IOC
 }
 
 func historyQueryValid(q HistoryQuery) error {
+	if len(q.ExactRelations) > 32 || len(q.ExactRelations) > 0 && q.DeviceID == "" {
+		return fmt.Errorf("history_query_invalid")
+	}
+	for _, r := range q.ExactRelations {
+		if r.Address == "" || (r.IOC.Type != "ip" && r.IOC.Type != "domain" && r.IOC.Type != "url") || r.IOC.Value == "" || len(r.IOC.Value) > 2048 {
+			return fmt.Errorf("history_query_invalid")
+		}
+	}
 	for _, ioc := range q.IOCs {
 		if len(ioc.Value) > 2048 || len(ioc.Type) > 32 || ioc.Value == "" || ioc.Type == "" {
 			return fmt.Errorf("history_query_invalid")
 		}
 	}
-	if q.Start.IsZero() || !q.Start.Before(q.End) || q.Limit < 1 || q.Limit > 201 || len(q.Addresses) > 32 || len(q.IOCs) > 32 || len(q.ExcludeIDs) > 256 || len(q.Addresses)+len(q.IOCs) == 0 {
+	if q.Start.IsZero() || !q.Start.Before(q.End) || q.Limit < 1 || q.Limit > 201 || len(q.Addresses) > 32 || len(q.IOCs) > 32 || len(q.ExcludeIDs) > 256 || len(q.Addresses)+len(q.IOCs)+len(q.ExactRelations) == 0 {
 		return fmt.Errorf("history_query_invalid")
 	}
 	return nil
@@ -42,6 +60,9 @@ func historyCandidateMatches(e domain.Event, q HistoryQuery) bool {
 	if t.Before(q.Start) || !t.Before(q.End) {
 		return false
 	}
+	if !q.BeforeTime.IsZero() && (t.After(q.BeforeTime) || t.Equal(q.BeforeTime) && e.EventID <= q.AfterID) {
+		return false
+	}
 	for _, id := range q.ExcludeIDs {
 		if e.EventID == id {
 			return false
@@ -50,6 +71,17 @@ func historyCandidateMatches(e domain.Event, q HistoryQuery) bool {
 	var c map[string]any
 	_ = json.Unmarshal([]byte(e.Context), &c)
 	if canonical, ok := c["canonical_event_id"].(string); ok && canonical != "" && canonical != e.EventID {
+		return false
+	}
+	if len(q.ExactRelations) > 0 {
+		if c["device_id"] != q.DeviceID {
+			return false
+		}
+		for _, r := range q.ExactRelations {
+			if ExactHistoryRelation(c, r) {
+				return true
+			}
+		}
 		return false
 	}
 	for _, address := range q.Addresses {
@@ -67,6 +99,33 @@ func historyCandidateMatches(e domain.Event, q HistoryQuery) bool {
 			if m, ok := c[key].(map[string]any); ok && m["ioc_value"] == ioc.Value && m["ioc_type"] == ioc.Type {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+// Requires both the declared IOC identity and the actual relevant field. DNS
+// answer membership cannot establish an IP transport contact.
+func ExactHistoryRelation(c map[string]any, r HistoryRelation) bool {
+	i, _ := c["ioc"].(map[string]any)
+	if i["ioc_type"] != r.IOC.Type || i["ioc_value"] != r.IOC.Value {
+		return false
+	}
+	src, dst := c["src_ip"], c["dst_ip"]
+	if src != r.Address && dst != r.Address {
+		return false
+	}
+	if r.IOC.Type == "ip" {
+		return src == r.Address && dst == r.IOC.Value || dst == r.Address && src == r.IOC.Value
+	}
+	a, _ := c["app"].(map[string]any)
+	if r.IOC.Type == "url" {
+		return a["http_url"] == r.IOC.Value
+	}
+	for _, key := range []string{"http_host", "tls_sni", "dns_query"} {
+		v, _ := a[key].(string)
+		if strings.EqualFold(strings.TrimSuffix(v, "."), strings.TrimSuffix(r.IOC.Value, ".")) {
+			return true
 		}
 	}
 	return false
@@ -128,14 +187,50 @@ func historySQL(q HistoryQuery) (string, []any, error) {
 	field := func(path string) string {
 		return "CASE WHEN JSON_VALID(context) THEN JSON_UNQUOTE(JSON_EXTRACT(context,'" + path + "')) ELSE NULL END"
 	}
-	for _, address := range q.Addresses {
-		match = append(match, "("+field("$.src_ip")+"=? OR "+field("$.dst_ip")+"=?)")
-		args = append(args, address, address)
+	if !q.BeforeTime.IsZero() {
+		where = append(where, "(COALESCE(last_seen_at,created_at)<? OR (COALESCE(last_seen_at,created_at)=? AND event_id>?))")
+		args = append(args, q.BeforeTime, q.BeforeTime, q.AfterID)
 	}
-	for _, ioc := range q.IOCs {
-		raw, _ := json.Marshal(map[string]string{"type": ioc.Type, "value": ioc.Value})
-		match = append(match, "((CASE WHEN JSON_VALID(observables) THEN JSON_CONTAINS(observables,?) ELSE 0 END) OR ("+field("$.ioc.ioc_value")+"=? AND "+field("$.ioc.ioc_type")+"=?) OR ("+field("$.ioc_evidence.ioc_value")+"=? AND "+field("$.ioc_evidence.ioc_type")+"=?))")
-		args = append(args, string(raw), ioc.Value, ioc.Type, ioc.Value, ioc.Type)
+	if len(q.ExactRelations) > 0 {
+		where = append(where, field("$.device_id")+"=?")
+		args = append(args, q.DeviceID)
+		for _, r := range q.ExactRelations {
+			clause := "(" + field("$.ioc.ioc_type") + "=? AND " + field("$.ioc.ioc_value") + "=? AND "
+			args = append(args, r.IOC.Type, r.IOC.Value)
+			if r.IOC.Type == "ip" {
+				clause += "((" + field("$.src_ip") + "=? AND " + field("$.dst_ip") + "=?) OR (" + field("$.dst_ip") + "=? AND " + field("$.src_ip") + "=?)))"
+				args = append(args, r.Address, r.IOC.Value, r.Address, r.IOC.Value)
+			} else {
+				clause += "(" + field("$.src_ip") + "=? OR " + field("$.dst_ip") + "=?) AND ("
+				args = append(args, r.Address, r.Address)
+				keys := []string{"http_host", "tls_sni", "dns_query"}
+				if r.IOC.Type == "url" {
+					keys = []string{"http_url"}
+				}
+				parts := []string{}
+				for _, k := range keys {
+					if r.IOC.Type == "url" {
+						parts = append(parts, field("$.app."+k)+"=?")
+					} else {
+						parts = append(parts, "LOWER(TRIM(TRAILING '.' FROM "+field("$.app."+k)+"))=LOWER(TRIM(TRAILING '.' FROM ?))")
+					}
+					args = append(args, r.IOC.Value)
+				}
+				clause += strings.Join(parts, " OR ") + "))"
+			}
+			match = append(match, clause)
+		}
+	}
+	if len(q.ExactRelations) == 0 {
+		for _, address := range q.Addresses {
+			match = append(match, "("+field("$.src_ip")+"=? OR "+field("$.dst_ip")+"=?)")
+			args = append(args, address, address)
+		}
+		for _, ioc := range q.IOCs {
+			raw, _ := json.Marshal(map[string]string{"type": ioc.Type, "value": ioc.Value})
+			match = append(match, "((CASE WHEN JSON_VALID(observables) THEN JSON_CONTAINS(observables,?) ELSE 0 END) OR ("+field("$.ioc.ioc_value")+"=? AND "+field("$.ioc.ioc_type")+"=?) OR ("+field("$.ioc_evidence.ioc_value")+"=? AND "+field("$.ioc_evidence.ioc_type")+"=?))")
+			args = append(args, string(raw), ioc.Value, ioc.Type, ioc.Value, ioc.Type)
+		}
 	}
 	where = append(where, "("+strings.Join(match, " OR ")+")")
 	args = append(args, q.Limit)

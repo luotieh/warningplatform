@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"github.com/google/gopacket"
@@ -109,6 +110,10 @@ func enrichSnapshotProtocols(input *evidence.Input, hit store.Hit, m map[string]
 	firstLine, _, _ := bytes.Cut(payload, []byte("\r\n"))
 	_, _, httpLike := bytes.Cut(firstLine, []byte(" HTTP/1."))
 	if httpLike {
+		if input.HTTP == nil {
+			input.HTTP = &evidence.HTTPData{}
+		}
+		input.HTTP.RequestCandidates++
 		record, protocolParsed, parseProblem := snapshotHTTPRequest(payload, full, hit, m, app)
 		if parseProblem != "" {
 			issue(parseProblem, "raw_packet.request")
@@ -284,6 +289,11 @@ func snapshotFramePayload(packet, m map[string]any, input *evidence.Input) (map[
 		copy[k] = v
 	}
 	copy["payload_hex"] = fmt.Sprintf("%x", body)
+	if l := p.Layer(layers.LayerTypeTCP); l != nil {
+		tcp := l.(*layers.TCP)
+		copy["tcp_seq"] = uint64(tcp.Seq)
+		copy["tcp_ack"] = uint64(tcp.Ack)
+	}
 	if rst && input.Network != nil && len(input.Network.Connections) > 0 {
 		input.Network.Connections[len(input.Network.Connections)-1].TCPState = "RST"
 	}
@@ -400,6 +410,9 @@ func snapshotHTTPRequest(payload []byte, full bool, hit store.Hit, m, app map[st
 		return r, true, "http_multiple_messages_unsupported"
 	}
 	r.Truncated = false
+	r.RawRequest = string(payload)
+	r.ParsedBody = string(body)
+	r.RequestID = snapshotHTTPRequestID(m, payload)
 	size := uint64(len(body))
 	r.BodyLength = &size
 	r.Fields = map[string]string{}
@@ -500,4 +513,20 @@ func snapshotHTTPRequest(payload []byte, full bool, hit store.Hit, m, app map[st
 	summary := evidence.SummarizeHTTPFieldEncoding(fieldValues)
 	r.EncodingSummary = &summary
 	return r, true, ""
+}
+
+// Stable across revisions/snapshots and independent of probe transaction labels.
+func snapshotHTTPRequestID(m map[string]any, payload []byte) string {
+	packet := nestedMap(m, "raw_packet")
+	if child := nestedMap(packet, "request"); len(child) > 0 && packet["report_quality_derivation"] == nil {
+		packet = child
+	}
+	seq := packet["tcp_seq"]
+	if frame, err := hex.DecodeString(asString(packet["packet_hex"])); err == nil && len(frame) > 0 {
+		p := gopacket.NewPacket(frame, layers.LayerTypeEthernet, gopacket.Default)
+		if l := p.Layer(layers.LayerTypeTCP); l != nil {
+			seq = uint64(l.(*layers.TCP).Seq)
+		}
+	}
+	return digest([]any{m["device_id"], m["src_ip"], m["dst_ip"], m["src_port"], m["dst_port"], seq, string(payload)})
 }

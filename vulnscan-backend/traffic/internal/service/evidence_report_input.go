@@ -15,8 +15,8 @@ import (
 
 // PrepareReportEvidence reads the snapshot once and shares its exact version
 // with both the deterministic engine and the existing model projection.
-// Reports check all registered facts against shared inputs; missing dependencies
-// remain explicit and cannot become negative evidence.
+// Reports default to the phase-one registry; the explicit compatibility profile
+// retains the full registry. Missing dependencies cannot become negative evidence.
 func (s Services) PrepareReportEvidence(ctx context.Context, event domain.Event) (string, error) {
 	prepared, err := s.prepareReportInput(ctx, event)
 	return prepared.Context, err
@@ -72,7 +72,10 @@ func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event
 		options.RegistryIssue = &issue
 		assets = nil
 	}
-	options.Facts = evidence.SupportedFacts()
+	options.Facts = evidence.PhaseOneFacts()
+	if s.LegacyReportEvidence {
+		options.Facts = evidence.SupportedFacts()
+	}
 	options.CaptureSemantic = true
 	options.Supplemental, options.SupplementalIssue, err = s.loadSnapshotSupplemental(ctx, snap)
 	if err != nil {
@@ -99,7 +102,7 @@ func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event
 		"F_HIST_SCHEDULE_MATCH":      {"kl_threshold": 0.5},
 		"F_HIST_COORD_PARAM_MATCH":   {"parameter_relative_tolerance": 0.25},
 	}
-	history := s.loadReportHistory(ctx, event, snap, assets)
+	history := s.loadReportHistoryMode(ctx, event, snap, assets, !s.LegacyReportEvidence)
 	if ctx.Err() != nil {
 		return preparedReportInput{}, ctx.Err()
 	}
@@ -120,7 +123,7 @@ func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event
 		if err := json.Unmarshal(record.Value, &evaluation); err != nil {
 			exists = false
 		}
-		if evaluation.Manifest.SnapshotVersion != snap.Version || evaluation.Manifest.AdapterVersion != reportSnapshotAdapterVersion || (evaluation.Result != nil && evaluation.Result.RuleVersion != evidence.RuleVersion) || evaluation.Status == "evaluated" && evaluation.Result == nil || len(evaluation.Manifest.FactCoverage) < len(evidence.SupportedFacts()) {
+		if evaluation.Manifest.SnapshotVersion != snap.Version || evaluation.Manifest.AdapterVersion != reportSnapshotAdapterVersion || (evaluation.Result != nil && evaluation.Result.RuleVersion != evidence.RuleVersion) || evaluation.Status == "evaluated" && evaluation.Result == nil || len(evaluation.Manifest.FactCoverage) < len(options.Facts) {
 			exists = false
 		}
 		if exists {
@@ -172,6 +175,38 @@ func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event
 	if ctx.Err() != nil {
 		return preparedReportInput{}, ctx.Err()
 	}
+	if !s.LegacyReportEvidence {
+		// Prepare independent F evidence before S planning. This does not call the
+		// model or write caches; the expanded manifest is reused by the final C join.
+		preparedPhase, phasePrepErr := s.ExecutePhaseOne(ctx, snap, evaluation, ReportSemanticEvaluation{}, history, assets, false)
+		if phasePrepErr != nil {
+			return preparedReportInput{}, phasePrepErr
+		}
+		evaluation.Manifest.PhaseOne = &preparedPhase.Materials
+		if evaluation.Result != nil {
+			evaluation.Result.Findings = preparedPhase.Facts
+			evaluation.Result.Executions = nil
+			for _, f := range preparedPhase.Facts {
+				status := "executed"
+				if f.Status == evidence.Missing {
+					status = "skipped"
+				}
+				evaluation.Result.Executions = append(evaluation.Result.Executions, evidence.Execution{FactID: f.FactID, Scope: f.Scope, Status: status, ReasonCode: f.ReasonCode})
+			}
+			evaluation.Manifest.FactCoverage = snapshotFactCoverage(evidence.Request{Facts: evidence.PhaseOneFacts()}, *evaluation.Result)
+		}
+		key = digest([]any{key, evidence.PhaseOneVersion, preparedPhase.Facts, preparedPhase.Materials})
+		// Diagnostics and S planning must reference a persisted result containing
+		// independent-contact F values, rather than the preliminary packet view.
+		resultPersisted = false
+		if persist {
+			if cacheErr := putRecord(ctx, s.Store, "evidence_result", key, snap.EventID, evaluation); cacheErr == nil {
+				resultPersisted = true
+			} else {
+				evaluation.Manifest.addIssue(SnapshotInputIssue{Code: "phase_one_fact_cache_write_failed", Stage: "persist", Retryable: true})
+			}
+		}
+	}
 	evaluation.Manifest.History = &ReportHistoryDiagnostics{Status: history.Status, Reason: history.Reason, Candidates: history.CandidateCount, Matched: len(history.Rows), Excluded: history.ExcludedCount, Truncated: history.Truncated}
 	if history.Status == "unavailable" {
 		issue := SnapshotInputIssue{Code: history.Reason, Stage: "load_history", Retryable: history.Reason == "history_query_failed"}
@@ -213,8 +248,21 @@ func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event
 	}
 	manifest["semantic_evidence"] = map[string]any{"result_key": semantics.ResultKey, "adapter_version": semantics.AdapterVersion, "input_mode": semantics.InputMode, "status": semantics.Status, "result_persisted": semantics.ResultPersisted}
 	projected, err := projectReportEvidence(snap, evaluation, semantics)
+	var phaseOne *PhaseOneEvaluation
+	if !s.LegacyReportEvidence {
+		executed, phaseErr := s.ExecutePhaseOne(ctx, snap, evaluation, semantics, history, assets, persist)
+		if phaseErr != nil {
+			return preparedReportInput{}, phaseErr
+		}
+		phaseOne = &executed
+		if err == nil {
+			projected, err = phaseOneContext(projected, executed)
+		}
+	}
 	assetSection := normalizeReportAssetSection(assetMatchContext(event, assets))
-	return preparedReportInput{Context: projected, AssetSection: assetSection, Evaluation: evaluation, Semantics: semantics, Evidence: buildReportEvidence(event, snap, evaluation, semantics, history)}, err
+	bundle := buildReportEvidence(event, snap, evaluation, semantics, history)
+	bundle.PhaseOne = phaseOne
+	return preparedReportInput{Context: projected, AssetSection: assetSection, Evaluation: evaluation, Semantics: semantics, Evidence: bundle}, err
 }
 
 // Report-only wording: packet direction and an IOC label do not establish an

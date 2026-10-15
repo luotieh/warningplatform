@@ -151,14 +151,15 @@ func (s Services) prepareReportSemantics(ctx context.Context, snap EvidenceSnaps
 			input = &loaded
 		}
 		request = buildSnapshotSemanticRequest(snap, *input, facts.Result, opts.InputMode)
+		if !s.LegacyReportEvidence {
+			request.Slots = evidence.PhaseOneSlots()
+		}
 		// Facts are already stored under factKey; avoid duplicating potentially
 		// enormous fact provenance once per operation in the materials journal.
 		if persist && cacheAllowed {
 			cached := request
 			cached.Subjects = append([]evidence.SemanticSubject(nil), request.Subjects...)
-			for n := range cached.Subjects {
-				cached.Subjects[n].Facts = nil
-			}
+
 			bundle := cachedSemanticMaterials{AdapterVersion: semanticAdapterVersion, FactResultKey: factKey, Request: cached}
 			if raw, marshalErr := json.Marshal(bundle); marshalErr == nil && len(raw) <= 8<<20 {
 				if saveErr := putRecord(ctx, s.Store, "semantic_materials", materialKey, snap.EventID, bundle); saveErr != nil {
@@ -171,6 +172,9 @@ func (s Services) prepareReportSemantics(ctx context.Context, snap EvidenceSnaps
 	if materialCached {
 		for n := range request.Subjects {
 			subject := &request.Subjects[n]
+			if len(subject.Facts) > 0 {
+				continue
+			}
 			for _, f := range facts.Result.Findings {
 				if f.Scope == subject.Scope && f.Window != nil && f.Window.Start.Equal(subject.Window.Start) && f.Window.End.Equal(subject.Window.End) {
 					subject.Facts = append(subject.Facts, f)
@@ -190,13 +194,14 @@ func (s Services) prepareReportSemantics(ctx context.Context, snap EvidenceSnaps
 			input = &loaded
 		}
 		request = buildSnapshotSemanticRequest(snap, *input, facts.Result, opts.InputMode)
+		if !s.LegacyReportEvidence {
+			request.Slots = evidence.PhaseOneSlots()
+		}
 		plan, err = engine.Plan(ctx, request)
 		if err == nil && persist && cacheAllowed {
 			cached := request
 			cached.Subjects = append([]evidence.SemanticSubject(nil), request.Subjects...)
-			for n := range cached.Subjects {
-				cached.Subjects[n].Facts = nil
-			}
+
 			bundle := cachedSemanticMaterials{AdapterVersion: semanticAdapterVersion, FactResultKey: factKey, Request: cached}
 			if raw, e := json.Marshal(bundle); e == nil && len(raw) <= 8<<20 {
 				if e = putRecord(ctx, s.Store, "semantic_materials", materialKey, snap.EventID, bundle); e != nil {

@@ -13,7 +13,7 @@ import (
 	"vulnscan-backend/traffic/internal/store"
 )
 
-const reportHistoryVersion = "platform-history-0.4"
+const reportHistoryVersion = "platform-history-0.5"
 
 type ReportHistoryDiagnostics struct {
 	Status     string `json:"status"`
@@ -44,6 +44,8 @@ type ReportHistoryRow struct {
 	AdjudicationSource string         `json:"adjudication_source,omitempty"`
 }
 type ReportHistory struct {
+	ExactRelations             bool                `json:"exact_relations,omitempty"`
+	ReadPages                  int                 `json:"read_pages"`
 	RawDNSVerificationRequired bool                `json:"raw_dns_verification_required,omitempty"`
 	RawDNSStatus               string              `json:"raw_dns_status,omitempty"`
 	RawDNSReadHits             int                 `json:"raw_dns_read_hits,omitempty"`
@@ -125,7 +127,11 @@ func historyIOCs(event domain.Event, c map[string]any) []domain.IOC {
 }
 
 func (s Services) loadReportHistory(ctx context.Context, event domain.Event, snap EvidenceSnapshot, assets []domain.Asset, _ ...*EvidenceSourceRegistry) ReportHistory {
+	return s.loadReportHistoryMode(ctx, event, snap, assets, false)
+}
+func (s Services) loadReportHistoryMode(ctx context.Context, event domain.Event, snap EvidenceSnapshot, assets []domain.Asset, exact bool) ReportHistory {
 	h := ReportHistory{Version: reportHistoryVersion, Status: "unavailable", Rows: []ReportHistoryRow{}}
+	h.ExactRelations = exact
 	first, err := time.Parse(time.RFC3339Nano, asString(snap.Context["first_time"]))
 	if err != nil {
 		h.Reason = "history_window_unavailable"
@@ -160,6 +166,18 @@ func (s Services) loadReportHistory(ctx context.Context, event domain.Event, sna
 	}
 	h.MatchAddresses = append([]string(nil), q.Addresses...)
 	h.MatchIOCs = append([]domain.IOC(nil), q.IOCs...)
+	if exact {
+		q.DeviceID = asString(snap.Context["device_id"])
+		for _, a := range q.Addresses {
+			for _, ioc := range q.IOCs {
+				q.ExactRelations = append(q.ExactRelations, store.HistoryRelation{Address: a, IOC: ioc})
+			}
+		}
+		if q.DeviceID == "" || len(q.ExactRelations) == 0 {
+			h.Reason = "history_exact_identity_unresolved"
+			return h
+		}
+	}
 	if len(q.Addresses) > 32 || len(q.IOCs) > 32 || len(q.ExcludeIDs) > 256 {
 		h.Reason = "history_identity_budget_exceeded"
 		return h
@@ -167,6 +185,32 @@ func (s Services) loadReportHistory(ctx context.Context, event domain.Event, sna
 	readCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	candidates, err := s.Store.HistoryCandidates(readCtx, q)
+	h.ReadPages++
+	if exact && err == nil {
+		// Stable keyset pagination; unrelated IOC/asset candidates never consume
+		// the phase-one budget. The final sentinel diagnoses partial coverage.
+		for len(candidates) > 0 && len(candidates)%201 == 0 && len(candidates) < 5001 {
+			tail := candidates[len(candidates)-1]
+			q.BeforeTime = tail.CreatedAt
+			if tail.LastSeenAt != nil {
+				q.BeforeTime = *tail.LastSeenAt
+			}
+			q.AfterID = tail.EventID
+			page, readErr := s.Store.HistoryCandidates(readCtx, q)
+			h.ReadPages++
+			if readErr != nil {
+				err = readErr
+				break
+			}
+			if len(page) == 0 {
+				break
+			}
+			candidates = append(candidates, page...)
+			if len(page) < 201 {
+				break
+			}
+		}
+	}
 	if err != nil {
 		h.Reason = "history_query_failed"
 		issue := snapshotIssueCause(SnapshotInputIssue{Code: h.Reason, Stage: "load_history", Retryable: true}, err)
@@ -174,9 +218,13 @@ func (s Services) loadReportHistory(ctx context.Context, event domain.Event, sna
 		return h
 	}
 	h.CandidateCount = len(candidates)
-	h.Truncated = len(candidates) > 200
+	maxRows := 200
+	if exact {
+		maxRows = 5000
+	}
+	h.Truncated = len(candidates) > maxRows
 	if h.Truncated {
-		candidates = candidates[:200]
+		candidates = candidates[:maxRows]
 	}
 	bytes := 0
 	seen := map[string]bool{}
@@ -226,6 +274,10 @@ func (s Services) loadReportHistory(ctx context.Context, event domain.Event, sna
 		row := ReportHistoryRow{EventID: e.EventID, First: start, Last: end, AssetIDs: []string{}, IOCs: []domain.IOC{}, ReviewStatus: e.ReviewStatus, Adjudication: "unreviewed"}
 		row.ActivityType = e.Category
 		row.DeviceID = asString(c["device_id"])
+		if exact && row.DeviceID != q.DeviceID {
+			h.ExcludedCount++
+			continue
+		}
 		row.Application = nestedMap(c, "app")
 		row.SourceAddress, row.DestinationAddress = asString(c["src_ip"]), asString(c["dst_ip"])
 		row.ActivityIOCs = historyIOCs(e, c)
@@ -267,7 +319,9 @@ func (s Services) loadReportHistory(ctx context.Context, event domain.Event, sna
 	if len(h.Rows) == 0 && !h.Truncated {
 		h.Reason = "no_matching_platform_history"
 	}
-	s.verifyReportHistoricalDNS(ctx, snap, &h)
+	if !exact {
+		s.verifyReportHistoricalDNS(ctx, snap, &h)
+	}
 	// Ordinary approval/rejection is a workflow state, not an independently
 	// verified malicious/false-positive adjudication; do not synthesize one.
 	return h

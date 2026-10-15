@@ -98,6 +98,8 @@ type Measurements struct {
 }
 
 type Finding struct {
+	IOCType         string       `json:"ioc_type,omitempty"`
+	IOCValue        string       `json:"ioc_value,omitempty"`
 	FactID          FactID       `json:"fact_id"`
 	RuleVersion     string       `json:"rule_version"`
 	SnapshotVersion int64        `json:"snapshot_version"`

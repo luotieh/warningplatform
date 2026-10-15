@@ -203,7 +203,13 @@ func (e *SemanticEngine) encodePlan(r SemanticRequest, tasks []SemanticTask) (st
 					deliveredSlot.Prerequisite = "实际历史活动的替代解释，不自动认定误报"
 				}
 			}
-			projected = append(projected, map[string]any{"task_id": t.ID, "slot": deliveredSlot, "scope": t.Scope, "window": t.Window, "max_strength": t.MaxStrength, "input_mode": t.InputMode, "materials": materials, "facts": facts, "non_additive_with": t.NonAdditiveWith})
+			requiredQuotes := []string{}
+			for _, m := range materials {
+				if semanticPrimaryKind(t.Slot.Key, m.Kind) {
+					requiredQuotes = append(requiredQuotes, m.ID)
+				}
+			}
+			projected = append(projected, map[string]any{"task_id": t.ID, "slot": deliveredSlot, "scope": t.Scope, "window": t.Window, "max_strength": t.MaxStrength, "input_mode": t.InputMode, "materials": materials, "facts": facts, "non_additive_with": t.NonAdditiveWith, "required_quote_material_ids": requiredQuotes})
 		}
 		data, err := json.Marshal(map[string]any{"event_id": r.EventID, "snapshot_version": r.SnapshotVersion, "tasks": projected, "provenance_note": "完整来源存于固定快照证据账本；每项保留全部指标、状态、原因及材料引用。历史只解释活动关联，不继承历史模型结论或认定同战役。"})
 		if err != nil {

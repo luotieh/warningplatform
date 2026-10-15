@@ -27,7 +27,7 @@ func (f reportSemanticModelFunc) Complete(ctx context.Context, call evidence.Sem
 
 func semanticReportFixture(t *testing.T, n int) (Services, EvidenceSnapshot) {
 	t.Helper()
-	svc := Services{Store: store.NewMemoryStore()}
+	svc := Services{Store: store.NewMemoryStore(), LegacyReportEvidence: true}
 	ctx := context.Background()
 	_, err := svc.Store.CreateAsset(domain.Asset{ID: "asset-a", Address: "192.0.2.1", Status: 1})
 	if err != nil {

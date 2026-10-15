@@ -3,6 +3,7 @@ package service
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
@@ -11,6 +12,7 @@ import (
 	"golang.org/x/net/dns/dnsmessage"
 	"io"
 	"net/http"
+	"net/url"
 	"slices"
 	"sort"
 	"strings"
@@ -22,7 +24,7 @@ import (
 	"vulnscan-backend/traffic/internal/store"
 )
 
-const semanticAdapterVersion = "snapshot-semantic-adapter-1.3.4"
+const semanticAdapterVersion = "snapshot-semantic-adapter-1.4-phase1"
 const maxSemanticObservations = 128
 const maxSemanticObservationBytes = 2 << 20
 const maxSemanticMessageBytes = 32 << 10
@@ -204,6 +206,16 @@ func buildSnapshotSemanticRequest(snap EvidenceSnapshot, input SnapshotEvidenceI
 		s := newSubject("operation:"+o.HitID, i)
 		p := evidence.Provenance{Verified: true, Complete: o.Complete, Version: fmt.Sprintf("%s:%d", snap.EventID, snap.Version), SourceIDs: []string{o.HitID}}
 		if o.DNS != nil {
+			// Bind the encoded-label fact to this exact question, not a positive
+			// aggregate from another domain at the same recursive resolver.
+			s.Facts = nil
+			if o.Complete {
+				fs, _ := phaseOneDNSFact(context.Background(), snap, PhaseOneRecord{Hit: evidence.Hit{ID: o.HitID, OccurredAt: o.DNS.Time, Scope: o.Scope}, DNS: o.DNS})
+				s.Facts = fs
+				for n := range s.Facts {
+					s.Facts[n].Window = &evidence.Window{Start: s.Window.Start, End: s.Window.End, Convention: "analysis_half_open"}
+				}
+			}
 			d := material(&s, "domain", o.DNS.Domain, "dns.domain", p, o.Complete)
 			lexText := "已保存域名字段；词形相似仅供解释，不证明DGA或恶意归属"
 			if !o.Complete {
@@ -211,7 +223,10 @@ func buildSnapshotSemanticRequest(snap EvidenceSnapshot, input SnapshotEvidenceI
 			}
 			lex := material(&s, "lexical_context", lexText, "dns.question", p, o.Complete)
 			s.Materials = append(s.Materials, d, lex)
-			addSemanticDecodeMaterials(&s, strings.Split(o.DNS.Domain, ".")[0], []string{d.ID}, material, p)
+			label := strings.Split(o.DNS.Domain, ".")[0]
+			if _, err := hex.DecodeString(label); err == nil {
+				addSemanticDecodeMaterials(&s, label, []string{d.ID}, material, p)
+			}
 		}
 		if o.HTTP != nil && o.Payload != "" {
 			h := o.HTTP
@@ -251,6 +266,59 @@ func buildSnapshotSemanticRequest(snap EvidenceSnapshot, input SnapshotEvidenceI
 				body.TransactionID = tx
 				s.Materials = append(s.Materials, body)
 				addSemanticDecodeMaterials(&s, o.Body, []string{request.ID}, material, p)
+			}
+			if parsed, err := url.Parse(h.URL); err == nil && parsed.RawQuery != "" {
+				query := material(&s, "parsed_payload", parsed.RawQuery, "http.request.query", p, o.Complete)
+				query.TransactionID = tx
+				s.Materials = append(s.Materials, query)
+			}
+			// Decode complete, parsed field values only; no substring guessing.
+			candidates := []string{}
+			if parsed, err := url.Parse(h.URL); err == nil {
+				keys := []string{}
+				for key := range parsed.Query() {
+					keys = append(keys, key)
+				}
+				sort.Strings(keys)
+				for _, key := range keys {
+					candidates = append(candidates, parsed.Query()[key]...)
+				}
+			}
+			if fields, err := url.ParseQuery(o.Body); err == nil {
+				keys := []string{}
+				for key := range fields {
+					keys = append(keys, key)
+				}
+				sort.Strings(keys)
+				for _, key := range keys {
+					candidates = append(candidates, fields[key]...)
+				}
+			}
+			var fields map[string]json.RawMessage
+			if json.Unmarshal([]byte(o.Body), &fields) == nil {
+				keys := []string{}
+				for key := range fields {
+					keys = append(keys, key)
+				}
+				sort.Strings(keys)
+				for _, key := range keys {
+					var value string
+					if json.Unmarshal(fields[key], &value) == nil {
+						candidates = append(candidates, value)
+					}
+				}
+			}
+			for _, value := range candidates {
+				decoded := false
+				for _, m := range s.Materials {
+					if m.Kind == "decode" {
+						decoded = true
+					}
+				}
+				if decoded {
+					break
+				}
+				addSemanticDecodeMaterials(&s, value, []string{request.ID}, material, p)
 			}
 			if h.ResponseVerified && o.Response != "" && o.Direction != "" && h.TransactionID != "" {
 				response := material(&s, "protocol_response", o.Response, "raw_packet.response.payload", p, true)

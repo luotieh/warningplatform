@@ -98,7 +98,7 @@ function stopGeneration() {
   requestController?.abort();
   requestController = undefined;
   stopWaiting();
-  sendError.value = '已停止本次报告生成';
+  sendError.value = '已停止等待，后台继续生成，稍后可重新打开查看回复';
   messageRecord.value = messageRecord.value.filter((item) => item.temp_id !== aiThinkingId.value);
   aiThinkingId.value = '';
   loading.value = false;
@@ -715,7 +715,7 @@ onUnmounted(() => {
             type="primary"
             circle
             :disabled="!loading && !messageInput.trim()"
-            :aria-label="loading ? '停止生成' : '发送'"
+            :aria-label="loading ? '停止等待' : '发送'"
             @click="loading ? stopGeneration() : sendMessage()"
           >
             <template #icon>

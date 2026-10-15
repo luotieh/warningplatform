@@ -24,7 +24,7 @@ import (
 )
 
 const snapshotAdapterVersion = "snapshot-evidence-adapter-0.4"
-const reportSnapshotAdapterVersion = "report-snapshot-adapter-1.5.2"
+const reportSnapshotAdapterVersion = "report-snapshot-adapter-1.6-phase1"
 
 // SnapshotEvidenceOptions limits the shared load, not each algorithm separately.
 // Large snapshots are explicitly deferred, never evaluated using model samples.
@@ -49,6 +49,7 @@ func DefaultSnapshotEvidenceOptions() SnapshotEvidenceOptions {
 }
 
 type SnapshotEvidenceManifest struct {
+	PhaseOne              *PhaseOneMaterials              `json:"phase_one_materials,omitempty"`
 	ReportPractical       []ReportEvidence                `json:"report_practical_evidence,omitempty"`
 	ReportPracticalChecks []ReportPracticalCheck          `json:"report_practical_checks,omitempty"`
 	ReportSchedules       map[string]ReportSchedulePolicy `json:"report_schedules,omitempty"`
@@ -299,6 +300,9 @@ func (s Services) SnapshotEvidenceInput(ctx context.Context, snap EvidenceSnapsh
 			scopeHits[scope] = append(scopeHits[scope], hit)
 			adaptSnapshotProtocols(input, h, m, remoteIP, remotePort, known && !truncated)
 			enrichSnapshotProtocols(input, h, m, &out.Manifest)
+			if opts.ReportMaterialMode && !s.LegacyReportEvidence {
+				collectPhaseOneMaterials(&out.Manifest, h, m, *input, assets, snap)
+			}
 			if opts.CaptureSemantic {
 				collectSnapshotSemanticObservation(&out, input, h, m, assets)
 			}
@@ -349,7 +353,21 @@ func (s Services) SnapshotEvidenceInput(ctx context.Context, snap EvidenceSnapsh
 		}
 		if input.HTTP != nil {
 			input.HTTP.Provenance = provenance
-			input.HTTP.Complete = provenance.Complete && len(input.HTTP.Records) == counts[scope]
+			// ACK/TLS/response packets are not HTTP request denominators.
+			input.HTTP.Complete = provenance.Complete && input.HTTP.RequestCandidates > 0 && len(input.HTTP.Records) == input.HTTP.RequestCandidates
+			seen := map[string]bool{}
+			records := []evidence.HTTPRecord{}
+			for _, r := range input.HTTP.Records {
+				if r.Truncated || r.RawRequest == "" {
+					input.HTTP.Complete = false
+				}
+				if r.RequestID != "" && seen[r.RequestID] {
+					continue
+				}
+				seen[r.RequestID] = true
+				records = append(records, r)
+			}
+			input.HTTP.Records = records
 		}
 		if input.DNS != nil {
 			input.DNS.Provenance = provenance

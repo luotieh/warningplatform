@@ -89,6 +89,16 @@ func (e *Engine) httpFact(f Finding, g *observations) Finding {
 	}
 	switch f.FactID {
 	case "F_HTTP_ENDPOINT_REPEAT":
+		seen := map[string]bool{}
+		for _, r := range h.Records {
+			if r.Truncated {
+				return absent(f, UnverifiedCoverage)
+			}
+			if r.RequestID != "" && seen[r.RequestID] {
+				return absent(f, UnresolvedBinding)
+			}
+			seen[r.RequestID] = true
+		}
 		if len(h.Records) < 6 {
 			return absent(f, InsufficientSamples)
 		}

@@ -56,6 +56,11 @@ func (s *evidenceMeasuredStore) HitRevisions(c context.Context, ids []string, w 
 	defer func() { s.record("revision_batch", start, err) }()
 	return s.Store.HitRevisions(c, ids, w)
 }
+func (s *evidenceMeasuredStore) HistoryCandidates(c context.Context, q store.HistoryQuery) (rows []domain.Event, err error) {
+	start := time.Now()
+	defer func() { s.record("history_page", start, err) }()
+	return s.Store.HistoryCandidates(c, q)
+}
 func (s *evidenceMeasuredStore) ListAssets() []domain.Asset {
 	start := time.Now()
 	defer func() { s.record("asset_registry", start, nil) }()
