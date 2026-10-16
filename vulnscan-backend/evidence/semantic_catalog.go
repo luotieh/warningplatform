@@ -8,7 +8,9 @@ type slotSpec struct {
 }
 
 func semanticSpec(id, target, subtype, prerequisite, dedupe string, explanation bool, kinds []string, all, any []FactID) slotSpec {
-	return slotSpec{SemanticDefinition{SlotKey{id, target, subtype}, prerequisite, explanation, dedupe}, kinds, all, any}
+	definition := SemanticDefinition{Key: SlotKey{id, target, subtype}, Prerequisite: prerequisite, ExplanationOnly: explanation, Deduplication: dedupe}
+	definition.EvidenceContract = semanticContract(definition)
+	return slotSpec{definition, kinds, all, any}
 }
 
 // Runtime registry is intentionally independent of the legacy draft YAML flags.
@@ -42,6 +44,7 @@ func SemanticDefinitions() []SemanticDefinition {
 	out := make([]SemanticDefinition, len(semanticSpecs))
 	for i, s := range semanticSpecs {
 		out[i] = s.SemanticDefinition
+		out[i].EvidenceContract = semanticContract(out[i])
 	}
 	return out
 }

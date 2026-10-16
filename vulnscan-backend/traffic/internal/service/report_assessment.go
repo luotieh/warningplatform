@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"vulnscan-backend/evidence"
 
 	"vulnscan-backend/traffic/internal/domain"
 )
@@ -29,19 +30,20 @@ type ReportRisk struct {
 	Impact      string   `json:"impact"`
 }
 type ReportAssessment struct {
-	Target            string                 `json:"target"`
-	ThreatType        string                 `json:"threat_type"`
-	Verdict           string                 `json:"verdict"`
-	Stage             string                 `json:"stage"`
-	Probability       *int                   `json:"probability"`
-	ProbabilityReason string                 `json:"probability_reason"`
-	Supporting        []ReportReason         `json:"supporting"`
-	Opposing          []ReportReason         `json:"opposing"`
-	Alternatives      []ReportReason         `json:"alternatives"`
-	Interpretations   []ReportInterpretation `json:"interpretations"`
-	Gaps              []string               `json:"gaps"`
-	Actions           []ReportAction         `json:"actions"`
-	Risks             []ReportRisk           `json:"risks,omitempty"`
+	EvidenceRisk      *evidence.PhaseOneResult `json:"evidence_risk,omitempty"`
+	Target            string                   `json:"target"`
+	ThreatType        string                   `json:"threat_type"`
+	Verdict           string                   `json:"verdict"`
+	Stage             string                   `json:"stage"`
+	Probability       *int                     `json:"probability"`
+	ProbabilityReason string                   `json:"probability_reason"`
+	Supporting        []ReportReason           `json:"supporting"`
+	Opposing          []ReportReason           `json:"opposing"`
+	Alternatives      []ReportReason           `json:"alternatives"`
+	Interpretations   []ReportInterpretation   `json:"interpretations"`
+	Gaps              []string                 `json:"gaps"`
+	Actions           []ReportAction           `json:"actions"`
+	Risks             []ReportRisk             `json:"risks,omitempty"`
 }
 
 // Dedicated report bounds. Legacy dialogue/analysis budgets stay unchanged.
@@ -113,6 +115,13 @@ func decodeReportAssessment(raw string, b ReportEvidenceBundle) (ReportAssessmen
 	}
 	if *a.Probability < 0 || *a.Probability > 100 {
 		return a, fmt.Errorf("report_probability_out_of_range")
+	}
+	// This field is owned by the backend. Never accept a model's score or
+	// duplicate relations, and never interpret policy points as probability.
+	a.EvidenceRisk = nil
+	if b.PhaseOne != nil {
+		risk := b.PhaseOne.Result
+		a.EvidenceRisk = &risk
 	}
 	return a, nil
 }

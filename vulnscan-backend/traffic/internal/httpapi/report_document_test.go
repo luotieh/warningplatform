@@ -97,7 +97,7 @@ func TestReportAPIAuthenticationPinnedVersionAndExport(t *testing.T) {
 		{base + "?summary_id=0", "report-token", 400, "正整数"},
 		{base + "?summary_id=garbage", "report-token", 400, "正整数"},
 		{base, "report-token", 400, "legacy_report_without_evidence_document"},
-		{base + fmt.Sprintf("?summary_id=%d", summary.ID), "report-token", 200, "evidence-report-1.6"},
+		{base + fmt.Sprintf("?summary_id=%d", summary.ID), "report-token", 200, "evidence-report-1.7"},
 		{base + "/export" + fmt.Sprintf("?summary_id=%d", summary.ID), "report-token", 200, ""},
 		{base + "/export" + fmt.Sprintf("?summary_id=%d&include_appendix=true", summary.ID), "report-token", 200, ""},
 		{base + "/export" + fmt.Sprintf("?summary_id=%d&include_appendix=wrong", summary.ID), "report-token", 400, "布尔值"},

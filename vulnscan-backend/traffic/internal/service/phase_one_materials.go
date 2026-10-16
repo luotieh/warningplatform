@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/url"
 	"sort"
 	"strings"
@@ -39,6 +40,9 @@ type PhaseOneContact struct {
 	Snapshot PhaseOneSnapshotSource `json:"snapshot"`
 }
 type PhaseOneMaterials struct {
+	CurrentContacts   []PhaseOneContact          `json:"current_contacts,omitempty"`
+	CurrentComplete   bool                       `json:"current_complete"`
+	CurrentIncomplete map[string][]string        `json:"current_scope_incomplete,omitempty"`
 	Expanded          bool                       `json:"expanded"`
 	Records           []PhaseOneRecord           `json:"records"`
 	Bindings          []evidence.PhaseOneBinding `json:"bindings"`
@@ -46,6 +50,7 @@ type PhaseOneMaterials struct {
 	Sources           []PhaseOneSnapshotSource   `json:"sources"`
 	Diagnostics       []string                   `json:"diagnostics"`
 	Complete          bool                       `json:"complete"`
+	ScopeIncomplete   map[string][]string        `json:"scope_incomplete,omitempty"`
 	RawHits           int64                      `json:"raw_hits"`
 	DuplicateContacts int                        `json:"duplicate_contacts"`
 }
@@ -78,7 +83,7 @@ func collectPhaseOneMaterials(manifest *SnapshotEvidenceManifest, h store.Hit, m
 		out.Bindings = append(out.Bindings, b)
 		out.Diagnostics = append(out.Diagnostics, h.ID+":"+reason)
 		if reason != "ioc_type_value_not_at_wire_field" {
-			out.Complete = false
+			markPhaseOneScopeIncomplete(out, b.Scope, b.IOCType, b.IOCValue, reason)
 		}
 	}
 	packet := nestedMap(m, "raw_packet")
@@ -138,6 +143,17 @@ func collectPhaseOneMaterials(manifest *SnapshotEvidenceManifest, h store.Hit, m
 		}
 	}
 	record := PhaseOneRecord{Hit: evidence.Hit{ID: h.ID, OccurredAt: t, Scope: input.Scope}, IOCType: b.IOCType, IOCValue: b.IOCValue}
+	if input.HTTP != nil {
+		for _, id := range input.HTTP.UnknownRequestIDs {
+			if id == h.ID {
+				record.HTTPCandidate = true
+			}
+		}
+	}
+	firstLine, _, _ := bytes.Cut(payload, []byte("\r\n"))
+	if bytes.Contains(firstLine, []byte(" HTTP/1.")) {
+		record.HTTPCandidate = true
+	}
 	for _, r := range func() []evidence.HTTPRecord {
 		if input.HTTP != nil {
 			return input.HTTP.Records
@@ -261,7 +277,12 @@ func phaseOneSNI(b []byte) string {
 // The manifest is independent of the current snapshot. Each source freezes its
 // own watermarks. Packets/ACKs and repeated revisions never become contacts.
 func (s Services) phaseOneTimeline(ctx context.Context, snap EvidenceSnapshot, current PhaseOneMaterials, h ReportHistory, assets []domain.Asset) (PhaseOneMaterials, error) {
+	current = dedupPhaseOneContacts(current)
 	out := current
+	out.CurrentContacts = append([]PhaseOneContact(nil), current.Contacts...)
+	out.CurrentComplete = current.Complete
+	out.CurrentIncomplete = clonePhaseOneIncomplete(current.ScopeIncomplete)
+	out.ScopeIncomplete = clonePhaseOneIncomplete(current.ScopeIncomplete)
 	out.Bindings = append([]evidence.PhaseOneBinding(nil), current.Bindings...)
 	out.Contacts = append([]PhaseOneContact(nil), current.Contacts...)
 	out.Sources = append([]PhaseOneSnapshotSource(nil), current.Sources...)
@@ -301,7 +322,8 @@ func (s Services) phaseOneTimeline(ctx context.Context, snap EvidenceSnapshot, c
 		return dedupPhaseOneContacts(out), nil
 	}
 	out.Complete = out.Complete && !h.Truncated && h.ExcludedCount == 0 && h.Status == "available"
-	maxSnapshots, maxHits, maxBytes := 100, int64(20000), int64(16<<20)
+	maxSnapshots, maxHits, maxBytes := 100, int64(20000), snapshotTotalBytes
+	featureBytes := int64(0)
 	loaded, rawBytes := int64(0), int64(0)
 	for index, row := range h.Rows {
 		if ctx.Err() != nil {
@@ -327,7 +349,7 @@ func (s Services) phaseOneTimeline(ctx context.Context, snap EvidenceSnapshot, c
 		q := store.HitQuery{Sources: hs.Sources, Watermark: hs.Watermark, Limit: 250}
 		seenHits := map[string]bool{}
 		for {
-			page, readErr := snapshotHitPage(ctx, s.Store, q, hs.RevisionWatermark)
+			page, readErr := snapshotBoundedPage(ctx, s.Store, q, hs.RevisionWatermark)
 			if readErr != nil {
 				return out, readErr
 			}
@@ -363,7 +385,11 @@ func (s Services) phaseOneTimeline(ctx context.Context, snap EvidenceSnapshot, c
 				}
 				scope, remote, port, ok := snapshotScope(m, assets)
 				if !ok {
-					out.Complete = false
+					if !phaseOneUnrelatedFrame(m, assets) {
+						out.Complete = false
+					} else {
+						out.Diagnostics = append(out.Diagnostics, hit.ID+":verified_frame_outside_eligible_scopes")
+					}
 					continue
 				}
 				allowed := false
@@ -383,6 +409,19 @@ func (s Services) phaseOneTimeline(ctx context.Context, snap EvidenceSnapshot, c
 				enrichSnapshotProtocols(&input, hit, m, &temp)
 				collectPhaseOneMaterials(&temp, hit, m, input, assets, hs)
 				if temp.PhaseOne != nil {
+					featureBytes += snapshotFeatureCharge(temp.PhaseOne.Contacts, temp.PhaseOne.Diagnostics)
+					if featureBytes > snapshotFeatureBytes {
+						out.Complete = false
+						out.Diagnostics = append(out.Diagnostics, "timeline_feature_budget_exceeded")
+						out.Sources = append(out.Sources, source)
+						return dedupPhaseOneContacts(out), nil
+					}
+					for key, reasons := range temp.PhaseOne.ScopeIncomplete {
+						if out.ScopeIncomplete == nil {
+							out.ScopeIncomplete = map[string][]string{}
+						}
+						out.ScopeIncomplete[key] = append(out.ScopeIncomplete[key], reasons...)
+					}
 					out.Contacts = append(out.Contacts, temp.PhaseOne.Contacts...)
 					out.Diagnostics = append(out.Diagnostics, temp.PhaseOne.Diagnostics...)
 				}
@@ -401,6 +440,7 @@ func (s Services) phaseOneTimeline(ctx context.Context, snap EvidenceSnapshot, c
 	return dedupPhaseOneContacts(out), nil
 }
 func dedupPhaseOneContacts(m PhaseOneMaterials) PhaseOneMaterials {
+	m.ScopeIncomplete = clonePhaseOneIncomplete(m.ScopeIncomplete)
 	// One observation basis per asset/endpoint/IOC: a complete application
 	// request supersedes SYN observations, which may describe that same contact.
 	// Missing requests can reduce coverage; they must never inflate frequency.
@@ -421,7 +461,7 @@ func dedupPhaseOneContacts(m PhaseOneMaterials) PhaseOneMaterials {
 	kept := []PhaseOneContact{}
 	for _, c := range m.Contacts {
 		if c.Kind == "tcp_initiation" && requests[scopeKey(c.Scope)+":"+c.IOCType+":"+c.IOCValue] {
-			m.Complete = false
+			markPhaseOneScopeIncomplete(&m, c.Scope, c.IOCType, c.IOCValue, "syn_excluded_from_http_request_timeline")
 			m.Diagnostics = append(m.Diagnostics, c.HitID+":syn_excluded_from_http_request_timeline")
 			continue
 		}
@@ -435,4 +475,60 @@ func dedupPhaseOneContacts(m PhaseOneMaterials) PhaseOneMaterials {
 	}
 	m.Contacts = kept
 	return m
+}
+
+func markPhaseOneScopeIncomplete(m *PhaseOneMaterials, s evidence.Scope, typ, value, reason string) {
+	if m.ScopeIncomplete == nil {
+		m.ScopeIncomplete = map[string][]string{}
+	}
+	k := scopeKey(s) + typ + ":" + value
+	m.ScopeIncomplete[k] = append(m.ScopeIncomplete[k], reason)
+}
+
+func clonePhaseOneIncomplete(in map[string][]string) map[string][]string {
+	out := map[string][]string{}
+	for k, v := range in {
+		out[k] = append([]string(nil), v...)
+	}
+	return out
+}
+
+// Exclude only a complete, wire-verified tuple that cannot belong to any
+// registered eligible endpoint. Unknown/missing frames remain coverage gaps.
+func phaseOneUnrelatedFrame(m map[string]any, assets []domain.Asset) bool {
+	if asString(nestedMap(m, "raw_packet")["packet_hex"]) == "" {
+		return false
+	}
+	reportVerifyDatagram(m)
+	packet := nestedMap(m, "raw_packet")
+	if truncated, known := packet["capture_truncated"].(bool); !known || truncated {
+		return false
+	}
+	// ICMP has no application transaction or TCP/UDP endpoint. Verify its
+	// actual IP header and complete datagram before excluding it, rather than
+	// trusting the saved protocol name or zero-port metadata.
+	if strings.EqualFold(asString(m["protocol"]), "icmp") && packet["report_quality_derivation"] != nil {
+		raw, err := hex.DecodeString(asString(packet["packet_hex"]))
+		if err != nil {
+			return false
+		}
+		frame := gopacket.NewPacket(raw, layers.LayerTypeEthernet, gopacket.Default)
+		if layer := frame.Layer(layers.LayerTypeIPv4); layer != nil && frame.ErrorLayer() == nil && frame.Layer(layers.LayerTypeICMPv4) != nil {
+			ip := layer.(*layers.IPv4)
+			return ip.SrcIP.Equal(net.ParseIP(asString(m["src_ip"]))) && ip.DstIP.Equal(net.ParseIP(asString(m["dst_ip"])))
+		}
+	}
+	if _, problem := snapshotFramePayload(packet, m, &evidence.Input{}); problem != "" {
+		return false
+	}
+	_, src := registeredSnapshotAsset(assets, asString(m["src_ip"]))
+	_, dst := registeredSnapshotAsset(assets, asString(m["dst_ip"]))
+	if !src && !dst {
+		return true
+	}
+	sp, sok := strictUint(m["src_port"])
+	dp, dok := strictUint(m["dst_port"])
+	// Zero-port tuples are outside snapshotScope's supported endpoint domain;
+	// they cannot alias any accepted positive-port scope.
+	return sok && dok && (sp == 0 || dp == 0)
 }

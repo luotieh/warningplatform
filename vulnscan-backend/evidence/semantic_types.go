@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-const SemanticVersion = "evidence-semantics-0.4"
+const SemanticVersion = "evidence-semantics-0.5"
 
 type SemanticInputMode string
 
@@ -31,6 +31,7 @@ type SlotKey struct {
 func (k SlotKey) String() string { return k.ID + "/" + k.Target + "/" + k.Subtype }
 
 type SemanticDefinition struct {
+	EvidenceContract
 	Key             SlotKey `json:"key"`
 	Prerequisite    string  `json:"prerequisite"`
 	ExplanationOnly bool    `json:"explanation_only"`
@@ -233,6 +234,10 @@ type SemanticItem struct {
 }
 
 type SemanticFinding struct {
+	EvidenceContract
+	StructureValidation string `json:"structure_validation"`
+	SemanticSupport     string `json:"semantic_support"`
+	BehaviorOutcome     string `json:"behavior_outcome"`
 	SemanticItem
 	Slot            SlotKey        `json:"slot"`
 	SubjectID       string         `json:"subject_id"`
@@ -248,8 +253,9 @@ type SemanticFinding struct {
 }
 
 type SemanticResult struct {
-	Plan           SemanticPlan      `json:"plan"`
-	Findings       []SemanticFinding `json:"semantic_findings"`
-	Calls          int               `json:"calls"`
-	ResponseSHA256 string            `json:"response_sha256,omitempty"`
+	CoverageIncomplete bool              `json:"operation_coverage_incomplete,omitempty"`
+	Plan               SemanticPlan      `json:"plan"`
+	Findings           []SemanticFinding `json:"semantic_findings"`
+	Calls              int               `json:"calls"`
+	ResponseSHA256     string            `json:"response_sha256,omitempty"`
 }

@@ -7,36 +7,39 @@ import (
 	"sort"
 )
 
-const NormalizationVersion = "evidence-normalization-0.1"
+const NormalizationVersion = "evidence-normalization-0.2"
 
 // UnifiedEvidence is an audit record, not a score. A measured observation,
 // an interpretation, a negative result and a skipped check remain distinct.
 type UnifiedEvidence struct {
-	ID              string        `json:"id"`
-	ReportID        string        `json:"report_id,omitempty"`
-	Kind            string        `json:"kind"`
-	RuleID          string        `json:"rule_id"`
-	TaskID          string        `json:"task_id,omitempty"`
-	SubjectID       string        `json:"subject_id,omitempty"`
-	SnapshotVersion int64         `json:"snapshot_version,omitempty"`
-	ExecutionStatus string        `json:"execution_status,omitempty"`
-	Scope           Scope         `json:"scope"`
-	Window          *Window       `json:"window,omitempty"`
-	Status          string        `json:"status"`
-	Quality         string        `json:"quality"`
-	Role            string        `json:"role"`
-	Reason          string        `json:"reason,omitempty"`
-	Judgement       string        `json:"judgement,omitempty"`
-	Strength        string        `json:"strength,omitempty"`
-	Measurements    *Measurements `json:"measurements,omitempty"`
-	Parameters      *Parameters   `json:"parameters,omitempty"`
-	Interpretation  string        `json:"interpretation,omitempty"`
-	SourceIDs       []string      `json:"source_ids,omitempty"`
-	Dependencies    []Dependency  `json:"dependencies,omitempty"`
-	NonAdditiveWith []string      `json:"non_additive_with,omitempty"`
-	DuplicateOf     string        `json:"duplicate_of,omitempty"`
-	Limitations     []string      `json:"limitations,omitempty"`
-	Version         string        `json:"version"`
+	EvidenceContract
+	StructureValidation string        `json:"structure_validation,omitempty"`
+	BehaviorOutcome     string        `json:"behavior_outcome,omitempty"`
+	ID                  string        `json:"id"`
+	ReportID            string        `json:"report_id,omitempty"`
+	Kind                string        `json:"kind"`
+	RuleID              string        `json:"rule_id"`
+	TaskID              string        `json:"task_id,omitempty"`
+	SubjectID           string        `json:"subject_id,omitempty"`
+	SnapshotVersion     int64         `json:"snapshot_version,omitempty"`
+	ExecutionStatus     string        `json:"execution_status,omitempty"`
+	Scope               Scope         `json:"scope"`
+	Window              *Window       `json:"window,omitempty"`
+	Status              string        `json:"status"`
+	Quality             string        `json:"quality"`
+	Role                string        `json:"role"`
+	Reason              string        `json:"reason,omitempty"`
+	Judgement           string        `json:"judgement,omitempty"`
+	Strength            string        `json:"strength,omitempty"`
+	Measurements        *Measurements `json:"measurements,omitempty"`
+	Parameters          *Parameters   `json:"parameters,omitempty"`
+	Interpretation      string        `json:"interpretation,omitempty"`
+	SourceIDs           []string      `json:"source_ids,omitempty"`
+	Dependencies        []Dependency  `json:"dependencies,omitempty"`
+	NonAdditiveWith     []string      `json:"non_additive_with,omitempty"`
+	DuplicateOf         string        `json:"duplicate_of,omitempty"`
+	Limitations         []string      `json:"limitations,omitempty"`
+	Version             string        `json:"version"`
 }
 
 type NormalizedEvidence struct {
@@ -99,7 +102,8 @@ func Normalize(facts []Finding, sem *SemanticResult, executions ...[]Execution) 
 				}
 			}
 			if f, ok := findings[x.TaskID]; ok {
-				u.Role, u.Quality, u.Judgement, u.Strength = "interpretation", "validated", f.Judgement, f.Strength
+				u.StructureValidation, u.BehaviorOutcome = "passed", "not_established"
+				u.Role, u.Quality, u.Judgement, u.Strength = "interpretation", "structure_validated", f.Judgement, f.Strength
 				u.Interpretation, u.NonAdditiveWith, u.DuplicateOf, u.Limitations = f.Explanation, f.NonAdditiveWith, f.DuplicateOf, f.Limitations
 				if f.ExplanationOnly {
 					u.Role = "context_interpretation"
@@ -122,6 +126,17 @@ func Normalize(facts []Finding, sem *SemanticResult, executions ...[]Execution) 
 	for _, d := range SemanticDefinitions() {
 		if !seenSlots[d.Key] {
 			n.Items = append(n.Items, UnifiedEvidence{ID: UnifiedID("semantic", d.Key.String(), Scope{}, nil, ""), Kind: "semantic", RuleID: d.Key.String(), Status: "unavailable", Quality: "unknown", Role: "gap", Reason: "no_execution_result", Version: SemanticVersion})
+		}
+	}
+	for i := range n.Items {
+		if n.Items[i].Kind == "fact" {
+			n.Items[i].EvidenceContract = contractForFact(FactID(n.Items[i].RuleID))
+		} else {
+			for _, d := range SemanticDefinitions() {
+				if d.Key.String() == n.Items[i].RuleID {
+					n.Items[i].EvidenceContract = d.EvidenceContract
+				}
+			}
 		}
 	}
 	sort.SliceStable(n.Items, func(i, j int) bool { return n.Items[i].ID < n.Items[j].ID })

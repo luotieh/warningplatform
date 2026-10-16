@@ -34,6 +34,17 @@ func phaseOneCurrentFacts(ctx context.Context, snap EvidenceSnapshot, m PhaseOne
 		req.Quality.CaptureTruncated = &notTruncated
 		input := evidence.Input{Scope: b.Scope}
 		http := evidence.HTTPData{Provenance: evidence.Provenance{Verified: true, Complete: true, Version: evidence.PhaseOneVersion}}
+		http.Complete = m.Complete
+		incomplete := m.ScopeIncomplete[key]
+		if m.Expanded {
+			http.Complete = m.CurrentComplete
+			incomplete = m.CurrentIncomplete[key]
+		}
+		for _, reason := range incomplete {
+			if reason != "syn_excluded_from_http_request_timeline" {
+				http.Complete = false
+			}
+		}
 		seen := map[string]bool{}
 		var start, end time.Time
 		for _, r := range m.Records {
@@ -63,7 +74,7 @@ func phaseOneCurrentFacts(ctx context.Context, snap EvidenceSnapshot, m PhaseOne
 			continue
 		}
 		input.Window = &evidence.AnalysisWindow{Start: start, End: end.Add(time.Nanosecond)}
-		if len(http.Records) > 0 {
+		if http.RequestCandidates > 0 {
 			input.HTTP = &http
 		}
 		hist := &evidence.HistoryData{Provenance: evidence.Provenance{Verified: true, Complete: h.Status == "available" && !h.Truncated && h.ExcludedCount == 0, Version: h.Version + ":" + digest(h)}, PlatformRecords: true, AsOf: h.End, LookbackStart: h.Start, IOC: b.IOCValue, Endpoint: b.Scope.EndpointID}

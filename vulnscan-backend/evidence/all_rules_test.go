@@ -88,8 +88,16 @@ func fullFixture(id FactID) (Request, Config) {
 		dns.Records = append(dns.Records, DNSRecord{SourceID: "dns2", Time: start, Domain: "other.com", RCode: 3, RCodeKnown: true})
 		setBaseline(map[string]float64{"nxdomain_rate_p99": 0.5})
 	case "F_FAILED_TO_ACTIVE":
+		network.Connections[0].Transport = "tcp"
+		scope.EndpointID = connectionEndpoint(network.Connections[0])
+		i.Scope = scope
+		for j := range r.Hits {
+			r.Hits[j].Scope = scope
+		}
+		r.Hits[0].ID = network.Connections[0].SourceID
+		dns.Records[0].Domain = "active.com"
 		dns.Records[0].Time = start.Add(-3 * time.Minute)
-		dns.Records = append(dns.Records, DNSRecord{SourceID: "dns2", Time: start.Add(-2 * time.Minute), Domain: "other.com", RCode: 3, RCodeKnown: true}, DNSRecord{SourceID: "dns3", Time: start.Add(-time.Minute), Domain: "active.com", RCode: 0, RCodeKnown: true, Answers: []string{conn.Destination}})
+		dns.Records = append(dns.Records, DNSRecord{SourceID: "dns2", Time: start.Add(-2 * time.Minute), Domain: "ACTIVE.COM.", RCode: 3, RCodeKnown: true}, DNSRecord{SourceID: "dns3", Time: start.Add(-time.Minute), Domain: "active.com", RCode: 0, RCodeKnown: true, Answers: []string{conn.Destination}})
 		c.Policies[id] = map[string]float64{"min_failures": 2}
 	case "F_HTTP_ENDPOINT_REPEAT":
 	case "F_HTTP_FIELD_ENCODING":
@@ -169,6 +177,7 @@ func fullFixture(id FactID) (Request, Config) {
 		network.Connections[0].PayloadBytes = &payload
 		c.Policies[id] = map[string]float64{"small_payload_bytes": 64}
 	case "F_CONN_FAIL_RATE":
+		network.Connections[0].OutcomeVerified = true
 		setBaseline(map[string]float64{"connection_failure_rate_p95": 0.1})
 	case "F_INDEPENDENT_RULE_CORROB", "F_INDEPENDENT_INTEL_CORROB", "F_IOC_TYPE_CORROB":
 		i.Corroboration = &CorroborationData{Provenance: fixtureProvenance(), IOC: "ioc", IOCType: "C2", HardScoresVerified: true, HardTypeScores: map[string]float64{"C2": 40, "BT": 5, "PH": 0}, Rules: []RuleRecord{{ID: "rule1", IndependenceGroup: "group1", OriginalSource: "original1"}, {ID: "rule2", IndependenceGroup: "group2", OriginalSource: "original2"}}, Intelligence: []IntelRecord{{ID: "intel1", IOC: "ioc", OriginalSource: "original1"}, {ID: "intel2", IOC: "ioc", OriginalSource: "original2"}}}
@@ -269,7 +278,7 @@ func groupFixture(id FactID) (Request, Config) {
 	c := DefaultConfig()
 	c.Policies = map[FactID]map[string]float64{}
 	start := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
-	x := GroupInput{Provenance: fixtureProvenance(), ID: "synthetic-group", Window: AnalysisWindow{Start: start, End: start.Add(10 * time.Minute)}, IOC: "203.0.113.10", Endpoint: "203.0.113.10", DNSOwnership: map[string]string{}}
+	x := GroupInput{Provenance: fixtureProvenance(), ID: "synthetic-group", Window: AnalysisWindow{Start: start, End: start.Add(10 * time.Minute)}, IOC: "203.0.113.10", Endpoint: "tcp://203.0.113.10:443", DNSOwnership: map[string]string{}}
 	packets := uint64(1)
 	for asset := 0; asset < 3; asset++ {
 		name := fmt.Sprintf("asset%d", asset)
@@ -280,7 +289,7 @@ func groupFixture(id FactID) (Request, Config) {
 			t := start.Add(time.Duration(j) * time.Minute)
 			r.Hits = append(r.Hits, Hit{ID: hid, OccurredAt: t, Packets: &packets, Scope: scope})
 			m.HitIDs = append(m.HitIDs, hid)
-			x.Connections = append(x.Connections, Connection{SourceID: fmt.Sprintf("connection%d-%d", asset, j), AssetID: name, Time: t, Destination: x.Endpoint, Port: 443})
+			x.Connections = append(x.Connections, Connection{SourceID: fmt.Sprintf("connection%d-%d", asset, j), AssetID: name, Time: t, Destination: "203.0.113.10", Port: 443, Transport: "tcp"})
 		}
 		x.Members = append(x.Members, m)
 	}
@@ -319,6 +328,7 @@ func groupFixture(id FactID) (Request, Config) {
 		}
 	}
 	r.Groups = []GroupInput{x}
+	bindGroupFixture(&r)
 	return r, c
 }
 
@@ -416,4 +426,35 @@ func TestAllRulesCanBeSelectedTogether(t *testing.T) {
 	if len(out.Findings) != 59 {
 		t.Fatalf("expected 59 results, got %d", len(out.Findings))
 	}
+}
+
+// Construct actual hit observations for a controlled group connection fixture.
+// Tests that deliberately corrupt associations must not call this afterwards.
+func bindGroupFixture(r *Request) {
+	x := &r.Groups[0]
+	r.Hits = nil
+	for i := range x.Members {
+		x.Members[i].HitIDs = nil
+	}
+	for i := range x.Connections {
+		row := &x.Connections[i]
+		if row.Transport == "" {
+			row.Transport = "tcp"
+		}
+		if row.Port == 0 {
+			row.Port = 443
+		}
+		for j := range x.Members {
+			m := &x.Members[j]
+			if m.AssetID != row.AssetID {
+				continue
+			}
+			scope := m.Scope
+			scope.EndpointID = connectionEndpoint(*row)
+			r.Hits = append(r.Hits, Hit{ID: row.SourceID, OccurredAt: row.Time, Scope: scope})
+			m.HitIDs = append(m.HitIDs, row.SourceID)
+		}
+	}
+	// Membership scope is an asset/device identity; connection scope is checked
+	// independently for each transport endpoint by the engine.
 }

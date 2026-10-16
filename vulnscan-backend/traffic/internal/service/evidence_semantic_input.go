@@ -24,7 +24,7 @@ import (
 	"vulnscan-backend/traffic/internal/store"
 )
 
-const semanticAdapterVersion = "snapshot-semantic-adapter-1.4-phase1"
+const semanticAdapterVersion = "snapshot-semantic-adapter-1.6-phase1"
 const maxSemanticObservations = 128
 const maxSemanticObservationBytes = 2 << 20
 const maxSemanticMessageBytes = 32 << 10
@@ -52,6 +52,11 @@ func collectSnapshotSemanticObservation(out *SnapshotEvidenceInput, input *evide
 		o.Direction = "inbound"
 	}
 	if input.HTTP != nil {
+		for _, id := range input.HTTP.UnknownRequestIDs {
+			if id == h.ID {
+				out.Manifest.SemanticCoverageIncomplete = true
+			}
+		}
 		for _, r := range input.HTTP.Records {
 			if r.SourceID == h.ID {
 				copy := r
@@ -74,6 +79,7 @@ func collectSnapshotSemanticObservation(out *SnapshotEvidenceInput, input *evide
 	packet, frameProblem := snapshotFramePayload(packet, m, input)
 	payload, full, problem := snapshotPayload(packet)
 	if frameProblem != "" || (problem != "" && problem != "payload_bytes_unavailable") {
+		out.Manifest.SemanticCoverageIncomplete = true
 		return
 	}
 	if o.DNS != nil {
@@ -127,10 +133,16 @@ func collectSnapshotSemanticObservation(out *SnapshotEvidenceInput, input *evide
 		}
 	}
 	if len(o.Payload) > maxSemanticMessageBytes || len(o.Response) > maxSemanticMessageBytes {
+		out.Manifest.SemanticCoverageIncomplete = true
 		out.Manifest.addIssue(SnapshotInputIssue{Code: "semantic_message_budget_exceeded", Stage: "prepare_semantics", HitID: h.ID, Scope: o.Scope})
 		return
 	}
 	if o.Payload == "" && o.DNS == nil {
+		return
+	}
+	if out.Manifest.StreamVersion != "" && !o.Complete {
+		out.Manifest.SemanticCoverageIncomplete = true
+		out.Manifest.addIssue(SnapshotInputIssue{Code: "phase_one_semantic_operation_incomplete", Stage: "prepare_semantics", HitID: h.ID, Scope: o.Scope})
 		return
 	}
 	used := len(o.Payload) + len(o.Response) + len(o.Body)
@@ -138,6 +150,7 @@ func collectSnapshotSemanticObservation(out *SnapshotEvidenceInput, input *evide
 		used += len(old.Payload) + len(old.Response) + len(old.Body)
 	}
 	if len(out.SemanticObservations) >= maxSemanticObservations || used > maxSemanticObservationBytes {
+		out.Manifest.SemanticCoverageIncomplete = true
 		out.Manifest.addIssue(SnapshotInputIssue{Code: "semantic_material_budget_exceeded", Stage: "prepare_semantics", HitID: h.ID, Scope: o.Scope})
 		return
 	}

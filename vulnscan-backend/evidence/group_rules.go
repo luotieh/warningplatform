@@ -2,12 +2,37 @@ package evidence
 
 import (
 	"math"
+	"net"
 	"net/netip"
+	"net/url"
 	"regexp"
 	"sort"
 	"strings"
 	"time"
 )
+
+// Endpoint identity includes transport, IP and destination port. Application
+// protocol and an IP alone cannot substitute for a transport endpoint.
+func connectionEndpoint(r Connection) string {
+	ip, err := netip.ParseAddr(r.Destination)
+	transport := strings.ToLower(r.Transport)
+	if err != nil || r.Port == 0 || (transport != "tcp" && transport != "udp") {
+		return ""
+	}
+	return transport + "://" + net.JoinHostPort(ip.Unmap().String(), stringPort(r.Port))
+}
+
+func canonicalEndpoint(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
+		return ""
+	}
+	a, err := netip.ParseAddrPort(u.Host)
+	if err != nil {
+		return ""
+	}
+	return connectionEndpoint(Connection{Transport: u.Scheme, Destination: a.Addr().String(), Port: a.Port()})
+}
 
 func verifiedGroup(g *observations) bool {
 	x := g.group
@@ -24,16 +49,23 @@ func verifiedGroup(g *observations) bool {
 		seen[m.AssetID] = true
 		for _, id := range m.HitIDs {
 			h, ok := hits[id]
-			if !ok || h.Scope != m.Scope || h.OccurredAt.IsZero() || h.OccurredAt.Before(x.Window.Start) || !h.OccurredAt.Before(x.Window.End) || bound[id] {
+			if !ok || h.Scope.AssetID != m.Scope.AssetID || h.Scope.DeviceID != m.Scope.DeviceID || h.Scope.GroupID != m.Scope.GroupID || h.OccurredAt.IsZero() || h.OccurredAt.Before(x.Window.Start) || !h.OccurredAt.Before(x.Window.End) || bound[id] {
 				return false
 			}
 			bound[id] = true
 		}
 	}
+	connections := map[string]bool{}
 	for _, r := range x.Connections {
 		if !seen[r.AssetID] || r.Time.Before(x.Window.Start) || !r.Time.Before(x.Window.End) || r.SourceID == "" || r.Destination == "" {
 			return false
 		}
+		h, ok := hits[r.SourceID]
+		endpoint := connectionEndpoint(r)
+		if !ok || !bound[r.SourceID] || connections[r.SourceID] || h.Scope.AssetID != r.AssetID || !h.OccurredAt.Equal(r.Time) || endpoint == "" || canonicalEndpoint(h.Scope.EndpointID) != endpoint {
+			return false
+		}
+		connections[r.SourceID] = true
 	}
 	for _, r := range x.DNS {
 		if !seen[x.DNSOwnership[r.SourceID]] || r.Time.Before(x.Window.Start) || !r.Time.Before(x.Window.End) || r.SourceID == "" {
@@ -167,6 +199,9 @@ func (e *Engine) groupFact(f Finding, g *observations) Finding {
 		target := x.IOC
 		if f.FactID == "F_SHARED_ENDPOINT" {
 			target = x.Endpoint
+			if canonicalEndpoint(target) == "" {
+				return absent(f, UnresolvedBinding)
+			}
 		}
 		if target == "" {
 			return absent(f, MissingInput)
@@ -174,12 +209,15 @@ func (e *Engine) groupFact(f Finding, g *observations) Finding {
 		members := map[string]bool{}
 		times := []time.Time{}
 		for _, r := range x.Connections {
-			if r.Destination == target {
+			if (f.FactID == "F_SHARED_ENDPOINT" && connectionEndpoint(r) == canonicalEndpoint(target)) || (f.FactID == "F_MULTI_ASSET_IOC" && r.Destination == target) {
 				members[r.AssetID] = true
 				times = append(times, r.Time)
 			}
 		}
 		for _, r := range x.DNS {
+			if f.FactID == "F_SHARED_ENDPOINT" {
+				continue
+			} // a DNS question is not a connection
 			if strings.EqualFold(strings.TrimSuffix(r.Domain, "."), target) {
 				members[x.DNSOwnership[r.SourceID]] = true
 				times = append(times, r.Time)
@@ -219,6 +257,9 @@ func (e *Engine) groupFact(f Finding, g *observations) Finding {
 		}
 		return finish(f, len(counts) >= 2 && h >= minEntropy && !management, map[string]float64{"subnets": float64(len(counts)), "subnet_entropy": h}, refs...)
 	case "F_TIME_COORDINATION":
+		if canonicalEndpoint(x.Endpoint) == "" {
+			return absent(f, UnresolvedBinding)
+		}
 		step, ok := e.policy(&f, "bucket_seconds")
 		if !ok || step <= 0 {
 			return absent(f, MissingPolicy)
@@ -243,7 +284,7 @@ func (e *Engine) groupFact(f Finding, g *observations) Finding {
 	case "F_COORD_FANOUT":
 		return e.groupFanout(f, x, refs)
 	case "F_INFECTION_CHAIN":
-		if x.Endpoint == "" || len(x.Connections) == 0 {
+		if canonicalEndpoint(x.Endpoint) == "" || len(x.Connections) == 0 {
 			return absent(f, MissingInput)
 		}
 		width, ok := e.policy(&f, "chain_window_seconds")
@@ -251,7 +292,7 @@ func (e *Engine) groupFact(f Finding, g *observations) Finding {
 			return absent(f, MissingPolicy)
 		}
 		for _, first := range x.Connections {
-			if first.Destination != x.Endpoint {
+			if connectionEndpoint(first) != canonicalEndpoint(x.Endpoint) {
 				continue
 			}
 			for _, spread := range x.Connections {
@@ -263,7 +304,7 @@ func (e *Engine) groupFact(f Finding, g *observations) Finding {
 						continue
 					}
 					for _, last := range x.Connections {
-						if last.AssetID == m.AssetID && last.Destination == x.Endpoint && last.Time.After(spread.Time) && last.Time.Sub(first.Time).Seconds() <= width {
+						if last.AssetID == m.AssetID && connectionEndpoint(last) == canonicalEndpoint(x.Endpoint) && last.Time.After(spread.Time) && last.Time.Sub(first.Time).Seconds() <= width {
 							return finish(f, true, map[string]float64{"matched_chains": 1}, refs...)
 						}
 					}
@@ -273,7 +314,7 @@ func (e *Engine) groupFact(f Finding, g *observations) Finding {
 		return finish(f, false, map[string]float64{"matched_chains": 0}, refs...)
 	case "F_FIRST_VISIT_CLUSTER":
 		h := x.History
-		if !validHistory(h, g.request.EventID) || !h.AsOf.Equal(x.Window.Start) || x.Endpoint == "" {
+		if !validHistory(h, g.request.EventID) || !h.AsOf.Equal(x.Window.Start) || canonicalEndpoint(x.Endpoint) == "" {
 			return absent(f, MissingInput)
 		}
 		first := map[string]time.Time{}
@@ -284,7 +325,7 @@ func (e *Engine) groupFact(f Finding, g *observations) Finding {
 			}
 		}
 		for _, r := range x.Connections {
-			if r.Destination == x.Endpoint && !prior[r.AssetID] {
+			if canonicalEndpoint(x.Endpoint) != "" && connectionEndpoint(r) == canonicalEndpoint(x.Endpoint) && !prior[r.AssetID] {
 				if first[r.AssetID].IsZero() || r.Time.Before(first[r.AssetID]) {
 					first[r.AssetID] = r.Time
 				}
@@ -296,6 +337,9 @@ func (e *Engine) groupFact(f Finding, g *observations) Finding {
 		}
 		return finish(f, len(first) >= 3 && timeSpan(times) <= 3600, map[string]float64{"first_visit_assets": float64(len(first)), "visit_span_seconds": timeSpan(times)}, append(refs, h.SourceIDs...)...)
 	case "F_COORD_PATTERN_RECURRENCE":
+		if canonicalEndpoint(x.Endpoint) == "" {
+			return absent(f, UnresolvedBinding)
+		}
 		step, ok := e.policy(&f, "bucket_seconds")
 		if !ok || step <= 0 {
 			return absent(f, MissingPolicy)
@@ -404,7 +448,10 @@ func groupSeries(x *GroupInput, step float64) ([][]float64, bool) {
 		rows[i] = make([]float64, n)
 	}
 	for _, r := range x.Connections {
-		if x.Endpoint != "" && r.Destination != x.Endpoint {
+		if canonicalEndpoint(x.Endpoint) == "" {
+			return nil, false
+		}
+		if connectionEndpoint(r) != canonicalEndpoint(x.Endpoint) {
 			continue
 		}
 		i, ok := index[r.AssetID]
@@ -467,7 +514,7 @@ func (e *Engine) groupFanout(f Finding, x *GroupInput, refs []string) Finding {
 		sets[m.AssetID] = map[string]bool{}
 	}
 	for _, r := range x.Connections {
-		sets[r.AssetID][r.Destination+":"+stringPort(r.Port)] = true
+		sets[r.AssetID][connectionEndpoint(r)] = true
 		times[r.AssetID] = append(times[r.AssetID], r.Time)
 	}
 	minimum := 1.0

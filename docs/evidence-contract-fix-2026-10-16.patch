@@ -1,0 +1,1546 @@
+diff --git a/tools/evidence-contract-catalog.go b/tools/evidence-contract-catalog.go
+new file mode 100644
+--- /dev/null
++++ b/tools/evidence-contract-catalog.go
+@@ -0,0 +1,26 @@
++//go:build ignore
++
++// Run from vulnscan-backend: go run ../tools/evidence-contract-catalog.go <output.json>
++// Reads only the executable registry. No database or model access.
++package main
++
++import (
++	"encoding/json"
++	"fmt"
++	"os"
++
++	"vulnscan-backend/evidence"
++)
++
++func main() {
++	if len(os.Args)!=2 {panic("output JSON path required")}
++	output:=map[string]any{
++		"contract_version":evidence.ContractVersion,"fact_version":evidence.RuleVersion,"semantic_version":evidence.SemanticVersion,
++		"facts":evidence.Definitions(),"slots":evidence.SemanticDefinitions(),
++		"phase_one_facts":evidence.PhaseOneFacts(),"phase_one_slots":evidence.PhaseOneSlots(),"phase_one_units":evidence.PhaseOneDefinitions(),
++		"acceptance_boundary":"82 registered contracts; controlled tests are not production or semantic-accuracy certification",
++	}
++	data,err:=json.MarshalIndent(output,"","  ");if err!=nil{panic(err)}
++	if err=os.WriteFile(os.Args[1],append(data,'\n'),0600);err!=nil{panic(err)}
++	fmt.Printf("wrote %d facts and %d semantic slots to %s\n",len(evidence.Definitions()),len(evidence.SemanticDefinitions()),os.Args[1])
++}
+diff --git a/vulnscan-backend/evidence/CONTRACTS.md b/vulnscan-backend/evidence/CONTRACTS.md
+new file mode 100644
+--- /dev/null
++++ b/vulnscan-backend/evidence/CONTRACTS.md
+@@ -0,0 +1,39 @@
++# 证据目录与代码合同
++
++2026-10-16；`evidence-contracts-1`。正式目录由 `Definitions()` 与 `SemanticDefinitions()` 提供，逐项JSON见项目 `docs/evidence-contracts-2026-10-16.json`。
++
++每项包含 `feature_claim`、`security_interpretation`、`cannot_prove`、`required_correlations`。字段进入F执行结果、S任务和执行结果、归一索引及报告模型输入。F只描述算法测到的特征，S解释可见内容，C按已绑定证据确定性联合计分。注册59F/23S不等于82项生产验收。正式一期仍为5F、4S、C01–C07，未更改C02/C03/C04阈值。
++
++## 来源和统计合同
++
++- `F_FAILED_TO_ACTIVE`：对同一IDNA规范DNS问题名统计先前至少配置次数的NXDOMAIN，再验证NOERROR回答IP与同资产、设备的真实命中连接在300秒内对应。不同子域不合并；失败SourceID重复拒绝。当前统计先前失败次数，不声称连续失败或域名激活原因。
++- 群体：每个连接SourceID必须是对应成员的命中ID，时间精确一致，资产、设备和组归属一致，命中端点与连接的协议/IP/目的端口一致；连接来源重复拒绝。`Verified=true`不能绕过这些检查。Hit本身仍须由可信原始报文适配器生成，本模块没有凭空重建主机身份的能力。
++- `GroupInput.Endpoint`使用`tcp://IP:port`或`udp://IP:port`，支持IPv6方括号和规范IP表示。空值、IP单值不得执行同端点协同、共享端点、传播时序或跨日端点协同。DNS查询不能充当共享端点连接。
++- `F_CONN_FAIL_RATE`：RST/TIMEOUT/REFUSED/FAILED须同时有可信供应方核验的`OutcomeVerified`才能计为确认失败；ESTABLISHED/SUCCEEDED须核验才能计成功。SYN_SENT/SYN_RECEIVED/CONNECTING属于尝试中，CLOSED及其他状态属于未知。单独RST报文不证明建立失败。存在尝试中或未知时保留分类数量并返回missing，禁止只用已终结子集伪装全窗口失败率。
++- `OutcomeVerified`应来自可信连接生命周期供应方，不能复制流量正文或客户端标志。常规快照尚无完整生命周期供应时，此通用规则保持missing；不从端口或累计FLOW字段猜测。
++- `F_NXDOMAIN_CLUSTER`明确采用NXDOMAIN查询比例基线`nxdomain_rate_p99`，并要求至少两个失败注册域；没有改成计数基线，避免把比例值误作域名数。
++
++## 保留ID，收紧含义
++
++| 兼容ID | 直接特征与边界 |
++| --- | --- |
++| F_INFECTION_CHAIN | 疑似横向传播时序；A外联→访问B→B外联同端点，一条路径不证明感染、多目标传播或利用成功 |
++| F_HTTP_SIZE_STABILITY | 请求体BodyLength的CV和唯一长度比例；没有响应大小或z分数 |
++| F_MULTI_REDIRECT_CHAIN | 至少两条验证的HTTP重定向边；未识别短链服务 |
++| F_TLS_SNI_MISMATCH | SNI与证书名称不符；未验证目的服务身份 |
++| F_SMALL_PACKET | 低应用载荷比例；同时记录零载荷比例，二者不能混用 |
++| F_HIST_INFRA_PERSISTENCE | 连续跨日多资产IOC关联；未证明服务存活或钓鱼 |
++
++重定向仍要求可信的RedirectVerified、响应状态、Location和事务边，并沿用同SessionID限制。常规快照只透传session_id，尚无独立浏览器逻辑会话身份供应；因此不会擅自移除限制或拼接跨连接浏览器跳转。需要真实浏览器会话证明时保持材料不足，此能力不属于一期C01–C07。
++
++## S类边界
++
++S结果由程序赋值：`structure_validation=passed`表示来源引用、解码、事务、强度合同通过；`semantic_support`保留模型support/contradict/neutral；`behavior_outcome=not_established`表示本槽位没有确认行为结果。缓存重新核验这些边界，拒绝把其篡改为execution_succeeded。模型无权设置这些字段。
++
++即使strong引用了同事务应答，也不能据此认定执行或利用成功。`explanation_only`的5个槽位只解释上下文。正反向模拟响应测试用于验证执行和引用合同；真实模型的恶意意图准确性须另建有人类标注的独立评估集，不能由程序引用校验代替。
++
++## 验证
++
++既有59项不同算法阳性/阴性测试继续运行；新增59项来源/有效时间反例、所有群体规则逐字段绑定反例、DNS跨域名及连接反例、TCP结局分类、23槽位support/contradict/伪造引用测试、缓存结果边界和报告输入合同测试。跨日规则仍允许有来源的partial阳性，完整性不足不能自动构成阴性。
++
++真实冻结样本回放使用项目已有离线脚本并指定新的输出前缀，保留前轮档案；不写180、不重新抓取、不部署、不调用本地LLM。
+diff --git a/vulnscan-backend/evidence/README.md b/vulnscan-backend/evidence/README.md
+--- a/vulnscan-backend/evidence/README.md
++++ b/vulnscan-backend/evidence/README.md
+@@ -1,3 +1,5 @@
++> 2026-10-16合同修订：以[证据合同](CONTRACTS.md)及可执行目录为准。通用59F/23S注册与受控测试不等于生产验收；正式一期仅5F、4S和C01–C07。下文历史接入描述不扩大这一范围。
++
+ # 后端证据模块
+ 
+ 报告已接入[自动历史关联](../traffic/internal/service/EVIDENCE_HISTORY.md)：同IOC或登记资产的历史活动进入事实算法和R06/R07，不按审核通过、驳回或未审核筛选。
+@@ -8,13 +10,13 @@
+ 
+ 报告语义接入现已完成：初报、终报、手动刷新共用快照资料，检查23槽位并按预算批量解释；当前本地模型默认使用原文模式，不宣称已脱敏。材料、结果、诊断独立保存，最终报告仅输入事实与语义的紧凑摘要。配置、覆盖边界和排错见[报告语义接入说明](../traffic/internal/service/EVIDENCE_SEMANTIC_REPORT.md)。以下提到的脱敏契约适用于显式 `redacted` 模式；本轮没有建设字段级脱敏流水线。
+ 
+-对应证据库v0.1的59项事实规则；后端计算规则版本为evidence-algorithms-0.5。已在原有两条算法基础上实现剩余57项，全部提供实际计算分支，不使用统一返回missing的占位实现。逐项列表见[RULES.md](RULES.md)。
++对应证据库v0.1的59项事实规则；后端计算规则版本为evidence-algorithms-0.7。已在原有两条算法基础上实现剩余57项，全部提供实际计算分支，不使用统一返回missing的占位实现。逐项列表见[RULES.md](RULES.md)。
+ 
+ ## 模块边界
+ 
+ 事实Engine只做确定性证据计算、数据前提检查和按需执行。输入由调用方提供，结果包含事实状态、指标、参数、快照版本、来源和依赖版本。事实计算不访问数据库、配置文件、消息队列、HTTP或LLM，不输出总体分数、威胁概率或自动取消其他证据。
+ 
+-新增独立SemanticEngine实现23个语义槽位（18个行为解释、5个解释专用），规则版本evidence-semantics-0.4；通过注入的模型接口按需解释事实及材料。前提检查、单批预算、事务与解码核验、引用和强度校验、失败降级及同命题去重均已实现。逐项矩阵及调用示例见[SEMANTICS.md](SEMANTICS.md)。事实与语义使用独立请求及结果，模型失败不会覆盖事实结果。
++新增独立SemanticEngine实现23个语义槽位（18个行为解释、5个解释专用），规则版本evidence-semantics-0.5；通过注入的模型接口按需解释事实及材料。前提检查、单批预算、事务与解码核验、引用和强度校验、失败降级及同命题去重均已实现。逐项矩阵及调用示例见[SEMANTICS.md](SEMANTICS.md)。事实与语义使用独立请求及结果，模型失败不会覆盖事实结果。
+ 
+ 仅依赖Go标准库与项目已有的golang.org/x/net中的IDNA/PSL能力，没有新增go.mod依赖。历史查询、基线生成、资产归属、授权记录获取和报告上下文压缩属于适配层；当前实现不会自行补造这些数据。
+ 
+diff --git a/vulnscan-backend/evidence/RULES.md b/vulnscan-backend/evidence/RULES.md
+--- a/vulnscan-backend/evidence/RULES.md
++++ b/vulnscan-backend/evidence/RULES.md
+@@ -1,6 +1,8 @@
++> 2026-10-16合同修订：以[证据合同](CONTRACTS.md)及可执行目录为准。通用59F/23S注册与受控测试不等于生产验收；正式一期仅5F、4S和C01–C07。下文历史接入描述不扩大这一范围。
++
+ # 59项事实规则实现清单
+ 
+-对应证据库v0.1；后端计算规则版本为evidence-algorithms-0.3。全部59项已有实际计算分支及成立/不成立用例；新增57项还有缺少依据的降级用例。这里的已实现不代表已获得生产数据、完成报告接入或通过真实告警验收。
++对应证据库v0.1；后端计算规则版本为evidence-algorithms-0.7。全部59项已有实际计算分支及成立/不成立用例；新增57项还有缺少依据的降级用例。这里的已实现不代表已获得生产数据、完成报告接入或通过真实告警验收。
+ 
+ 规则参数及数据前提详见README。没有指定阈值的规则须由调用方注入配置；缺依据返回missing/ineligible。原定义中的旧版分值及类型门槛只作兼容说明，不作为本模块评分输出。
+ 
+@@ -15,48 +17,48 @@
+ | F_DNS_HIGH_ENTROPY | 长标签高基数子域（单资产） | DNS | 按固定条件计算，或读取明确的外部基线/核验资料 |
+ | F_DNS_ENCODED_LABEL | 子域编码结构 | DNS | 按固定条件计算，或读取明确的外部基线/核验资料 |
+ | F_DGA_LEXICAL | 词形随机性（单资产） | DNS | 按固定条件计算，或读取明确的外部基线/核验资料 |
+-| F_NXDOMAIN_CLUSTER | NXDOMAIN 聚集（scope=asset，单资产） | DNS | 按固定条件计算，或读取明确的外部基线/核验资料 |
++| F_NXDOMAIN_CLUSTER | NXDOMAIN失败率与多注册域聚集（单资产） | DNS | 按固定条件计算，或读取明确的外部基线/核验资料 |
+ | F_GROUP_NXDOMAIN_CLUSTER | 群体 NXDOMAIN 聚集（scope=asset_group） | 群体 | 按固定条件计算，或读取明确的外部基线/核验资料 |
+ | F_FAILED_TO_ACTIVE | 失败域→激活连接 | DNS | min_failures |
+ | F_SHARED_DOMAIN_CLUSTER | 群体共同域名簇 | 群体 | 按固定条件计算，或读取明确的外部基线/核验资料 |
+ | F_HTTP_ENDPOINT_REPEAT | 端点重复回连 | HTTP/会话 | 按固定条件计算，或读取明确的外部基线/核验资料 |
+ | F_HTTP_FIELD_ENCODING | 字段编码异常 | HTTP/会话 | 按固定条件计算，或读取明确的外部基线/核验资料 |
+-| F_HTTP_UA_RARITY | UA 稀有/不一致 | HTTP/会话 | 按固定条件计算，或读取明确的外部基线/核验资料 |
+-| F_HTTP_SIZE_STABILITY | 请求/响应尺寸稳定 | HTTP/会话 | 按固定条件计算，或读取明确的外部基线/核验资料 |
++| F_HTTP_UA_RARITY | UA一致且稀有 | HTTP/会话 | 按固定条件计算，或读取明确的外部基线/核验资料 |
++| F_HTTP_SIZE_STABILITY | HTTP请求体大小稳定 | HTTP/会话 | 按固定条件计算，或读取明确的外部基线/核验资料 |
+ | F_LONG_LOW_SESSION | 长会话低频小流量 | HTTP/会话 | 按固定条件计算，或读取明确的外部基线/核验资料 |
+ | F_URL_ODD_AUTHORITY | URL 授权部分异常（弱欺骗） | HTTP/会话 | 按固定条件计算，或读取明确的外部基线/核验资料 |
+-| F_URL_HOMOGLYPH | 同形混淆字符（强欺骗） | HTTP/会话 | 按固定条件计算，或读取明确的外部基线/核验资料 |
+-| F_URL_BRAND_SUBDOMAIN_TRICK | 伪装子域（强欺骗） | HTTP/会话 | 按固定条件计算，或读取明确的外部基线/核验资料 |
++| F_URL_HOMOGLYPH | 域名有限字符映射近似 | HTTP/会话 | 按固定条件计算，或读取明确的外部基线/核验资料 |
++| F_URL_BRAND_SUBDOMAIN_TRICK | 子域品牌词与授权注册域冲突 | HTTP/会话 | 按固定条件计算，或读取明确的外部基线/核验资料 |
+ | F_BRAND_IMPOSTOR | 品牌仿冒 | HTTP/会话 | max_edit_distance |
+ | F_CRED_POST_STRUCTURE | 登录提交结构 | HTTP/会话 | 按固定条件计算，或读取明确的外部基线/核验资料 |
+ | F_FORM_CROSSSITE | 表单跨站提交 | HTTP/会话 | 按固定条件计算，或读取明确的外部基线/核验资料 |
+ | F_REDIRECT_CHAIN | 落地页→异站提交链 | HTTP/会话 | 按固定条件计算，或读取明确的外部基线/核验资料 |
+-| F_MULTI_REDIRECT_CHAIN | 多重短链跳转 | HTTP/会话 | 按固定条件计算，或读取明确的外部基线/核验资料 |
++| F_MULTI_REDIRECT_CHAIN | 多次HTTP重定向 | HTTP/会话 | 按固定条件计算，或读取明确的外部基线/核验资料 |
+ | F_PROTOCOL_PORT_MISMATCH | 协议-端口错配 | 网络/独立佐证 | 按固定条件计算，或读取明确的外部基线/核验资料 |
+ | F_RARE_PORT | 稀有端口 | 网络/独立佐证 | 按固定条件计算，或读取明确的外部基线/核验资料 |
+ | F_DST_NOVELTY | 目的端点新颖 | 历史/授权 | 按固定条件计算，或读取明确的外部基线/核验资料 |
+ | F_INFRA_RARITY | 目标基础设施稀有度 | 网络/独立佐证 | 按固定条件计算，或读取明确的外部基线/核验资料 |
+ | F_FANOUT_SINGLE_SRC | 单源目标扇出 | 网络/独立佐证 | 按固定条件计算，或读取明确的外部基线/核验资料 |
+ | F_PORT_SEQUENCE | 端口序列形态 | 网络/独立佐证 | difference_entropy_threshold（非单调序列） |
+-| F_SMALL_PACKET | 小包无载荷 | 网络/独立佐证 | small_payload_bytes |
++| F_SMALL_PACKET | 低应用载荷占比 | 网络/独立佐证 | small_payload_bytes |
+ | F_CONN_FAIL_RATE | 连接失败率 | 网络/独立佐证 | 按固定条件计算，或读取明确的外部基线/核验资料 |
+ | F_INDEPENDENT_RULE_CORROB | 独立规则交叉佐证 | 网络/独立佐证 | 按固定条件计算，或读取明确的外部基线/核验资料 |
+ | F_INDEPENDENT_INTEL_CORROB | 跨情报源独立命中 | 网络/独立佐证 | 按固定条件计算，或读取明确的外部基线/核验资料 |
+ | F_IOC_TYPE_CORROB | IOC 类型与行为证据一致 | 网络/独立佐证 | 按固定条件计算，或读取明确的外部基线/核验资料 |
+-| F_TLS_SNI_MISMATCH | SNI 与目的不符 | TLS | 按固定条件计算，或读取明确的外部基线/核验资料 |
++| F_TLS_SNI_MISMATCH | SNI与证书名称不符 | TLS | 按固定条件计算，或读取明确的外部基线/核验资料 |
+ | F_TLS_CERT_ANOMALY | 自签名/异常证书 | TLS | 按固定条件计算，或读取明确的外部基线/核验资料 |
+ | F_TLS_JA_MISMATCH | JA3/JA4 指纹与声明不符 | TLS | 按固定条件计算，或读取明确的外部基线/核验资料 |
+ | F_MULTI_ASSET_IOC | 多资产同 IOC | 群体 | cluster_window_seconds |
+ | F_MULTI_ASSET_DIST | 聚集分布形态 | 群体 | subnet_entropy_min |
+ | F_TIME_COORDINATION | 多资产时间协同 | 群体 | bucket_seconds；可选max_lag_bins |
+-| F_COORD_FANOUT | 协同扫描/扇出 | 群体 | handoff_seconds（分工子路径） |
+-| F_INFECTION_CHAIN | 感染链传播 | 群体 | chain_window_seconds |
++| F_COORD_FANOUT | 多资产目标集合重叠或扇出衔接 | 群体 | handoff_seconds（分工子路径） |
++| F_INFECTION_CHAIN | 疑似横向传播时序 | 群体 | chain_window_seconds |
+ | F_SHARED_ENDPOINT | 共享目的端点 | 群体 | 按固定条件计算，或读取明确的外部基线/核验资料 |
+-| F_FIRST_VISIT_CLUSTER | 首访时间聚集 | 群体 | 按固定条件计算，或读取明确的外部基线/核验资料 |
++| F_FIRST_VISIT_CLUSTER | 首次已保存访问时间聚集 | 群体 | 按固定条件计算，或读取明确的外部基线/核验资料 |
+ | F_COORD_PATTERN_RECURRENCE | 协同模式跨日重复 | 群体 | bucket_seconds |
+ | F_HIST_ASSET_IOC_RECURRENCE | 同 IOC→同资产跨日复发 | 历史/授权 | 按固定条件计算，或读取明确的外部基线/核验资料 |
+ | F_HIST_GROUP_RECURRENCE | 群体+基础设施复发 | 历史/授权 | 按固定条件计算，或读取明确的外部基线/核验资料 |
+-| F_HIST_INFRA_PERSISTENCE | 钓鱼基础设施持续存活 | 历史/授权 | 按固定条件计算，或读取明确的外部基线/核验资料 |
++| F_HIST_INFRA_PERSISTENCE | 连续跨日多资产IOC关联 | 历史/授权 | 按固定条件计算，或读取明确的外部基线/核验资料 |
+ | F_HIST_SCHEDULE_MATCH | 历史时刻模式一致 | 历史/授权 | kl_threshold |
+ | F_HIST_MULTI_IOC_SIEGE | 同资产多 IOC 围攻 | 历史/授权 | 按固定条件计算，或读取明确的外部基线/核验资料 |
+ | F_HIST_STAGE_PROGRESSION | 攻击阶段递进 | 历史/授权 | CurrentStage来源证明；同IOC或核验战役；当前严格推进且历史不回退；见HISTORY.md |
+diff --git a/vulnscan-backend/evidence/SEMANTICS.md b/vulnscan-backend/evidence/SEMANTICS.md
+--- a/vulnscan-backend/evidence/SEMANTICS.md
++++ b/vulnscan-backend/evidence/SEMANTICS.md
+@@ -1,3 +1,5 @@
++> 2026-10-16合同修订：以[证据合同](CONTRACTS.md)及可执行目录为准。通用59F/23S注册与受控测试不等于生产验收；正式一期仅5F、4S和C01–C07。下文历史接入描述不扩大这一范围。
++
+ # 23个语义槽位
+ 
+ ## 报告接入与原文模式（0.2）
+@@ -8,7 +10,7 @@
+ 
+ 缓存命中也会重新核验任务、引用、逐字摘录、执行状态及强度；模式或规则、材料、模型配置版本、预算改变会使对应缓存失效。
+ 
+-后端语义规则版本为`evidence-semantics-0.4`。23个槽位均已实现前提解析、任务构建、模型返回校验及失败降级；其中18个解释具体行为，5个只记录替代解释、阶段缺口或历史参考。槽位使用`(id,target,subtype)`作为唯一键，S12和S13各占两个槽位。
++后端语义规则版本为`evidence-semantics-0.5`。23个槽位均已实现前提解析、任务构建、模型返回校验及失败降级；其中18个解释具体行为，5个只记录替代解释、阶段缺口或历史参考。槽位使用`(id,target,subtype)`作为唯一键，S12和S13各占两个槽位。
+ 
+ 语义不是新的统计算法。59项事实规则的结果保持原样；语义解释使用可追溯的实际片段、字段与背景，不重算事实，不输出评分、概率、类型门槛或自动排除决定。LLM的解释仍需复核，引用合法及强度合规不等于语义判断正确，也不证明攻击成功。
+ 
+@@ -99,4 +101,4 @@
+ 
+ ## 实现进度
+ 
+-已完成模块实现、23槽位的合成测试、关键边界测试及客户端HTTP契约测试。仍需在报告服务中构建可信快照适配器、配置真实tokenizer、落库及输出精简报告上下文，并进行真实告警回放/模型验收。现有报告服务尚未自动调用这23个槽位，旧版YAML和Python PoC的实现标记不代表本次Go后端进度。
++23槽位有受控模型响应和材料合同测试；正式报告仅执行S01、S04、S09、S13-command。引用与结构通过不等于语义正确。真实样本和已保存K2.7响应的验收范围见项目docs中的一期报告，不能推广到另外19槽位。
+diff --git a/vulnscan-backend/evidence/all_rules_test.go b/vulnscan-backend/evidence/all_rules_test.go
+--- a/vulnscan-backend/evidence/all_rules_test.go
++++ b/vulnscan-backend/evidence/all_rules_test.go
+@@ -88,8 +88,16 @@
+ 		dns.Records = append(dns.Records, DNSRecord{SourceID: "dns2", Time: start, Domain: "other.com", RCode: 3, RCodeKnown: true})
+ 		setBaseline(map[string]float64{"nxdomain_rate_p99": 0.5})
+ 	case "F_FAILED_TO_ACTIVE":
++		network.Connections[0].Transport = "tcp"
++		scope.EndpointID = connectionEndpoint(network.Connections[0])
++		i.Scope = scope
++		for j := range r.Hits {
++			r.Hits[j].Scope = scope
++		}
++		r.Hits[0].ID = network.Connections[0].SourceID
++		dns.Records[0].Domain = "active.com"
+ 		dns.Records[0].Time = start.Add(-3 * time.Minute)
+-		dns.Records = append(dns.Records, DNSRecord{SourceID: "dns2", Time: start.Add(-2 * time.Minute), Domain: "other.com", RCode: 3, RCodeKnown: true}, DNSRecord{SourceID: "dns3", Time: start.Add(-time.Minute), Domain: "active.com", RCode: 0, RCodeKnown: true, Answers: []string{conn.Destination}})
++		dns.Records = append(dns.Records, DNSRecord{SourceID: "dns2", Time: start.Add(-2 * time.Minute), Domain: "ACTIVE.COM.", RCode: 3, RCodeKnown: true}, DNSRecord{SourceID: "dns3", Time: start.Add(-time.Minute), Domain: "active.com", RCode: 0, RCodeKnown: true, Answers: []string{conn.Destination}})
+ 		c.Policies[id] = map[string]float64{"min_failures": 2}
+ 	case "F_HTTP_ENDPOINT_REPEAT":
+ 	case "F_HTTP_FIELD_ENCODING":
+@@ -169,6 +177,7 @@
+ 		network.Connections[0].PayloadBytes = &payload
+ 		c.Policies[id] = map[string]float64{"small_payload_bytes": 64}
+ 	case "F_CONN_FAIL_RATE":
++		network.Connections[0].OutcomeVerified = true
+ 		setBaseline(map[string]float64{"connection_failure_rate_p95": 0.1})
+ 	case "F_INDEPENDENT_RULE_CORROB", "F_INDEPENDENT_INTEL_CORROB", "F_IOC_TYPE_CORROB":
+ 		i.Corroboration = &CorroborationData{Provenance: fixtureProvenance(), IOC: "ioc", IOCType: "C2", HardScoresVerified: true, HardTypeScores: map[string]float64{"C2": 40, "BT": 5, "PH": 0}, Rules: []RuleRecord{{ID: "rule1", IndependenceGroup: "group1", OriginalSource: "original1"}, {ID: "rule2", IndependenceGroup: "group2", OriginalSource: "original2"}}, Intelligence: []IntelRecord{{ID: "intel1", IOC: "ioc", OriginalSource: "original1"}, {ID: "intel2", IOC: "ioc", OriginalSource: "original2"}}}
+@@ -269,7 +278,7 @@
+ 	c := DefaultConfig()
+ 	c.Policies = map[FactID]map[string]float64{}
+ 	start := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+-	x := GroupInput{Provenance: fixtureProvenance(), ID: "synthetic-group", Window: AnalysisWindow{Start: start, End: start.Add(10 * time.Minute)}, IOC: "203.0.113.10", Endpoint: "203.0.113.10", DNSOwnership: map[string]string{}}
++	x := GroupInput{Provenance: fixtureProvenance(), ID: "synthetic-group", Window: AnalysisWindow{Start: start, End: start.Add(10 * time.Minute)}, IOC: "203.0.113.10", Endpoint: "tcp://203.0.113.10:443", DNSOwnership: map[string]string{}}
+ 	packets := uint64(1)
+ 	for asset := 0; asset < 3; asset++ {
+ 		name := fmt.Sprintf("asset%d", asset)
+@@ -280,7 +289,7 @@
+ 			t := start.Add(time.Duration(j) * time.Minute)
+ 			r.Hits = append(r.Hits, Hit{ID: hid, OccurredAt: t, Packets: &packets, Scope: scope})
+ 			m.HitIDs = append(m.HitIDs, hid)
+-			x.Connections = append(x.Connections, Connection{SourceID: fmt.Sprintf("connection%d-%d", asset, j), AssetID: name, Time: t, Destination: x.Endpoint, Port: 443})
++			x.Connections = append(x.Connections, Connection{SourceID: fmt.Sprintf("connection%d-%d", asset, j), AssetID: name, Time: t, Destination: "203.0.113.10", Port: 443, Transport: "tcp"})
+ 		}
+ 		x.Members = append(x.Members, m)
+ 	}
+@@ -319,6 +328,7 @@
+ 		}
+ 	}
+ 	r.Groups = []GroupInput{x}
++	bindGroupFixture(&r)
+ 	return r, c
+ }
+ 
+@@ -417,3 +427,34 @@
+ 		t.Fatalf("expected 59 results, got %d", len(out.Findings))
+ 	}
+ }
++
++// Construct actual hit observations for a controlled group connection fixture.
++// Tests that deliberately corrupt associations must not call this afterwards.
++func bindGroupFixture(r *Request) {
++	x := &r.Groups[0]
++	r.Hits = nil
++	for i := range x.Members {
++		x.Members[i].HitIDs = nil
++	}
++	for i := range x.Connections {
++		row := &x.Connections[i]
++		if row.Transport == "" {
++			row.Transport = "tcp"
++		}
++		if row.Port == 0 {
++			row.Port = 443
++		}
++		for j := range x.Members {
++			m := &x.Members[j]
++			if m.AssetID != row.AssetID {
++				continue
++			}
++			scope := m.Scope
++			scope.EndpointID = connectionEndpoint(*row)
++			r.Hits = append(r.Hits, Hit{ID: row.SourceID, OccurredAt: row.Time, Scope: scope})
++			m.HitIDs = append(m.HitIDs, row.SourceID)
++		}
++	}
++	// Membership scope is an asset/device identity; connection scope is checked
++	// independently for each transport endpoint by the engine.
++}
+diff --git a/vulnscan-backend/evidence/binding_rules_test.go b/vulnscan-backend/evidence/binding_rules_test.go
+--- a/vulnscan-backend/evidence/binding_rules_test.go
++++ b/vulnscan-backend/evidence/binding_rules_test.go
+@@ -25,6 +25,7 @@
+ 			x.Connections = append(x.Connections, Connection{SourceID: string(rune('a' + asset*2 + j)), AssetID: m.AssetID, Destination: "203.0.113." + stringPort(uint16(asset*2+j+1)), Time: start.Add(time.Duration(asset*5+j) * time.Second), Port: 22})
+ 		}
+ 	}
++	bindGroupFixture(&r)
+ 	e, err := NewEngine(c)
+ 	if err != nil {
+ 		t.Fatal(err)
+@@ -34,6 +35,7 @@
+ 	}
+ 	x.Connections[4].Time = start.Add(time.Second)
+ 	x.Connections[5].Time = start.Add(2 * time.Second)
++	bindGroupFixture(&r)
+ 	if evaluate(t, e, r).Findings[0].Status != NotObserved {
+ 		t.Fatal("overlapping handoff accepted")
+ 	}
+diff --git a/vulnscan-backend/evidence/catalog.go b/vulnscan-backend/evidence/catalog.go
+--- a/vulnscan-backend/evidence/catalog.go
++++ b/vulnscan-backend/evidence/catalog.go
+@@ -1,7 +1,8 @@
+ package evidence
+ 
+-// Canonical fact definitions copied from evidence-library v0.1; not an LLM prompt.
++// Executable feature contracts. Stable IDs do not imply an attack verdict.
+ type Definition struct {
++	EvidenceContract
+ 	ID          FactID `json:"fact_id"`
+ 	Description string `json:"description"`
+ 	Algorithm   string `json:"algorithm"`
+@@ -17,48 +18,48 @@
+ 	{ID: FactID("F_DNS_HIGH_ENTROPY"), Description: "长标签高基数子域（单资产）", Algorithm: "PSL 归一后：独特子域比 >p95 且 标签长 p90 >p95 且 查询速率 >p95（同域基线）；单机高熵不支持 Botnet"},
+ 	{ID: FactID("F_DNS_ENCODED_LABEL"), Description: "子域编码结构", Algorithm: "base32/hex 模式匹配且代码可验证解码链"},
+ 	{ID: FactID("F_DGA_LEXICAL"), Description: "词形随机性（单资产）", Algorithm: "bigram 对数概率 <语料 p05；元音比/长度分布异常；单机随机域名不支持 Botnet"},
+-	{ID: FactID("F_NXDOMAIN_CLUSTER"), Description: "NXDOMAIN 聚集（scope=asset，单资产）", Algorithm: "单资产窗口内不同 eTLD+1 的 NXDOMAIN >p99 基线；需 rcode＋未命中 DNS 分母"},
++	{ID: FactID("F_NXDOMAIN_CLUSTER"), Description: "NXDOMAIN失败率与多注册域聚集（单资产）", Algorithm: "单资产完整查询窗口内 NXDOMAIN 查询比例 > nxdomain_rate_p99，且失败的不同 eTLD+1 ≥2；基线单位为查询比例"},
+ 	{ID: FactID("F_GROUP_NXDOMAIN_CLUSTER"), Description: "群体 NXDOMAIN 聚集（scope=asset_group）", Algorithm: "≥3 资产同窗口对同词形簇域名的失败解析率 >群体基线 p99；需 rcode＋未命中分母；与单资产版为不同 fact"},
+-	{ID: FactID("F_FAILED_TO_ACTIVE"), Description: "失败域→激活连接", Algorithm: "连续失败域名中成功解析，且 ≤5min 外联对应 IP（DNS→连接关联）"},
++	{ID: FactID("F_FAILED_TO_ACTIVE"), Description: "失败域→激活连接", Algorithm: "同一规范DNS问题名至少min_failures次先前NXDOMAIN，随后NOERROR回答IP且同资产≤5min连接该IP；不要求连续失败"},
+ 	{ID: FactID("F_SHARED_DOMAIN_CLUSTER"), Description: "群体共同域名簇", Algorithm: "≥3 资产共同查询一簇非常规域名（同注册域/同命名模式）"},
+ 	{ID: FactID("F_HTTP_ENDPOINT_REPEAT"), Description: "端点重复回连", Algorithm: "主机＋规范端点分组：重复 ≥6 次且间隔低抖动（CV≤0.3）；POST 本身不加分"},
+ 	{ID: FactID("F_HTTP_FIELD_ENCODING"), Description: "字段编码异常", Algorithm: "编码链验证后异常长度/编码占比 >同服务基线 p95；排除 JWT/OAuth"},
+-	{ID: FactID("F_HTTP_UA_RARITY"), Description: "UA 稀有/不一致", Algorithm: "同资产 UA 一致且全平台稀有度 <p01；弱证据，与 S03 同事实取其一"},
+-	{ID: FactID("F_HTTP_SIZE_STABILITY"), Description: "请求/响应尺寸稳定", Algorithm: "n≥12；CV(size)<baseline_p05 且 unique_size_ratio<baseline_p05（或 z≤−2.0）"},
++	{ID: FactID("F_HTTP_UA_RARITY"), Description: "UA一致且稀有", Algorithm: "同资产 UA 一致且全平台稀有度 <p01；弱证据，与 S03 同事实取其一"},
++	{ID: FactID("F_HTTP_SIZE_STABILITY"), Description: "HTTP请求体大小稳定", Algorithm: "n≥12；仅请求BodyLength：CV< size_cv_p05 且 unique_size_ratio<unique_size_ratio_p05；不计算响应或z分数"},
+ 	{ID: FactID("F_LONG_LOW_SESSION"), Description: "长会话低频小流量", Algorithm: "会话 >30min 且双向 <10KB 且含周期小包（体量须 Q02 verified）"},
+ 	{ID: FactID("F_URL_ODD_AUTHORITY"), Description: "URL 授权部分异常（弱欺骗）", Algorithm: "userinfo `@` / IP·数字·十六进制主机；deception_strength: weak，不满足 Phishing 欺骗门槛"},
+-	{ID: FactID("F_URL_HOMOGLYPH"), Description: "同形混淆字符（强欺骗）", Algorithm: "IDNA 解码后视觉近似（rn→m、0→o、西里尔/希腊字母混入）；输出混淆字符清单"},
+-	{ID: FactID("F_URL_BRAND_SUBDOMAIN_TRICK"), Description: "伪装子域（强欺骗）", Algorithm: "品牌词在子域而注册域无关（PSL 提取），如 `brand.com.evil.tld`"},
++	{ID: FactID("F_URL_HOMOGLYPH"), Description: "域名有限字符映射近似", Algorithm: "有限字符映射后与核验品牌域近似；不覆盖完整Unicode视觉混淆检测"},
++	{ID: FactID("F_URL_BRAND_SUBDOMAIN_TRICK"), Description: "子域品牌词与授权注册域冲突", Algorithm: "品牌词在子域而注册域无关（PSL 提取），如 `brand.com.evil.tld`"},
+ 	{ID: FactID("F_BRAND_IMPOSTOR"), Description: "品牌仿冒", Algorithm: "与审核品牌清单编辑距离/邻键比对，或授权域核验失败；需品牌清单"},
+ 	{ID: FactID("F_CRED_POST_STRUCTURE"), Description: "登录提交结构", Algorithm: "同请求 POST＋脱敏凭据字段名；正文截断标 insufficient"},
+ 	{ID: FactID("F_FORM_CROSSSITE"), Description: "表单跨站提交", Algorithm: "action 与页面来源不同可注册域"},
+ 	{ID: FactID("F_REDIRECT_CHAIN"), Description: "落地页→异站提交链", Algorithm: "事务 ID 关联的跨注册域跳转提交链；两条无关联命中不得拼接"},
+-	{ID: FactID("F_MULTI_REDIRECT_CHAIN"), Description: "多重短链跳转", Algorithm: "短链→中间页→落地页的重定向序列还原（需完整响应/Location）"},
++	{ID: FactID("F_MULTI_REDIRECT_CHAIN"), Description: "多次HTTP重定向", Algorithm: "同一已关联会话内≥2条经RedirectVerified验证的事务跳转边；核验响应状态及Location，不识别短链服务"},
+ 	{ID: FactID("F_PROTOCOL_PORT_MISMATCH"), Description: "协议-端口错配", Algorithm: "dst_port vs 可解析 app_proto 指纹＋服务清单不符（端口推断的 protocol 不算）"},
+ 	{ID: FactID("F_RARE_PORT"), Description: "稀有端口", Algorithm: "目的端口在同角色资产群体中频率 <p01"},
+ 	{ID: FactID("F_DST_NOVELTY"), Description: "目的端点新颖", Algorithm: "资产历史覆盖窗口内首现（只称\"首次告警\"）"},
+ 	{ID: FactID("F_INFRA_RARITY"), Description: "目标基础设施稀有度", Algorithm: "目的 IP 的 ASN/地理/信誉稀有（外部清单，二期）"},
+ 	{ID: FactID("F_FANOUT_SINGLE_SRC"), Description: "单源目标扇出", Algorithm: "跨事件按源去重 unique(dst,port)/小时 >角色基线 p99"},
+ 	{ID: FactID("F_PORT_SEQUENCE"), Description: "端口序列形态", Algorithm: "目的端口序列呈顺序/逆序/伪随机（≥8 去重端口）"},
+-	{ID: FactID("F_SMALL_PACKET"), Description: "小包无载荷", Algorithm: "payload 长度分布 ≥80% 集中于小包"},
+-	{ID: FactID("F_CONN_FAIL_RATE"), Description: "连接失败率", Algorithm: "SYN/RST 失败比例 >p95（需 TCP 状态，一期仅线索）"},
++	{ID: FactID("F_SMALL_PACKET"), Description: "低应用载荷占比", Algorithm: "≥80%独立连接观测的应用载荷字节数≤small_payload_bytes；另记录零载荷比例，不等同零载荷"},
++	{ID: FactID("F_CONN_FAIL_RATE"), Description: "连接失败率", Algorithm: "完整窗口确认失败/(确认失败+确认成功)>connection_failure_rate_p95；须OutcomeVerified；尝试中或未知结局返回missing，SYN_SENT不计失败"},
+ 	{ID: FactID("F_INDEPENDENT_RULE_CORROB"), Description: "独立规则交叉佐证", Algorithm: "by_rule＋规则库元数据判独立性；同 IOC 派生多 rule_id 只记一组"},
+ 	{ID: FactID("F_INDEPENDENT_INTEL_CORROB"), Description: "跨情报源独立命中", Algorithm: "多情报源/引擎独立标记同一目的；须验证情报源独立性（同源转引不算）"},
+ 	{ID: FactID("F_IOC_TYPE_CORROB"), Description: "IOC 类型与行为证据一致", Algorithm: "IOC 情报类型与成立硬行为事实类型一致（evaluation_stage=post_hard_type；抑制与 modifier 后的 hard_type_scores 满足 top1≥15、份额≥0.60、margin≥10 且情报标签与 top1 一致时成立）；不回填类型分"},
+-	{ID: FactID("F_TLS_SNI_MISMATCH"), Description: "SNI 与目的不符", Algorithm: "需 TLS 握手元数据；CDN 例外清单"},
++	{ID: FactID("F_TLS_SNI_MISMATCH"), Description: "SNI与证书名称不符", Algorithm: "已核验TLS握手SNI与证书名称匹配失败；需已核验CDN例外清单；不比较目的服务身份"},
+ 	{ID: FactID("F_TLS_CERT_ANOMALY"), Description: "自签名/异常证书", Algorithm: "证书链/有效期/颁发者异常"},
+ 	{ID: FactID("F_TLS_JA_MISMATCH"), Description: "JA3/JA4 指纹与声明不符", Algorithm: "指纹库比对；浏览器声称 vs TLS 指纹"},
+ 	{ID: FactID("F_MULTI_ASSET_IOC"), Description: "多资产同 IOC", Algorithm: "≥3 独立资产（NAT/代理/解析器归属去重）同 IOC 且时间聚集"},
+-	{ID: FactID("F_MULTI_ASSET_DIST"), Description: "聚集分布形态", Algorithm: "命中资产跨网段随机分布（真感染面）vs 同网段管理面"},
+-	{ID: FactID("F_TIME_COORDINATION"), Description: "多资产时间协同", Algorithm: "各资产到同端点时序相位一致（互相关 >0.7），或秒级窗口同向突发"},
+-	{ID: FactID("F_COORD_FANOUT"), Description: "协同扫描/扇出", Algorithm: "多源目标集合重叠 >70%，或不同资产分工覆盖目标段且时间衔接"},
+-	{ID: FactID("F_INFECTION_CHAIN"), Description: "感染链传播", Algorithm: "A 可疑外联→A 访问多内网 B→B 随后外联同目的的时序链"},
+-	{ID: FactID("F_SHARED_ENDPOINT"), Description: "共享目的端点", Algorithm: "去 IOC 标签后 ≥3 资产独立聚集同目的端点（端点稀有度 × 资产数）"},
+-	{ID: FactID("F_FIRST_VISIT_CLUSTER"), Description: "首访时间聚集", Algorithm: "多资产首访集中 ≤1h 窗口（投递后点击潮）"},
++	{ID: FactID("F_MULTI_ASSET_DIST"), Description: "聚集分布形态", Algorithm: "核验成员的子网熵及角色分布达到配置门槛；不推断随机感染或真实感染面"},
++	{ID: FactID("F_TIME_COORDINATION"), Description: "多资产时间协同", Algorithm: "≥3资产到同一协议/IP/端口的有界时间桶序列；最小两两互相关>0.7；Endpoint缺失不执行"},
++	{ID: FactID("F_COORD_FANOUT"), Description: "多资产目标集合重叠或扇出衔接", Algorithm: "多源目标集合重叠 >70%，或不同资产分工覆盖目标段且时间衔接"},
++	{ID: FactID("F_INFECTION_CHAIN"), Description: "疑似横向传播时序", Algorithm: "A外联同一协议/IP/端口→A访问另一成员B的核验地址→B随后外联该端点；至少一条时序路径，不证明感染或利用成功"},
++	{ID: FactID("F_SHARED_ENDPOINT"), Description: "共享目的端点", Algorithm: "≥3核验资产连接同一协议/IP/端口，且endpoint_frequency<endpoint_frequency_p01；DNS查询不充当连接"},
++	{ID: FactID("F_FIRST_VISIT_CLUSTER"), Description: "首次已保存访问时间聚集", Algorithm: "完整历史窗口内无先前记录的同端点访问，≥3资产集中≤1h；不证明网络真实首访或点击"},
+ 	{ID: FactID("F_COORD_PATTERN_RECURRENCE"), Description: "协同模式跨日重复", Algorithm: "同一资产组的协同模式（相位/突发窗口）在 ≥2 个自然日重现"},
+-	{ID: FactID("F_HIST_ASSET_IOC_RECURRENCE"), Description: "同 IOC→同资产跨日复发", Algorithm: "30 天窗 ≥2 自然日独立事件；确认恶意 +20｜判误报 −20｜未审核 0"},
+-	{ID: FactID("F_HIST_GROUP_RECURRENCE"), Description: "群体+基础设施复发", Algorithm: "同 IOC 簇/同族域名/同目的端点的资产组跨周重现；确认恶意 +15｜判误报 −15｜未审核 0"},
+-	{ID: FactID("F_HIST_INFRA_PERSISTENCE"), Description: "钓鱼基础设施持续存活", Algorithm: "同 IOC 连续多天被不同资产访问；确认恶意 +15｜未审核 0"},
++	{ID: FactID("F_HIST_ASSET_IOC_RECURRENCE"), Description: "同 IOC→同资产跨日复发", Algorithm: "30天窗≥2自然日独立事件；允许有来源的partial阳性；F不按审核状态计分，C01按一期联合策略计分"},
++	{ID: FactID("F_HIST_GROUP_RECURRENCE"), Description: "群体+基础设施复发", Algorithm: "同已核验群体及基础设施跨周重现；仅输出历史事实，不执行旧版审核加减分"},
++	{ID: FactID("F_HIST_INFRA_PERSISTENCE"), Description: "连续跨日多资产IOC关联", Algorithm: "同IOC连续自然日由多个资产产生已保存历史记录；只输出关联事实，不证明服务存活、钓鱼或直接加分"},
+ 	{ID: FactID("F_HIST_SCHEDULE_MATCH"), Description: "历史时刻模式一致", Algorithm: "历史事件与当前命中时刻分布一致（KL 散度 <阈值）"},
+ 	{ID: FactID("F_HIST_MULTI_IOC_SIEGE"), Description: "同资产多 IOC 围攻", Algorithm: "窗口内同资产被 ≥3 不同 IOC/规则族命中；按角色基线"},
+ 	{ID: FactID("F_HIST_STAGE_PROGRESSION"), Description: "攻击阶段递进", Algorithm: "同资产、同IOC或独立核验战役内，已定谳恶意历史与有来源证明的CurrentStage构成scan/exploit→c2→exfil推进；当前阶段须高于最近历史阶段，历史不得回退；不证明因果攻击链"},
+@@ -69,7 +70,13 @@
+ 	{ID: FactID("F_EXCL_INFRA_ROLE"), Description: "已核验基础服务", Algorithm: "核验登记角色/任务与当前活动匹配，不由模型推断"},
+ }
+ 
+-func Definitions() []Definition { return append([]Definition(nil), definitions...) }
++func Definitions() []Definition {
++	out := append([]Definition(nil), definitions...)
++	for i := range out {
++		out[i].EvidenceContract = factContract(out[i])
++	}
++	return out
++}
+ func SupportedFacts() []FactID {
+ 	ids := make([]FactID, len(definitions))
+ 	for i, d := range definitions {
+diff --git a/vulnscan-backend/evidence/contracts.go b/vulnscan-backend/evidence/contracts.go
+new file mode 100644
+--- /dev/null
++++ b/vulnscan-backend/evidence/contracts.go
+@@ -0,0 +1,74 @@
++package evidence
++
++const ContractVersion = "evidence-contracts-1"
++
++// EvidenceContract separates what the program measures from a security
++// interpretation. Neither a feature nor a model quotation confirms an outcome.
++type EvidenceContract struct {
++	FeatureClaim           string   `json:"feature_claim"`
++	SecurityInterpretation string   `json:"security_interpretation"`
++	CannotProve            string   `json:"cannot_prove"`
++	RequiredCorrelations   []string `json:"required_correlations"`
++}
++
++func contractForFact(id FactID) EvidenceContract {
++	for _, d := range definitions {
++		if d.ID == id {
++			return factContract(d)
++		}
++	}
++	return EvidenceContract{}
++}
++
++func factContract(d Definition) EvidenceContract {
++	c := EvidenceContract{FeatureClaim: d.Algorithm,
++		SecurityInterpretation: d.Description + "；仅作为已核验输入范围内的特征线索",
++		CannotProve:            "不能单独证明恶意意图、攻击归属、主机感染或攻击成功",
++		RequiredCorrelations:   []string{"同资产及真实通信来源绑定", "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"}}
++	switch d.ID {
++	case BeaconPeriodic, "F_BEACON_JITTER", "F_HTTP_ENDPOINT_REPEAT":
++		c.CannotProve = "周期或重复请求不证明C2；累计FLOW包数不能替代逐次独立联系"
++		c.RequiredCorrelations = []string{"同资产、端点与IOC的原始字段绑定", "完整独立联系或HTTP事务观测", "适用的C02/C04前提；F_BEACON_PERIODIC不属于一期C"}
++	case "F_FIXED_DAILY_WINDOW", MultiDayPersist:
++		c.CannotProve = "活跃日期或日内集中不证明持续在线、持久化或恶意作息"
++	case "F_DNS_HIGH_ENTROPY":
++		c.CannotProve = "未计算Shannon熵；高唯一率、长标签与高查询率不证明隧道或Botnet"
++	case "F_DNS_ENCODED_LABEL":
++		c.CannotProve = "编码结构不证明恶意目的或数据外传"
++		c.RequiredCorrelations = []string{"S04对同一DNS问题及程序验证解码链的语义解释", "C07同源关联及去重"}
++	case "F_DGA_LEXICAL":
++		c.CannotProve = "词形代理指标不证明DGA生成机制或家族归属"
++	case "F_FAILED_TO_ACTIVE":
++		c.CannotProve = "同问题名失败后解析并连接不证明域名激活原因、C2或感染"
++	case "F_HTTP_SIZE_STABILITY":
++		c.CannotProve = "只计算请求体大小；未证明响应大小稳定、回连目的或传输内容"
++	case "F_MULTI_REDIRECT_CHAIN", "F_REDIRECT_CHAIN":
++		c.CannotProve = "不识别短链服务，不证明钓鱼；SessionID只用于限制现有已核验链，不能猜测浏览器跨连接身份"
++	case "F_SMALL_PACKET":
++		c.CannotProve = "低应用载荷不等于零载荷，也不证明扫描或探测意图"
++	case "F_CONN_FAIL_RATE":
++		c.CannotProve = "连接尝试、单独RST或CLOSED状态不证明最终连接失败；失败比例不证明扫描"
++	case "F_TLS_SNI_MISMATCH":
++		c.CannotProve = "仅SNI与证书名称比较；不验证实际目的服务身份，不证明流量伪装"
++	case "F_INFECTION_CHAIN":
++		c.CannotProve = "A→B时间顺序不证明感染、利用成功或因果传播；一条路径不证明多个B"
++		c.RequiredCorrelations = []string{"独立主机感染或执行证据", "每条边的真实资产、协议、目的IP和端口绑定"}
++	case "F_HIST_INFRA_PERSISTENCE":
++		c.CannotProve = "已保存跨日多资产IOC关联不证明服务持续存活或钓鱼活动"
++	case "F_HIST_ASSET_IOC_RECURRENCE":
++		c.CannotProve = "历史复发不证明恶意；不重复审核IOC；F不执行旧版审核加减分"
++		c.RequiredCorrelations = []string{"同资产设备与IOC真实关系", "C01一期确定性联合策略；partial仅允许有来源的阳性"}
++	}
++	return c
++}
++
++func semanticContract(d SemanticDefinition) EvidenceContract {
++	c := EvidenceContract{FeatureClaim: "在材料、引用、事务和前提结构验证后解释：" + d.Prerequisite,
++		SecurityInterpretation: "模型对" + d.Key.Target + "的受约束解释；语义正确性须独立评价",
++		CannotProve:            "引用存在与结构校验通过不等于恶意语义正确，也不证明执行、利用成功、感染或送达",
++		RequiredCorrelations:   []string{"槽位要求的原始材料及事实前提", "确认行为结果须另有独立网络、主机或执行证据"}}
++	if d.ExplanationOnly {
++		c.SecurityInterpretation = "仅解释上下文、替代原因或缺项；不独立产生风险加减分"
++	}
++	return c
++}
+diff --git a/vulnscan-backend/evidence/contracts_test.go b/vulnscan-backend/evidence/contracts_test.go
+new file mode 100644
+--- /dev/null
++++ b/vulnscan-backend/evidence/contracts_test.go
+@@ -0,0 +1,359 @@
++package evidence
++
++import (
++	"context"
++	"encoding/json"
++	"strings"
++	"testing"
++	"time"
++)
++
++func contractFinding(t *testing.T, r Request, c Config) Finding {
++	t.Helper()
++	e, err := NewEngine(c)
++	if err != nil {
++		t.Fatal(err)
++	}
++	out := evaluate(t, e, r)
++	if len(out.Findings) != 1 {
++		t.Fatalf("unexpected scope count: %d", len(out.Findings))
++	}
++	return out.Findings[0]
++}
++
++func TestFailedToActiveRequiresSameQuestionAndActualConnection(t *testing.T) {
++	for _, mode := range []string{"same_normalized_question", "other_question", "other_subdomain", "wrong_answer_ip", "late_connection", "other_asset", "invented_source", "wrong_source_time", "duplicate_failure"} {
++		t.Run(mode, func(t *testing.T) {
++			r, c := fullFixture("F_FAILED_TO_ACTIVE")
++			d, n := r.Inputs[0].DNS, r.Inputs[0].Network
++			want := NotObserved
++			switch mode {
++			case "same_normalized_question":
++				want = Observed
++			case "other_question":
++				d.Records[0].Domain = "a.example"
++				d.Records[1].Domain = "a.example"
++			case "other_subdomain":
++				d.Records[0].Domain = "a.active.com"
++				d.Records[1].Domain = "a.active.com"
++			case "wrong_answer_ip":
++				d.Records[2].Answers = []string{"203.0.113.8"}
++			case "late_connection":
++				d.Records[2].Time = n.Connections[0].Time.Add(-6 * time.Minute)
++			case "other_asset":
++				n.Connections[0].AssetID = "unrelated"
++				want = Missing
++			case "invented_source":
++				n.Connections[0].SourceID = "invented"
++				want = Missing
++			case "wrong_source_time":
++				n.Connections[0].Time = n.Connections[0].Time.Add(time.Second)
++				want = Missing
++			case "duplicate_failure":
++				d.Records[1].SourceID = d.Records[0].SourceID
++				want = Missing
++			}
++			if f := contractFinding(t, r, c); f.Status != want {
++				t.Fatalf("want %s, got %+v", want, f)
++			}
++		})
++	}
++}
++
++func TestEveryGroupRuleRejectsUnboundConnection(t *testing.T) {
++	for _, id := range SupportedFacts() {
++		if !groupRule(id) {
++			continue
++		}
++		for _, mode := range []string{"nonexistent_hit", "wrong_asset_hit", "wrong_time", "wrong_ip", "wrong_port", "wrong_protocol", "duplicate_connection"} {
++			t.Run(string(id)+"/"+mode, func(t *testing.T) {
++				r, c := groupFixture(id)
++				x := &r.Groups[0]
++				row := &x.Connections[0]
++				switch mode {
++				case "nonexistent_hit":
++					row.SourceID = "fabricated"
++				case "wrong_asset_hit":
++					row.SourceID = x.Connections[8].SourceID
++				case "wrong_time":
++					row.Time = row.Time.Add(time.Second)
++				case "wrong_ip":
++					row.Destination = "203.0.113.200"
++				case "wrong_port":
++					row.Port = 8443
++				case "wrong_protocol":
++					row.Transport = "udp"
++				case "duplicate_connection":
++					x.Connections = append(x.Connections, *row)
++				}
++				f := contractFinding(t, r, c)
++				if f.Status != Missing || f.ReasonCode != UnresolvedBinding {
++					t.Fatalf("unbound group accepted: %+v", f)
++				}
++			})
++		}
++	}
++}
++
++func TestGroupEndpointIdentityCannotMergePortsOrProtocols(t *testing.T) {
++	for _, id := range []FactID{"F_SHARED_ENDPOINT", "F_TIME_COORDINATION"} {
++		for _, mode := range []string{"empty_endpoint", "ip_only", "different_ports", "different_transport", "dns_is_not_connection"} {
++			t.Run(string(id)+"/"+mode, func(t *testing.T) {
++				r, c := groupFixture(id)
++				x := &r.Groups[0]
++				want := NotObserved
++				switch mode {
++				case "empty_endpoint":
++					x.Endpoint = ""
++					want = Missing
++				case "ip_only":
++					x.Endpoint = "203.0.113.10"
++					want = Missing
++				case "different_ports":
++					for j := range x.Connections {
++						if x.Connections[j].AssetID == "asset2" {
++							x.Connections[j].Port = 8443
++						}
++					}
++					bindGroupFixture(&r)
++				case "different_transport":
++					for j := range x.Connections {
++						if x.Connections[j].AssetID == "asset2" {
++							x.Connections[j].Transport = "udp"
++						}
++					}
++					bindGroupFixture(&r)
++				case "dns_is_not_connection":
++					x.Connections = []Connection{}
++					for _, m := range x.Members {
++						x.DNS = append(x.DNS, DNSRecord{SourceID: m.AssetID, Domain: x.Endpoint, Time: x.Window.Start})
++						x.DNSOwnership[m.AssetID] = m.AssetID
++					}
++				}
++				if f := contractFinding(t, r, c); f.Status != want {
++					t.Fatalf("want %s got %+v", want, f)
++				}
++			})
++		}
++	}
++}
++
++func TestConnectionFailureOutcomes(t *testing.T) {
++	for _, tc := range []struct {
++		state    string
++		verified bool
++		want     Status
++	}{
++		{"SYN_SENT", true, Missing}, {"SYN_SENT", false, Missing}, {"RST", false, Missing}, {"RST", true, Observed},
++		{"TIMEOUT", true, Observed}, {"ESTABLISHED", true, NotObserved}, {"ESTABLISHED", false, Missing}, {"CLOSED", true, Missing}, {"UNKNOWN", true, Missing},
++	} {
++		t.Run(tc.state+"/"+string(tc.want), func(t *testing.T) {
++			r, c := fullFixture("F_CONN_FAIL_RATE")
++			row := &r.Inputs[0].Network.Connections[0]
++			row.TCPState = tc.state
++			row.OutcomeVerified = tc.verified
++			f := contractFinding(t, r, c)
++			if f.Status != tc.want {
++				t.Fatalf("%+v", f)
++			}
++			if tc.state == "SYN_SENT" && (f.Measurements.Values["confirmed_failures"] != 0 || f.Measurements.Values["pending"] != 1) {
++				t.Fatal("pending counted as failure")
++			}
++		})
++	}
++	r, c := fullFixture("F_CONN_FAIL_RATE")
++	n := r.Inputs[0].Network
++	success := n.Connections[0]
++	success.SourceID = "success"
++	success.TCPState = "ESTABLISHED"
++	n.Connections = append(n.Connections, success)
++	f := contractFinding(t, r, c)
++	if f.Measurements.Values["connection_failure_rate"] != .5 {
++		t.Fatalf("wrong denominator: %+v", f)
++	}
++	pending := success
++	pending.TCPState = "SYN_SENT"
++	pending.SourceID = "pending"
++	n.Connections = append(n.Connections, pending)
++	if f := contractFinding(t, r, c); f.Status != Missing || f.Measurements.Values["terminal_outcomes"] != 2 {
++		t.Fatalf("incomplete cohort: %+v", f)
++	}
++}
++
++func TestWeakerFeatureClaimsStayTruthful(t *testing.T) {
++	r, c := fullFixture("F_SMALL_PACKET")
++	f := contractFinding(t, r, c)
++	if f.Status != Observed || f.Measurements.Values["zero_payload_fraction"] != 0 {
++		t.Fatal("nonzero small payload claimed zero")
++	}
++	for _, tc := range []struct {
++		id        FactID
++		forbidden string
++	}{
++		{"F_HTTP_SIZE_STABILITY", "响应"}, {"F_MULTI_REDIRECT_CHAIN", "短链"}, {"F_TLS_SNI_MISMATCH", "目的"}, {"F_SMALL_PACKET", "无载荷"}, {"F_INFECTION_CHAIN", "感染"}, {"F_HIST_INFRA_PERSISTENCE", "钓鱼"},
++	} {
++		for _, d := range Definitions() {
++			if d.ID == tc.id && strings.Contains(d.Description, tc.forbidden) {
++				t.Fatalf("overclaim: %+v", d)
++			}
++		}
++	}
++	// One temporal A/B path is a valid feature, never an infection verdict.
++	r, c = fullFixture("F_INFECTION_CHAIN")
++	f = contractFinding(t, r, c)
++	if f.Status != Observed || !strings.Contains(f.CannotProve, "不证明感染") {
++		t.Fatalf("%+v", f)
++	}
++	// Stable request bodies say nothing about responses or shortener ownership.
++	for _, id := range []FactID{"F_HTTP_SIZE_STABILITY", "F_MULTI_REDIRECT_CHAIN", "F_TLS_SNI_MISMATCH", "F_HIST_INFRA_PERSISTENCE"} {
++		r, c = fullFixture(id)
++		f = contractFinding(t, r, c)
++		if f.Status != Observed || f.CannotProve == "" {
++			t.Fatalf("%+v", f)
++		}
++	}
++}
++
++// A positive feature fixture with its mandatory source/trust removed must not
++// become a negative or survive as observed. These complement the 59 distinct
++// numeric/content negatives in negative_rules_test.go; they are not production
++// or malicious-intent accuracy tests.
++func TestAll59RejectUnverifiedFeatureSources(t *testing.T) {
++	for _, id := range SupportedFacts() {
++		t.Run(string(id), func(t *testing.T) {
++			r, c := fullFixture(id)
++			if groupRule(id) {
++				r.Groups[0].Verified = false
++			} else {
++				switch id {
++				case MultiDayPersist:
++					// Partial coverage permits a sourced positive; invalid times do not.
++					for j := range r.Hits {
++						r.Hits[j].OccurredAt = time.Time{}
++					}
++				case BeaconPeriodic, "F_BEACON_JITTER", "F_FIXED_DAILY_WINDOW", "F_RATE_BURST", "F_RATE_RAMP":
++					r.Quality.Coverage = CoverageUnknown
++				case "F_LONG_LOW_SESSION":
++					r.Inputs[0].Network.Verified = false
++				default:
++					for _, family := range FactInputs(id) {
++						switch family {
++						case "dns_records":
++							r.Inputs[0].DNS.Verified = false
++						case "http_records":
++							r.Inputs[0].HTTP.Verified = false
++						case "network_records":
++							r.Inputs[0].Network.Verified = false
++						case "history":
++							r.Inputs[0].History.Verified = false
++						case "tls_records":
++							r.Inputs[0].TLS.Verified = false
++						case "authorization_records":
++							r.Inputs[0].Authorizations.Verified = false
++						case "independent_rule_and_intel_metadata":
++							r.Inputs[0].Corroboration.Verified = false
++						}
++					}
++				}
++			}
++			if f := contractFinding(t, r, c); f.Status != Missing {
++				t.Fatalf("unverified source survived: %+v", f)
++			}
++		})
++	}
++}
++
++// These are controlled model responses. Acceptance proves only citation and
++// strength contracts, not that model semantics match a human ground truth.
++func TestAll23SemanticSupportContradictionAndFalseCitation(t *testing.T) {
++	for _, spec := range semanticSpecs {
++		for _, mode := range []string{"support", "contradict", "invented_quote"} {
++			t.Run(spec.Key.String()+"/"+mode, func(t *testing.T) {
++				r := semanticFixture(spec)
++				e := semanticTestEngine(t)
++				out, err := e.Evaluate(context.Background(), r, semanticModelFunc(func(_ context.Context, call SemanticCall) (string, error) {
++					return semanticResponse(call, func(item *SemanticItem) {
++						if mode == "contradict" {
++							item.Judgement = "contradict"
++						}
++						if mode == "invented_quote" {
++							for j := range item.Quotes {
++								item.Quotes[j].Excerpt = "THIS TEXT IS NOT IN THE MATERIAL"
++							}
++						}
++					}), nil
++				}))
++				if err != nil {
++					t.Fatal(err)
++				}
++				if mode == "invented_quote" {
++					if len(out.Findings) != 0 {
++						t.Fatal("fabricated evidence accepted")
++					}
++					return
++				}
++				if len(out.Findings) != 1 {
++					t.Fatalf("%+v", out)
++				}
++				f := out.Findings[0]
++				if f.StructureValidation != "passed" || f.SemanticSupport != mode || f.BehaviorOutcome != "not_established" {
++					t.Fatalf("%+v", f)
++				}
++				plan, err := e.Plan(context.Background(), r)
++				if err != nil {
++					t.Fatal(err)
++				}
++				if err := ValidateSemanticResult(plan, out); err != nil {
++					t.Fatal(err)
++				}
++				out.Findings[0].BehaviorOutcome = "execution_succeeded"
++				if err := ValidateSemanticResult(plan, out); err == nil {
++					t.Fatal("cached model interpretation promoted to outcome")
++				}
++			})
++		}
++	}
++}
++
++func Test82ContractsReachNormalizedEvidence(t *testing.T) {
++	n := Normalize(nil, nil)
++	if len(n.Items) != 82 {
++		t.Fatalf("registry size %d", len(n.Items))
++	}
++	for _, u := range n.Items {
++		raw, _ := json.Marshal(u)
++		var fields map[string]any
++		_ = json.Unmarshal(raw, &fields)
++		for _, key := range []string{"feature_claim", "security_interpretation", "cannot_prove", "required_correlations"} {
++			if fields[key] == nil || fields[key] == "" {
++				t.Fatalf("%s missing %s", u.RuleID, key)
++			}
++		}
++		if u.Status != "unavailable" {
++			t.Fatal("registration promoted to acceptance")
++		}
++	}
++	if len(PhaseOneFacts()) != 5 || len(PhaseOneSlots()) != 4 || len(PhaseOneDefinitions()) != 7 {
++		t.Fatal("phase one scope expanded")
++	}
++}
++
++func TestSemanticContractsDoNotExposeMutableRegistrySlices(t *testing.T) {
++	defs := SemanticDefinitions()
++	original := defs[0].RequiredCorrelations[0]
++	defs[0].RequiredCorrelations[0] = "tampered catalog"
++	e := semanticTestEngine(t)
++	r := semanticFixture(semanticSpecs[0])
++	plan, err := e.Plan(context.Background(), r)
++	if err != nil || len(plan.Tasks) == 0 {
++		t.Fatalf("%v", err)
++	}
++	plan.Tasks[0].Slot.RequiredCorrelations[0] = "tampered plan"
++	if SemanticDefinitions()[0].RequiredCorrelations[0] != original {
++		t.Fatal("caller mutated global semantic contract")
++	}
++	next, err := e.Plan(context.Background(), r)
++	if err != nil || next.Tasks[0].Slot.RequiredCorrelations[0] != original {
++		t.Fatal("caller changed future semantic tasks")
++	}
++}
+diff --git a/vulnscan-backend/evidence/dns_rules.go b/vulnscan-backend/evidence/dns_rules.go
+--- a/vulnscan-backend/evidence/dns_rules.go
++++ b/vulnscan-backend/evidence/dns_rules.go
+@@ -60,12 +60,14 @@
+ 	refs := []string{}
+ 	domains := []string{}
+ 	roots := []string{}
++	seenDNS := map[string]bool{}
+ 	for _, r := range d.Records {
+ 		domain, ok := canonicalDomain(r.Domain)
+ 		root, valid := registrable(r.Domain)
+-		if !ok || !valid || r.SourceID == "" || r.Time.IsZero() {
++		if !ok || !valid || r.SourceID == "" || r.Time.IsZero() || seenDNS[r.SourceID] {
+ 			return absent(f, MissingInput)
+ 		}
++		seenDNS[r.SourceID] = true
+ 		domains = append(domains, domain)
+ 		roots = append(roots, root)
+ 		refs = append(refs, r.SourceID)
+@@ -171,6 +173,19 @@
+ 		if g.input.Network == nil || !provenance(g.input.Network.Provenance) || !g.input.Network.Complete {
+ 			return absent(f, MissingInput)
+ 		}
++		dependency(&f, "network", g.input.Network.Provenance)
++		for _, connection := range g.input.Network.Connections {
++			bound := false
++			for _, hit := range g.request.Hits {
++				if hit.ID == connection.SourceID && hit.Scope.AssetID == g.scope.AssetID && hit.Scope.DeviceID == g.scope.DeviceID && connection.AssetID == g.scope.AssetID && hit.OccurredAt.Equal(connection.Time) && connectionEndpoint(connection) != "" && canonicalEndpoint(hit.Scope.EndpointID) == connectionEndpoint(connection) {
++					bound = true
++					break
++				}
++			}
++			if !bound {
++				return absent(f, UnresolvedBinding)
++			}
++		}
+ 		minFailures, ok := e.policy(&f, "min_failures")
+ 		if !ok || minFailures < 2 || minFailures != math.Trunc(minFailures) {
+ 			return absent(f, MissingPolicy)
+@@ -183,8 +198,10 @@
+ 				continue
+ 			}
+ 			fails := 0
++			resolvedName, _ := canonicalDomain(resolved.Domain)
+ 			for _, earlier := range d.Records {
+-				if earlier.Time.Before(resolved.Time) && earlier.RCodeKnown && earlier.RCode == 3 {
++				earlierName, _ := canonicalDomain(earlier.Domain)
++				if earlierName == resolvedName && earlier.Time.Before(resolved.Time) && earlier.RCodeKnown && earlier.RCode == 3 {
+ 					fails++
+ 				}
+ 			}
+@@ -192,10 +209,13 @@
+ 				continue
+ 			}
+ 			for _, connection := range g.input.Network.Connections {
++				if connection.AssetID != g.scope.AssetID || connection.SourceID == "" || connection.Time.IsZero() {
++					return absent(f, UnresolvedBinding)
++				}
+ 				delay := connection.Time.Sub(resolved.Time).Seconds()
+ 				if delay >= 0 && delay <= 300 {
+ 					for _, ip := range resolved.Answers {
+-						if ip == connection.Destination {
++						if parsed := net.ParseIP(ip); parsed != nil && parsed.Equal(net.ParseIP(connection.Destination)) {
+ 							return finish(f, true, map[string]float64{"prior_failures": float64(fails), "connection_delay_sec": delay}, append(refs, connection.SourceID)...)
+ 						}
+ 					}
+diff --git a/vulnscan-backend/evidence/engine.go b/vulnscan-backend/evidence/engine.go
+--- a/vulnscan-backend/evidence/engine.go
++++ b/vulnscan-backend/evidence/engine.go
+@@ -252,7 +252,7 @@
+ 	if !g.complete {
+ 		quality = "coverage_gap"
+ 	}
+-	return Finding{FactID: id, RuleVersion: RuleVersion, Scope: g.scope, Status: Missing,
++	return Finding{EvidenceContract: contractForFact(id), FactID: id, RuleVersion: RuleVersion, Scope: g.scope, Status: Missing,
+ 		Eligibility: "ineligible", Quality: quality, Parameters: parameters,
+ 		Measurements: Measurements{SampleCount: len(g.hits)},
+ 		SourceIDs:    append([]string(nil), g.sourceIDs...), Limitations: limits}
+diff --git a/vulnscan-backend/evidence/group_rules.go b/vulnscan-backend/evidence/group_rules.go
+--- a/vulnscan-backend/evidence/group_rules.go
++++ b/vulnscan-backend/evidence/group_rules.go
+@@ -2,13 +2,38 @@
+ 
+ import (
+ 	"math"
++	"net"
+ 	"net/netip"
++	"net/url"
+ 	"regexp"
+ 	"sort"
+ 	"strings"
+ 	"time"
+ )
+ 
++// Endpoint identity includes transport, IP and destination port. Application
++// protocol and an IP alone cannot substitute for a transport endpoint.
++func connectionEndpoint(r Connection) string {
++	ip, err := netip.ParseAddr(r.Destination)
++	transport := strings.ToLower(r.Transport)
++	if err != nil || r.Port == 0 || (transport != "tcp" && transport != "udp") {
++		return ""
++	}
++	return transport + "://" + net.JoinHostPort(ip.Unmap().String(), stringPort(r.Port))
++}
++
++func canonicalEndpoint(raw string) string {
++	u, err := url.Parse(raw)
++	if err != nil || u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
++		return ""
++	}
++	a, err := netip.ParseAddrPort(u.Host)
++	if err != nil {
++		return ""
++	}
++	return connectionEndpoint(Connection{Transport: u.Scheme, Destination: a.Addr().String(), Port: a.Port()})
++}
++
+ func verifiedGroup(g *observations) bool {
+ 	x := g.group
+ 	if x == nil || x.ID == "" || !provenance(x.Provenance) || !x.Complete || !x.Window.Start.Before(x.Window.End) {
+@@ -24,16 +49,23 @@
+ 		seen[m.AssetID] = true
+ 		for _, id := range m.HitIDs {
+ 			h, ok := hits[id]
+-			if !ok || h.Scope != m.Scope || h.OccurredAt.IsZero() || h.OccurredAt.Before(x.Window.Start) || !h.OccurredAt.Before(x.Window.End) || bound[id] {
++			if !ok || h.Scope.AssetID != m.Scope.AssetID || h.Scope.DeviceID != m.Scope.DeviceID || h.Scope.GroupID != m.Scope.GroupID || h.OccurredAt.IsZero() || h.OccurredAt.Before(x.Window.Start) || !h.OccurredAt.Before(x.Window.End) || bound[id] {
+ 				return false
+ 			}
+ 			bound[id] = true
+ 		}
+ 	}
++	connections := map[string]bool{}
+ 	for _, r := range x.Connections {
+ 		if !seen[r.AssetID] || r.Time.Before(x.Window.Start) || !r.Time.Before(x.Window.End) || r.SourceID == "" || r.Destination == "" {
+ 			return false
+ 		}
++		h, ok := hits[r.SourceID]
++		endpoint := connectionEndpoint(r)
++		if !ok || !bound[r.SourceID] || connections[r.SourceID] || h.Scope.AssetID != r.AssetID || !h.OccurredAt.Equal(r.Time) || endpoint == "" || canonicalEndpoint(h.Scope.EndpointID) != endpoint {
++			return false
++		}
++		connections[r.SourceID] = true
+ 	}
+ 	for _, r := range x.DNS {
+ 		if !seen[x.DNSOwnership[r.SourceID]] || r.Time.Before(x.Window.Start) || !r.Time.Before(x.Window.End) || r.SourceID == "" {
+@@ -167,6 +199,9 @@
+ 		target := x.IOC
+ 		if f.FactID == "F_SHARED_ENDPOINT" {
+ 			target = x.Endpoint
++			if canonicalEndpoint(target) == "" {
++				return absent(f, UnresolvedBinding)
++			}
+ 		}
+ 		if target == "" {
+ 			return absent(f, MissingInput)
+@@ -174,12 +209,15 @@
+ 		members := map[string]bool{}
+ 		times := []time.Time{}
+ 		for _, r := range x.Connections {
+-			if r.Destination == target {
++			if (f.FactID == "F_SHARED_ENDPOINT" && connectionEndpoint(r) == canonicalEndpoint(target)) || (f.FactID == "F_MULTI_ASSET_IOC" && r.Destination == target) {
+ 				members[r.AssetID] = true
+ 				times = append(times, r.Time)
+ 			}
+ 		}
+ 		for _, r := range x.DNS {
++			if f.FactID == "F_SHARED_ENDPOINT" {
++				continue
++			} // a DNS question is not a connection
+ 			if strings.EqualFold(strings.TrimSuffix(r.Domain, "."), target) {
+ 				members[x.DNSOwnership[r.SourceID]] = true
+ 				times = append(times, r.Time)
+@@ -219,6 +257,9 @@
+ 		}
+ 		return finish(f, len(counts) >= 2 && h >= minEntropy && !management, map[string]float64{"subnets": float64(len(counts)), "subnet_entropy": h}, refs...)
+ 	case "F_TIME_COORDINATION":
++		if canonicalEndpoint(x.Endpoint) == "" {
++			return absent(f, UnresolvedBinding)
++		}
+ 		step, ok := e.policy(&f, "bucket_seconds")
+ 		if !ok || step <= 0 {
+ 			return absent(f, MissingPolicy)
+@@ -243,7 +284,7 @@
+ 	case "F_COORD_FANOUT":
+ 		return e.groupFanout(f, x, refs)
+ 	case "F_INFECTION_CHAIN":
+-		if x.Endpoint == "" || len(x.Connections) == 0 {
++		if canonicalEndpoint(x.Endpoint) == "" || len(x.Connections) == 0 {
+ 			return absent(f, MissingInput)
+ 		}
+ 		width, ok := e.policy(&f, "chain_window_seconds")
+@@ -251,7 +292,7 @@
+ 			return absent(f, MissingPolicy)
+ 		}
+ 		for _, first := range x.Connections {
+-			if first.Destination != x.Endpoint {
++			if connectionEndpoint(first) != canonicalEndpoint(x.Endpoint) {
+ 				continue
+ 			}
+ 			for _, spread := range x.Connections {
+@@ -263,7 +304,7 @@
+ 						continue
+ 					}
+ 					for _, last := range x.Connections {
+-						if last.AssetID == m.AssetID && last.Destination == x.Endpoint && last.Time.After(spread.Time) && last.Time.Sub(first.Time).Seconds() <= width {
++						if last.AssetID == m.AssetID && connectionEndpoint(last) == canonicalEndpoint(x.Endpoint) && last.Time.After(spread.Time) && last.Time.Sub(first.Time).Seconds() <= width {
+ 							return finish(f, true, map[string]float64{"matched_chains": 1}, refs...)
+ 						}
+ 					}
+@@ -273,7 +314,7 @@
+ 		return finish(f, false, map[string]float64{"matched_chains": 0}, refs...)
+ 	case "F_FIRST_VISIT_CLUSTER":
+ 		h := x.History
+-		if !validHistory(h, g.request.EventID) || !h.AsOf.Equal(x.Window.Start) || x.Endpoint == "" {
++		if !validHistory(h, g.request.EventID) || !h.AsOf.Equal(x.Window.Start) || canonicalEndpoint(x.Endpoint) == "" {
+ 			return absent(f, MissingInput)
+ 		}
+ 		first := map[string]time.Time{}
+@@ -284,7 +325,7 @@
+ 			}
+ 		}
+ 		for _, r := range x.Connections {
+-			if r.Destination == x.Endpoint && !prior[r.AssetID] {
++			if canonicalEndpoint(x.Endpoint) != "" && connectionEndpoint(r) == canonicalEndpoint(x.Endpoint) && !prior[r.AssetID] {
+ 				if first[r.AssetID].IsZero() || r.Time.Before(first[r.AssetID]) {
+ 					first[r.AssetID] = r.Time
+ 				}
+@@ -296,6 +337,9 @@
+ 		}
+ 		return finish(f, len(first) >= 3 && timeSpan(times) <= 3600, map[string]float64{"first_visit_assets": float64(len(first)), "visit_span_seconds": timeSpan(times)}, append(refs, h.SourceIDs...)...)
+ 	case "F_COORD_PATTERN_RECURRENCE":
++		if canonicalEndpoint(x.Endpoint) == "" {
++			return absent(f, UnresolvedBinding)
++		}
+ 		step, ok := e.policy(&f, "bucket_seconds")
+ 		if !ok || step <= 0 {
+ 			return absent(f, MissingPolicy)
+@@ -404,7 +448,10 @@
+ 		rows[i] = make([]float64, n)
+ 	}
+ 	for _, r := range x.Connections {
+-		if x.Endpoint != "" && r.Destination != x.Endpoint {
++		if canonicalEndpoint(x.Endpoint) == "" {
++			return nil, false
++		}
++		if connectionEndpoint(r) != canonicalEndpoint(x.Endpoint) {
+ 			continue
+ 		}
+ 		i, ok := index[r.AssetID]
+@@ -467,7 +514,7 @@
+ 		sets[m.AssetID] = map[string]bool{}
+ 	}
+ 	for _, r := range x.Connections {
+-		sets[r.AssetID][r.Destination+":"+stringPort(r.Port)] = true
++		sets[r.AssetID][connectionEndpoint(r)] = true
+ 		times[r.AssetID] = append(times[r.AssetID], r.Time)
+ 	}
+ 	minimum := 1.0
+diff --git a/vulnscan-backend/evidence/input_contract.go b/vulnscan-backend/evidence/input_contract.go
+--- a/vulnscan-backend/evidence/input_contract.go
++++ b/vulnscan-backend/evidence/input_contract.go
+@@ -37,6 +37,10 @@
+ 		inputs = append(inputs, "baselines")
+ 	}
+ 	switch id {
++	case "F_FAILED_TO_ACTIVE":
++		inputs = append(inputs, "network_records", "bound_connection_hits")
++	case "F_CONN_FAIL_RATE":
++		inputs = append(inputs, "verified_connection_outcomes")
+ 	case "F_URL_HOMOGLYPH", "F_URL_BRAND_SUBDOMAIN_TRICK", "F_BRAND_IMPOSTOR":
+ 		inputs = append(inputs, "brand_registry")
+ 	case "F_HIST_STAGE_PROGRESSION", "F_HIST_COORD_PARAM_MATCH":
+diff --git a/vulnscan-backend/evidence/inputs.go b/vulnscan-backend/evidence/inputs.go
+--- a/vulnscan-backend/evidence/inputs.go
++++ b/vulnscan-backend/evidence/inputs.go
+@@ -93,16 +93,18 @@
+ 	BrandsVerified    bool         `json:"brands_verified"`
+ }
+ type Connection struct {
+-	SourceID       string    `json:"source_id"`
+-	Time           time.Time `json:"time"`
+-	AssetID        string    `json:"asset_id"`
+-	Destination    string    `json:"destination"`
+-	Port           uint16    `json:"port"`
+-	AppProtocol    string    `json:"app_protocol"`
+-	ProtocolParsed bool      `json:"protocol_parsed"`
+-	PayloadBytes   *uint64   `json:"payload_bytes"`
+-	TCPState       string    `json:"tcp_state"`
+-	SessionID      string    `json:"session_id"`
++	Transport       string    `json:"transport"`        // verified tcp/udp, never inferred from a port
++	OutcomeVerified bool      `json:"outcome_verified"` // terminal outcome, not a packet flag
++	SourceID        string    `json:"source_id"`
++	Time            time.Time `json:"time"`
++	AssetID         string    `json:"asset_id"`
++	Destination     string    `json:"destination"`
++	Port            uint16    `json:"port"`
++	AppProtocol     string    `json:"app_protocol"`
++	ProtocolParsed  bool      `json:"protocol_parsed"`
++	PayloadBytes    *uint64   `json:"payload_bytes"`
++	TCPState        string    `json:"tcp_state"`
++	SessionID       string    `json:"session_id"`
+ }
+ type Session struct {
+ 	SourceID       string    `json:"source_id"`
+diff --git a/vulnscan-backend/evidence/negative_rules_test.go b/vulnscan-backend/evidence/negative_rules_test.go
+--- a/vulnscan-backend/evidence/negative_rules_test.go
++++ b/vulnscan-backend/evidence/negative_rules_test.go
+@@ -65,6 +65,10 @@
+ 		b("nxdomain_rate_p99", 1)
+ 	case "F_FAILED_TO_ACTIVE":
+ 		i.Network.Connections[0].Destination = "203.0.113.99"
++		i.Scope.EndpointID = connectionEndpoint(i.Network.Connections[0])
++		for j := range r.Hits {
++			r.Hits[j].Scope = i.Scope
++		}
+ 	case "F_HTTP_ENDPOINT_REPEAT":
+ 		for j := range i.HTTP.Records {
+ 			i.HTTP.Records[j].Time = start.Add(time.Duration(1<<j) * time.Second)
+@@ -171,6 +175,7 @@
+ 			r.Groups[0].Connections[j].Time = r.Groups[0].Connections[j].Time.Add(2 * time.Minute)
+ 		}
+ 	}
++	bindGroupFixture(&r)
+ 	e, _ := NewEngine(c)
+ 	if evaluate(t, e, r).Findings[0].Status != NotObserved {
+ 		t.Fatal("desynchronized member accepted")
+diff --git a/vulnscan-backend/evidence/network_rules.go b/vulnscan-backend/evidence/network_rules.go
+--- a/vulnscan-backend/evidence/network_rules.go
++++ b/vulnscan-backend/evidence/network_rules.go
+@@ -22,10 +22,12 @@
+ 	}
+ 	f.SourceIDs = append(f.SourceIDs, n.SourceIDs...)
+ 	refs := []string{}
++	seen := map[string]bool{}
+ 	for _, r := range n.Connections {
+-		if r.SourceID == "" || r.Time.IsZero() || r.AssetID != g.scope.AssetID || r.Destination == "" {
++		if r.SourceID == "" || seen[r.SourceID] || r.Time.IsZero() || r.AssetID != g.scope.AssetID || r.Destination == "" {
+ 			return absent(f, UnresolvedBinding)
+ 		}
++		seen[r.SourceID] = true
+ 		refs = append(refs, r.SourceID)
+ 	}
+ 	switch f.FactID {
+@@ -161,6 +163,7 @@
+ 			return absent(f, MissingPolicy)
+ 		}
+ 		small := 0
++		zero := 0
+ 		for _, r := range n.Connections {
+ 			if r.PayloadBytes == nil {
+ 				return absent(f, MissingInput)
+@@ -168,26 +171,48 @@
+ 			if float64(*r.PayloadBytes) <= limit {
+ 				small++
+ 			}
++			if *r.PayloadBytes == 0 {
++				zero++
++			}
+ 		}
+ 		ratio := float64(small) / float64(len(n.Connections))
+-		return finish(f, ratio >= 0.8, map[string]float64{"small_payload_fraction": ratio}, refs...)
++		return finish(f, ratio >= 0.8, map[string]float64{"small_payload_fraction": ratio, "zero_payload_fraction": float64(zero) / float64(len(n.Connections))}, refs...)
+ 	case "F_CONN_FAIL_RATE":
+ 		b, ok := baseline(&f, g, "connection_failure_rate_p95")
+ 		if !ok || b[0] < 0 || b[0] > 1 {
+ 			return absent(f, MissingBaseline)
+ 		}
+-		failed := 0
++		failed, succeeded, pending, unknown := 0, 0, 0, 0
+ 		for _, r := range n.Connections {
+ 			switch strings.ToUpper(r.TCPState) {
+-			case "RST", "TIMEOUT", "SYN_SENT":
+-				failed++
+-			case "ESTABLISHED", "CLOSED":
++			case "SYN_SENT", "SYN_RECEIVED", "CONNECTING":
++				pending++
++			case "RST", "TIMEOUT", "REFUSED", "FAILED":
++				if r.OutcomeVerified {
++					failed++
++				} else {
++					unknown++
++				}
++			case "ESTABLISHED", "SUCCEEDED":
++				if r.OutcomeVerified {
++					succeeded++
++				} else {
++					unknown++
++				}
+ 			default:
+-				return absent(f, MissingInput)
+-			}
+-		}
+-		rate := float64(failed) / float64(len(n.Connections))
+-		return finish(f, rate > b[0], map[string]float64{"connection_failure_rate": rate}, refs...)
++				unknown++ // CLOSED and a bare RST do not establish handshake outcome.
++			}
++		}
++		values := map[string]float64{"confirmed_failures": float64(failed), "confirmed_successes": float64(succeeded), "pending": float64(pending), "unknown": float64(unknown), "terminal_outcomes": float64(failed + succeeded)}
++		f.Measurements.Values = values
++		// A terminal-only subpopulation cannot refute or establish the full-window
++		// failure rate while some attempts still have no verified outcome.
++		if pending+unknown > 0 || failed+succeeded == 0 {
++			return absent(f, UnverifiedCoverage)
++		}
++		rate := float64(failed) / float64(failed+succeeded)
++		values["connection_failure_rate"] = rate
++		return finish(f, rate > b[0], values, refs...)
+ 	}
+ 	return absent(f, MissingInput)
+ }
+diff --git a/vulnscan-backend/evidence/normalization.go b/vulnscan-backend/evidence/normalization.go
+--- a/vulnscan-backend/evidence/normalization.go
++++ b/vulnscan-backend/evidence/normalization.go
+@@ -7,36 +7,39 @@
+ 	"sort"
+ )
+ 
+-const NormalizationVersion = "evidence-normalization-0.1"
++const NormalizationVersion = "evidence-normalization-0.2"
+ 
+ // UnifiedEvidence is an audit record, not a score. A measured observation,
+ // an interpretation, a negative result and a skipped check remain distinct.
+ type UnifiedEvidence struct {
+-	ID              string        `json:"id"`
+-	ReportID        string        `json:"report_id,omitempty"`
+-	Kind            string        `json:"kind"`
+-	RuleID          string        `json:"rule_id"`
+-	TaskID          string        `json:"task_id,omitempty"`
+-	SubjectID       string        `json:"subject_id,omitempty"`
+-	SnapshotVersion int64         `json:"snapshot_version,omitempty"`
+-	ExecutionStatus string        `json:"execution_status,omitempty"`
+-	Scope           Scope         `json:"scope"`
+-	Window          *Window       `json:"window,omitempty"`
+-	Status          string        `json:"status"`
+-	Quality         string        `json:"quality"`
+-	Role            string        `json:"role"`
+-	Reason          string        `json:"reason,omitempty"`
+-	Judgement       string        `json:"judgement,omitempty"`
+-	Strength        string        `json:"strength,omitempty"`
+-	Measurements    *Measurements `json:"measurements,omitempty"`
+-	Parameters      *Parameters   `json:"parameters,omitempty"`
+-	Interpretation  string        `json:"interpretation,omitempty"`
+-	SourceIDs       []string      `json:"source_ids,omitempty"`
+-	Dependencies    []Dependency  `json:"dependencies,omitempty"`
+-	NonAdditiveWith []string      `json:"non_additive_with,omitempty"`
+-	DuplicateOf     string        `json:"duplicate_of,omitempty"`
+-	Limitations     []string      `json:"limitations,omitempty"`
+-	Version         string        `json:"version"`
++	EvidenceContract
++	StructureValidation string        `json:"structure_validation,omitempty"`
++	BehaviorOutcome     string        `json:"behavior_outcome,omitempty"`
++	ID                  string        `json:"id"`
++	ReportID            string        `json:"report_id,omitempty"`
++	Kind                string        `json:"kind"`
++	RuleID              string        `json:"rule_id"`
++	TaskID              string        `json:"task_id,omitempty"`
++	SubjectID           string        `json:"subject_id,omitempty"`
++	SnapshotVersion     int64         `json:"snapshot_version,omitempty"`
++	ExecutionStatus     string        `json:"execution_status,omitempty"`
++	Scope               Scope         `json:"scope"`
++	Window              *Window       `json:"window,omitempty"`
++	Status              string        `json:"status"`
++	Quality             string        `json:"quality"`
++	Role                string        `json:"role"`
++	Reason              string        `json:"reason,omitempty"`
++	Judgement           string        `json:"judgement,omitempty"`
++	Strength            string        `json:"strength,omitempty"`
++	Measurements        *Measurements `json:"measurements,omitempty"`
++	Parameters          *Parameters   `json:"parameters,omitempty"`
++	Interpretation      string        `json:"interpretation,omitempty"`
++	SourceIDs           []string      `json:"source_ids,omitempty"`
++	Dependencies        []Dependency  `json:"dependencies,omitempty"`
++	NonAdditiveWith     []string      `json:"non_additive_with,omitempty"`
++	DuplicateOf         string        `json:"duplicate_of,omitempty"`
++	Limitations         []string      `json:"limitations,omitempty"`
++	Version             string        `json:"version"`
+ }
+ 
+ type NormalizedEvidence struct {
+@@ -99,7 +102,8 @@
+ 				}
+ 			}
+ 			if f, ok := findings[x.TaskID]; ok {
+-				u.Role, u.Quality, u.Judgement, u.Strength = "interpretation", "validated", f.Judgement, f.Strength
++				u.StructureValidation, u.BehaviorOutcome = "passed", "not_established"
++				u.Role, u.Quality, u.Judgement, u.Strength = "interpretation", "structure_validated", f.Judgement, f.Strength
+ 				u.Interpretation, u.NonAdditiveWith, u.DuplicateOf, u.Limitations = f.Explanation, f.NonAdditiveWith, f.DuplicateOf, f.Limitations
+ 				if f.ExplanationOnly {
+ 					u.Role = "context_interpretation"
+@@ -124,6 +128,17 @@
+ 			n.Items = append(n.Items, UnifiedEvidence{ID: UnifiedID("semantic", d.Key.String(), Scope{}, nil, ""), Kind: "semantic", RuleID: d.Key.String(), Status: "unavailable", Quality: "unknown", Role: "gap", Reason: "no_execution_result", Version: SemanticVersion})
+ 		}
+ 	}
++	for i := range n.Items {
++		if n.Items[i].Kind == "fact" {
++			n.Items[i].EvidenceContract = contractForFact(FactID(n.Items[i].RuleID))
++		} else {
++			for _, d := range SemanticDefinitions() {
++				if d.Key.String() == n.Items[i].RuleID {
++					n.Items[i].EvidenceContract = d.EvidenceContract
++				}
++			}
++		}
++	}
+ 	sort.SliceStable(n.Items, func(i, j int) bool { return n.Items[i].ID < n.Items[j].ID })
+ 	n.Recount()
+ 	return n
+diff --git a/vulnscan-backend/evidence/semantic_catalog.go b/vulnscan-backend/evidence/semantic_catalog.go
+--- a/vulnscan-backend/evidence/semantic_catalog.go
++++ b/vulnscan-backend/evidence/semantic_catalog.go
+@@ -8,7 +8,9 @@
+ }
+ 
+ func semanticSpec(id, target, subtype, prerequisite, dedupe string, explanation bool, kinds []string, all, any []FactID) slotSpec {
+-	return slotSpec{SemanticDefinition{SlotKey{id, target, subtype}, prerequisite, explanation, dedupe}, kinds, all, any}
++	definition := SemanticDefinition{Key: SlotKey{id, target, subtype}, Prerequisite: prerequisite, ExplanationOnly: explanation, Deduplication: dedupe}
++	definition.EvidenceContract = semanticContract(definition)
++	return slotSpec{definition, kinds, all, any}
+ }
+ 
+ // Runtime registry is intentionally independent of the legacy draft YAML flags.
+@@ -42,6 +44,7 @@
+ 	out := make([]SemanticDefinition, len(semanticSpecs))
+ 	for i, s := range semanticSpecs {
+ 		out[i] = s.SemanticDefinition
++		out[i].EvidenceContract = semanticContract(out[i])
+ 	}
+ 	return out
+ }
+diff --git a/vulnscan-backend/evidence/semantic_engine.go b/vulnscan-backend/evidence/semantic_engine.go
+--- a/vulnscan-backend/evidence/semantic_engine.go
++++ b/vulnscan-backend/evidence/semantic_engine.go
+@@ -58,6 +58,7 @@
+ 	}
+ 	for _, spec := range specs {
+ 		for _, subject := range r.Subjects {
++			spec.SemanticDefinition.EvidenceContract = semanticContract(spec.SemanticDefinition)
+ 			subject.ReportHistory = e.config.ReportHistory
+ 			subject.ReportSchedule = e.config.ReportSchedule
+ 			subject.ReportPractical = e.config.ReportPractical
+@@ -340,7 +341,7 @@
+ 				semanticMarkTask(&result.Plan, task.ID, "rejected", reason)
+ 				break
+ 			}
+-			finding := SemanticFinding{SemanticItem: item, Slot: task.Slot.Key, SubjectID: task.SubjectID, PropositionID: task.PropositionID, Scope: task.Scope, Window: task.Window, SnapshotVersion: r.SnapshotVersion, RuleVersion: SemanticVersion, ExplanationOnly: task.Slot.ExplanationOnly, NonAdditiveWith: task.NonAdditiveWith, Limitations: []string{"model_interpretation_requires_review", "does_not_prove_attack_success"}}
++			finding := SemanticFinding{EvidenceContract: semanticContract(task.Slot), StructureValidation: "passed", SemanticSupport: item.Judgement, BehaviorOutcome: "not_established", SemanticItem: item, Slot: task.Slot.Key, SubjectID: task.SubjectID, PropositionID: task.PropositionID, Scope: task.Scope, Window: task.Window, SnapshotVersion: r.SnapshotVersion, RuleVersion: SemanticVersion, ExplanationOnly: task.Slot.ExplanationOnly, NonAdditiveWith: task.NonAdditiveWith, Limitations: []string{"model_interpretation_requires_review", "does_not_prove_attack_success"}}
+ 			result.Findings = append(result.Findings, finding)
+ 			semanticMarkTask(&result.Plan, task.ID, "accepted", "references_and_strength_validated")
+ 		}
+diff --git a/vulnscan-backend/evidence/semantic_types.go b/vulnscan-backend/evidence/semantic_types.go
+--- a/vulnscan-backend/evidence/semantic_types.go
++++ b/vulnscan-backend/evidence/semantic_types.go
+@@ -5,7 +5,7 @@
+ 	"time"
+ )
+ 
+-const SemanticVersion = "evidence-semantics-0.4"
++const SemanticVersion = "evidence-semantics-0.5"
+ 
+ type SemanticInputMode string
+ 
+@@ -31,6 +31,7 @@
+ func (k SlotKey) String() string { return k.ID + "/" + k.Target + "/" + k.Subtype }
+ 
+ type SemanticDefinition struct {
++	EvidenceContract
+ 	Key             SlotKey `json:"key"`
+ 	Prerequisite    string  `json:"prerequisite"`
+ 	ExplanationOnly bool    `json:"explanation_only"`
+@@ -233,6 +234,10 @@
+ }
+ 
+ type SemanticFinding struct {
++	EvidenceContract
++	StructureValidation string `json:"structure_validation"`
++	SemanticSupport     string `json:"semantic_support"`
++	BehaviorOutcome     string `json:"behavior_outcome"`
+ 	SemanticItem
+ 	Slot            SlotKey        `json:"slot"`
+ 	SubjectID       string         `json:"subject_id"`
+diff --git a/vulnscan-backend/evidence/semantic_validation.go b/vulnscan-backend/evidence/semantic_validation.go
+--- a/vulnscan-backend/evidence/semantic_validation.go
++++ b/vulnscan-backend/evidence/semantic_validation.go
+@@ -35,6 +35,9 @@
+ 	}
+ 	for _, f := range result.Findings {
+ 		task, ok := tasks[f.TaskID]
++		if f.StructureValidation != "passed" || f.SemanticSupport != f.Judgement || f.BehaviorOutcome != "not_established" || !reflect.DeepEqual(f.EvidenceContract, semanticContract(task.Slot)) {
++			return fmt.Errorf("invalid cached semantic claim boundary")
++		}
+ 		if !ok || seen[f.TaskID] || f.Slot != task.Slot.Key || f.SubjectID != task.SubjectID || f.PropositionID != task.PropositionID || f.Scope != task.Scope || !sameSemanticWindow(f.Window, task.Window) || f.SnapshotVersion != plan.SnapshotVersion || f.RuleVersion != plan.RuleVersion || f.ExplanationOnly != task.Slot.ExplanationOnly || !reflect.DeepEqual(f.NonAdditiveWith, task.NonAdditiveWith) || validateSemanticItem(task, f.SemanticItem) != "" {
+ 			return fmt.Errorf("invalid cached semantic finding")
+ 		}
+diff --git a/vulnscan-backend/evidence/types.go b/vulnscan-backend/evidence/types.go
+--- a/vulnscan-backend/evidence/types.go
++++ b/vulnscan-backend/evidence/types.go
+@@ -9,7 +9,7 @@
+ const (
+ 	BeaconPeriodic  FactID = "F_BEACON_PERIODIC"
+ 	MultiDayPersist FactID = "F_MULTI_DAY_PERSIST"
+-	RuleVersion            = "evidence-algorithms-0.6"
++	RuleVersion            = "evidence-algorithms-0.7"
+ )
+ 
+ type Scope struct {
+@@ -106,6 +106,7 @@
+ }
+ 
+ type Finding struct {
++	EvidenceContract
+ 	IOCType         string       `json:"ioc_type,omitempty"`
+ 	IOCValue        string       `json:"ioc_value,omitempty"`
+ 	FactID          FactID       `json:"fact_id"`
+diff --git a/vulnscan-backend/traffic/internal/httpapi/report_document_test.go b/vulnscan-backend/traffic/internal/httpapi/report_document_test.go
+--- a/vulnscan-backend/traffic/internal/httpapi/report_document_test.go
++++ b/vulnscan-backend/traffic/internal/httpapi/report_document_test.go
+@@ -97,7 +97,7 @@
+ 		{base + "?summary_id=0", "report-token", 400, "正整数"},
+ 		{base + "?summary_id=garbage", "report-token", 400, "正整数"},
+ 		{base, "report-token", 400, "legacy_report_without_evidence_document"},
+-		{base + fmt.Sprintf("?summary_id=%d", summary.ID), "report-token", 200, "evidence-report-1.6"},
++		{base + fmt.Sprintf("?summary_id=%d", summary.ID), "report-token", 200, "evidence-report-1.7"},
+ 		{base + "/export" + fmt.Sprintf("?summary_id=%d", summary.ID), "report-token", 200, ""},
+ 		{base + "/export" + fmt.Sprintf("?summary_id=%d&include_appendix=true", summary.ID), "report-token", 200, ""},
+ 		{base + "/export" + fmt.Sprintf("?summary_id=%d&include_appendix=wrong", summary.ID), "report-token", 400, "布尔值"},
+diff --git a/vulnscan-backend/traffic/internal/service/evidence_contract_test.go b/vulnscan-backend/traffic/internal/service/evidence_contract_test.go
+new file mode 100644
+--- /dev/null
++++ b/vulnscan-backend/traffic/internal/service/evidence_contract_test.go
+@@ -0,0 +1,29 @@
++package service
++
++import (
++	"encoding/json"
++	"testing"
++
++	"vulnscan-backend/evidence"
++)
++
++func TestReportPromptPreservesFeatureAndSemanticBoundaries(t *testing.T) {
++	for _, d := range evidence.Definitions() {
++		f := evidence.Finding{FactID: d.ID, EvidenceContract: d.EvidenceContract, Status: evidence.Observed}
++		entry := ReportEvidence{Kind: "fact", Finding: &f, FactID: d.ID, Name: d.Description}
++		out := reportEvidencePromptEntry(entry)
++		if out["feature_claim"] != d.FeatureClaim || out["cannot_prove"] != d.CannotProve {
++			t.Fatalf("feature boundary omitted for %s", d.ID)
++		}
++	}
++	for _, d := range evidence.SemanticDefinitions() {
++		f := evidence.SemanticFinding{EvidenceContract: d.EvidenceContract, Slot: d.Key, StructureValidation: "passed", SemanticSupport: "support", BehaviorOutcome: "not_established"}
++		out := reportEvidencePromptEntry(ReportEvidence{Kind: "semantic", Semantic: &f})
++		if out["structure_validation"] != "passed" || out["behavior_outcome"] != "not_established" || out["cannot_prove"] != d.CannotProve {
++			t.Fatalf("semantic boundary omitted for %s", d.Key)
++		}
++		if _, err := json.Marshal(out); err != nil {
++			t.Fatal(err)
++		}
++	}
++}
+diff --git a/vulnscan-backend/traffic/internal/service/report_evidence.go b/vulnscan-backend/traffic/internal/service/report_evidence.go
+--- a/vulnscan-backend/traffic/internal/service/report_evidence.go
++++ b/vulnscan-backend/traffic/internal/service/report_evidence.go
+@@ -12,10 +12,10 @@
+ 	"vulnscan-backend/traffic/internal/domain"
+ )
+ 
+-const reportEvidenceVersion = "evidence-report-1.6"
++const reportEvidenceVersion = "evidence-report-1.7"
+ 
+ func narrativeReportVersion(v string) bool {
+-	return v == reportEvidenceVersion || v == "evidence-report-1.4" || v == "evidence-report-1.5"
++	return v == reportEvidenceVersion || v == "evidence-report-1.6" || v == "evidence-report-1.4" || v == "evidence-report-1.5"
+ }
+ 
+ var ReportBuildRevision = "development"
+@@ -335,6 +335,10 @@
+ 		out["duplicate_of"], out["non_additive_with"] = u.DuplicateOf, u.NonAdditiveWith
+ 	}
+ 	if e.Finding != nil {
++		out["feature_claim"] = e.Finding.FeatureClaim
++		out["security_interpretation"] = e.Finding.SecurityInterpretation
++		out["cannot_prove"] = e.Finding.CannotProve
++		out["required_correlations"] = e.Finding.RequiredCorrelations
+ 		delete(out, "result") // the same values are retained below as typed metrics
+ 		out["fact_id"] = e.FactID
+ 		out["measurements"] = e.Finding.Measurements
+@@ -343,6 +347,13 @@
+ 		out["eligibility"] = e.Finding.Eligibility
+ 	}
+ 	if e.Semantic != nil {
++		out["feature_claim"] = e.Semantic.FeatureClaim
++		out["security_interpretation"] = e.Semantic.SecurityInterpretation
++		out["cannot_prove"] = e.Semantic.CannotProve
++		out["required_correlations"] = e.Semantic.RequiredCorrelations
++		out["structure_validation"] = e.Semantic.StructureValidation
++		out["semantic_support"] = e.Semantic.SemanticSupport
++		out["behavior_outcome"] = e.Semantic.BehaviorOutcome
+ 		// The table may use a display excerpt. The model must receive the full
+ 		// validated explanation; budget handling may not cut its conclusion.
+ 		out["result"] = e.Semantic.Explanation

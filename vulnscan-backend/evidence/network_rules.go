@@ -22,10 +22,12 @@ func (e *Engine) networkFact(f Finding, g *observations) Finding {
 	}
 	f.SourceIDs = append(f.SourceIDs, n.SourceIDs...)
 	refs := []string{}
+	seen := map[string]bool{}
 	for _, r := range n.Connections {
-		if r.SourceID == "" || r.Time.IsZero() || r.AssetID != g.scope.AssetID || r.Destination == "" {
+		if r.SourceID == "" || seen[r.SourceID] || r.Time.IsZero() || r.AssetID != g.scope.AssetID || r.Destination == "" {
 			return absent(f, UnresolvedBinding)
 		}
+		seen[r.SourceID] = true
 		refs = append(refs, r.SourceID)
 	}
 	switch f.FactID {
@@ -161,6 +163,7 @@ func (e *Engine) networkFact(f Finding, g *observations) Finding {
 			return absent(f, MissingPolicy)
 		}
 		small := 0
+		zero := 0
 		for _, r := range n.Connections {
 			if r.PayloadBytes == nil {
 				return absent(f, MissingInput)
@@ -168,26 +171,48 @@ func (e *Engine) networkFact(f Finding, g *observations) Finding {
 			if float64(*r.PayloadBytes) <= limit {
 				small++
 			}
+			if *r.PayloadBytes == 0 {
+				zero++
+			}
 		}
 		ratio := float64(small) / float64(len(n.Connections))
-		return finish(f, ratio >= 0.8, map[string]float64{"small_payload_fraction": ratio}, refs...)
+		return finish(f, ratio >= 0.8, map[string]float64{"small_payload_fraction": ratio, "zero_payload_fraction": float64(zero) / float64(len(n.Connections))}, refs...)
 	case "F_CONN_FAIL_RATE":
 		b, ok := baseline(&f, g, "connection_failure_rate_p95")
 		if !ok || b[0] < 0 || b[0] > 1 {
 			return absent(f, MissingBaseline)
 		}
-		failed := 0
+		failed, succeeded, pending, unknown := 0, 0, 0, 0
 		for _, r := range n.Connections {
 			switch strings.ToUpper(r.TCPState) {
-			case "RST", "TIMEOUT", "SYN_SENT":
-				failed++
-			case "ESTABLISHED", "CLOSED":
+			case "SYN_SENT", "SYN_RECEIVED", "CONNECTING":
+				pending++
+			case "RST", "TIMEOUT", "REFUSED", "FAILED":
+				if r.OutcomeVerified {
+					failed++
+				} else {
+					unknown++
+				}
+			case "ESTABLISHED", "SUCCEEDED":
+				if r.OutcomeVerified {
+					succeeded++
+				} else {
+					unknown++
+				}
 			default:
-				return absent(f, MissingInput)
+				unknown++ // CLOSED and a bare RST do not establish handshake outcome.
 			}
 		}
-		rate := float64(failed) / float64(len(n.Connections))
-		return finish(f, rate > b[0], map[string]float64{"connection_failure_rate": rate}, refs...)
+		values := map[string]float64{"confirmed_failures": float64(failed), "confirmed_successes": float64(succeeded), "pending": float64(pending), "unknown": float64(unknown), "terminal_outcomes": float64(failed + succeeded)}
+		f.Measurements.Values = values
+		// A terminal-only subpopulation cannot refute or establish the full-window
+		// failure rate while some attempts still have no verified outcome.
+		if pending+unknown > 0 || failed+succeeded == 0 {
+			return absent(f, UnverifiedCoverage)
+		}
+		rate := float64(failed) / float64(failed+succeeded)
+		values["connection_failure_rate"] = rate
+		return finish(f, rate > b[0], values, refs...)
 	}
 	return absent(f, MissingInput)
 }

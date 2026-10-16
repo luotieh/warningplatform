@@ -54,7 +54,9 @@ func (s Services) ExecutePhaseOne(ctx context.Context, snap EvidenceSnapshot, fa
 	materials := PhaseOneMaterials{Complete: false, Diagnostics: []string{"current_wire_materials_unavailable"}}
 	if facts.Manifest.PhaseOne != nil {
 		materials = *facts.Manifest.PhaseOne
-		materials.Complete = materials.Complete && facts.Manifest.Coverage == "complete"
+		currentMembershipComplete := facts.Manifest.Coverage == "complete" ||
+			(facts.Manifest.StreamVersion != "" && facts.Manifest.LoadedHits == facts.Manifest.DeclaredHits && facts.Manifest.UnresolvedHits == facts.Manifest.PhaseOneExcludedHits)
+		materials.Complete = materials.Complete && currentMembershipComplete
 		for i := range materials.Sources {
 			if materials.Expanded {
 				break
@@ -107,27 +109,44 @@ func (s Services) ExecutePhaseOne(ctx context.Context, snap EvidenceSnapshot, fa
 		groups[k] = append(groups[k], c)
 	}
 	for _, contacts := range groups {
-		req := evidence.Request{EventID: snap.EventID, SnapshotVersion: snap.Version, Facts: []evidence.FactID{"F_BEACON_JITTER", "F_FIXED_DAILY_WINDOW"}, Quality: evidence.Quality{Coverage: evidence.CoverageComplete}}
-		complete := merged.Complete
-		req.Quality.SavedTimelineComplete = &complete
-		truncated := false
-		req.Quality.CaptureTruncated = &truncated
-		if !complete {
-			req.Quality.Coverage = evidence.CoveragePartial
+		groupKey := scopeKey(contacts[0].Scope) + contacts[0].IOCType + ":" + contacts[0].IOCValue
+		// C02 needs a complete current observation set, not C03's three-day
+		// extension. Failure of that optional extension cannot erase this set.
+		currentContacts := []PhaseOneContact{}
+		for _, c := range merged.CurrentContacts {
+			if scopeKey(c.Scope)+c.IOCType+":"+c.IOCValue == groupKey {
+				currentContacts = append(currentContacts, c)
+			}
 		}
-		for _, c := range contacts {
-			req.Hits = append(req.Hits, evidence.Hit{ID: c.HitID, OccurredAt: c.Time, Scope: c.Scope})
-		}
-		fc := evidence.DefaultConfig()
-		fc.Policies = map[evidence.FactID]map[string]float64{"F_BEACON_JITTER": {"ljung_box_lags": 3, "median_relative_tolerance": 0.25}}
-		engine, _ := evidence.NewEngine(fc)
-		computed, e := engine.Evaluate(ctx, req)
-		if e != nil {
-			return out, e
-		}
-		for _, f := range computed.Findings {
-			f.IOCType, f.IOCValue = contacts[0].IOCType, contacts[0].IOCValue
-			findings = append(findings, f)
+		for _, factID := range []evidence.FactID{"F_BEACON_JITTER", "F_FIXED_DAILY_WINDOW"} {
+			selected := contacts
+			complete := merged.Complete && len(merged.ScopeIncomplete[groupKey]) == 0
+			if factID == "F_BEACON_JITTER" && len(currentContacts) >= 16 {
+				selected = currentContacts
+				complete = merged.CurrentComplete && len(merged.CurrentIncomplete[groupKey]) == 0
+			}
+			req := evidence.Request{EventID: snap.EventID, SnapshotVersion: snap.Version, Facts: []evidence.FactID{"F_BEACON_JITTER", "F_FIXED_DAILY_WINDOW"}, Quality: evidence.Quality{Coverage: evidence.CoverageComplete}}
+			req.Facts = []evidence.FactID{factID}
+			req.Quality.SavedTimelineComplete = &complete
+			truncated := false
+			req.Quality.CaptureTruncated = &truncated
+			if !complete {
+				req.Quality.Coverage = evidence.CoveragePartial
+			}
+			for _, c := range selected {
+				req.Hits = append(req.Hits, evidence.Hit{ID: c.HitID, OccurredAt: c.Time, Scope: c.Scope})
+			}
+			fc := evidence.DefaultConfig()
+			fc.Policies = map[evidence.FactID]map[string]float64{"F_BEACON_JITTER": {"ljung_box_lags": 3, "median_relative_tolerance": 0.25}}
+			engine, _ := evidence.NewEngine(fc)
+			computed, e := engine.Evaluate(ctx, req)
+			if e != nil {
+				return out, e
+			}
+			for _, f := range computed.Findings {
+				f.IOCType, f.IOCValue = contacts[0].IOCType, contacts[0].IOCValue
+				findings = append(findings, f)
+			}
 		}
 	}
 	// Missing contacts need explicit F outcomes, never inherited packet-count F.

@@ -86,21 +86,25 @@ type HTTPFieldEncodingSummary struct {
 type HTTPData struct {
 	Provenance
 	RequestCandidates int          `json:"request_candidates"`
+	NonRequestPackets int          `json:"non_request_packets"`
+	UnknownRequestIDs []string     `json:"unknown_request_ids,omitempty"`
 	Records           []HTTPRecord `json:"records"`
 	Brands            []Brand      `json:"brands"`
 	BrandsVerified    bool         `json:"brands_verified"`
 }
 type Connection struct {
-	SourceID       string    `json:"source_id"`
-	Time           time.Time `json:"time"`
-	AssetID        string    `json:"asset_id"`
-	Destination    string    `json:"destination"`
-	Port           uint16    `json:"port"`
-	AppProtocol    string    `json:"app_protocol"`
-	ProtocolParsed bool      `json:"protocol_parsed"`
-	PayloadBytes   *uint64   `json:"payload_bytes"`
-	TCPState       string    `json:"tcp_state"`
-	SessionID      string    `json:"session_id"`
+	Transport       string    `json:"transport"`        // verified tcp/udp, never inferred from a port
+	OutcomeVerified bool      `json:"outcome_verified"` // terminal outcome, not a packet flag
+	SourceID        string    `json:"source_id"`
+	Time            time.Time `json:"time"`
+	AssetID         string    `json:"asset_id"`
+	Destination     string    `json:"destination"`
+	Port            uint16    `json:"port"`
+	AppProtocol     string    `json:"app_protocol"`
+	ProtocolParsed  bool      `json:"protocol_parsed"`
+	PayloadBytes    *uint64   `json:"payload_bytes"`
+	TCPState        string    `json:"tcp_state"`
+	SessionID       string    `json:"session_id"`
 }
 type Session struct {
 	SourceID       string    `json:"source_id"`

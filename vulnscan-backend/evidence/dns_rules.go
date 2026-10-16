@@ -60,12 +60,14 @@ func (e *Engine) dnsFact(f Finding, g *observations) Finding {
 	refs := []string{}
 	domains := []string{}
 	roots := []string{}
+	seenDNS := map[string]bool{}
 	for _, r := range d.Records {
 		domain, ok := canonicalDomain(r.Domain)
 		root, valid := registrable(r.Domain)
-		if !ok || !valid || r.SourceID == "" || r.Time.IsZero() {
+		if !ok || !valid || r.SourceID == "" || r.Time.IsZero() || seenDNS[r.SourceID] {
 			return absent(f, MissingInput)
 		}
+		seenDNS[r.SourceID] = true
 		domains = append(domains, domain)
 		roots = append(roots, root)
 		refs = append(refs, r.SourceID)
@@ -171,6 +173,19 @@ func (e *Engine) dnsFact(f Finding, g *observations) Finding {
 		if g.input.Network == nil || !provenance(g.input.Network.Provenance) || !g.input.Network.Complete {
 			return absent(f, MissingInput)
 		}
+		dependency(&f, "network", g.input.Network.Provenance)
+		for _, connection := range g.input.Network.Connections {
+			bound := false
+			for _, hit := range g.request.Hits {
+				if hit.ID == connection.SourceID && hit.Scope.AssetID == g.scope.AssetID && hit.Scope.DeviceID == g.scope.DeviceID && connection.AssetID == g.scope.AssetID && hit.OccurredAt.Equal(connection.Time) && connectionEndpoint(connection) != "" && canonicalEndpoint(hit.Scope.EndpointID) == connectionEndpoint(connection) {
+					bound = true
+					break
+				}
+			}
+			if !bound {
+				return absent(f, UnresolvedBinding)
+			}
+		}
 		minFailures, ok := e.policy(&f, "min_failures")
 		if !ok || minFailures < 2 || minFailures != math.Trunc(minFailures) {
 			return absent(f, MissingPolicy)
@@ -183,8 +198,10 @@ func (e *Engine) dnsFact(f Finding, g *observations) Finding {
 				continue
 			}
 			fails := 0
+			resolvedName, _ := canonicalDomain(resolved.Domain)
 			for _, earlier := range d.Records {
-				if earlier.Time.Before(resolved.Time) && earlier.RCodeKnown && earlier.RCode == 3 {
+				earlierName, _ := canonicalDomain(earlier.Domain)
+				if earlierName == resolvedName && earlier.Time.Before(resolved.Time) && earlier.RCodeKnown && earlier.RCode == 3 {
 					fails++
 				}
 			}
@@ -192,10 +209,13 @@ func (e *Engine) dnsFact(f Finding, g *observations) Finding {
 				continue
 			}
 			for _, connection := range g.input.Network.Connections {
+				if connection.AssetID != g.scope.AssetID || connection.SourceID == "" || connection.Time.IsZero() {
+					return absent(f, UnresolvedBinding)
+				}
 				delay := connection.Time.Sub(resolved.Time).Seconds()
 				if delay >= 0 && delay <= 300 {
 					for _, ip := range resolved.Answers {
-						if ip == connection.Destination {
+						if parsed := net.ParseIP(ip); parsed != nil && parsed.Equal(net.ParseIP(connection.Destination)) {
 							return finish(f, true, map[string]float64{"prior_failures": float64(fails), "connection_delay_sec": delay}, append(refs, connection.SourceID)...)
 						}
 					}

@@ -24,7 +24,7 @@ import (
 )
 
 const snapshotAdapterVersion = "snapshot-evidence-adapter-0.4"
-const reportSnapshotAdapterVersion = "report-snapshot-adapter-1.6-phase1"
+const reportSnapshotAdapterVersion = "report-snapshot-adapter-1.7-stream"
 
 // SnapshotEvidenceOptions limits the shared load, not each algorithm separately.
 // Large snapshots are explicitly deferred, never evaluated using model samples.
@@ -36,6 +36,9 @@ type SnapshotEvidenceOptions struct {
 	Facts              []evidence.FactID
 	MaxHits            int64
 	MaxRawBytes        int64
+	StreamFeatures     bool
+	MaxSnapshotBytes   int64
+	MaxFeatureBytes    int64
 	MaxScopes          int
 	Supplemental       *SnapshotSupplementalInputs `json:"-"`
 	SupplementalIssue  *SnapshotInputIssue         `json:"-"`
@@ -49,36 +52,43 @@ func DefaultSnapshotEvidenceOptions() SnapshotEvidenceOptions {
 }
 
 type SnapshotEvidenceManifest struct {
-	PhaseOne              *PhaseOneMaterials              `json:"phase_one_materials,omitempty"`
-	ReportPractical       []ReportEvidence                `json:"report_practical_evidence,omitempty"`
-	ReportPracticalChecks []ReportPracticalCheck          `json:"report_practical_checks,omitempty"`
-	ReportSchedules       map[string]ReportSchedulePolicy `json:"report_schedules,omitempty"`
-	ReportDuplicateHits   map[string]string               `json:"report_duplicate_hits,omitempty"`
-	ReportObservations    []ReportMaterialObservation     `json:"report_observations,omitempty"`
-	History               *ReportHistoryDiagnostics       `json:"history,omitempty"`
-	AdapterVersion        string                          `json:"adapter_version"`
-	RegistryVersion       string                          `json:"registry_version"`
-	SnapshotVersion       int64                           `json:"snapshot_version"`
-	Watermark             int64                           `json:"watermark"`
-	RevisionWatermark     int64                           `json:"revision_watermark"`
-	DeclaredHits          int64                           `json:"declared_hits"`
-	LoadedHits            int64                           `json:"loaded_hits"`
-	BoundHits             int64                           `json:"bound_hits"`
-	UnresolvedHits        int64                           `json:"unresolved_hits"`
-	ReadPages             int                             `json:"read_pages"`
-	RevisionBatches       int                             `json:"revision_batches"`
-	RawBytes              int64                           `json:"raw_bytes"`
-	MaxHits               int64                           `json:"max_hits"`
-	MaxRawBytes           int64                           `json:"max_raw_bytes"`
-	MaxScopes             int                             `json:"max_scopes"`
-	Coverage              string                          `json:"coverage"`
-	MissingInputs         []string                        `json:"missing_inputs"`
-	Issues                []SnapshotInputIssue            `json:"issues,omitempty"`
-	IssueCount            int                             `json:"issue_count"`
-	OmittedIssues         int                             `json:"omitted_issues"`
-	FactCoverage          []SnapshotFactCoverage          `json:"fact_coverage,omitempty"`
-	SupplementalVersion   string                          `json:"supplemental_version,omitempty"`
-	SourceRegistryVersion string                          `json:"source_registry_version,omitempty"`
+	PhaseOne                   *PhaseOneMaterials              `json:"phase_one_materials,omitempty"`
+	ReportPractical            []ReportEvidence                `json:"report_practical_evidence,omitempty"`
+	ReportPracticalChecks      []ReportPracticalCheck          `json:"report_practical_checks,omitempty"`
+	ReportSchedules            map[string]ReportSchedulePolicy `json:"report_schedules,omitempty"`
+	ReportDuplicateHits        map[string]string               `json:"report_duplicate_hits,omitempty"`
+	ReportObservations         []ReportMaterialObservation     `json:"report_observations,omitempty"`
+	History                    *ReportHistoryDiagnostics       `json:"history,omitempty"`
+	AdapterVersion             string                          `json:"adapter_version"`
+	RegistryVersion            string                          `json:"registry_version"`
+	SnapshotVersion            int64                           `json:"snapshot_version"`
+	Watermark                  int64                           `json:"watermark"`
+	RevisionWatermark          int64                           `json:"revision_watermark"`
+	DeclaredHits               int64                           `json:"declared_hits"`
+	LoadedHits                 int64                           `json:"loaded_hits"`
+	BoundHits                  int64                           `json:"bound_hits"`
+	UnresolvedHits             int64                           `json:"unresolved_hits"`
+	PhaseOneExcludedHits       int64                           `json:"phase_one_excluded_hits"`
+	SemanticCoverageIncomplete bool                            `json:"semantic_coverage_incomplete"`
+	ReadPages                  int                             `json:"read_pages"`
+	RevisionBatches            int                             `json:"revision_batches"`
+	RawBytes                   int64                           `json:"raw_bytes"`
+	MaxHits                    int64                           `json:"max_hits"`
+	MaxRawBytes                int64                           `json:"max_raw_bytes"`
+	StreamVersion              string                          `json:"stream_version,omitempty"`
+	PageByteBudget             int64                           `json:"page_byte_budget,omitempty"`
+	SnapshotByteBudget         int64                           `json:"snapshot_byte_budget,omitempty"`
+	FeatureByteBudget          int64                           `json:"feature_byte_budget,omitempty"`
+	RetainedFeatureBytes       int64                           `json:"retained_feature_bytes,omitempty"`
+	MaxScopes                  int                             `json:"max_scopes"`
+	Coverage                   string                          `json:"coverage"`
+	MissingInputs              []string                        `json:"missing_inputs"`
+	Issues                     []SnapshotInputIssue            `json:"issues,omitempty"`
+	IssueCount                 int                             `json:"issue_count"`
+	OmittedIssues              int                             `json:"omitted_issues"`
+	FactCoverage               []SnapshotFactCoverage          `json:"fact_coverage,omitempty"`
+	SupplementalVersion        string                          `json:"supplemental_version,omitempty"`
+	SourceRegistryVersion      string                          `json:"source_registry_version,omitempty"`
 }
 
 type SnapshotEvidenceInput struct {
@@ -134,6 +144,15 @@ func (s Services) SnapshotEvidenceInput(ctx context.Context, snap EvidenceSnapsh
 		opts.MaxScopes = 256
 	}
 	out.Manifest.MaxScopes = opts.MaxScopes
+	if opts.StreamFeatures {
+		if opts.MaxSnapshotBytes <= 0 || opts.MaxFeatureBytes <= 0 {
+			return out, errors.New("positive stream budgets required")
+		}
+		out.Manifest.StreamVersion = snapshotStreamVersion
+		out.Manifest.PageByteBudget = snapshotPageBytes
+		out.Manifest.SnapshotByteBudget = opts.MaxSnapshotBytes
+		out.Manifest.FeatureByteBudget = opts.MaxFeatureBytes
+	}
 	defer func() {
 		if err == nil && out.Reason != "" {
 			out.Manifest.addIssue(SnapshotInputIssue{Code: out.Reason, Stage: "load"})
@@ -208,7 +227,11 @@ func (s Services) SnapshotEvidenceInput(ctx context.Context, snap EvidenceSnapsh
 	allCaptureKnown, anyTruncated := true, false
 	q := store.HitQuery{Sources: snap.Sources, Watermark: snap.Watermark, Limit: 500}
 	for {
-		page, err := snapshotHitPage(ctx, s.Store, q, snap.RevisionWatermark)
+		readPage := snapshotHitPage
+		if opts.StreamFeatures {
+			readPage = snapshotBoundedPage
+		}
+		page, err := readPage(ctx, s.Store, q, snap.RevisionWatermark)
 		if err != nil {
 			return out, &SnapshotInputError{Code: "snapshot_read_failed", Stage: "load_hits_and_revisions", Cause: err}
 		}
@@ -232,7 +255,11 @@ func (s Services) SnapshotEvidenceInput(ctx context.Context, snap EvidenceSnapsh
 			}
 			out.Manifest.LoadedHits++
 			out.Manifest.RawBytes += int64(len(h.Raw))
-			if out.Manifest.LoadedHits > opts.MaxHits || out.Manifest.RawBytes > opts.MaxRawBytes {
+			rawBudget := opts.MaxRawBytes
+			if opts.StreamFeatures {
+				rawBudget = opts.MaxSnapshotBytes
+			}
+			if out.Manifest.LoadedHits > opts.MaxHits || out.Manifest.RawBytes > rawBudget {
 				out.Request.Hits, out.Request.Inputs = nil, nil
 				out.Reason = "snapshot_input_budget_exceeded"
 				return out, nil
@@ -251,6 +278,10 @@ func (s Services) SnapshotEvidenceInput(ctx context.Context, snap EvidenceSnapsh
 			scope, remoteIP, remotePort, ok := snapshotScope(m, assets)
 			if !ok || h.OccurredAt.IsZero() {
 				out.Manifest.UnresolvedHits++
+				if opts.StreamFeatures && phaseOneUnrelatedFrame(m, assets) {
+					out.Manifest.PhaseOneExcludedHits++
+					out.Manifest.addIssue(SnapshotInputIssue{Code: "verified_frame_outside_eligible_scopes", Stage: "bind", HitID: h.ID})
+				}
 				out.Manifest.addIssue(SnapshotInputIssue{Code: "unresolved_binding_or_time", Stage: "bind", HitID: h.ID, Field: "asset/endpoint/device/time"})
 				continue
 			}
@@ -273,6 +304,9 @@ func (s Services) SnapshotEvidenceInput(ctx context.Context, snap EvidenceSnapsh
 			if opts.ReportMaterialMode {
 				o := reportMaterialObservation(h, m, scope)
 				out.Manifest.ReportObservations = append(out.Manifest.ReportObservations, o)
+				if opts.StreamFeatures {
+					out.Manifest.RetainedFeatureBytes += snapshotFeatureCharge(o)
+				}
 				if o.PhysicalPacketID != "" {
 					key := scopeKey(scope) + ":" + o.PhysicalPacketID
 					if original, ok := seenReportPackets[key]; ok {
@@ -298,6 +332,7 @@ func (s Services) SnapshotEvidenceInput(ctx context.Context, snap EvidenceSnapsh
 			}
 			counts[scope]++
 			scopeHits[scope] = append(scopeHits[scope], hit)
+			mark := snapshotFeatureMark(input, out.Manifest.PhaseOne, len(out.SemanticObservations))
 			adaptSnapshotProtocols(input, h, m, remoteIP, remotePort, known && !truncated)
 			enrichSnapshotProtocols(input, h, m, &out.Manifest)
 			if opts.ReportMaterialMode && !s.LegacyReportEvidence {
@@ -305,6 +340,22 @@ func (s Services) SnapshotEvidenceInput(ctx context.Context, snap EvidenceSnapsh
 			}
 			if opts.CaptureSemantic {
 				collectSnapshotSemanticObservation(&out, input, h, m, assets)
+			}
+			if opts.StreamFeatures {
+				out.Manifest.RetainedFeatureBytes += snapshotFeatureDelta(input, &out, mark, hit)
+				// Phase one uses verified contacts and application transactions. Do
+				// not retain packet payloads for unrelated legacy network/TLS facts.
+				input.Network, input.TLS = nil, nil
+				if out.Manifest.RetainedFeatureBytes > opts.MaxFeatureBytes {
+					out.Reason = "snapshot_feature_budget_exceeded"
+					out.Request.Hits, out.Request.Inputs = nil, nil
+					out.SemanticObservations = nil
+					if out.Manifest.PhaseOne != nil {
+						out.Manifest.PhaseOne.Complete = false
+						out.Manifest.PhaseOne.Records = nil
+					}
+					return out, nil
+				}
 			}
 		}
 		tail := page[len(page)-1]
@@ -354,7 +405,7 @@ func (s Services) SnapshotEvidenceInput(ctx context.Context, snap EvidenceSnapsh
 		if input.HTTP != nil {
 			input.HTTP.Provenance = provenance
 			// ACK/TLS/response packets are not HTTP request denominators.
-			input.HTTP.Complete = provenance.Complete && input.HTTP.RequestCandidates > 0 && len(input.HTTP.Records) == input.HTTP.RequestCandidates
+			input.HTTP.Complete = provenance.Complete && input.HTTP.RequestCandidates > 0 && len(input.HTTP.UnknownRequestIDs) == 0 && len(input.HTTP.Records) == input.HTTP.RequestCandidates
 			seen := map[string]bool{}
 			records := []evidence.HTTPRecord{}
 			for _, r := range input.HTTP.Records {

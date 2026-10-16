@@ -5,7 +5,7 @@ import (
 	"sort"
 )
 
-const PhaseOneVersion = "evidence-phase1-v1.0"
+const PhaseOneVersion = "evidence-phase1-v1.1"
 
 type PhaseOneDefinition struct {
 	ID       string    `json:"id"`
@@ -229,6 +229,25 @@ func EvaluatePhaseOne(event string, version int64, facts []Finding, sem *Semanti
 				} else {
 					u.Status = "missing"
 					u.Reason = "accepted_phase_one_semantics_missing"
+					if validSem && phaseOneSemanticNegative(sem, scope, d) {
+						u.Status = "not_observed"
+						u.Reason = "validated_semantics_contradict"
+						for _, task := range sem.Plan.Tasks {
+							if task.Scope != scope {
+								continue
+							}
+							for _, slot := range d.Slots {
+								if slot == task.Slot.Key {
+									if u.SemanticTask == "" {
+										u.SemanticTask = task.ID
+									}
+									for _, m := range task.Materials {
+										u.SourceIDs = append(u.SourceIDs, m.SourceIDs...)
+									}
+								}
+							}
+						}
+					}
 				}
 				u.SourceIDs = unique(u.SourceIDs)
 				sort.Strings(u.SourceIDs)
@@ -281,6 +300,55 @@ func EvaluatePhaseOne(event string, version int64, facts []Finding, sem *Semanti
 		out.Score = cfg.MaxScore
 	}
 	return out, nil
+}
+
+// A neutral/rejected/omitted interpretation is not a negative. Only explicit
+// validated contradictions for every relevant planned operation can refute
+// this conjunction. Conservatively retain missing when planning skipped work.
+func phaseOneSemanticNegative(sem *SemanticResult, scope Scope, d PhaseOneDefinition) bool {
+	if len(d.Slots) == 0 || sem.CoverageIncomplete {
+		return false
+	}
+	relevant := func(slot SlotKey) bool {
+		for _, s := range d.Slots {
+			if s == slot {
+				return true
+			}
+		}
+		return false
+	}
+	subjects := map[string]bool{}
+	for _, task := range sem.Plan.Tasks {
+		if task.Scope == scope && relevant(task.Slot.Key) {
+			subjects[task.SubjectID] = true
+		}
+	}
+	for _, x := range sem.Plan.Executions {
+		if x.Reason == "task_budget_exceeded" {
+			return false
+		}
+		if subjects[x.SubjectID] && relevant(x.Slot) && x.Status == "skipped" {
+			return false
+		}
+	}
+	count := 0
+	for _, task := range sem.Plan.Tasks {
+		if task.Scope != scope || !relevant(task.Slot.Key) {
+			continue
+		}
+		count++
+		found := false
+		for _, f := range sem.Findings {
+			if f.TaskID == task.ID && f.Judgement == "contradict" && f.Strength != "none" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return count > 0
 }
 
 // A rejected task cannot erase a different accepted task. Validate each accepted

@@ -12,10 +12,10 @@ import (
 	"vulnscan-backend/traffic/internal/domain"
 )
 
-const reportEvidenceVersion = "evidence-report-1.6"
+const reportEvidenceVersion = "evidence-report-1.7"
 
 func narrativeReportVersion(v string) bool {
-	return v == reportEvidenceVersion || v == "evidence-report-1.4" || v == "evidence-report-1.5"
+	return v == reportEvidenceVersion || v == "evidence-report-1.6" || v == "evidence-report-1.4" || v == "evidence-report-1.5"
 }
 
 var ReportBuildRevision = "development"
@@ -335,6 +335,10 @@ func reportEvidencePromptEntry(e ReportEvidence) map[string]any {
 		out["duplicate_of"], out["non_additive_with"] = u.DuplicateOf, u.NonAdditiveWith
 	}
 	if e.Finding != nil {
+		out["feature_claim"] = e.Finding.FeatureClaim
+		out["security_interpretation"] = e.Finding.SecurityInterpretation
+		out["cannot_prove"] = e.Finding.CannotProve
+		out["required_correlations"] = e.Finding.RequiredCorrelations
 		delete(out, "result") // the same values are retained below as typed metrics
 		out["fact_id"] = e.FactID
 		out["measurements"] = e.Finding.Measurements
@@ -343,6 +347,13 @@ func reportEvidencePromptEntry(e ReportEvidence) map[string]any {
 		out["eligibility"] = e.Finding.Eligibility
 	}
 	if e.Semantic != nil {
+		out["feature_claim"] = e.Semantic.FeatureClaim
+		out["security_interpretation"] = e.Semantic.SecurityInterpretation
+		out["cannot_prove"] = e.Semantic.CannotProve
+		out["required_correlations"] = e.Semantic.RequiredCorrelations
+		out["structure_validation"] = e.Semantic.StructureValidation
+		out["semantic_support"] = e.Semantic.SemanticSupport
+		out["behavior_outcome"] = e.Semantic.BehaviorOutcome
 		// The table may use a display excerpt. The model must receive the full
 		// validated explanation; budget handling may not cut its conclusion.
 		out["result"] = e.Semantic.Explanation

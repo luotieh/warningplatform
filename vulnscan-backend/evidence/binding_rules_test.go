@@ -25,6 +25,7 @@ func TestPartitionedFanoutAndInvalidHandoff(t *testing.T) {
 			x.Connections = append(x.Connections, Connection{SourceID: string(rune('a' + asset*2 + j)), AssetID: m.AssetID, Destination: "203.0.113." + stringPort(uint16(asset*2+j+1)), Time: start.Add(time.Duration(asset*5+j) * time.Second), Port: 22})
 		}
 	}
+	bindGroupFixture(&r)
 	e, err := NewEngine(c)
 	if err != nil {
 		t.Fatal(err)
@@ -34,6 +35,7 @@ func TestPartitionedFanoutAndInvalidHandoff(t *testing.T) {
 	}
 	x.Connections[4].Time = start.Add(time.Second)
 	x.Connections[5].Time = start.Add(2 * time.Second)
+	bindGroupFixture(&r)
 	if evaluate(t, e, r).Findings[0].Status != NotObserved {
 		t.Fatal("overlapping handoff accepted")
 	}

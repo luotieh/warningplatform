@@ -58,6 +58,7 @@ func (e *SemanticEngine) Plan(ctx context.Context, r SemanticRequest) (SemanticP
 	}
 	for _, spec := range specs {
 		for _, subject := range r.Subjects {
+			spec.SemanticDefinition.EvidenceContract = semanticContract(spec.SemanticDefinition)
 			subject.ReportHistory = e.config.ReportHistory
 			subject.ReportSchedule = e.config.ReportSchedule
 			subject.ReportPractical = e.config.ReportPractical
@@ -340,7 +341,7 @@ func (e *SemanticEngine) evaluatePlan(ctx context.Context, r SemanticRequest, p 
 				semanticMarkTask(&result.Plan, task.ID, "rejected", reason)
 				break
 			}
-			finding := SemanticFinding{SemanticItem: item, Slot: task.Slot.Key, SubjectID: task.SubjectID, PropositionID: task.PropositionID, Scope: task.Scope, Window: task.Window, SnapshotVersion: r.SnapshotVersion, RuleVersion: SemanticVersion, ExplanationOnly: task.Slot.ExplanationOnly, NonAdditiveWith: task.NonAdditiveWith, Limitations: []string{"model_interpretation_requires_review", "does_not_prove_attack_success"}}
+			finding := SemanticFinding{EvidenceContract: semanticContract(task.Slot), StructureValidation: "passed", SemanticSupport: item.Judgement, BehaviorOutcome: "not_established", SemanticItem: item, Slot: task.Slot.Key, SubjectID: task.SubjectID, PropositionID: task.PropositionID, Scope: task.Scope, Window: task.Window, SnapshotVersion: r.SnapshotVersion, RuleVersion: SemanticVersion, ExplanationOnly: task.Slot.ExplanationOnly, NonAdditiveWith: task.NonAdditiveWith, Limitations: []string{"model_interpretation_requires_review", "does_not_prove_attack_success"}}
 			result.Findings = append(result.Findings, finding)
 			semanticMarkTask(&result.Plan, task.ID, "accepted", "references_and_strength_validated")
 		}

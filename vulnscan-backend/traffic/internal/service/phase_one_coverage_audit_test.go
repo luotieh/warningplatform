@@ -12,6 +12,7 @@ import (
 	"golang.org/x/net/dns/dnsmessage"
 	"io"
 	"math"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -20,6 +21,7 @@ import (
 	"testing"
 	"time"
 	"vulnscan-backend/evidence"
+	"vulnscan-backend/traffic/internal/client"
 	"vulnscan-backend/traffic/internal/domain"
 	"vulnscan-backend/traffic/internal/store"
 )
@@ -167,6 +169,33 @@ func (s *coverageArchiveStore) HitRevisions(ctx context.Context, ids []string, w
 	}
 	return map[string]json.RawMessage{}, ctx.Err()
 }
+
+func (s *coverageArchiveStore) SnapshotPage(ctx context.Context, q store.HitQuery, rw, pageBytes, rowBytes int64) ([]store.Hit, error) {
+	page, err := s.HitPage(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	out := []store.Hit{}
+	var total int64
+	for _, hit := range page {
+		cost := int64(len(hit.Raw))
+		if cost > rowBytes || cost > pageBytes {
+			if len(out) == 0 {
+				return nil, fmt.Errorf("snapshot_row_budget_exceeded:%s", hit.ID)
+			}
+			break
+		}
+		if total+cost > pageBytes {
+			break
+		}
+		if _, err = s.HitRevisions(ctx, []string{hit.ID}, rw); err != nil {
+			return nil, err
+		}
+		total += cost
+		out = append(out, hit)
+	}
+	return out, nil
+}
 func coverageReadJSON(t *testing.T, path string, v any) {
 	t.Helper()
 	b, err := os.ReadFile(path)
@@ -295,6 +324,13 @@ func TestPhaseOneCoverageFrozenReportReplay(t *testing.T) {
 		} `json:"segments"`
 	}
 	coverageReadJSON(t, filepath.Join(dir, "coverage180-snapshots.json"), &saved)
+	if path := os.Getenv("PHASE_ONE_COVERAGE_SUPPLEMENT"); path != "" {
+		extra := saved
+		extra.Snapshots, extra.Segments = nil, nil
+		coverageReadJSON(t, path, &extra)
+		saved.Snapshots = append(saved.Snapshots, extra.Snapshots...)
+		saved.Segments = append(saved.Segments, extra.Segments...)
+	}
 	for _, r := range saved.Snapshots {
 		if err := putRecord(ctx, st, "snapshot", r.Key, r.Value.EventID, r.Value); err != nil {
 			t.Fatal(err)
@@ -342,13 +378,27 @@ func TestPhaseOneCoverageFrozenReportReplay(t *testing.T) {
 	})
 	outputs := []any{}
 	svc := Services{Store: st}
+	modelEvent := os.Getenv("PHASE_ONE_COVERAGE_MODEL_EVENT")
+	if modelEvent != "" {
+		endpoint := os.Getenv("PHASE_ONE_MODEL_ENDPOINT")
+		if !strings.HasPrefix(endpoint, "http://127.0.0.1:") {
+			t.Fatal("isolated model endpoint must be localhost")
+		}
+		svc.LLM = &client.LLMClient{BaseURL: endpoint, Model: "K2.7", DisableThinking: true, HTTP: &http.Client{Timeout: 180 * time.Second}}
+		opts := DefaultReportSemanticOptions()
+		opts.Config.MaxTasks = 3
+		svc.ReportSemantics = &opts
+	}
 	for _, id := range targets {
+		if modelEvent != "" && modelEvent != id {
+			continue
+		}
 		t.Run(id, func(t *testing.T) {
 			event, ok := st.GetEvent(id)
 			if !ok {
 				t.Fatal("event absent")
 			}
-			p, err := svc.prepareReportInputMode(ctx, event, false)
+			p, err := svc.prepareReportInputMode(ctx, event, modelEvent != "")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -359,21 +409,94 @@ func TestPhaseOneCoverageFrozenReportReplay(t *testing.T) {
 			if p.Evidence.SnapshotVersion != snap.Version || p.Evidence.Watermark != snap.Watermark || p.Evidence.RevisionWatermark != snap.RevisionWatermark {
 				t.Fatal("snapshot provenance changed")
 			}
+			if os.Getenv("PHASE_ONE_COVERAGE_SUPPLEMENT") != "" && modelEvent == "" {
+				if p.Evaluation.Manifest.LoadedHits != snap.Count || p.Evaluation.Reason != "" {
+					t.Fatal("full fixed membership was not supplied")
+				}
+				if id == "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8" {
+					positive := false
+					negatives := 0
+					for _, u := range p.Evidence.PhaseOne.Result.Units {
+						if u.ID == "C02" && u.Status == "not_observed" {
+							negatives++
+							if u.Score != 0 {
+								t.Fatal("negative scored")
+							}
+						}
+						if u.ID == "C03" && u.Scope.EndpointID == "tcp://144.48.4.129:443" && u.Status == "observed" && u.Fact.Measurements.SampleCount == 66 && u.Score == 10 {
+							positive = true
+						}
+					}
+					if !positive || negatives != 30 {
+						t.Fatal("real C03 positive / C02 negatives changed", positive, negatives)
+					}
+				}
+				if id == "ly-14725b4b-84f0-4233-b6f3-98d6444ce2e6" {
+					negative := false
+					for _, u := range p.Evidence.PhaseOne.Result.Units {
+						if u.ID == "C04" && u.Scope.EndpointID == "tcp://144.48.4.129:80" && u.Status == "not_observed" && u.Fact.Measurements.SampleCount == 168 && u.Score == 0 {
+							negative = true
+						}
+					}
+					if !negative {
+						t.Fatal("real complete HTTP negative changed")
+					}
+				}
+			}
 			doc := ReportDocument{EventID: id, LayoutVersion: reportFivePartLayout, Evidence: p.Evidence, Assessment: ReportAssessment{Verdict: "insufficient", ProbabilityReason: "本文件验证确定性 F→C→报告渲染链路；未调用模型，未进行事件性质研判。"}}
+			if p.Evidence.PhaseOne != nil {
+				risk := p.Evidence.PhaseOne.Result
+				doc.Assessment.EvidenceRisk = &risk
+			}
 			doc.Markdown = renderFivePartReport(doc)
 			if p.Evidence.PhaseOne != nil && !strings.Contains(doc.Markdown, "C04") {
 				t.Fatal("C results absent from formal report renderer")
 			}
-			out := filepath.Join(dir, "coverage180-report-"+id+".md")
+			prefix := os.Getenv("PHASE_ONE_COVERAGE_OUTPUT_PREFIX")
+			if prefix == "" {
+				prefix = "coverage180"
+			}
+			out := filepath.Join(dir, prefix+"-report-"+id+".md")
 			if err = os.WriteFile(out, []byte(doc.Markdown), 0600); err != nil {
 				t.Fatal(err)
 			}
 			// Exclude packet bodies and semantic payloads from the audit result.
 			phase := p.Evidence.PhaseOne
+			protocols := map[string]map[string]int{}
+			if phase != nil {
+				for _, r := range phase.Materials.Records {
+					key := scopeKey(r.Hit.Scope) + r.IOCType + ":" + r.IOCValue
+					if protocols[key] == nil {
+						protocols[key] = map[string]int{}
+					}
+					if r.HTTPCandidate {
+						protocols[key]["http_candidates"]++
+						if r.HTTP == nil {
+							protocols[key]["unknown_or_parse_failed"]++
+						} else if r.HTTP.Truncated || r.RawRequest == "" {
+							protocols[key]["incomplete_requests"]++
+						} else {
+							protocols[key]["complete_requests"]++
+						}
+					}
+					if r.DNS != nil {
+						protocols[key]["dns_questions"]++
+					}
+				}
+			}
 			if phase != nil {
 				phase.Materials.Records = nil
 			}
 			row := map[string]any{"event_id": id, "snapshot_version": snap.Version, "watermark": snap.Watermark, "revision_watermark": snap.RevisionWatermark, "declared_hits": snap.Count, "loaded_hits": p.Evaluation.Manifest.LoadedHits, "raw_bytes": p.Evaluation.Manifest.RawBytes, "coverage": p.Evaluation.Manifest.Coverage, "status": p.Evaluation.Status, "reason": p.Evaluation.Reason, "issues": p.Evaluation.Manifest.Issues, "phase_one": phase, "history": p.Evidence.History, "report_path": out, "report_rendered": true, "model_called": false, "production_writes": 0}
+			row["protocol_inputs"] = protocols
+			row["stream_budgets"] = map[string]any{"version": p.Evaluation.Manifest.StreamVersion, "page_bytes": p.Evaluation.Manifest.PageByteBudget, "total_bytes": p.Evaluation.Manifest.SnapshotByteBudget, "feature_bytes": p.Evaluation.Manifest.FeatureByteBudget, "retained_feature_bytes": p.Evaluation.Manifest.RetainedFeatureBytes, "excluded_hits": p.Evaluation.Manifest.PhaseOneExcludedHits}
+			row["semantics"] = p.Semantics
+			row["structured_risk"] = doc.Assessment.EvidenceRisk
+			if modelEvent != "" {
+				row["model_called"] = p.Semantics.Result != nil && p.Semantics.Result.Calls > 0
+				row["model_task_budget"] = 3
+				row["local_memory_cache_only"] = true
+			}
 			if os.Getenv("PHASE_ONE_COVERAGE_EXPANDED_DIAGNOSTIC") == "1" {
 				opts := DefaultSnapshotEvidenceOptions()
 				opts.ReportMaterialMode = true
@@ -525,7 +648,11 @@ func TestPhaseOneCoverageFrozenReportReplay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = os.WriteFile(filepath.Join(dir, "coverage180-report-replay.json"), raw, 0600); err != nil {
+	prefix := os.Getenv("PHASE_ONE_COVERAGE_OUTPUT_PREFIX")
+	if prefix == "" {
+		prefix = "coverage180"
+	}
+	if err = os.WriteFile(filepath.Join(dir, prefix+"-report-replay.json"), raw, 0600); err != nil {
 		t.Fatal(err)
 	}
 }

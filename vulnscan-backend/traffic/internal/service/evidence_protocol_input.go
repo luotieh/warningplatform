@@ -55,6 +55,27 @@ func snapshotPayload(packet map[string]any) ([]byte, bool, string) {
 }
 
 func enrichSnapshotProtocols(input *evidence.Input, hit store.Hit, m map[string]any, manifest *SnapshotEvidenceManifest) {
+	// Session-level app.http_url is a hint, never a captured request. Remove
+	// this hit's projection before classifying its actual wire bytes.
+	httpHint := false
+	if input.HTTP != nil {
+		kept := input.HTTP.Records[:0]
+		for _, r := range input.HTTP.Records {
+			if r.SourceID == hit.ID {
+				httpHint = true
+			} else {
+				kept = append(kept, r)
+			}
+		}
+		input.HTTP.Records = kept
+	}
+	unknownHTTP := func() {
+		if input.HTTP == nil {
+			input.HTTP = &evidence.HTTPData{}
+		}
+		input.HTTP.UnknownRequestIDs = append(input.HTTP.UnknownRequestIDs, hit.ID)
+		manifest.addIssue(SnapshotInputIssue{Code: "http_request_classification_unknown", Stage: "parse_protocol", HitID: hit.ID, Scope: input.Scope})
+	}
 	packet := nestedMap(m, "raw_packet")
 	if child := nestedMap(packet, "request"); len(child) > 0 && packet["report_quality_derivation"] == nil {
 		packet = child
@@ -65,6 +86,7 @@ func enrichSnapshotProtocols(input *evidence.Input, hit store.Hit, m map[string]
 		manifest.addIssue(SnapshotInputIssue{Code: code, Stage: "parse_protocol", Field: field, HitID: hit.ID, Scope: input.Scope})
 	}
 	if frameProblem != "" {
+		unknownHTTP()
 		issue(frameProblem, "raw_packet.packet_hex")
 		if input.Network != nil && len(input.Network.Connections) > 0 {
 			c := &input.Network.Connections[len(input.Network.Connections)-1]
@@ -105,6 +127,11 @@ func enrichSnapshotProtocols(input *evidence.Input, hit store.Hit, m map[string]
 		issue("tls_certificate_and_trust_unavailable", "app.tls_sni/certificate_chain")
 	}
 	if len(payload) == 0 {
+		if !full {
+			unknownHTTP()
+		} else if input.HTTP != nil {
+			input.HTTP.NonRequestPackets++
+		}
 		return
 	}
 	firstLine, _, _ := bytes.Cut(payload, []byte("\r\n"))
@@ -152,6 +179,16 @@ func enrichSnapshotProtocols(input *evidence.Input, hit store.Hit, m map[string]
 			}
 		}
 		return
+	}
+	// A complete response or another identified wire protocol cannot be a
+	// request. Opaque bytes on an HTTP-hinted connection remain unresolved.
+	knownNonRequest := bytes.HasPrefix(payload, []byte("HTTP/1.")) ||
+		(len(payload) >= 3 && payload[0] >= 20 && payload[0] <= 23 && payload[1] == 3) ||
+		strings.EqualFold(firstNonEmpty(asString(m["protocol"]), asString(m["proto"])), "udp")
+	if (!full || httpHint) && !knownNonRequest {
+		unknownHTTP()
+	} else if input.HTTP != nil {
+		input.HTTP.NonRequestPackets++
 	}
 	// Port alone never proves a protocol. Only attempt DNS when actual app
 	// metadata identified DNS; successful binary decoding supplies the proof.

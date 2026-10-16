@@ -37,6 +37,10 @@ func FactInputs(id FactID) []string {
 		inputs = append(inputs, "baselines")
 	}
 	switch id {
+	case "F_FAILED_TO_ACTIVE":
+		inputs = append(inputs, "network_records", "bound_connection_hits")
+	case "F_CONN_FAIL_RATE":
+		inputs = append(inputs, "verified_connection_outcomes")
 	case "F_URL_HOMOGLYPH", "F_URL_BRAND_SUBDOMAIN_TRICK", "F_BRAND_IMPOSTOR":
 		inputs = append(inputs, "brand_registry")
 	case "F_HIST_STAGE_PROGRESSION", "F_HIST_COORD_PARAM_MATCH":

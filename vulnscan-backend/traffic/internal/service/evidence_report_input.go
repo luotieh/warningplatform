@@ -66,6 +66,11 @@ func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event
 	}
 	options := DefaultSnapshotEvidenceOptions()
 	options.ReportMaterialMode = true
+	if !s.LegacyReportEvidence {
+		options.StreamFeatures = true
+		options.MaxSnapshotBytes = snapshotTotalBytes
+		options.MaxFeatureBytes = snapshotFeatureBytes
+	}
 	options.ReportSchedules = s.ReportSchedules
 	if assetErr != nil {
 		issue := snapshotIssueCause(SnapshotInputIssue{Code: "asset_registry_read_failed", Stage: "load_assets", Retryable: true}, assetErr)

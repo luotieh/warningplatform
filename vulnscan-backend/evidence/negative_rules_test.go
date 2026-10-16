@@ -65,6 +65,10 @@ func negativeFixture(id FactID) (Request, Config) {
 		b("nxdomain_rate_p99", 1)
 	case "F_FAILED_TO_ACTIVE":
 		i.Network.Connections[0].Destination = "203.0.113.99"
+		i.Scope.EndpointID = connectionEndpoint(i.Network.Connections[0])
+		for j := range r.Hits {
+			r.Hits[j].Scope = i.Scope
+		}
 	case "F_HTTP_ENDPOINT_REPEAT":
 		for j := range i.HTTP.Records {
 			i.HTTP.Records[j].Time = start.Add(time.Duration(1<<j) * time.Second)
@@ -171,6 +175,7 @@ func TestGroupCoordinationNegativeWithThreeVerifiedMembers(t *testing.T) {
 			r.Groups[0].Connections[j].Time = r.Groups[0].Connections[j].Time.Add(2 * time.Minute)
 		}
 	}
+	bindGroupFixture(&r)
 	e, _ := NewEngine(c)
 	if evaluate(t, e, r).Findings[0].Status != NotObserved {
 		t.Fatal("desynchronized member accepted")

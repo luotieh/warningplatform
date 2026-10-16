@@ -9,7 +9,7 @@ type FactID string
 const (
 	BeaconPeriodic  FactID = "F_BEACON_PERIODIC"
 	MultiDayPersist FactID = "F_MULTI_DAY_PERSIST"
-	RuleVersion            = "evidence-algorithms-0.5"
+	RuleVersion            = "evidence-algorithms-0.7"
 )
 
 type Scope struct {
@@ -95,9 +95,18 @@ type Measurements struct {
 	MaxPackets            *uint64            `json:"max_packets,omitempty"`
 	Values                map[string]float64 `json:"values,omitempty"`
 	Labels                []string           `json:"labels,omitempty"`
+	HTTPGroups            []HTTPRepeatGroup  `json:"http_groups,omitempty"`
+}
+
+type HTTPRepeatGroup struct {
+	Endpoint            string  `json:"host_path"`
+	Requests            int     `json:"requests"`
+	IntervalMeanSeconds float64 `json:"interval_mean_sec"`
+	IntervalCV          float64 `json:"interval_cv"`
 }
 
 type Finding struct {
+	EvidenceContract
 	IOCType         string       `json:"ioc_type,omitempty"`
 	IOCValue        string       `json:"ioc_value,omitempty"`
 	FactID          FactID       `json:"fact_id"`

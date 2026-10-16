@@ -277,7 +277,7 @@ func TestPhaseOneHTTPQueryAndContactBasis(t *testing.T) {
 	if phaseOneUnit(t, p, "C06").Status != "observed" {
 		t.Fatal("query payload did not reach S09", p.Semantics)
 	}
-	if len(p.Evidence.PhaseOne.Materials.Contacts) != 1 || p.Evidence.PhaseOne.Materials.Contacts[0].Kind != "complete_http_request" || p.Evidence.PhaseOne.Materials.Complete {
+	if len(p.Evidence.PhaseOne.Materials.Contacts) != 1 || p.Evidence.PhaseOne.Materials.Contacts[0].Kind != "complete_http_request" || len(p.Evidence.PhaseOne.Materials.ScopeIncomplete) == 0 {
 		t.Fatal("SYN/request inflated contacts or coverage")
 	}
 }

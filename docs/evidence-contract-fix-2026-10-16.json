@@ -1,0 +1,2418 @@
+{
+  "base_commit": "c9becc8c11bd719cbf7531785e9bbce8c3402bac",
+  "branch": "trafficanalysis-local-fix",
+  "comparison_base": "previous round2 delivery reconstructed locally; original working changes preserved",
+  "contract_version": "evidence-contracts-1",
+  "files": [
+    "tools/evidence-contract-catalog.go",
+    "vulnscan-backend/evidence/CONTRACTS.md",
+    "vulnscan-backend/evidence/README.md",
+    "vulnscan-backend/evidence/RULES.md",
+    "vulnscan-backend/evidence/SEMANTICS.md",
+    "vulnscan-backend/evidence/all_rules_test.go",
+    "vulnscan-backend/evidence/binding_rules_test.go",
+    "vulnscan-backend/evidence/catalog.go",
+    "vulnscan-backend/evidence/contracts.go",
+    "vulnscan-backend/evidence/contracts_test.go",
+    "vulnscan-backend/evidence/dns_rules.go",
+    "vulnscan-backend/evidence/engine.go",
+    "vulnscan-backend/evidence/group_rules.go",
+    "vulnscan-backend/evidence/input_contract.go",
+    "vulnscan-backend/evidence/inputs.go",
+    "vulnscan-backend/evidence/negative_rules_test.go",
+    "vulnscan-backend/evidence/network_rules.go",
+    "vulnscan-backend/evidence/normalization.go",
+    "vulnscan-backend/evidence/semantic_catalog.go",
+    "vulnscan-backend/evidence/semantic_engine.go",
+    "vulnscan-backend/evidence/semantic_types.go",
+    "vulnscan-backend/evidence/semantic_validation.go",
+    "vulnscan-backend/evidence/types.go",
+    "vulnscan-backend/traffic/internal/httpapi/report_document_test.go",
+    "vulnscan-backend/traffic/internal/service/evidence_contract_test.go",
+    "vulnscan-backend/traffic/internal/service/report_evidence.go"
+  ],
+  "tests": [
+    {
+      "kind": "F",
+      "id": "F_BEACON_PERIODIC",
+      "claim": "n≥8；5s≤Δt≤24h；CV(Δt)≤0.15；每次≤5 包（DetectHeartbeat）",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_BEACON_PERIODIC",
+        "TestAll59RulesHaveNegativeComputations/F_BEACON_PERIODIC",
+        "TestAll59RejectUnverifiedFeatureSources/F_BEACON_PERIODIC"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_BEACON_JITTER",
+      "claim": "n≥16；median(Δt) 稳定且 0.15<CV≤0.40；Ljung-Box p<0.05 且 ACF 峰值>0.3",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_BEACON_JITTER",
+        "TestAll59RulesHaveNegativeComputations/F_BEACON_JITTER",
+        "TestAll59RejectUnverifiedFeatureSources/F_BEACON_JITTER"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_FIXED_DAILY_WINDOW",
+      "claim": "≥3 自然日且 ≥80% 命中落在同一 ≤2h 窗口",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_FIXED_DAILY_WINDOW",
+        "TestAll59RulesHaveNegativeComputations/F_FIXED_DAILY_WINDOW",
+        "TestAll59RejectUnverifiedFeatureSources/F_FIXED_DAILY_WINDOW"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_MULTI_DAY_PERSIST",
+      "claim": "锁定窗口内逐日桶活跃 ≥2 天为 days2 / ≥3 天为 days3（不用首末两点推持续；固定资产/端点，需跨段时联合快照）",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_MULTI_DAY_PERSIST",
+        "TestAll59RulesHaveNegativeComputations/F_MULTI_DAY_PERSIST",
+        "TestAll59RejectUnverifiedFeatureSources/F_MULTI_DAY_PERSIST"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_RATE_BURST",
+      "claim": "peak_window(5m)/长期窗口均值 >p99 基线",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_RATE_BURST",
+        "TestAll59RulesHaveNegativeComputations/F_RATE_BURST",
+        "TestAll59RejectUnverifiedFeatureSources/F_RATE_BURST"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_RATE_RAMP",
+      "claim": "至少5个固定等长窗口；无并列值时精确双侧Mann-Kendall p<0.05；并列/缺窗标ineligible，禁止静默切渐近检验",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_RATE_RAMP",
+        "TestAll59RulesHaveNegativeComputations/F_RATE_RAMP",
+        "TestAll59RejectUnverifiedFeatureSources/F_RATE_RAMP"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_DNS_HIGH_ENTROPY",
+      "claim": "PSL 归一后：独特子域比 >p95 且 标签长 p90 >p95 且 查询速率 >p95（同域基线）；单机高熵不支持 Botnet",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_DNS_HIGH_ENTROPY",
+        "TestAll59RulesHaveNegativeComputations/F_DNS_HIGH_ENTROPY",
+        "TestAll59RejectUnverifiedFeatureSources/F_DNS_HIGH_ENTROPY"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_DNS_ENCODED_LABEL",
+      "claim": "base32/hex 模式匹配且代码可验证解码链",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_DNS_ENCODED_LABEL",
+        "TestAll59RulesHaveNegativeComputations/F_DNS_ENCODED_LABEL",
+        "TestAll59RejectUnverifiedFeatureSources/F_DNS_ENCODED_LABEL"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_DGA_LEXICAL",
+      "claim": "bigram 对数概率 <语料 p05；元音比/长度分布异常；单机随机域名不支持 Botnet",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_DGA_LEXICAL",
+        "TestAll59RulesHaveNegativeComputations/F_DGA_LEXICAL",
+        "TestAll59RejectUnverifiedFeatureSources/F_DGA_LEXICAL"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_NXDOMAIN_CLUSTER",
+      "claim": "单资产完整查询窗口内 NXDOMAIN 查询比例 > nxdomain_rate_p99，且失败的不同 eTLD+1 ≥2；基线单位为查询比例",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_NXDOMAIN_CLUSTER",
+        "TestAll59RulesHaveNegativeComputations/F_NXDOMAIN_CLUSTER",
+        "TestAll59RejectUnverifiedFeatureSources/F_NXDOMAIN_CLUSTER"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_GROUP_NXDOMAIN_CLUSTER",
+      "claim": "≥3 资产同窗口对同词形簇域名的失败解析率 >群体基线 p99；需 rcode＋未命中分母；与单资产版为不同 fact",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_GROUP_NXDOMAIN_CLUSTER",
+        "TestAll59RulesHaveNegativeComputations/F_GROUP_NXDOMAIN_CLUSTER",
+        "TestAll59RejectUnverifiedFeatureSources/F_GROUP_NXDOMAIN_CLUSTER"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_FAILED_TO_ACTIVE",
+      "claim": "同一规范DNS问题名至少min_failures次先前NXDOMAIN，随后NOERROR回答IP且同资产≤5min连接该IP；不要求连续失败",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_FAILED_TO_ACTIVE",
+        "TestAll59RulesHaveNegativeComputations/F_FAILED_TO_ACTIVE",
+        "TestAll59RejectUnverifiedFeatureSources/F_FAILED_TO_ACTIVE"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_SHARED_DOMAIN_CLUSTER",
+      "claim": "≥3 资产共同查询一簇非常规域名（同注册域/同命名模式）",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_SHARED_DOMAIN_CLUSTER",
+        "TestAll59RulesHaveNegativeComputations/F_SHARED_DOMAIN_CLUSTER",
+        "TestAll59RejectUnverifiedFeatureSources/F_SHARED_DOMAIN_CLUSTER"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_HTTP_ENDPOINT_REPEAT",
+      "claim": "主机＋规范端点分组：重复 ≥6 次且间隔低抖动（CV≤0.3）；POST 本身不加分",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_HTTP_ENDPOINT_REPEAT",
+        "TestAll59RulesHaveNegativeComputations/F_HTTP_ENDPOINT_REPEAT",
+        "TestAll59RejectUnverifiedFeatureSources/F_HTTP_ENDPOINT_REPEAT"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_HTTP_FIELD_ENCODING",
+      "claim": "编码链验证后异常长度/编码占比 >同服务基线 p95；排除 JWT/OAuth",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_HTTP_FIELD_ENCODING",
+        "TestAll59RulesHaveNegativeComputations/F_HTTP_FIELD_ENCODING",
+        "TestAll59RejectUnverifiedFeatureSources/F_HTTP_FIELD_ENCODING"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_HTTP_UA_RARITY",
+      "claim": "同资产 UA 一致且全平台稀有度 <p01；弱证据，与 S03 同事实取其一",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_HTTP_UA_RARITY",
+        "TestAll59RulesHaveNegativeComputations/F_HTTP_UA_RARITY",
+        "TestAll59RejectUnverifiedFeatureSources/F_HTTP_UA_RARITY"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_HTTP_SIZE_STABILITY",
+      "claim": "n≥12；仅请求BodyLength：CV< size_cv_p05 且 unique_size_ratio<unique_size_ratio_p05；不计算响应或z分数",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_HTTP_SIZE_STABILITY",
+        "TestAll59RulesHaveNegativeComputations/F_HTTP_SIZE_STABILITY",
+        "TestAll59RejectUnverifiedFeatureSources/F_HTTP_SIZE_STABILITY"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_LONG_LOW_SESSION",
+      "claim": "会话 >30min 且双向 <10KB 且含周期小包（体量须 Q02 verified）",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_LONG_LOW_SESSION",
+        "TestAll59RulesHaveNegativeComputations/F_LONG_LOW_SESSION",
+        "TestAll59RejectUnverifiedFeatureSources/F_LONG_LOW_SESSION"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_URL_ODD_AUTHORITY",
+      "claim": "userinfo `@` / IP·数字·十六进制主机；deception_strength: weak，不满足 Phishing 欺骗门槛",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_URL_ODD_AUTHORITY",
+        "TestAll59RulesHaveNegativeComputations/F_URL_ODD_AUTHORITY",
+        "TestAll59RejectUnverifiedFeatureSources/F_URL_ODD_AUTHORITY"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_URL_HOMOGLYPH",
+      "claim": "有限字符映射后与核验品牌域近似；不覆盖完整Unicode视觉混淆检测",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_URL_HOMOGLYPH",
+        "TestAll59RulesHaveNegativeComputations/F_URL_HOMOGLYPH",
+        "TestAll59RejectUnverifiedFeatureSources/F_URL_HOMOGLYPH"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_URL_BRAND_SUBDOMAIN_TRICK",
+      "claim": "品牌词在子域而注册域无关（PSL 提取），如 `brand.com.evil.tld`",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_URL_BRAND_SUBDOMAIN_TRICK",
+        "TestAll59RulesHaveNegativeComputations/F_URL_BRAND_SUBDOMAIN_TRICK",
+        "TestAll59RejectUnverifiedFeatureSources/F_URL_BRAND_SUBDOMAIN_TRICK"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_BRAND_IMPOSTOR",
+      "claim": "与审核品牌清单编辑距离/邻键比对，或授权域核验失败；需品牌清单",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_BRAND_IMPOSTOR",
+        "TestAll59RulesHaveNegativeComputations/F_BRAND_IMPOSTOR",
+        "TestAll59RejectUnverifiedFeatureSources/F_BRAND_IMPOSTOR"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_CRED_POST_STRUCTURE",
+      "claim": "同请求 POST＋脱敏凭据字段名；正文截断标 insufficient",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_CRED_POST_STRUCTURE",
+        "TestAll59RulesHaveNegativeComputations/F_CRED_POST_STRUCTURE",
+        "TestAll59RejectUnverifiedFeatureSources/F_CRED_POST_STRUCTURE"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_FORM_CROSSSITE",
+      "claim": "action 与页面来源不同可注册域",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_FORM_CROSSSITE",
+        "TestAll59RulesHaveNegativeComputations/F_FORM_CROSSSITE",
+        "TestAll59RejectUnverifiedFeatureSources/F_FORM_CROSSSITE"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_REDIRECT_CHAIN",
+      "claim": "事务 ID 关联的跨注册域跳转提交链；两条无关联命中不得拼接",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_REDIRECT_CHAIN",
+        "TestAll59RulesHaveNegativeComputations/F_REDIRECT_CHAIN",
+        "TestAll59RejectUnverifiedFeatureSources/F_REDIRECT_CHAIN"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_MULTI_REDIRECT_CHAIN",
+      "claim": "同一已关联会话内≥2条经RedirectVerified验证的事务跳转边；核验响应状态及Location，不识别短链服务",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_MULTI_REDIRECT_CHAIN",
+        "TestAll59RulesHaveNegativeComputations/F_MULTI_REDIRECT_CHAIN",
+        "TestAll59RejectUnverifiedFeatureSources/F_MULTI_REDIRECT_CHAIN"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_PROTOCOL_PORT_MISMATCH",
+      "claim": "dst_port vs 可解析 app_proto 指纹＋服务清单不符（端口推断的 protocol 不算）",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_PROTOCOL_PORT_MISMATCH",
+        "TestAll59RulesHaveNegativeComputations/F_PROTOCOL_PORT_MISMATCH",
+        "TestAll59RejectUnverifiedFeatureSources/F_PROTOCOL_PORT_MISMATCH"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_RARE_PORT",
+      "claim": "目的端口在同角色资产群体中频率 <p01",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_RARE_PORT",
+        "TestAll59RulesHaveNegativeComputations/F_RARE_PORT",
+        "TestAll59RejectUnverifiedFeatureSources/F_RARE_PORT"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_DST_NOVELTY",
+      "claim": "资产历史覆盖窗口内首现（只称\"首次告警\"）",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_DST_NOVELTY",
+        "TestAll59RulesHaveNegativeComputations/F_DST_NOVELTY",
+        "TestAll59RejectUnverifiedFeatureSources/F_DST_NOVELTY"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_INFRA_RARITY",
+      "claim": "目的 IP 的 ASN/地理/信誉稀有（外部清单，二期）",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_INFRA_RARITY",
+        "TestAll59RulesHaveNegativeComputations/F_INFRA_RARITY",
+        "TestAll59RejectUnverifiedFeatureSources/F_INFRA_RARITY"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_FANOUT_SINGLE_SRC",
+      "claim": "跨事件按源去重 unique(dst,port)/小时 >角色基线 p99",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_FANOUT_SINGLE_SRC",
+        "TestAll59RulesHaveNegativeComputations/F_FANOUT_SINGLE_SRC",
+        "TestAll59RejectUnverifiedFeatureSources/F_FANOUT_SINGLE_SRC"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_PORT_SEQUENCE",
+      "claim": "目的端口序列呈顺序/逆序/伪随机（≥8 去重端口）",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_PORT_SEQUENCE",
+        "TestAll59RulesHaveNegativeComputations/F_PORT_SEQUENCE",
+        "TestAll59RejectUnverifiedFeatureSources/F_PORT_SEQUENCE"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_SMALL_PACKET",
+      "claim": "≥80%独立连接观测的应用载荷字节数≤small_payload_bytes；另记录零载荷比例，不等同零载荷",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_SMALL_PACKET",
+        "TestAll59RulesHaveNegativeComputations/F_SMALL_PACKET",
+        "TestAll59RejectUnverifiedFeatureSources/F_SMALL_PACKET"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_CONN_FAIL_RATE",
+      "claim": "完整窗口确认失败/(确认失败+确认成功)>connection_failure_rate_p95；须OutcomeVerified；尝试中或未知结局返回missing，SYN_SENT不计失败",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_CONN_FAIL_RATE",
+        "TestAll59RulesHaveNegativeComputations/F_CONN_FAIL_RATE",
+        "TestAll59RejectUnverifiedFeatureSources/F_CONN_FAIL_RATE"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_INDEPENDENT_RULE_CORROB",
+      "claim": "by_rule＋规则库元数据判独立性；同 IOC 派生多 rule_id 只记一组",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_INDEPENDENT_RULE_CORROB",
+        "TestAll59RulesHaveNegativeComputations/F_INDEPENDENT_RULE_CORROB",
+        "TestAll59RejectUnverifiedFeatureSources/F_INDEPENDENT_RULE_CORROB"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_INDEPENDENT_INTEL_CORROB",
+      "claim": "多情报源/引擎独立标记同一目的；须验证情报源独立性（同源转引不算）",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_INDEPENDENT_INTEL_CORROB",
+        "TestAll59RulesHaveNegativeComputations/F_INDEPENDENT_INTEL_CORROB",
+        "TestAll59RejectUnverifiedFeatureSources/F_INDEPENDENT_INTEL_CORROB"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_IOC_TYPE_CORROB",
+      "claim": "IOC 情报类型与成立硬行为事实类型一致（evaluation_stage=post_hard_type；抑制与 modifier 后的 hard_type_scores 满足 top1≥15、份额≥0.60、margin≥10 且情报标签与 top1 一致时成立）；不回填类型分",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_IOC_TYPE_CORROB",
+        "TestAll59RulesHaveNegativeComputations/F_IOC_TYPE_CORROB",
+        "TestAll59RejectUnverifiedFeatureSources/F_IOC_TYPE_CORROB"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_TLS_SNI_MISMATCH",
+      "claim": "已核验TLS握手SNI与证书名称匹配失败；需已核验CDN例外清单；不比较目的服务身份",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_TLS_SNI_MISMATCH",
+        "TestAll59RulesHaveNegativeComputations/F_TLS_SNI_MISMATCH",
+        "TestAll59RejectUnverifiedFeatureSources/F_TLS_SNI_MISMATCH"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_TLS_CERT_ANOMALY",
+      "claim": "证书链/有效期/颁发者异常",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_TLS_CERT_ANOMALY",
+        "TestAll59RulesHaveNegativeComputations/F_TLS_CERT_ANOMALY",
+        "TestAll59RejectUnverifiedFeatureSources/F_TLS_CERT_ANOMALY"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_TLS_JA_MISMATCH",
+      "claim": "指纹库比对；浏览器声称 vs TLS 指纹",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_TLS_JA_MISMATCH",
+        "TestAll59RulesHaveNegativeComputations/F_TLS_JA_MISMATCH",
+        "TestAll59RejectUnverifiedFeatureSources/F_TLS_JA_MISMATCH"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_MULTI_ASSET_IOC",
+      "claim": "≥3 独立资产（NAT/代理/解析器归属去重）同 IOC 且时间聚集",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_MULTI_ASSET_IOC",
+        "TestAll59RulesHaveNegativeComputations/F_MULTI_ASSET_IOC",
+        "TestAll59RejectUnverifiedFeatureSources/F_MULTI_ASSET_IOC"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_MULTI_ASSET_DIST",
+      "claim": "核验成员的子网熵及角色分布达到配置门槛；不推断随机感染或真实感染面",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_MULTI_ASSET_DIST",
+        "TestAll59RulesHaveNegativeComputations/F_MULTI_ASSET_DIST",
+        "TestAll59RejectUnverifiedFeatureSources/F_MULTI_ASSET_DIST"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_TIME_COORDINATION",
+      "claim": "≥3资产到同一协议/IP/端口的有界时间桶序列；最小两两互相关>0.7；Endpoint缺失不执行",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_TIME_COORDINATION",
+        "TestAll59RulesHaveNegativeComputations/F_TIME_COORDINATION",
+        "TestAll59RejectUnverifiedFeatureSources/F_TIME_COORDINATION"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_COORD_FANOUT",
+      "claim": "多源目标集合重叠 >70%，或不同资产分工覆盖目标段且时间衔接",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_COORD_FANOUT",
+        "TestAll59RulesHaveNegativeComputations/F_COORD_FANOUT",
+        "TestAll59RejectUnverifiedFeatureSources/F_COORD_FANOUT"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_INFECTION_CHAIN",
+      "claim": "A外联同一协议/IP/端口→A访问另一成员B的核验地址→B随后外联该端点；至少一条时序路径，不证明感染或利用成功",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_INFECTION_CHAIN",
+        "TestAll59RulesHaveNegativeComputations/F_INFECTION_CHAIN",
+        "TestAll59RejectUnverifiedFeatureSources/F_INFECTION_CHAIN"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_SHARED_ENDPOINT",
+      "claim": "≥3核验资产连接同一协议/IP/端口，且endpoint_frequency<endpoint_frequency_p01；DNS查询不充当连接",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_SHARED_ENDPOINT",
+        "TestAll59RulesHaveNegativeComputations/F_SHARED_ENDPOINT",
+        "TestAll59RejectUnverifiedFeatureSources/F_SHARED_ENDPOINT"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_FIRST_VISIT_CLUSTER",
+      "claim": "完整历史窗口内无先前记录的同端点访问，≥3资产集中≤1h；不证明网络真实首访或点击",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_FIRST_VISIT_CLUSTER",
+        "TestAll59RulesHaveNegativeComputations/F_FIRST_VISIT_CLUSTER",
+        "TestAll59RejectUnverifiedFeatureSources/F_FIRST_VISIT_CLUSTER"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_COORD_PATTERN_RECURRENCE",
+      "claim": "同一资产组的协同模式（相位/突发窗口）在 ≥2 个自然日重现",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_COORD_PATTERN_RECURRENCE",
+        "TestAll59RulesHaveNegativeComputations/F_COORD_PATTERN_RECURRENCE",
+        "TestAll59RejectUnverifiedFeatureSources/F_COORD_PATTERN_RECURRENCE"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_HIST_ASSET_IOC_RECURRENCE",
+      "claim": "30天窗≥2自然日独立事件；允许有来源的partial阳性；F不按审核状态计分，C01按一期联合策略计分",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_HIST_ASSET_IOC_RECURRENCE",
+        "TestAll59RulesHaveNegativeComputations/F_HIST_ASSET_IOC_RECURRENCE",
+        "TestAll59RejectUnverifiedFeatureSources/F_HIST_ASSET_IOC_RECURRENCE"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_HIST_GROUP_RECURRENCE",
+      "claim": "同已核验群体及基础设施跨周重现；仅输出历史事实，不执行旧版审核加减分",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_HIST_GROUP_RECURRENCE",
+        "TestAll59RulesHaveNegativeComputations/F_HIST_GROUP_RECURRENCE",
+        "TestAll59RejectUnverifiedFeatureSources/F_HIST_GROUP_RECURRENCE"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_HIST_INFRA_PERSISTENCE",
+      "claim": "同IOC连续自然日由多个资产产生已保存历史记录；只输出关联事实，不证明服务存活、钓鱼或直接加分",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_HIST_INFRA_PERSISTENCE",
+        "TestAll59RulesHaveNegativeComputations/F_HIST_INFRA_PERSISTENCE",
+        "TestAll59RejectUnverifiedFeatureSources/F_HIST_INFRA_PERSISTENCE"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_HIST_SCHEDULE_MATCH",
+      "claim": "历史事件与当前命中时刻分布一致（KL 散度 <阈值）",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_HIST_SCHEDULE_MATCH",
+        "TestAll59RulesHaveNegativeComputations/F_HIST_SCHEDULE_MATCH",
+        "TestAll59RejectUnverifiedFeatureSources/F_HIST_SCHEDULE_MATCH"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_HIST_MULTI_IOC_SIEGE",
+      "claim": "窗口内同资产被 ≥3 不同 IOC/规则族命中；按角色基线",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_HIST_MULTI_IOC_SIEGE",
+        "TestAll59RulesHaveNegativeComputations/F_HIST_MULTI_IOC_SIEGE",
+        "TestAll59RejectUnverifiedFeatureSources/F_HIST_MULTI_IOC_SIEGE"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_HIST_STAGE_PROGRESSION",
+      "claim": "同资产、同IOC或独立核验战役内，已定谳恶意历史与有来源证明的CurrentStage构成scan/exploit→c2→exfil推进；当前阶段须高于最近历史阶段，历史不得回退；不证明因果攻击链",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_HIST_STAGE_PROGRESSION",
+        "TestAll59RulesHaveNegativeComputations/F_HIST_STAGE_PROGRESSION",
+        "TestAll59RejectUnverifiedFeatureSources/F_HIST_STAGE_PROGRESSION"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_HIST_COORD_PARAM_MATCH",
+      "claim": "同实际基础设施、独立核验战役及资产/完整群体范围内，核验的当前协同参数与已定谳历史按配置容限比较；群体ID及完整核验成员集合须一致；只说明受约束的参数相似",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_HIST_COORD_PARAM_MATCH",
+        "TestAll59RulesHaveNegativeComputations/F_HIST_COORD_PARAM_MATCH",
+        "TestAll59RejectUnverifiedFeatureSources/F_HIST_COORD_PARAM_MATCH"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_HIST_EXERCISE",
+      "claim": "资产/域名属登记钓鱼演练或测试平台（留验证记录）；classification_effect: type=PH, effective_score_cap=34, status=candidate",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_HIST_EXERCISE",
+        "TestAll59RulesHaveNegativeComputations/F_HIST_EXERCISE",
+        "TestAll59RejectUnverifiedFeatureSources/F_HIST_EXERCISE"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_IOC_NOVELTY",
+      "claim": "历史库无记录；与 F_HIST_ASSET_IOC_RECURRENCE 互斥",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_IOC_NOVELTY",
+        "TestAll59RulesHaveNegativeComputations/F_IOC_NOVELTY",
+        "TestAll59RejectUnverifiedFeatureSources/F_IOC_NOVELTY"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_EXCL_SCAN_TASK",
+      "claim": "核验登记角色/任务与当前活动匹配，不由模型推断",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_EXCL_SCAN_TASK",
+        "TestAll59RulesHaveNegativeComputations/F_EXCL_SCAN_TASK",
+        "TestAll59RejectUnverifiedFeatureSources/F_EXCL_SCAN_TASK"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "F",
+      "id": "F_EXCL_INFRA_ROLE",
+      "claim": "核验登记角色/任务与当前活动匹配，不由模型推断",
+      "tests": [
+        "TestAll59RulesHavePositiveComputations/F_EXCL_INFRA_ROLE",
+        "TestAll59RulesHaveNegativeComputations/F_EXCL_INFRA_ROLE",
+        "TestAll59RejectUnverifiedFeatureSources/F_EXCL_INFRA_ROLE"
+      ],
+      "status": "controlled_contract_passed",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "S",
+      "id": "S01/c2.command_intent/",
+      "claim": "在材料、引用、事务和前提结构验证后解释：可读协议、可信方向；strong须同事务双向语义对应；不证明执行成功",
+      "tests": [
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S01/c2.command_intent//support",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S01/c2.command_intent//contradict",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S01/c2.command_intent//invented_quote"
+      ],
+      "status": "mock_model_structure_contract_passed",
+      "semantic_accuracy": "not_measured",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "S",
+      "id": "S02/c2.command_exchange/",
+      "claim": "在材料、引用、事务和前提结构验证后解释：同事务真实请求应答；排除文档与日志回显",
+      "tests": [
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S02/c2.command_exchange//support",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S02/c2.command_exchange//contradict",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S02/c2.command_exchange//invented_quote"
+      ],
+      "status": "mock_model_structure_contract_passed",
+      "semantic_accuracy": "not_measured",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "S",
+      "id": "S03/c2.ua_behavior_conflict/",
+      "claim": "在材料、引用、事务和前提结构验证后解释：重复端点事实及实际UA；浏览器声明不足",
+      "tests": [
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S03/c2.ua_behavior_conflict//support",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S03/c2.ua_behavior_conflict//contradict",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S03/c2.ua_behavior_conflict//invented_quote"
+      ],
+      "status": "mock_model_structure_contract_passed",
+      "semantic_accuracy": "not_measured",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "S",
+      "id": "S04/c2.dns_encoded_intent/",
+      "claim": "在材料、引用、事务和前提结构验证后解释：编码标签事实及代码验证解码链；考虑追踪token",
+      "tests": [
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S04/c2.dns_encoded_intent//support",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S04/c2.dns_encoded_intent//contradict",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S04/c2.dns_encoded_intent//invented_quote"
+      ],
+      "status": "mock_model_structure_contract_passed",
+      "semantic_accuracy": "not_measured",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "S",
+      "id": "S05/phishing.deception/",
+      "claim": "在材料、引用、事务和前提结构验证后解释：页面正文、Host、核验品牌授权域；strong须明确仿冒依据",
+      "tests": [
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S05/phishing.deception//support",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S05/phishing.deception//contradict",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S05/phishing.deception//invented_quote"
+      ],
+      "status": "mock_model_structure_contract_passed",
+      "semantic_accuracy": "not_measured",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "S",
+      "id": "S06/phishing.credential_action/",
+      "claim": "在材料、引用、事务和前提结构验证后解释：同请求字段名、方法、目的及行动事实；只解释收集意图",
+      "tests": [
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S06/phishing.credential_action//support",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S06/phishing.credential_action//contradict",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S06/phishing.credential_action//invented_quote"
+      ],
+      "status": "mock_model_structure_contract_passed",
+      "semantic_accuracy": "not_measured",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "S",
+      "id": "S07/exfil.sensitive_upload/",
+      "claim": "在材料、引用、事务和前提结构验证后解释：完整请求、可信方向与体量、内容分类依据；不证明送达",
+      "tests": [
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S07/exfil.sensitive_upload//support",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S07/exfil.sensitive_upload//contradict",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S07/exfil.sensitive_upload//invented_quote"
+      ],
+      "status": "mock_model_structure_contract_passed",
+      "semantic_accuracy": "not_measured",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "S",
+      "id": "S08/exfil.chunk_sequence/",
+      "claim": "在材料、引用、事务和前提结构验证后解释：至少两个可靠关联事务、块序号及可信体量；禁止拼接无关命中",
+      "tests": [
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S08/exfil.chunk_sequence//support",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S08/exfil.chunk_sequence//contradict",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S08/exfil.chunk_sequence//invented_quote"
+      ],
+      "status": "mock_model_structure_contract_passed",
+      "semantic_accuracy": "not_measured",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "S",
+      "id": "S09/exploit.payload_intent/",
+      "claim": "在材料、引用、事务和前提结构验证后解释：已解析请求载荷、方法、目标协议及可信方向；不证明利用成功",
+      "tests": [
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S09/exploit.payload_intent//support",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S09/exploit.payload_intent//contradict",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S09/exploit.payload_intent//invented_quote"
+      ],
+      "status": "mock_model_structure_contract_passed",
+      "semantic_accuracy": "not_measured",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "S",
+      "id": "S10/protocol.response_meaning/",
+      "claim": "在材料、引用、事务和前提结构验证后解释：同事务真实双向应答；HTTP200不证明执行",
+      "tests": [
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S10/protocol.response_meaning//support",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S10/protocol.response_meaning//contradict",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S10/protocol.response_meaning//invented_quote"
+      ],
+      "status": "mock_model_structure_contract_passed",
+      "semantic_accuracy": "not_measured",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "S",
+      "id": "S11/mining.protocol_intent/",
+      "claim": "在材料、引用、事务和前提结构验证后解释：实际Stratum方法、参数和应答；不重复协议事实",
+      "tests": [
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S11/mining.protocol_intent//support",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S11/mining.protocol_intent//contradict",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S11/mining.protocol_intent//invented_quote"
+      ],
+      "status": "mock_model_structure_contract_passed",
+      "semantic_accuracy": "not_measured",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "S",
+      "id": "S12/c2.domain_lexical/dga_lexical",
+      "claim": "在材料、引用、事务和前提结构验证后解释：原始域名及词形上下文；随机串不自动等于DGA",
+      "tests": [
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S12/c2.domain_lexical/dga_lexical/support",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S12/c2.domain_lexical/dga_lexical/contradict",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S12/c2.domain_lexical/dga_lexical/invented_quote"
+      ],
+      "status": "mock_model_structure_contract_passed",
+      "semantic_accuracy": "not_measured",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "S",
+      "id": "S12/phishing.deception/brand_semantic_impostor",
+      "claim": "在材料、引用、事务和前提结构验证后解释：品牌、实际授权域与仿冒关系；仅品牌词最多weak",
+      "tests": [
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S12/phishing.deception/brand_semantic_impostor/support",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S12/phishing.deception/brand_semantic_impostor/contradict",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S12/phishing.deception/brand_semantic_impostor/invented_quote"
+      ],
+      "status": "mock_model_structure_contract_passed",
+      "semantic_accuracy": "not_measured",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "S",
+      "id": "S13/payload.decoded_intent/command",
+      "claim": "在材料、引用、事务和前提结构验证后解释：代码验证解码链及实际命令上下文；strong遵循S01",
+      "tests": [
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S13/payload.decoded_intent/command/support",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S13/payload.decoded_intent/command/contradict",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S13/payload.decoded_intent/command/invented_quote"
+      ],
+      "status": "mock_model_structure_contract_passed",
+      "semantic_accuracy": "not_measured",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "S",
+      "id": "S13/payload.decoded_intent/other",
+      "claim": "在材料、引用、事务和前提结构验证后解释：代码验证解码链及独立操作上下文；解码成功不等于恶意",
+      "tests": [
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S13/payload.decoded_intent/other/support",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S13/payload.decoded_intent/other/contradict",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S13/payload.decoded_intent/other/invented_quote"
+      ],
+      "status": "mock_model_structure_contract_passed",
+      "semantic_accuracy": "not_measured",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "S",
+      "id": "S14/review.benign_alternative/",
+      "claim": "在材料、引用、事务和前提结构验证后解释：实际流量、事实规则、资产角色及任务上下文；仅记录异议",
+      "tests": [
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S14/review.benign_alternative//support",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S14/review.benign_alternative//contradict",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S14/review.benign_alternative//invented_quote"
+      ],
+      "status": "mock_model_structure_contract_passed",
+      "semantic_accuracy": "not_measured",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "S",
+      "id": "S15/review.stage_and_gaps/",
+      "claim": "在材料、引用、事务和前提结构验证后解释：接受的事实、可见范围及缺项；成功性须独立证据",
+      "tests": [
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S15/review.stage_and_gaps//support",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S15/review.stage_and_gaps//contradict",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/S15/review.stage_and_gaps//invented_quote"
+      ],
+      "status": "mock_model_structure_contract_passed",
+      "semantic_accuracy": "not_measured",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "S",
+      "id": "BT-S01/botnet.coordination/",
+      "claim": "在材料、引用、事务和前提结构验证后解释：核验群体及协同硬事实；最多5资产；不替代硬门槛",
+      "tests": [
+        "TestAll23SemanticSupportContradictionAndFalseCitation/BT-S01/botnet.coordination//support",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/BT-S01/botnet.coordination//contradict",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/BT-S01/botnet.coordination//invented_quote"
+      ],
+      "status": "mock_model_structure_contract_passed",
+      "semantic_accuracy": "not_measured",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "S",
+      "id": "SC01/c2.role_schedule_conflict/",
+      "claim": "在材料、引用、事务和前提结构验证后解释：核验角色、业务作息及实际时间分布；夜间服务器运行不自动异常",
+      "tests": [
+        "TestAll23SemanticSupportContradictionAndFalseCitation/SC01/c2.role_schedule_conflict//support",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/SC01/c2.role_schedule_conflict//contradict",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/SC01/c2.role_schedule_conflict//invented_quote"
+      ],
+      "status": "mock_model_structure_contract_passed",
+      "semantic_accuracy": "not_measured",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "S",
+      "id": "SC02/botnet.group_alternative/",
+      "claim": "在材料、引用、事务和前提结构验证后解释：核验群体角色与实际行为摘要；供人工解释",
+      "tests": [
+        "TestAll23SemanticSupportContradictionAndFalseCitation/SC02/botnet.group_alternative//support",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/SC02/botnet.group_alternative//contradict",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/SC02/botnet.group_alternative//invented_quote"
+      ],
+      "status": "mock_model_structure_contract_passed",
+      "semantic_accuracy": "not_measured",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "S",
+      "id": "SC03/phishing.brand_field_conflict/",
+      "claim": "在材料、引用、事务和前提结构验证后解释：实际品牌、字段级引用及核验授权背景；不替代欺骗或行动门槛",
+      "tests": [
+        "TestAll23SemanticSupportContradictionAndFalseCitation/SC03/phishing.brand_field_conflict//support",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/SC03/phishing.brand_field_conflict//contradict",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/SC03/phishing.brand_field_conflict//invented_quote"
+      ],
+      "status": "mock_model_structure_contract_passed",
+      "semantic_accuracy": "not_measured",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "S",
+      "id": "R06/history.activity_association/",
+      "claim": "在材料、引用、事务和前提结构验证后解释：引用历史活动与当前模式，解释同IOC/资产关联；相似不自动等于同战役",
+      "tests": [
+        "TestAll23SemanticSupportContradictionAndFalseCitation/R06/history.activity_association//support",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/R06/history.activity_association//contradict",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/R06/history.activity_association//invented_quote"
+      ],
+      "status": "mock_model_structure_contract_passed",
+      "semantic_accuracy": "not_measured",
+      "production_acceptance": "not_inferred"
+    },
+    {
+      "kind": "S",
+      "id": "R07/history.alternative_explanation/",
+      "claim": "在材料、引用、事务和前提结构验证后解释：使用全部关联历史比较业务解释与异常解释，不按审核状态筛选，不以相似认定误报",
+      "tests": [
+        "TestAll23SemanticSupportContradictionAndFalseCitation/R07/history.alternative_explanation//support",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/R07/history.alternative_explanation//contradict",
+        "TestAll23SemanticSupportContradictionAndFalseCitation/R07/history.alternative_explanation//invented_quote"
+      ],
+      "status": "mock_model_structure_contract_passed",
+      "semantic_accuracy": "not_measured",
+      "production_acceptance": "not_inferred"
+    }
+  ],
+  "unit_counts": {
+    "C01": {
+      "not_observed": 5,
+      "missing": 5,
+      "observed": 113
+    },
+    "C02": {
+      "missing": 93,
+      "not_observed": 30
+    },
+    "C03": {
+      "missing": 122,
+      "observed": 1
+    },
+    "C04": {
+      "missing": 121,
+      "not_observed": 2
+    },
+    "C05": {
+      "missing": 120
+    },
+    "C06": {
+      "missing": 120
+    },
+    "C07": {
+      "missing": 120
+    }
+  },
+  "positive_units": [
+    {
+      "event_id": "ly-1ffb21c0-18cc-44d5-81f7-f5e4bda651f4",
+      "snapshot": 4,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "udp://144.48.4.129:53",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 10
+    },
+    {
+      "event_id": "ly-2e5b8c5b-438d-4a63-a432-35a8fc1a4a37",
+      "snapshot": 4560,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:443",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 10
+    },
+    {
+      "event_id": "ly-2e5b8c5b-438d-4a63-a432-35a8fc1a4a37",
+      "snapshot": 4560,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:80",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-2e5b8c5b-438d-4a63-a432-35a8fc1a4a37",
+      "snapshot": 4560,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:8081",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:10000",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 10
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:1025",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:1080",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:1099",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:110",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:111",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:11211",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:119",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:135",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:139",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:143",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:1433",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:1434",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:1521",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:15672",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:161",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:1723",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:2049",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:21",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:2121",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:2181",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:22",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:23",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:2375",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:2376",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:25",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:27017",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:27018",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:28017",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:3000",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:3128",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:3306",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:3389",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:3690",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:389",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:4000",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:443",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C03",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:443",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 10
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:4443",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:445",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:465",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:4848",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:5000",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:50000",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:50030",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:50070",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:512",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:513",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:514",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:515",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:53",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:5432",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:5433",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:548",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:554",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:5555",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:5601",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:5672",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:587",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:5900",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:5984",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:6000",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:61616",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:61617",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:631",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:636",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:6379",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:6443",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:6666",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:7001",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:7002",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:7070",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:7077",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:7687",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:80",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:8000",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:8008",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:8009",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:8080",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:8081",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:8082",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:8083",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:8084",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:8085",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:8086",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:8088",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:8090",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:81",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:8161",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:8443",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:873",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:88",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:8888",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:8899",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:9",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:9000",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:9001",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:902",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:9042",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:9090",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:9092",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:9100",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:9200",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:9300",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:9418",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:9443",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:993",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:995",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:9999",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 0
+    },
+    {
+      "event_id": "ly-bd71faed-5aea-4b76-9287-da41d34fcc63",
+      "snapshot": 67,
+      "unit": "C01",
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://144.48.4.129:22",
+        "device_id": "node-arm-offline-001"
+      },
+      "score": 10
+    }
+  ],
+  "events": [
+    {
+      "event_id": "ly-030bb1f5-25cc-4f08-988b-b89798b11e1c",
+      "snapshot": 5079,
+      "watermark": 44029,
+      "revision_watermark": 106168,
+      "loaded": 2651,
+      "declared": 2651,
+      "rendered": true,
+      "model_called": false,
+      "production_writes": 0
+    },
+    {
+      "event_id": "ly-14725b4b-84f0-4233-b6f3-98d6444ce2e6",
+      "snapshot": 2076,
+      "watermark": 41071,
+      "revision_watermark": 103193,
+      "loaded": 874,
+      "declared": 874,
+      "rendered": true,
+      "model_called": false,
+      "production_writes": 0
+    },
+    {
+      "event_id": "ly-1ffb21c0-18cc-44d5-81f7-f5e4bda651f4",
+      "snapshot": 4,
+      "watermark": 48561,
+      "revision_watermark": 0,
+      "loaded": 4,
+      "declared": 4,
+      "rendered": true,
+      "model_called": false,
+      "production_writes": 0
+    },
+    {
+      "event_id": "ly-2e5b8c5b-438d-4a63-a432-35a8fc1a4a37",
+      "snapshot": 4560,
+      "watermark": 47784,
+      "revision_watermark": 113881,
+      "loaded": 2350,
+      "declared": 2350,
+      "rendered": true,
+      "model_called": false,
+      "production_writes": 0
+    },
+    {
+      "event_id": "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8",
+      "snapshot": 14747,
+      "watermark": 66118,
+      "revision_watermark": 126268,
+      "loaded": 7684,
+      "declared": 7684,
+      "rendered": true,
+      "model_called": false,
+      "production_writes": 0
+    },
+    {
+      "event_id": "ly-bd71faed-5aea-4b76-9287-da41d34fcc63",
+      "snapshot": 67,
+      "watermark": 52539,
+      "revision_watermark": 117792,
+      "loaded": 32,
+      "declared": 32,
+      "rendered": true,
+      "model_called": false,
+      "production_writes": 0
+    },
+    {
+      "event_id": "ly-fd1496c4-14e6-40ae-bb29-57d162a9d94f",
+      "snapshot": 12,
+      "watermark": 44473,
+      "revision_watermark": 107095,
+      "loaded": 6,
+      "declared": 6,
+      "rendered": true,
+      "model_called": false,
+      "production_writes": 0
+    }
+  ],
+  "preexisting_files_unchanged": {
+    "vulnscan-backend/traffic/chat_diagnostics_test.go": true,
+    "vulnscan-backend/traffic/chat_service.go": true,
+    "vulnscan-backend/traffic/internal/httpapi/server.go": true,
+    "vulnscan-frontend/apps/web/src/views/ly/event/detail/components/ChatBox.vue": true
+  },
+  "patch_sha256": "35402eb3bd51354e6e5fd1939b5230cf6b714f5189529c415877d49c691227dd",
+  "limits": [
+    "23S tests use controlled responses; no model semantic accuracy certification",
+    "generic rules outside phase one are not promoted to production acceptance",
+    "no production deployment, production writes, network fetch or model call in this round"
+  ]
+}

@@ -289,6 +289,15 @@ func (s Services) prepareReportSemantics(ctx context.Context, snap EvidenceSnaps
 			}
 		}
 	}
+	if input != nil {
+		result.CoverageIncomplete = input.Manifest.Coverage != "complete" || input.Manifest.SemanticCoverageIncomplete
+		for _, issue := range input.Manifest.Issues {
+			switch issue.Code {
+			case "semantic_material_budget_exceeded", "semantic_message_budget_exceeded", "phase_one_semantic_operation_incomplete":
+				result.CoverageIncomplete = true
+			}
+		}
+	}
 	out.Result = &result
 	out.ElapsedMS = time.Since(start).Milliseconds()
 	if persist && cacheAllowed && semanticReusable(result) {

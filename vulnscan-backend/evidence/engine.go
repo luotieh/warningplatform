@@ -252,7 +252,7 @@ func baseFinding(id FactID, g *observations, parameters Parameters, limits []str
 	if !g.complete {
 		quality = "coverage_gap"
 	}
-	return Finding{FactID: id, RuleVersion: RuleVersion, Scope: g.scope, Status: Missing,
+	return Finding{EvidenceContract: contractForFact(id), FactID: id, RuleVersion: RuleVersion, Scope: g.scope, Status: Missing,
 		Eligibility: "ineligible", Quality: quality, Parameters: parameters,
 		Measurements: Measurements{SampleCount: len(g.hits)},
 		SourceIDs:    append([]string(nil), g.sourceIDs...), Limitations: limits}

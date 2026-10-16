@@ -1,0 +1,1836 @@
+diff --git a/vulnscan-backend/evidence/http_rules.go b/vulnscan-backend/evidence/http_rules.go
+index 2d514cd..19a0f0a 100644
+--- a/vulnscan-backend/evidence/http_rules.go
++++ b/vulnscan-backend/evidence/http_rules.go
+@@ -72,6 +72,9 @@ func (e *Engine) httpFact(f Finding, g *observations) Finding {
+ 		return absent(f, MissingInput)
+ 	}
+ 	h := g.input.HTTP
++	if f.FactID == "F_HTTP_ENDPOINT_REPEAT" {
++		f.Measurements.SampleCount = len(h.Records)
++	}
+ 	dependency(&f, "http", h.Provenance)
+ 	if !provenance(h.Provenance) || !h.Complete || len(h.Records) == 0 {
+ 		return absent(f, UnverifiedCoverage)
+@@ -112,7 +115,13 @@ func (e *Engine) httpFact(f Finding, g *observations) Finding {
+ 			groups[key] = append(groups[key], r)
+ 		}
+ 		best := 0.0
+-		for _, records := range groups {
++		keys := []string{}
++		for key := range groups {
++			keys = append(keys, key)
++		}
++		sort.Strings(keys)
++		for _, key := range keys {
++			records := groups[key]
+ 			if len(records) < 6 {
+ 				continue
+ 			}
+@@ -122,6 +131,7 @@ func (e *Engine) httpFact(f Finding, g *observations) Finding {
+ 				intervals = append(intervals, records[i].Time.Sub(records[i-1].Time).Seconds())
+ 			}
+ 			avg, cv := moments(intervals)
++			f.Measurements.HTTPGroups = append(f.Measurements.HTTPGroups, HTTPRepeatGroup{Endpoint: key, Requests: len(records), IntervalMeanSeconds: avg, IntervalCV: cv})
+ 			if avg > 0 && cv <= 0.3 && float64(len(records)) > best {
+ 				best = float64(len(records))
+ 			}
+diff --git a/vulnscan-backend/evidence/inputs.go b/vulnscan-backend/evidence/inputs.go
+index f0e750a..bec56c5 100644
+--- a/vulnscan-backend/evidence/inputs.go
++++ b/vulnscan-backend/evidence/inputs.go
+@@ -86,6 +86,8 @@ type HTTPFieldEncodingSummary struct {
+ type HTTPData struct {
+ 	Provenance
+ 	RequestCandidates int          `json:"request_candidates"`
++	NonRequestPackets int          `json:"non_request_packets"`
++	UnknownRequestIDs []string     `json:"unknown_request_ids,omitempty"`
+ 	Records           []HTTPRecord `json:"records"`
+ 	Brands            []Brand      `json:"brands"`
+ 	BrandsVerified    bool         `json:"brands_verified"`
+diff --git a/vulnscan-backend/evidence/phase_one.go b/vulnscan-backend/evidence/phase_one.go
+index 82d560a..72da82f 100644
+--- a/vulnscan-backend/evidence/phase_one.go
++++ b/vulnscan-backend/evidence/phase_one.go
+@@ -5,7 +5,7 @@ import (
+ 	"sort"
+ )
+ 
+-const PhaseOneVersion = "evidence-phase1-v1.0"
++const PhaseOneVersion = "evidence-phase1-v1.1"
+ 
+ type PhaseOneDefinition struct {
+ 	ID       string    `json:"id"`
+@@ -229,6 +229,25 @@ func EvaluatePhaseOne(event string, version int64, facts []Finding, sem *Semanti
+ 				} else {
+ 					u.Status = "missing"
+ 					u.Reason = "accepted_phase_one_semantics_missing"
++					if validSem && phaseOneSemanticNegative(sem, scope, d) {
++						u.Status = "not_observed"
++						u.Reason = "validated_semantics_contradict"
++						for _, task := range sem.Plan.Tasks {
++							if task.Scope != scope {
++								continue
++							}
++							for _, slot := range d.Slots {
++								if slot == task.Slot.Key {
++									if u.SemanticTask == "" {
++										u.SemanticTask = task.ID
++									}
++									for _, m := range task.Materials {
++										u.SourceIDs = append(u.SourceIDs, m.SourceIDs...)
++									}
++								}
++							}
++						}
++					}
+ 				}
+ 				u.SourceIDs = unique(u.SourceIDs)
+ 				sort.Strings(u.SourceIDs)
+@@ -283,6 +302,55 @@ func EvaluatePhaseOne(event string, version int64, facts []Finding, sem *Semanti
+ 	return out, nil
+ }
+ 
++// A neutral/rejected/omitted interpretation is not a negative. Only explicit
++// validated contradictions for every relevant planned operation can refute
++// this conjunction. Conservatively retain missing when planning skipped work.
++func phaseOneSemanticNegative(sem *SemanticResult, scope Scope, d PhaseOneDefinition) bool {
++	if len(d.Slots) == 0 || sem.CoverageIncomplete {
++		return false
++	}
++	relevant := func(slot SlotKey) bool {
++		for _, s := range d.Slots {
++			if s == slot {
++				return true
++			}
++		}
++		return false
++	}
++	subjects := map[string]bool{}
++	for _, task := range sem.Plan.Tasks {
++		if task.Scope == scope && relevant(task.Slot.Key) {
++			subjects[task.SubjectID] = true
++		}
++	}
++	for _, x := range sem.Plan.Executions {
++		if x.Reason == "task_budget_exceeded" {
++			return false
++		}
++		if subjects[x.SubjectID] && relevant(x.Slot) && x.Status == "skipped" {
++			return false
++		}
++	}
++	count := 0
++	for _, task := range sem.Plan.Tasks {
++		if task.Scope != scope || !relevant(task.Slot.Key) {
++			continue
++		}
++		count++
++		found := false
++		for _, f := range sem.Findings {
++			if f.TaskID == task.ID && f.Judgement == "contradict" && f.Strength != "none" {
++				found = true
++				break
++			}
++		}
++		if !found {
++			return false
++		}
++	}
++	return count > 0
++}
++
+ // A rejected task cannot erase a different accepted task. Validate each accepted
+ // operation, including quotes and transaction bindings, against its own plan.
+ func phaseOneValidatedSemantics(event string, version int64, sem *SemanticResult) *SemanticResult {
+diff --git a/vulnscan-backend/evidence/semantic_types.go b/vulnscan-backend/evidence/semantic_types.go
+index e2d3c64..f648c73 100644
+--- a/vulnscan-backend/evidence/semantic_types.go
++++ b/vulnscan-backend/evidence/semantic_types.go
+@@ -248,8 +248,9 @@ type SemanticFinding struct {
+ }
+ 
+ type SemanticResult struct {
+-	Plan           SemanticPlan      `json:"plan"`
+-	Findings       []SemanticFinding `json:"semantic_findings"`
+-	Calls          int               `json:"calls"`
+-	ResponseSHA256 string            `json:"response_sha256,omitempty"`
++	CoverageIncomplete bool              `json:"operation_coverage_incomplete,omitempty"`
++	Plan               SemanticPlan      `json:"plan"`
++	Findings           []SemanticFinding `json:"semantic_findings"`
++	Calls              int               `json:"calls"`
++	ResponseSHA256     string            `json:"response_sha256,omitempty"`
+ }
+diff --git a/vulnscan-backend/evidence/types.go b/vulnscan-backend/evidence/types.go
+index 9ca379b..cecf94a 100644
+--- a/vulnscan-backend/evidence/types.go
++++ b/vulnscan-backend/evidence/types.go
+@@ -9,7 +9,7 @@ type FactID string
+ const (
+ 	BeaconPeriodic  FactID = "F_BEACON_PERIODIC"
+ 	MultiDayPersist FactID = "F_MULTI_DAY_PERSIST"
+-	RuleVersion            = "evidence-algorithms-0.5"
++	RuleVersion            = "evidence-algorithms-0.6"
+ )
+ 
+ type Scope struct {
+@@ -95,6 +95,14 @@ type Measurements struct {
+ 	MaxPackets            *uint64            `json:"max_packets,omitempty"`
+ 	Values                map[string]float64 `json:"values,omitempty"`
+ 	Labels                []string           `json:"labels,omitempty"`
++	HTTPGroups            []HTTPRepeatGroup  `json:"http_groups,omitempty"`
++}
++
++type HTTPRepeatGroup struct {
++	Endpoint            string  `json:"host_path"`
++	Requests            int     `json:"requests"`
++	IntervalMeanSeconds float64 `json:"interval_mean_sec"`
++	IntervalCV          float64 `json:"interval_cv"`
+ }
+ 
+ type Finding struct {
+diff --git a/vulnscan-backend/traffic/internal/service/evidence_protocol_input.go b/vulnscan-backend/traffic/internal/service/evidence_protocol_input.go
+index 279a8c5..bed8c90 100644
+--- a/vulnscan-backend/traffic/internal/service/evidence_protocol_input.go
++++ b/vulnscan-backend/traffic/internal/service/evidence_protocol_input.go
+@@ -55,6 +55,27 @@ func snapshotPayload(packet map[string]any) ([]byte, bool, string) {
+ }
+ 
+ func enrichSnapshotProtocols(input *evidence.Input, hit store.Hit, m map[string]any, manifest *SnapshotEvidenceManifest) {
++	// Session-level app.http_url is a hint, never a captured request. Remove
++	// this hit's projection before classifying its actual wire bytes.
++	httpHint := false
++	if input.HTTP != nil {
++		kept := input.HTTP.Records[:0]
++		for _, r := range input.HTTP.Records {
++			if r.SourceID == hit.ID {
++				httpHint = true
++			} else {
++				kept = append(kept, r)
++			}
++		}
++		input.HTTP.Records = kept
++	}
++	unknownHTTP := func() {
++		if input.HTTP == nil {
++			input.HTTP = &evidence.HTTPData{}
++		}
++		input.HTTP.UnknownRequestIDs = append(input.HTTP.UnknownRequestIDs, hit.ID)
++		manifest.addIssue(SnapshotInputIssue{Code: "http_request_classification_unknown", Stage: "parse_protocol", HitID: hit.ID, Scope: input.Scope})
++	}
+ 	packet := nestedMap(m, "raw_packet")
+ 	if child := nestedMap(packet, "request"); len(child) > 0 && packet["report_quality_derivation"] == nil {
+ 		packet = child
+@@ -65,6 +86,7 @@ func enrichSnapshotProtocols(input *evidence.Input, hit store.Hit, m map[string]
+ 		manifest.addIssue(SnapshotInputIssue{Code: code, Stage: "parse_protocol", Field: field, HitID: hit.ID, Scope: input.Scope})
+ 	}
+ 	if frameProblem != "" {
++		unknownHTTP()
+ 		issue(frameProblem, "raw_packet.packet_hex")
+ 		if input.Network != nil && len(input.Network.Connections) > 0 {
+ 			c := &input.Network.Connections[len(input.Network.Connections)-1]
+@@ -105,6 +127,11 @@ func enrichSnapshotProtocols(input *evidence.Input, hit store.Hit, m map[string]
+ 		issue("tls_certificate_and_trust_unavailable", "app.tls_sni/certificate_chain")
+ 	}
+ 	if len(payload) == 0 {
++		if !full {
++			unknownHTTP()
++		} else if input.HTTP != nil {
++			input.HTTP.NonRequestPackets++
++		}
+ 		return
+ 	}
+ 	firstLine, _, _ := bytes.Cut(payload, []byte("\r\n"))
+@@ -153,6 +180,16 @@ func enrichSnapshotProtocols(input *evidence.Input, hit store.Hit, m map[string]
+ 		}
+ 		return
+ 	}
++	// A complete response or another identified wire protocol cannot be a
++	// request. Opaque bytes on an HTTP-hinted connection remain unresolved.
++	knownNonRequest := bytes.HasPrefix(payload, []byte("HTTP/1.")) ||
++		(len(payload) >= 3 && payload[0] >= 20 && payload[0] <= 23 && payload[1] == 3) ||
++		strings.EqualFold(firstNonEmpty(asString(m["protocol"]), asString(m["proto"])), "udp")
++	if (!full || httpHint) && !knownNonRequest {
++		unknownHTTP()
++	} else if input.HTTP != nil {
++		input.HTTP.NonRequestPackets++
++	}
+ 	// Port alone never proves a protocol. Only attempt DNS when actual app
+ 	// metadata identified DNS; successful binary decoding supplies the proof.
+ 	if strings.TrimSpace(asString(app["dns_query"])) != "" || (len(payload) >= 12 && strings.ToLower(firstNonEmpty(asString(m["protocol"]), asString(m["proto"]))) == "udp" && full) {
+diff --git a/vulnscan-backend/traffic/internal/service/evidence_report_input.go b/vulnscan-backend/traffic/internal/service/evidence_report_input.go
+index 0138107..9866b18 100644
+--- a/vulnscan-backend/traffic/internal/service/evidence_report_input.go
++++ b/vulnscan-backend/traffic/internal/service/evidence_report_input.go
+@@ -66,6 +66,11 @@ func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event
+ 	}
+ 	options := DefaultSnapshotEvidenceOptions()
+ 	options.ReportMaterialMode = true
++	if !s.LegacyReportEvidence {
++		options.StreamFeatures = true
++		options.MaxSnapshotBytes = snapshotTotalBytes
++		options.MaxFeatureBytes = snapshotFeatureBytes
++	}
+ 	options.ReportSchedules = s.ReportSchedules
+ 	if assetErr != nil {
+ 		issue := snapshotIssueCause(SnapshotInputIssue{Code: "asset_registry_read_failed", Stage: "load_assets", Retryable: true}, assetErr)
+diff --git a/vulnscan-backend/traffic/internal/service/evidence_semantic_input.go b/vulnscan-backend/traffic/internal/service/evidence_semantic_input.go
+index 2130a92..3bb0c86 100644
+--- a/vulnscan-backend/traffic/internal/service/evidence_semantic_input.go
++++ b/vulnscan-backend/traffic/internal/service/evidence_semantic_input.go
+@@ -24,7 +24,7 @@ import (
+ 	"vulnscan-backend/traffic/internal/store"
+ )
+ 
+-const semanticAdapterVersion = "snapshot-semantic-adapter-1.4-phase1"
++const semanticAdapterVersion = "snapshot-semantic-adapter-1.6-phase1"
+ const maxSemanticObservations = 128
+ const maxSemanticObservationBytes = 2 << 20
+ const maxSemanticMessageBytes = 32 << 10
+@@ -52,6 +52,11 @@ func collectSnapshotSemanticObservation(out *SnapshotEvidenceInput, input *evide
+ 		o.Direction = "inbound"
+ 	}
+ 	if input.HTTP != nil {
++		for _, id := range input.HTTP.UnknownRequestIDs {
++			if id == h.ID {
++				out.Manifest.SemanticCoverageIncomplete = true
++			}
++		}
+ 		for _, r := range input.HTTP.Records {
+ 			if r.SourceID == h.ID {
+ 				copy := r
+@@ -74,6 +79,7 @@ func collectSnapshotSemanticObservation(out *SnapshotEvidenceInput, input *evide
+ 	packet, frameProblem := snapshotFramePayload(packet, m, input)
+ 	payload, full, problem := snapshotPayload(packet)
+ 	if frameProblem != "" || (problem != "" && problem != "payload_bytes_unavailable") {
++		out.Manifest.SemanticCoverageIncomplete = true
+ 		return
+ 	}
+ 	if o.DNS != nil {
+@@ -127,17 +133,24 @@ func collectSnapshotSemanticObservation(out *SnapshotEvidenceInput, input *evide
+ 		}
+ 	}
+ 	if len(o.Payload) > maxSemanticMessageBytes || len(o.Response) > maxSemanticMessageBytes {
++		out.Manifest.SemanticCoverageIncomplete = true
+ 		out.Manifest.addIssue(SnapshotInputIssue{Code: "semantic_message_budget_exceeded", Stage: "prepare_semantics", HitID: h.ID, Scope: o.Scope})
+ 		return
+ 	}
+ 	if o.Payload == "" && o.DNS == nil {
+ 		return
+ 	}
++	if out.Manifest.StreamVersion != "" && !o.Complete {
++		out.Manifest.SemanticCoverageIncomplete = true
++		out.Manifest.addIssue(SnapshotInputIssue{Code: "phase_one_semantic_operation_incomplete", Stage: "prepare_semantics", HitID: h.ID, Scope: o.Scope})
++		return
++	}
+ 	used := len(o.Payload) + len(o.Response) + len(o.Body)
+ 	for _, old := range out.SemanticObservations {
+ 		used += len(old.Payload) + len(old.Response) + len(old.Body)
+ 	}
+ 	if len(out.SemanticObservations) >= maxSemanticObservations || used > maxSemanticObservationBytes {
++		out.Manifest.SemanticCoverageIncomplete = true
+ 		out.Manifest.addIssue(SnapshotInputIssue{Code: "semantic_material_budget_exceeded", Stage: "prepare_semantics", HitID: h.ID, Scope: o.Scope})
+ 		return
+ 	}
+diff --git a/vulnscan-backend/traffic/internal/service/evidence_semantic_report.go b/vulnscan-backend/traffic/internal/service/evidence_semantic_report.go
+index fc37d38..6087e0e 100644
+--- a/vulnscan-backend/traffic/internal/service/evidence_semantic_report.go
++++ b/vulnscan-backend/traffic/internal/service/evidence_semantic_report.go
+@@ -289,6 +289,15 @@ func (s Services) prepareReportSemantics(ctx context.Context, snap EvidenceSnaps
+ 			}
+ 		}
+ 	}
++	if input != nil {
++		result.CoverageIncomplete = input.Manifest.Coverage != "complete" || input.Manifest.SemanticCoverageIncomplete
++		for _, issue := range input.Manifest.Issues {
++			switch issue.Code {
++			case "semantic_material_budget_exceeded", "semantic_message_budget_exceeded", "phase_one_semantic_operation_incomplete":
++				result.CoverageIncomplete = true
++			}
++		}
++	}
+ 	out.Result = &result
+ 	out.ElapsedMS = time.Since(start).Milliseconds()
+ 	if persist && cacheAllowed && semanticReusable(result) {
+diff --git a/vulnscan-backend/traffic/internal/service/evidence_snapshot_adapter.go b/vulnscan-backend/traffic/internal/service/evidence_snapshot_adapter.go
+index e19d623..1cf6bfd 100644
+--- a/vulnscan-backend/traffic/internal/service/evidence_snapshot_adapter.go
++++ b/vulnscan-backend/traffic/internal/service/evidence_snapshot_adapter.go
+@@ -24,7 +24,7 @@ import (
+ )
+ 
+ const snapshotAdapterVersion = "snapshot-evidence-adapter-0.4"
+-const reportSnapshotAdapterVersion = "report-snapshot-adapter-1.6-phase1"
++const reportSnapshotAdapterVersion = "report-snapshot-adapter-1.7-stream"
+ 
+ // SnapshotEvidenceOptions limits the shared load, not each algorithm separately.
+ // Large snapshots are explicitly deferred, never evaluated using model samples.
+@@ -36,6 +36,9 @@ type SnapshotEvidenceOptions struct {
+ 	Facts              []evidence.FactID
+ 	MaxHits            int64
+ 	MaxRawBytes        int64
++	StreamFeatures     bool
++	MaxSnapshotBytes   int64
++	MaxFeatureBytes    int64
+ 	MaxScopes          int
+ 	Supplemental       *SnapshotSupplementalInputs `json:"-"`
+ 	SupplementalIssue  *SnapshotInputIssue         `json:"-"`
+@@ -49,36 +52,43 @@ func DefaultSnapshotEvidenceOptions() SnapshotEvidenceOptions {
+ }
+ 
+ type SnapshotEvidenceManifest struct {
+-	PhaseOne              *PhaseOneMaterials              `json:"phase_one_materials,omitempty"`
+-	ReportPractical       []ReportEvidence                `json:"report_practical_evidence,omitempty"`
+-	ReportPracticalChecks []ReportPracticalCheck          `json:"report_practical_checks,omitempty"`
+-	ReportSchedules       map[string]ReportSchedulePolicy `json:"report_schedules,omitempty"`
+-	ReportDuplicateHits   map[string]string               `json:"report_duplicate_hits,omitempty"`
+-	ReportObservations    []ReportMaterialObservation     `json:"report_observations,omitempty"`
+-	History               *ReportHistoryDiagnostics       `json:"history,omitempty"`
+-	AdapterVersion        string                          `json:"adapter_version"`
+-	RegistryVersion       string                          `json:"registry_version"`
+-	SnapshotVersion       int64                           `json:"snapshot_version"`
+-	Watermark             int64                           `json:"watermark"`
+-	RevisionWatermark     int64                           `json:"revision_watermark"`
+-	DeclaredHits          int64                           `json:"declared_hits"`
+-	LoadedHits            int64                           `json:"loaded_hits"`
+-	BoundHits             int64                           `json:"bound_hits"`
+-	UnresolvedHits        int64                           `json:"unresolved_hits"`
+-	ReadPages             int                             `json:"read_pages"`
+-	RevisionBatches       int                             `json:"revision_batches"`
+-	RawBytes              int64                           `json:"raw_bytes"`
+-	MaxHits               int64                           `json:"max_hits"`
+-	MaxRawBytes           int64                           `json:"max_raw_bytes"`
+-	MaxScopes             int                             `json:"max_scopes"`
+-	Coverage              string                          `json:"coverage"`
+-	MissingInputs         []string                        `json:"missing_inputs"`
+-	Issues                []SnapshotInputIssue            `json:"issues,omitempty"`
+-	IssueCount            int                             `json:"issue_count"`
+-	OmittedIssues         int                             `json:"omitted_issues"`
+-	FactCoverage          []SnapshotFactCoverage          `json:"fact_coverage,omitempty"`
+-	SupplementalVersion   string                          `json:"supplemental_version,omitempty"`
+-	SourceRegistryVersion string                          `json:"source_registry_version,omitempty"`
++	PhaseOne                   *PhaseOneMaterials              `json:"phase_one_materials,omitempty"`
++	ReportPractical            []ReportEvidence                `json:"report_practical_evidence,omitempty"`
++	ReportPracticalChecks      []ReportPracticalCheck          `json:"report_practical_checks,omitempty"`
++	ReportSchedules            map[string]ReportSchedulePolicy `json:"report_schedules,omitempty"`
++	ReportDuplicateHits        map[string]string               `json:"report_duplicate_hits,omitempty"`
++	ReportObservations         []ReportMaterialObservation     `json:"report_observations,omitempty"`
++	History                    *ReportHistoryDiagnostics       `json:"history,omitempty"`
++	AdapterVersion             string                          `json:"adapter_version"`
++	RegistryVersion            string                          `json:"registry_version"`
++	SnapshotVersion            int64                           `json:"snapshot_version"`
++	Watermark                  int64                           `json:"watermark"`
++	RevisionWatermark          int64                           `json:"revision_watermark"`
++	DeclaredHits               int64                           `json:"declared_hits"`
++	LoadedHits                 int64                           `json:"loaded_hits"`
++	BoundHits                  int64                           `json:"bound_hits"`
++	UnresolvedHits             int64                           `json:"unresolved_hits"`
++	PhaseOneExcludedHits       int64                           `json:"phase_one_excluded_hits"`
++	SemanticCoverageIncomplete bool                            `json:"semantic_coverage_incomplete"`
++	ReadPages                  int                             `json:"read_pages"`
++	RevisionBatches            int                             `json:"revision_batches"`
++	RawBytes                   int64                           `json:"raw_bytes"`
++	MaxHits                    int64                           `json:"max_hits"`
++	MaxRawBytes                int64                           `json:"max_raw_bytes"`
++	StreamVersion              string                          `json:"stream_version,omitempty"`
++	PageByteBudget             int64                           `json:"page_byte_budget,omitempty"`
++	SnapshotByteBudget         int64                           `json:"snapshot_byte_budget,omitempty"`
++	FeatureByteBudget          int64                           `json:"feature_byte_budget,omitempty"`
++	RetainedFeatureBytes       int64                           `json:"retained_feature_bytes,omitempty"`
++	MaxScopes                  int                             `json:"max_scopes"`
++	Coverage                   string                          `json:"coverage"`
++	MissingInputs              []string                        `json:"missing_inputs"`
++	Issues                     []SnapshotInputIssue            `json:"issues,omitempty"`
++	IssueCount                 int                             `json:"issue_count"`
++	OmittedIssues              int                             `json:"omitted_issues"`
++	FactCoverage               []SnapshotFactCoverage          `json:"fact_coverage,omitempty"`
++	SupplementalVersion        string                          `json:"supplemental_version,omitempty"`
++	SourceRegistryVersion      string                          `json:"source_registry_version,omitempty"`
+ }
+ 
+ type SnapshotEvidenceInput struct {
+@@ -134,6 +144,15 @@ func (s Services) SnapshotEvidenceInput(ctx context.Context, snap EvidenceSnapsh
+ 		opts.MaxScopes = 256
+ 	}
+ 	out.Manifest.MaxScopes = opts.MaxScopes
++	if opts.StreamFeatures {
++		if opts.MaxSnapshotBytes <= 0 || opts.MaxFeatureBytes <= 0 {
++			return out, errors.New("positive stream budgets required")
++		}
++		out.Manifest.StreamVersion = snapshotStreamVersion
++		out.Manifest.PageByteBudget = snapshotPageBytes
++		out.Manifest.SnapshotByteBudget = opts.MaxSnapshotBytes
++		out.Manifest.FeatureByteBudget = opts.MaxFeatureBytes
++	}
+ 	defer func() {
+ 		if err == nil && out.Reason != "" {
+ 			out.Manifest.addIssue(SnapshotInputIssue{Code: out.Reason, Stage: "load"})
+@@ -208,7 +227,11 @@ func (s Services) SnapshotEvidenceInput(ctx context.Context, snap EvidenceSnapsh
+ 	allCaptureKnown, anyTruncated := true, false
+ 	q := store.HitQuery{Sources: snap.Sources, Watermark: snap.Watermark, Limit: 500}
+ 	for {
+-		page, err := snapshotHitPage(ctx, s.Store, q, snap.RevisionWatermark)
++		readPage := snapshotHitPage
++		if opts.StreamFeatures {
++			readPage = snapshotBoundedPage
++		}
++		page, err := readPage(ctx, s.Store, q, snap.RevisionWatermark)
+ 		if err != nil {
+ 			return out, &SnapshotInputError{Code: "snapshot_read_failed", Stage: "load_hits_and_revisions", Cause: err}
+ 		}
+@@ -232,7 +255,11 @@ func (s Services) SnapshotEvidenceInput(ctx context.Context, snap EvidenceSnapsh
+ 			}
+ 			out.Manifest.LoadedHits++
+ 			out.Manifest.RawBytes += int64(len(h.Raw))
+-			if out.Manifest.LoadedHits > opts.MaxHits || out.Manifest.RawBytes > opts.MaxRawBytes {
++			rawBudget := opts.MaxRawBytes
++			if opts.StreamFeatures {
++				rawBudget = opts.MaxSnapshotBytes
++			}
++			if out.Manifest.LoadedHits > opts.MaxHits || out.Manifest.RawBytes > rawBudget {
+ 				out.Request.Hits, out.Request.Inputs = nil, nil
+ 				out.Reason = "snapshot_input_budget_exceeded"
+ 				return out, nil
+@@ -251,6 +278,10 @@ func (s Services) SnapshotEvidenceInput(ctx context.Context, snap EvidenceSnapsh
+ 			scope, remoteIP, remotePort, ok := snapshotScope(m, assets)
+ 			if !ok || h.OccurredAt.IsZero() {
+ 				out.Manifest.UnresolvedHits++
++				if opts.StreamFeatures && phaseOneUnrelatedFrame(m, assets) {
++					out.Manifest.PhaseOneExcludedHits++
++					out.Manifest.addIssue(SnapshotInputIssue{Code: "verified_frame_outside_eligible_scopes", Stage: "bind", HitID: h.ID})
++				}
+ 				out.Manifest.addIssue(SnapshotInputIssue{Code: "unresolved_binding_or_time", Stage: "bind", HitID: h.ID, Field: "asset/endpoint/device/time"})
+ 				continue
+ 			}
+@@ -273,6 +304,9 @@ func (s Services) SnapshotEvidenceInput(ctx context.Context, snap EvidenceSnapsh
+ 			if opts.ReportMaterialMode {
+ 				o := reportMaterialObservation(h, m, scope)
+ 				out.Manifest.ReportObservations = append(out.Manifest.ReportObservations, o)
++				if opts.StreamFeatures {
++					out.Manifest.RetainedFeatureBytes += snapshotFeatureCharge(o)
++				}
+ 				if o.PhysicalPacketID != "" {
+ 					key := scopeKey(scope) + ":" + o.PhysicalPacketID
+ 					if original, ok := seenReportPackets[key]; ok {
+@@ -298,6 +332,7 @@ func (s Services) SnapshotEvidenceInput(ctx context.Context, snap EvidenceSnapsh
+ 			}
+ 			counts[scope]++
+ 			scopeHits[scope] = append(scopeHits[scope], hit)
++			mark := snapshotFeatureMark(input, out.Manifest.PhaseOne, len(out.SemanticObservations))
+ 			adaptSnapshotProtocols(input, h, m, remoteIP, remotePort, known && !truncated)
+ 			enrichSnapshotProtocols(input, h, m, &out.Manifest)
+ 			if opts.ReportMaterialMode && !s.LegacyReportEvidence {
+@@ -306,6 +341,22 @@ func (s Services) SnapshotEvidenceInput(ctx context.Context, snap EvidenceSnapsh
+ 			if opts.CaptureSemantic {
+ 				collectSnapshotSemanticObservation(&out, input, h, m, assets)
+ 			}
++			if opts.StreamFeatures {
++				out.Manifest.RetainedFeatureBytes += snapshotFeatureDelta(input, &out, mark, hit)
++				// Phase one uses verified contacts and application transactions. Do
++				// not retain packet payloads for unrelated legacy network/TLS facts.
++				input.Network, input.TLS = nil, nil
++				if out.Manifest.RetainedFeatureBytes > opts.MaxFeatureBytes {
++					out.Reason = "snapshot_feature_budget_exceeded"
++					out.Request.Hits, out.Request.Inputs = nil, nil
++					out.SemanticObservations = nil
++					if out.Manifest.PhaseOne != nil {
++						out.Manifest.PhaseOne.Complete = false
++						out.Manifest.PhaseOne.Records = nil
++					}
++					return out, nil
++				}
++			}
+ 		}
+ 		tail := page[len(page)-1]
+ 		if !q.AfterTime.IsZero() && (tail.OccurredAt.Before(q.AfterTime) || (tail.OccurredAt.Equal(q.AfterTime) && tail.ID <= q.AfterID)) {
+@@ -354,7 +405,7 @@ func (s Services) SnapshotEvidenceInput(ctx context.Context, snap EvidenceSnapsh
+ 		if input.HTTP != nil {
+ 			input.HTTP.Provenance = provenance
+ 			// ACK/TLS/response packets are not HTTP request denominators.
+-			input.HTTP.Complete = provenance.Complete && input.HTTP.RequestCandidates > 0 && len(input.HTTP.Records) == input.HTTP.RequestCandidates
++			input.HTTP.Complete = provenance.Complete && input.HTTP.RequestCandidates > 0 && len(input.HTTP.UnknownRequestIDs) == 0 && len(input.HTTP.Records) == input.HTTP.RequestCandidates
+ 			seen := map[string]bool{}
+ 			records := []evidence.HTTPRecord{}
+ 			for _, r := range input.HTTP.Records {
+diff --git a/vulnscan-backend/traffic/internal/service/phase_one.go b/vulnscan-backend/traffic/internal/service/phase_one.go
+index 93529be..3f98ea0 100644
+--- a/vulnscan-backend/traffic/internal/service/phase_one.go
++++ b/vulnscan-backend/traffic/internal/service/phase_one.go
+@@ -54,7 +54,9 @@ func (s Services) ExecutePhaseOne(ctx context.Context, snap EvidenceSnapshot, fa
+ 	materials := PhaseOneMaterials{Complete: false, Diagnostics: []string{"current_wire_materials_unavailable"}}
+ 	if facts.Manifest.PhaseOne != nil {
+ 		materials = *facts.Manifest.PhaseOne
+-		materials.Complete = materials.Complete && facts.Manifest.Coverage == "complete"
++		currentMembershipComplete := facts.Manifest.Coverage == "complete" ||
++			(facts.Manifest.StreamVersion != "" && facts.Manifest.LoadedHits == facts.Manifest.DeclaredHits && facts.Manifest.UnresolvedHits == facts.Manifest.PhaseOneExcludedHits)
++		materials.Complete = materials.Complete && currentMembershipComplete
+ 		for i := range materials.Sources {
+ 			if materials.Expanded {
+ 				break
+@@ -107,27 +109,44 @@ func (s Services) ExecutePhaseOne(ctx context.Context, snap EvidenceSnapshot, fa
+ 		groups[k] = append(groups[k], c)
+ 	}
+ 	for _, contacts := range groups {
+-		req := evidence.Request{EventID: snap.EventID, SnapshotVersion: snap.Version, Facts: []evidence.FactID{"F_BEACON_JITTER", "F_FIXED_DAILY_WINDOW"}, Quality: evidence.Quality{Coverage: evidence.CoverageComplete}}
+-		complete := merged.Complete
+-		req.Quality.SavedTimelineComplete = &complete
+-		truncated := false
+-		req.Quality.CaptureTruncated = &truncated
+-		if !complete {
+-			req.Quality.Coverage = evidence.CoveragePartial
+-		}
+-		for _, c := range contacts {
+-			req.Hits = append(req.Hits, evidence.Hit{ID: c.HitID, OccurredAt: c.Time, Scope: c.Scope})
+-		}
+-		fc := evidence.DefaultConfig()
+-		fc.Policies = map[evidence.FactID]map[string]float64{"F_BEACON_JITTER": {"ljung_box_lags": 3, "median_relative_tolerance": 0.25}}
+-		engine, _ := evidence.NewEngine(fc)
+-		computed, e := engine.Evaluate(ctx, req)
+-		if e != nil {
+-			return out, e
++		groupKey := scopeKey(contacts[0].Scope) + contacts[0].IOCType + ":" + contacts[0].IOCValue
++		// C02 needs a complete current observation set, not C03's three-day
++		// extension. Failure of that optional extension cannot erase this set.
++		currentContacts := []PhaseOneContact{}
++		for _, c := range merged.CurrentContacts {
++			if scopeKey(c.Scope)+c.IOCType+":"+c.IOCValue == groupKey {
++				currentContacts = append(currentContacts, c)
++			}
+ 		}
+-		for _, f := range computed.Findings {
+-			f.IOCType, f.IOCValue = contacts[0].IOCType, contacts[0].IOCValue
+-			findings = append(findings, f)
++		for _, factID := range []evidence.FactID{"F_BEACON_JITTER", "F_FIXED_DAILY_WINDOW"} {
++			selected := contacts
++			complete := merged.Complete && len(merged.ScopeIncomplete[groupKey]) == 0
++			if factID == "F_BEACON_JITTER" && len(currentContacts) >= 16 {
++				selected = currentContacts
++				complete = merged.CurrentComplete && len(merged.CurrentIncomplete[groupKey]) == 0
++			}
++			req := evidence.Request{EventID: snap.EventID, SnapshotVersion: snap.Version, Facts: []evidence.FactID{"F_BEACON_JITTER", "F_FIXED_DAILY_WINDOW"}, Quality: evidence.Quality{Coverage: evidence.CoverageComplete}}
++			req.Facts = []evidence.FactID{factID}
++			req.Quality.SavedTimelineComplete = &complete
++			truncated := false
++			req.Quality.CaptureTruncated = &truncated
++			if !complete {
++				req.Quality.Coverage = evidence.CoveragePartial
++			}
++			for _, c := range selected {
++				req.Hits = append(req.Hits, evidence.Hit{ID: c.HitID, OccurredAt: c.Time, Scope: c.Scope})
++			}
++			fc := evidence.DefaultConfig()
++			fc.Policies = map[evidence.FactID]map[string]float64{"F_BEACON_JITTER": {"ljung_box_lags": 3, "median_relative_tolerance": 0.25}}
++			engine, _ := evidence.NewEngine(fc)
++			computed, e := engine.Evaluate(ctx, req)
++			if e != nil {
++				return out, e
++			}
++			for _, f := range computed.Findings {
++				f.IOCType, f.IOCValue = contacts[0].IOCType, contacts[0].IOCValue
++				findings = append(findings, f)
++			}
+ 		}
+ 	}
+ 	// Missing contacts need explicit F outcomes, never inherited packet-count F.
+diff --git a/vulnscan-backend/traffic/internal/service/phase_one_coverage_audit_test.go b/vulnscan-backend/traffic/internal/service/phase_one_coverage_audit_test.go
+index 8474444..0e8294d 100644
+--- a/vulnscan-backend/traffic/internal/service/phase_one_coverage_audit_test.go
++++ b/vulnscan-backend/traffic/internal/service/phase_one_coverage_audit_test.go
+@@ -12,6 +12,7 @@ import (
+ 	"golang.org/x/net/dns/dnsmessage"
+ 	"io"
+ 	"math"
++	"net/http"
+ 	"net/url"
+ 	"os"
+ 	"path/filepath"
+@@ -20,6 +21,7 @@ import (
+ 	"testing"
+ 	"time"
+ 	"vulnscan-backend/evidence"
++	"vulnscan-backend/traffic/internal/client"
+ 	"vulnscan-backend/traffic/internal/domain"
+ 	"vulnscan-backend/traffic/internal/store"
+ )
+@@ -167,6 +169,33 @@ func (s *coverageArchiveStore) HitRevisions(ctx context.Context, ids []string, w
+ 	}
+ 	return map[string]json.RawMessage{}, ctx.Err()
+ }
++
++func (s *coverageArchiveStore) SnapshotPage(ctx context.Context, q store.HitQuery, rw, pageBytes, rowBytes int64) ([]store.Hit, error) {
++	page, err := s.HitPage(ctx, q)
++	if err != nil {
++		return nil, err
++	}
++	out := []store.Hit{}
++	var total int64
++	for _, hit := range page {
++		cost := int64(len(hit.Raw))
++		if cost > rowBytes || cost > pageBytes {
++			if len(out) == 0 {
++				return nil, fmt.Errorf("snapshot_row_budget_exceeded:%s", hit.ID)
++			}
++			break
++		}
++		if total+cost > pageBytes {
++			break
++		}
++		if _, err = s.HitRevisions(ctx, []string{hit.ID}, rw); err != nil {
++			return nil, err
++		}
++		total += cost
++		out = append(out, hit)
++	}
++	return out, nil
++}
+ func coverageReadJSON(t *testing.T, path string, v any) {
+ 	t.Helper()
+ 	b, err := os.ReadFile(path)
+@@ -295,6 +324,13 @@ func TestPhaseOneCoverageFrozenReportReplay(t *testing.T) {
+ 		} `json:"segments"`
+ 	}
+ 	coverageReadJSON(t, filepath.Join(dir, "coverage180-snapshots.json"), &saved)
++	if path := os.Getenv("PHASE_ONE_COVERAGE_SUPPLEMENT"); path != "" {
++		extra := saved
++		extra.Snapshots, extra.Segments = nil, nil
++		coverageReadJSON(t, path, &extra)
++		saved.Snapshots = append(saved.Snapshots, extra.Snapshots...)
++		saved.Segments = append(saved.Segments, extra.Segments...)
++	}
+ 	for _, r := range saved.Snapshots {
+ 		if err := putRecord(ctx, st, "snapshot", r.Key, r.Value.EventID, r.Value); err != nil {
+ 			t.Fatal(err)
+@@ -342,13 +378,27 @@ func TestPhaseOneCoverageFrozenReportReplay(t *testing.T) {
+ 	})
+ 	outputs := []any{}
+ 	svc := Services{Store: st}
++	modelEvent := os.Getenv("PHASE_ONE_COVERAGE_MODEL_EVENT")
++	if modelEvent != "" {
++		endpoint := os.Getenv("PHASE_ONE_MODEL_ENDPOINT")
++		if !strings.HasPrefix(endpoint, "http://127.0.0.1:") {
++			t.Fatal("isolated model endpoint must be localhost")
++		}
++		svc.LLM = &client.LLMClient{BaseURL: endpoint, Model: "K2.7", DisableThinking: true, HTTP: &http.Client{Timeout: 180 * time.Second}}
++		opts := DefaultReportSemanticOptions()
++		opts.Config.MaxTasks = 3
++		svc.ReportSemantics = &opts
++	}
+ 	for _, id := range targets {
++		if modelEvent != "" && modelEvent != id {
++			continue
++		}
+ 		t.Run(id, func(t *testing.T) {
+ 			event, ok := st.GetEvent(id)
+ 			if !ok {
+ 				t.Fatal("event absent")
+ 			}
+-			p, err := svc.prepareReportInputMode(ctx, event, false)
++			p, err := svc.prepareReportInputMode(ctx, event, modelEvent != "")
+ 			if err != nil {
+ 				t.Fatal(err)
+ 			}
+@@ -359,21 +409,94 @@ func TestPhaseOneCoverageFrozenReportReplay(t *testing.T) {
+ 			if p.Evidence.SnapshotVersion != snap.Version || p.Evidence.Watermark != snap.Watermark || p.Evidence.RevisionWatermark != snap.RevisionWatermark {
+ 				t.Fatal("snapshot provenance changed")
+ 			}
++			if os.Getenv("PHASE_ONE_COVERAGE_SUPPLEMENT") != "" && modelEvent == "" {
++				if p.Evaluation.Manifest.LoadedHits != snap.Count || p.Evaluation.Reason != "" {
++					t.Fatal("full fixed membership was not supplied")
++				}
++				if id == "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8" {
++					positive := false
++					negatives := 0
++					for _, u := range p.Evidence.PhaseOne.Result.Units {
++						if u.ID == "C02" && u.Status == "not_observed" {
++							negatives++
++							if u.Score != 0 {
++								t.Fatal("negative scored")
++							}
++						}
++						if u.ID == "C03" && u.Scope.EndpointID == "tcp://144.48.4.129:443" && u.Status == "observed" && u.Fact.Measurements.SampleCount == 66 && u.Score == 10 {
++							positive = true
++						}
++					}
++					if !positive || negatives != 30 {
++						t.Fatal("real C03 positive / C02 negatives changed", positive, negatives)
++					}
++				}
++				if id == "ly-14725b4b-84f0-4233-b6f3-98d6444ce2e6" {
++					negative := false
++					for _, u := range p.Evidence.PhaseOne.Result.Units {
++						if u.ID == "C04" && u.Scope.EndpointID == "tcp://144.48.4.129:80" && u.Status == "not_observed" && u.Fact.Measurements.SampleCount == 168 && u.Score == 0 {
++							negative = true
++						}
++					}
++					if !negative {
++						t.Fatal("real complete HTTP negative changed")
++					}
++				}
++			}
+ 			doc := ReportDocument{EventID: id, LayoutVersion: reportFivePartLayout, Evidence: p.Evidence, Assessment: ReportAssessment{Verdict: "insufficient", ProbabilityReason: "本文件验证确定性 F→C→报告渲染链路；未调用模型，未进行事件性质研判。"}}
++			if p.Evidence.PhaseOne != nil {
++				risk := p.Evidence.PhaseOne.Result
++				doc.Assessment.EvidenceRisk = &risk
++			}
+ 			doc.Markdown = renderFivePartReport(doc)
+ 			if p.Evidence.PhaseOne != nil && !strings.Contains(doc.Markdown, "C04") {
+ 				t.Fatal("C results absent from formal report renderer")
+ 			}
+-			out := filepath.Join(dir, "coverage180-report-"+id+".md")
++			prefix := os.Getenv("PHASE_ONE_COVERAGE_OUTPUT_PREFIX")
++			if prefix == "" {
++				prefix = "coverage180"
++			}
++			out := filepath.Join(dir, prefix+"-report-"+id+".md")
+ 			if err = os.WriteFile(out, []byte(doc.Markdown), 0600); err != nil {
+ 				t.Fatal(err)
+ 			}
+ 			// Exclude packet bodies and semantic payloads from the audit result.
+ 			phase := p.Evidence.PhaseOne
++			protocols := map[string]map[string]int{}
++			if phase != nil {
++				for _, r := range phase.Materials.Records {
++					key := scopeKey(r.Hit.Scope) + r.IOCType + ":" + r.IOCValue
++					if protocols[key] == nil {
++						protocols[key] = map[string]int{}
++					}
++					if r.HTTPCandidate {
++						protocols[key]["http_candidates"]++
++						if r.HTTP == nil {
++							protocols[key]["unknown_or_parse_failed"]++
++						} else if r.HTTP.Truncated || r.RawRequest == "" {
++							protocols[key]["incomplete_requests"]++
++						} else {
++							protocols[key]["complete_requests"]++
++						}
++					}
++					if r.DNS != nil {
++						protocols[key]["dns_questions"]++
++					}
++				}
++			}
+ 			if phase != nil {
+ 				phase.Materials.Records = nil
+ 			}
+ 			row := map[string]any{"event_id": id, "snapshot_version": snap.Version, "watermark": snap.Watermark, "revision_watermark": snap.RevisionWatermark, "declared_hits": snap.Count, "loaded_hits": p.Evaluation.Manifest.LoadedHits, "raw_bytes": p.Evaluation.Manifest.RawBytes, "coverage": p.Evaluation.Manifest.Coverage, "status": p.Evaluation.Status, "reason": p.Evaluation.Reason, "issues": p.Evaluation.Manifest.Issues, "phase_one": phase, "history": p.Evidence.History, "report_path": out, "report_rendered": true, "model_called": false, "production_writes": 0}
++			row["protocol_inputs"] = protocols
++			row["stream_budgets"] = map[string]any{"version": p.Evaluation.Manifest.StreamVersion, "page_bytes": p.Evaluation.Manifest.PageByteBudget, "total_bytes": p.Evaluation.Manifest.SnapshotByteBudget, "feature_bytes": p.Evaluation.Manifest.FeatureByteBudget, "retained_feature_bytes": p.Evaluation.Manifest.RetainedFeatureBytes, "excluded_hits": p.Evaluation.Manifest.PhaseOneExcludedHits}
++			row["semantics"] = p.Semantics
++			row["structured_risk"] = doc.Assessment.EvidenceRisk
++			if modelEvent != "" {
++				row["model_called"] = p.Semantics.Result != nil && p.Semantics.Result.Calls > 0
++				row["model_task_budget"] = 3
++				row["local_memory_cache_only"] = true
++			}
+ 			if os.Getenv("PHASE_ONE_COVERAGE_EXPANDED_DIAGNOSTIC") == "1" {
+ 				opts := DefaultSnapshotEvidenceOptions()
+ 				opts.ReportMaterialMode = true
+@@ -525,7 +648,11 @@ func TestPhaseOneCoverageFrozenReportReplay(t *testing.T) {
+ 	if err != nil {
+ 		t.Fatal(err)
+ 	}
+-	if err = os.WriteFile(filepath.Join(dir, "coverage180-report-replay.json"), raw, 0600); err != nil {
++	prefix := os.Getenv("PHASE_ONE_COVERAGE_OUTPUT_PREFIX")
++	if prefix == "" {
++		prefix = "coverage180"
++	}
++	if err = os.WriteFile(filepath.Join(dir, prefix+"-report-replay.json"), raw, 0600); err != nil {
+ 		t.Fatal(err)
+ 	}
+ }
+diff --git a/vulnscan-backend/traffic/internal/service/phase_one_facts.go b/vulnscan-backend/traffic/internal/service/phase_one_facts.go
+index b69abfb..a8d1efd 100644
+--- a/vulnscan-backend/traffic/internal/service/phase_one_facts.go
++++ b/vulnscan-backend/traffic/internal/service/phase_one_facts.go
+@@ -34,6 +34,17 @@ func phaseOneCurrentFacts(ctx context.Context, snap EvidenceSnapshot, m PhaseOne
+ 		req.Quality.CaptureTruncated = &notTruncated
+ 		input := evidence.Input{Scope: b.Scope}
+ 		http := evidence.HTTPData{Provenance: evidence.Provenance{Verified: true, Complete: true, Version: evidence.PhaseOneVersion}}
++		http.Complete = m.Complete
++		incomplete := m.ScopeIncomplete[key]
++		if m.Expanded {
++			http.Complete = m.CurrentComplete
++			incomplete = m.CurrentIncomplete[key]
++		}
++		for _, reason := range incomplete {
++			if reason != "syn_excluded_from_http_request_timeline" {
++				http.Complete = false
++			}
++		}
+ 		seen := map[string]bool{}
+ 		var start, end time.Time
+ 		for _, r := range m.Records {
+@@ -63,7 +74,7 @@ func phaseOneCurrentFacts(ctx context.Context, snap EvidenceSnapshot, m PhaseOne
+ 			continue
+ 		}
+ 		input.Window = &evidence.AnalysisWindow{Start: start, End: end.Add(time.Nanosecond)}
+-		if len(http.Records) > 0 {
++		if http.RequestCandidates > 0 {
+ 			input.HTTP = &http
+ 		}
+ 		hist := &evidence.HistoryData{Provenance: evidence.Provenance{Verified: true, Complete: h.Status == "available" && !h.Truncated && h.ExcludedCount == 0, Version: h.Version + ":" + digest(h)}, PlatformRecords: true, AsOf: h.End, LookbackStart: h.Start, IOC: b.IOCValue, Endpoint: b.Scope.EndpointID}
+diff --git a/vulnscan-backend/traffic/internal/service/phase_one_materials.go b/vulnscan-backend/traffic/internal/service/phase_one_materials.go
+index 0721e0d..03c5f5e 100644
+--- a/vulnscan-backend/traffic/internal/service/phase_one_materials.go
++++ b/vulnscan-backend/traffic/internal/service/phase_one_materials.go
+@@ -7,6 +7,7 @@ import (
+ 	"encoding/hex"
+ 	"encoding/json"
+ 	"fmt"
++	"net"
+ 	"net/url"
+ 	"sort"
+ 	"strings"
+@@ -39,6 +40,9 @@ type PhaseOneContact struct {
+ 	Snapshot PhaseOneSnapshotSource `json:"snapshot"`
+ }
+ type PhaseOneMaterials struct {
++	CurrentContacts   []PhaseOneContact          `json:"current_contacts,omitempty"`
++	CurrentComplete   bool                       `json:"current_complete"`
++	CurrentIncomplete map[string][]string        `json:"current_scope_incomplete,omitempty"`
+ 	Expanded          bool                       `json:"expanded"`
+ 	Records           []PhaseOneRecord           `json:"records"`
+ 	Bindings          []evidence.PhaseOneBinding `json:"bindings"`
+@@ -46,6 +50,7 @@ type PhaseOneMaterials struct {
+ 	Sources           []PhaseOneSnapshotSource   `json:"sources"`
+ 	Diagnostics       []string                   `json:"diagnostics"`
+ 	Complete          bool                       `json:"complete"`
++	ScopeIncomplete   map[string][]string        `json:"scope_incomplete,omitempty"`
+ 	RawHits           int64                      `json:"raw_hits"`
+ 	DuplicateContacts int                        `json:"duplicate_contacts"`
+ }
+@@ -78,7 +83,7 @@ func collectPhaseOneMaterials(manifest *SnapshotEvidenceManifest, h store.Hit, m
+ 		out.Bindings = append(out.Bindings, b)
+ 		out.Diagnostics = append(out.Diagnostics, h.ID+":"+reason)
+ 		if reason != "ioc_type_value_not_at_wire_field" {
+-			out.Complete = false
++			markPhaseOneScopeIncomplete(out, b.Scope, b.IOCType, b.IOCValue, reason)
+ 		}
+ 	}
+ 	packet := nestedMap(m, "raw_packet")
+@@ -138,6 +143,17 @@ func collectPhaseOneMaterials(manifest *SnapshotEvidenceManifest, h store.Hit, m
+ 		}
+ 	}
+ 	record := PhaseOneRecord{Hit: evidence.Hit{ID: h.ID, OccurredAt: t, Scope: input.Scope}, IOCType: b.IOCType, IOCValue: b.IOCValue}
++	if input.HTTP != nil {
++		for _, id := range input.HTTP.UnknownRequestIDs {
++			if id == h.ID {
++				record.HTTPCandidate = true
++			}
++		}
++	}
++	firstLine, _, _ := bytes.Cut(payload, []byte("\r\n"))
++	if bytes.Contains(firstLine, []byte(" HTTP/1.")) {
++		record.HTTPCandidate = true
++	}
+ 	for _, r := range func() []evidence.HTTPRecord {
+ 		if input.HTTP != nil {
+ 			return input.HTTP.Records
+@@ -261,7 +277,12 @@ func phaseOneSNI(b []byte) string {
+ // The manifest is independent of the current snapshot. Each source freezes its
+ // own watermarks. Packets/ACKs and repeated revisions never become contacts.
+ func (s Services) phaseOneTimeline(ctx context.Context, snap EvidenceSnapshot, current PhaseOneMaterials, h ReportHistory, assets []domain.Asset) (PhaseOneMaterials, error) {
++	current = dedupPhaseOneContacts(current)
+ 	out := current
++	out.CurrentContacts = append([]PhaseOneContact(nil), current.Contacts...)
++	out.CurrentComplete = current.Complete
++	out.CurrentIncomplete = clonePhaseOneIncomplete(current.ScopeIncomplete)
++	out.ScopeIncomplete = clonePhaseOneIncomplete(current.ScopeIncomplete)
+ 	out.Bindings = append([]evidence.PhaseOneBinding(nil), current.Bindings...)
+ 	out.Contacts = append([]PhaseOneContact(nil), current.Contacts...)
+ 	out.Sources = append([]PhaseOneSnapshotSource(nil), current.Sources...)
+@@ -301,7 +322,8 @@ func (s Services) phaseOneTimeline(ctx context.Context, snap EvidenceSnapshot, c
+ 		return dedupPhaseOneContacts(out), nil
+ 	}
+ 	out.Complete = out.Complete && !h.Truncated && h.ExcludedCount == 0 && h.Status == "available"
+-	maxSnapshots, maxHits, maxBytes := 100, int64(20000), int64(16<<20)
++	maxSnapshots, maxHits, maxBytes := 100, int64(20000), snapshotTotalBytes
++	featureBytes := int64(0)
+ 	loaded, rawBytes := int64(0), int64(0)
+ 	for index, row := range h.Rows {
+ 		if ctx.Err() != nil {
+@@ -327,7 +349,7 @@ func (s Services) phaseOneTimeline(ctx context.Context, snap EvidenceSnapshot, c
+ 		q := store.HitQuery{Sources: hs.Sources, Watermark: hs.Watermark, Limit: 250}
+ 		seenHits := map[string]bool{}
+ 		for {
+-			page, readErr := snapshotHitPage(ctx, s.Store, q, hs.RevisionWatermark)
++			page, readErr := snapshotBoundedPage(ctx, s.Store, q, hs.RevisionWatermark)
+ 			if readErr != nil {
+ 				return out, readErr
+ 			}
+@@ -363,7 +385,11 @@ func (s Services) phaseOneTimeline(ctx context.Context, snap EvidenceSnapshot, c
+ 				}
+ 				scope, remote, port, ok := snapshotScope(m, assets)
+ 				if !ok {
+-					out.Complete = false
++					if !phaseOneUnrelatedFrame(m, assets) {
++						out.Complete = false
++					} else {
++						out.Diagnostics = append(out.Diagnostics, hit.ID+":verified_frame_outside_eligible_scopes")
++					}
+ 					continue
+ 				}
+ 				allowed := false
+@@ -383,6 +409,19 @@ func (s Services) phaseOneTimeline(ctx context.Context, snap EvidenceSnapshot, c
+ 				enrichSnapshotProtocols(&input, hit, m, &temp)
+ 				collectPhaseOneMaterials(&temp, hit, m, input, assets, hs)
+ 				if temp.PhaseOne != nil {
++					featureBytes += snapshotFeatureCharge(temp.PhaseOne.Contacts, temp.PhaseOne.Diagnostics)
++					if featureBytes > snapshotFeatureBytes {
++						out.Complete = false
++						out.Diagnostics = append(out.Diagnostics, "timeline_feature_budget_exceeded")
++						out.Sources = append(out.Sources, source)
++						return dedupPhaseOneContacts(out), nil
++					}
++					for key, reasons := range temp.PhaseOne.ScopeIncomplete {
++						if out.ScopeIncomplete == nil {
++							out.ScopeIncomplete = map[string][]string{}
++						}
++						out.ScopeIncomplete[key] = append(out.ScopeIncomplete[key], reasons...)
++					}
+ 					out.Contacts = append(out.Contacts, temp.PhaseOne.Contacts...)
+ 					out.Diagnostics = append(out.Diagnostics, temp.PhaseOne.Diagnostics...)
+ 				}
+@@ -401,6 +440,7 @@ func (s Services) phaseOneTimeline(ctx context.Context, snap EvidenceSnapshot, c
+ 	return dedupPhaseOneContacts(out), nil
+ }
+ func dedupPhaseOneContacts(m PhaseOneMaterials) PhaseOneMaterials {
++	m.ScopeIncomplete = clonePhaseOneIncomplete(m.ScopeIncomplete)
+ 	// One observation basis per asset/endpoint/IOC: a complete application
+ 	// request supersedes SYN observations, which may describe that same contact.
+ 	// Missing requests can reduce coverage; they must never inflate frequency.
+@@ -421,7 +461,7 @@ func dedupPhaseOneContacts(m PhaseOneMaterials) PhaseOneMaterials {
+ 	kept := []PhaseOneContact{}
+ 	for _, c := range m.Contacts {
+ 		if c.Kind == "tcp_initiation" && requests[scopeKey(c.Scope)+":"+c.IOCType+":"+c.IOCValue] {
+-			m.Complete = false
++			markPhaseOneScopeIncomplete(&m, c.Scope, c.IOCType, c.IOCValue, "syn_excluded_from_http_request_timeline")
+ 			m.Diagnostics = append(m.Diagnostics, c.HitID+":syn_excluded_from_http_request_timeline")
+ 			continue
+ 		}
+@@ -436,3 +476,59 @@ func dedupPhaseOneContacts(m PhaseOneMaterials) PhaseOneMaterials {
+ 	m.Contacts = kept
+ 	return m
+ }
++
++func markPhaseOneScopeIncomplete(m *PhaseOneMaterials, s evidence.Scope, typ, value, reason string) {
++	if m.ScopeIncomplete == nil {
++		m.ScopeIncomplete = map[string][]string{}
++	}
++	k := scopeKey(s) + typ + ":" + value
++	m.ScopeIncomplete[k] = append(m.ScopeIncomplete[k], reason)
++}
++
++func clonePhaseOneIncomplete(in map[string][]string) map[string][]string {
++	out := map[string][]string{}
++	for k, v := range in {
++		out[k] = append([]string(nil), v...)
++	}
++	return out
++}
++
++// Exclude only a complete, wire-verified tuple that cannot belong to any
++// registered eligible endpoint. Unknown/missing frames remain coverage gaps.
++func phaseOneUnrelatedFrame(m map[string]any, assets []domain.Asset) bool {
++	if asString(nestedMap(m, "raw_packet")["packet_hex"]) == "" {
++		return false
++	}
++	reportVerifyDatagram(m)
++	packet := nestedMap(m, "raw_packet")
++	if truncated, known := packet["capture_truncated"].(bool); !known || truncated {
++		return false
++	}
++	// ICMP has no application transaction or TCP/UDP endpoint. Verify its
++	// actual IP header and complete datagram before excluding it, rather than
++	// trusting the saved protocol name or zero-port metadata.
++	if strings.EqualFold(asString(m["protocol"]), "icmp") && packet["report_quality_derivation"] != nil {
++		raw, err := hex.DecodeString(asString(packet["packet_hex"]))
++		if err != nil {
++			return false
++		}
++		frame := gopacket.NewPacket(raw, layers.LayerTypeEthernet, gopacket.Default)
++		if layer := frame.Layer(layers.LayerTypeIPv4); layer != nil && frame.ErrorLayer() == nil && frame.Layer(layers.LayerTypeICMPv4) != nil {
++			ip := layer.(*layers.IPv4)
++			return ip.SrcIP.Equal(net.ParseIP(asString(m["src_ip"]))) && ip.DstIP.Equal(net.ParseIP(asString(m["dst_ip"])))
++		}
++	}
++	if _, problem := snapshotFramePayload(packet, m, &evidence.Input{}); problem != "" {
++		return false
++	}
++	_, src := registeredSnapshotAsset(assets, asString(m["src_ip"]))
++	_, dst := registeredSnapshotAsset(assets, asString(m["dst_ip"]))
++	if !src && !dst {
++		return true
++	}
++	sp, sok := strictUint(m["src_port"])
++	dp, dok := strictUint(m["dst_port"])
++	// Zero-port tuples are outside snapshotScope's supported endpoint domain;
++	// they cannot alias any accepted positive-port scope.
++	return sok && dok && (sp == 0 || dp == 0)
++}
+diff --git a/vulnscan-backend/traffic/internal/service/phase_one_test.go b/vulnscan-backend/traffic/internal/service/phase_one_test.go
+index 0c38c3b..04d00e6 100644
+--- a/vulnscan-backend/traffic/internal/service/phase_one_test.go
++++ b/vulnscan-backend/traffic/internal/service/phase_one_test.go
+@@ -277,7 +277,7 @@ func TestPhaseOneHTTPQueryAndContactBasis(t *testing.T) {
+ 	if phaseOneUnit(t, p, "C06").Status != "observed" {
+ 		t.Fatal("query payload did not reach S09", p.Semantics)
+ 	}
+-	if len(p.Evidence.PhaseOne.Materials.Contacts) != 1 || p.Evidence.PhaseOne.Materials.Contacts[0].Kind != "complete_http_request" || p.Evidence.PhaseOne.Materials.Complete {
++	if len(p.Evidence.PhaseOne.Materials.Contacts) != 1 || p.Evidence.PhaseOne.Materials.Contacts[0].Kind != "complete_http_request" || len(p.Evidence.PhaseOne.Materials.ScopeIncomplete) == 0 {
+ 		t.Fatal("SYN/request inflated contacts or coverage")
+ 	}
+ }
+diff --git a/vulnscan-backend/traffic/internal/service/report_assessment.go b/vulnscan-backend/traffic/internal/service/report_assessment.go
+index 7ea622b..8382359 100644
+--- a/vulnscan-backend/traffic/internal/service/report_assessment.go
++++ b/vulnscan-backend/traffic/internal/service/report_assessment.go
+@@ -5,6 +5,7 @@ import (
+ 	"fmt"
+ 	"io"
+ 	"strings"
++	"vulnscan-backend/evidence"
+ 
+ 	"vulnscan-backend/traffic/internal/domain"
+ )
+@@ -29,19 +30,20 @@ type ReportRisk struct {
+ 	Impact      string   `json:"impact"`
+ }
+ type ReportAssessment struct {
+-	Target            string                 `json:"target"`
+-	ThreatType        string                 `json:"threat_type"`
+-	Verdict           string                 `json:"verdict"`
+-	Stage             string                 `json:"stage"`
+-	Probability       *int                   `json:"probability"`
+-	ProbabilityReason string                 `json:"probability_reason"`
+-	Supporting        []ReportReason         `json:"supporting"`
+-	Opposing          []ReportReason         `json:"opposing"`
+-	Alternatives      []ReportReason         `json:"alternatives"`
+-	Interpretations   []ReportInterpretation `json:"interpretations"`
+-	Gaps              []string               `json:"gaps"`
+-	Actions           []ReportAction         `json:"actions"`
+-	Risks             []ReportRisk           `json:"risks,omitempty"`
++	EvidenceRisk      *evidence.PhaseOneResult `json:"evidence_risk,omitempty"`
++	Target            string                   `json:"target"`
++	ThreatType        string                   `json:"threat_type"`
++	Verdict           string                   `json:"verdict"`
++	Stage             string                   `json:"stage"`
++	Probability       *int                     `json:"probability"`
++	ProbabilityReason string                   `json:"probability_reason"`
++	Supporting        []ReportReason           `json:"supporting"`
++	Opposing          []ReportReason           `json:"opposing"`
++	Alternatives      []ReportReason           `json:"alternatives"`
++	Interpretations   []ReportInterpretation   `json:"interpretations"`
++	Gaps              []string                 `json:"gaps"`
++	Actions           []ReportAction           `json:"actions"`
++	Risks             []ReportRisk             `json:"risks,omitempty"`
+ }
+ 
+ // Dedicated report bounds. Legacy dialogue/analysis budgets stay unchanged.
+@@ -114,6 +116,13 @@ func decodeReportAssessment(raw string, b ReportEvidenceBundle) (ReportAssessmen
+ 	if *a.Probability < 0 || *a.Probability > 100 {
+ 		return a, fmt.Errorf("report_probability_out_of_range")
+ 	}
++	// This field is owned by the backend. Never accept a model's score or
++	// duplicate relations, and never interpret policy points as probability.
++	a.EvidenceRisk = nil
++	if b.PhaseOne != nil {
++		risk := b.PhaseOne.Result
++		a.EvidenceRisk = &risk
++	}
+ 	return a, nil
+ }
+ func scanReportJSON(d *json.Decoder, depth int) error {
+diff --git a/vulnscan-backend/traffic/internal/store/snapshot_page.go b/vulnscan-backend/traffic/internal/store/snapshot_page.go
+new file mode 100644
+index 0000000..01c5bf4
+--- /dev/null
++++ b/vulnscan-backend/traffic/internal/store/snapshot_page.go
+@@ -0,0 +1,116 @@
++package store
++
++import (
++	"context"
++	"encoding/json"
++	"fmt"
++	"strings"
++)
++
++// SnapshotPageReader bounds base+effective revision bytes BEFORE reading JSON.
++// Implementations preserve immutable membership and never skip an oversized row.
++type SnapshotPageReader interface {
++	SnapshotPage(context.Context, HitQuery, int64, int64, int64) ([]Hit, error)
++}
++
++func (s *MySQLStore) SnapshotPage(ctx context.Context, q HitQuery, rw, pageBytes, rowBytes int64) ([]Hit, error) {
++	if len(q.Sources) == 0 {
++		return []Hit{}, nil
++	}
++	if pageBytes < 1 || rowBytes < 1 {
++		return nil, fmt.Errorf("invalid_snapshot_page_budget")
++	}
++	if q.Limit < 1 || q.Limit > 500 {
++		q.Limit = 200
++	}
++	where := "h.origin_event_id IN (" + strings.TrimRight(strings.Repeat("?,", len(q.Sources)), ",") + ") AND h.sequence<=?"
++	args := []any{rw}
++	for _, id := range q.Sources {
++		args = append(args, id)
++	}
++	args = append(args, q.Watermark)
++	if !q.From.IsZero() {
++		where += " AND h.occurred_at>=?"
++		args = append(args, q.From)
++	}
++	if !q.To.IsZero() {
++		where += " AND h.occurred_at<?"
++		args = append(args, q.To)
++	}
++	if !q.AfterTime.IsZero() {
++		where += " AND (h.occurred_at>? OR (h.occurred_at=? AND h.hit_id>?))"
++		args = append(args, q.AfterTime, q.AfterTime, q.AfterID)
++	}
++	if q.ID != "" {
++		where += " AND h.hit_id=?"
++		args = append(args, q.ID)
++	}
++	args = append(args, q.Limit)
++	query := `SELECT h.hit_id,OCTET_LENGTH(h.raw_json),COALESCE((SELECT OCTET_LENGTH(r.raw_json) FROM traffic_hit_revisions r WHERE r.hit_id=h.hit_id AND r.sequence<=? ORDER BY r.source_revision DESC LIMIT 1),0) FROM traffic_event_hits h WHERE ` + where + ` ORDER BY h.occurred_at,h.hit_id LIMIT ?`
++	rows, err := s.db.QueryContext(ctx, query, args...)
++	if err != nil {
++		return nil, err
++	}
++	ids := []string{}
++	var total int64
++	for rows.Next() {
++		var id string
++		var base, rev int64
++		if err = rows.Scan(&id, &base, &rev); err != nil {
++			rows.Close()
++			return nil, err
++		}
++		cost := base + rev
++		if cost > rowBytes || cost > pageBytes {
++			if len(ids) == 0 {
++				rows.Close()
++				return nil, fmt.Errorf("snapshot_row_budget_exceeded:%s", id)
++			}
++			break
++		}
++		if total+cost > pageBytes {
++			break
++		}
++		total += cost
++		ids = append(ids, id)
++	}
++	err = rows.Err()
++	rows.Close()
++	if err != nil {
++		return nil, err
++	}
++	if len(ids) == 0 {
++		return []Hit{}, nil
++	}
++	q.Limit = len(ids)
++	page, err := s.HitPage(ctx, q)
++	if err != nil {
++		return nil, err
++	}
++	if len(page) != len(ids) {
++		return nil, fmt.Errorf("snapshot_page_membership_changed")
++	}
++	var revisions map[string]json.RawMessage
++	if rw > 0 {
++		revisions, err = s.HitRevisions(ctx, ids, rw)
++		if err != nil {
++			return nil, err
++		}
++	}
++	total = 0
++	for i := range page {
++		if page[i].ID != ids[i] {
++			return nil, fmt.Errorf("snapshot_page_membership_changed")
++		}
++		cost := int64(len(page[i].Raw))
++		if raw, ok := revisions[page[i].ID]; ok {
++			cost += int64(len(raw))
++			page[i].Raw = raw
++		}
++		total += cost
++		if cost > rowBytes || total > pageBytes {
++			return nil, fmt.Errorf("snapshot_page_byte_binding_changed")
++		}
++	}
++	return page, nil
++}
+diff --git a/vulnscan-backend/traffic/internal/store/snapshot_page_test.go b/vulnscan-backend/traffic/internal/store/snapshot_page_test.go
+new file mode 100644
+index 0000000..f4e97c2
+--- /dev/null
++++ b/vulnscan-backend/traffic/internal/store/snapshot_page_test.go
+@@ -0,0 +1,72 @@
++package store
++
++import (
++	"context"
++	"database/sql"
++	"database/sql/driver"
++	"strings"
++	"testing"
++	"time"
++)
++
++type snapshotQueryFixture struct {
++	queryFixture
++	oversized bool
++	args      [][]driver.NamedValue
++}
++type snapshotRows struct {
++	fixtureRows
++	columns []string
++}
++
++func (r *snapshotRows) Columns() []string { return r.columns }
++func (f *snapshotQueryFixture) QueryContext(_ context.Context, q string, args []driver.NamedValue) (driver.Rows, error) {
++	f.queries = append(f.queries, q)
++	f.args = append(f.args, args)
++	if strings.Contains(q, "OCTET_LENGTH") {
++		size := int64(10)
++		if f.oversized {
++			size = 1000
++		}
++		return &snapshotRows{fixtureRows: fixtureRows{rows: [][]driver.Value{{"a", size, int64(10)}, {"b", int64(10), int64(10)}}}, columns: []string{"id", "base", "revision"}}, nil
++	}
++	if strings.Contains(q, "SELECT r.hit_id") {
++		return &snapshotRows{fixtureRows: fixtureRows{rows: [][]driver.Value{{"a", []byte(`{"rev":2}`)}}}, columns: []string{"id", "raw"}}, nil
++	}
++	at := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
++	return &snapshotRows{fixtureRows: fixtureRows{rows: [][]driver.Value{{int64(3), "a", "dedup", "identity", "agg", "event", at, at, []byte(`{"base":1}`)}}}, columns: strings.Split(hitColumns, ",")}, nil
++}
++
++type snapshotConnector struct{ f *snapshotQueryFixture }
++
++func (c snapshotConnector) Connect(context.Context) (driver.Conn, error) { return c.f, nil }
++func (c snapshotConnector) Driver() driver.Driver                        { return fixtureDriver{&c.f.queryFixture} }
++
++func TestMySQLSnapshotBytePagePreservesRevisionAndPrefix(t *testing.T) {
++	f := &snapshotQueryFixture{}
++	db := sql.OpenDB(snapshotConnector{f})
++	defer db.Close()
++	q := HitQuery{Sources: []string{"event"}, Watermark: 7, Limit: 500, AfterTime: time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC), AfterID: "previous"}
++	page, err := NewMySQLStore(db).SnapshotPage(context.Background(), q, 17, 25, 25)
++	if err != nil || len(page) != 1 || string(page[0].Raw) != `{"rev":2}` {
++		t.Fatal(page, err)
++	}
++	if len(f.queries) != 3 || f.args[0][0].Value != int64(17) || f.args[1][len(f.args[1])-1].Value != int64(1) {
++		t.Fatal("raw read was not bounded to prefix", f.args)
++	}
++	for _, part := range []string{"OCTET_LENGTH", "source_revision DESC", "h.sequence<=?", "h.occurred_at>?", "h.hit_id>?"} {
++		if !strings.Contains(f.queries[0], part) {
++			t.Fatal("missing frozen query constraint", part)
++		}
++	}
++}
++
++func TestMySQLSnapshotOversizedRowIsNeverSkipped(t *testing.T) {
++	f := &snapshotQueryFixture{oversized: true}
++	db := sql.OpenDB(snapshotConnector{f})
++	defer db.Close()
++	_, err := NewMySQLStore(db).SnapshotPage(context.Background(), HitQuery{Sources: []string{"event"}, Watermark: 7, Limit: 500}, 17, 25, 25)
++	if err == nil || !strings.Contains(err.Error(), "snapshot_row_budget_exceeded:a") || len(f.queries) != 1 {
++		t.Fatal("oversized raw was read or silently skipped", err, f.queries)
++	}
++}
+diff --git a/vulnscan-backend/traffic/internal/service/evidence_stream.go b/vulnscan-backend/traffic/internal/service/evidence_stream.go
+new file mode 100644
+index 0000000..e463691
+--- /dev/null
++++ b/vulnscan-backend/traffic/internal/service/evidence_stream.go
+@@ -0,0 +1,110 @@
++package service
++
++import (
++	"context"
++	"fmt"
++	"reflect"
++	"vulnscan-backend/evidence"
++	"vulnscan-backend/traffic/internal/store"
++)
++
++const snapshotStreamVersion = "snapshot-stream-1"
++const snapshotPageBytes = int64(2 << 20)
++const snapshotRowBytes = int64(2 << 20)
++const snapshotTotalBytes = int64(512 << 20)
++const snapshotFeatureBytes = int64(32 << 20)
++
++func snapshotBoundedPage(ctx context.Context, st store.Store, q store.HitQuery, rw int64) ([]store.Hit, error) {
++	if reader, ok := st.(store.SnapshotPageReader); ok {
++		return reader.SnapshotPage(ctx, q, rw, snapshotPageBytes, snapshotRowBytes)
++	}
++	// Stores without a byte-aware reader may only supply one row per call.
++	q.Limit = 1
++	page, err := snapshotHitPage(ctx, st, q, rw)
++	if err != nil {
++		return nil, err
++	}
++	for _, h := range page {
++		if int64(len(h.Raw)) > snapshotRowBytes {
++			return nil, fmt.Errorf("snapshot_row_budget_exceeded:%s", h.ID)
++		}
++	}
++	return page, nil
++}
++
++// Charge newly retained feature values, never the discarded raw JSON. Charging
++// aliased values twice is conservative and keeps the retained budget explicit.
++func snapshotFeatureCharge(values ...any) int64 {
++	var total int64
++	for _, v := range values {
++		total += retainedFeatureSize(reflect.ValueOf(v))
++	}
++	return total
++}
++
++// Charge struct/slice storage and referenced strings, including duplicate
++// references conservatively. JSON field names are not retained allocations.
++// Page/raw decode and bounded semantic reservoirs have separate budgets.
++func retainedFeatureSize(v reflect.Value) int64 {
++	if !v.IsValid() {
++		return 0
++	}
++	n := int64(v.Type().Size())
++	switch v.Kind() {
++	case reflect.String:
++		return n + int64(v.Len())
++	case reflect.Interface, reflect.Pointer:
++		if !v.IsNil() {
++			n += retainedFeatureSize(v.Elem())
++		}
++	case reflect.Slice, reflect.Array:
++		for i := 0; i < v.Len(); i++ {
++			n += retainedFeatureSize(v.Index(i))
++		}
++	case reflect.Struct:
++		for i := 0; i < v.NumField(); i++ {
++			n += retainedFeatureSize(v.Field(i)) - int64(v.Field(i).Type().Size())
++		}
++	case reflect.Map:
++		it := v.MapRange()
++		for it.Next() {
++			n += 64 + retainedFeatureSize(it.Key()) + retainedFeatureSize(it.Value())
++		}
++	}
++	return n
++}
++
++type featureMark struct{ http, dns, records, bindings, contacts, semantic int }
++
++func snapshotFeatureMark(in *evidence.Input, p *PhaseOneMaterials, sem int) featureMark {
++	m := featureMark{semantic: sem}
++	if in.HTTP != nil {
++		m.http = len(in.HTTP.Records)
++	}
++	if in.DNS != nil {
++		m.dns = len(in.DNS.Records)
++	}
++	if p != nil {
++		m.records = len(p.Records)
++		m.bindings = len(p.Bindings)
++		m.contacts = len(p.Contacts)
++	}
++	return m
++}
++func snapshotFeatureDelta(in *evidence.Input, out *SnapshotEvidenceInput, m featureMark, hit evidence.Hit) int64 {
++	n := snapshotFeatureCharge(hit, hit) // request and scope timeline metadata
++	// Enrichment may remove the current metadata projection; prior records remain.
++	if in.HTTP != nil && len(in.HTTP.Records) > m.http {
++		n += snapshotFeatureCharge(in.HTTP.Records[m.http:])
++	}
++	if in.DNS != nil && len(in.DNS.Records) > m.dns {
++		n += snapshotFeatureCharge(in.DNS.Records[m.dns:])
++	}
++	if p := out.Manifest.PhaseOne; p != nil {
++		n += snapshotFeatureCharge(p.Records[m.records:], p.Bindings[m.bindings:], p.Contacts[m.contacts:])
++	}
++	if len(out.SemanticObservations) > m.semantic {
++		n += snapshotFeatureCharge(out.SemanticObservations[m.semantic:])
++	}
++	return n
++}
+diff --git a/vulnscan-backend/traffic/internal/service/evidence_stream_test.go b/vulnscan-backend/traffic/internal/service/evidence_stream_test.go
+new file mode 100644
+index 0000000..4b46249
+--- /dev/null
++++ b/vulnscan-backend/traffic/internal/service/evidence_stream_test.go
+@@ -0,0 +1,335 @@
++package service
++
++import (
++	"context"
++	"encoding/hex"
++	"encoding/json"
++	"fmt"
++	"golang.org/x/net/dns/dnsmessage"
++	"os"
++	"path/filepath"
++	"strings"
++	"testing"
++	"time"
++	"vulnscan-backend/evidence"
++)
++
++func TestPhaseOneStreamBudgetsAreIndependent(t *testing.T) {
++	s := phaseOneFixture(t)
++	at := time.Date(2026, 10, 12, 4, 0, 0, 0, time.UTC)
++	messages := []map[string]any{}
++	for i := 0; i < 20; i++ {
++		m := phaseOneWire(t, at.Add(time.Duration(i)*time.Minute), uint32(i+1), nil, false, true)
++		m["unused_projection"] = strings.Repeat("x", 900000)
++		messages = append(messages, m)
++	}
++	snap := phaseOneInstallSnapshot(t, s, "large-controlled", 1, messages)
++	assets, _ := s.Store.ListAssetsContext(context.Background())
++	opts := DefaultSnapshotEvidenceOptions()
++	opts.ReportMaterialMode = true
++	opts.Facts = evidence.PhaseOneFacts()
++	legacy, err := s.SnapshotEvidenceInput(context.Background(), snap, assets, opts)
++	if err != nil || legacy.Reason != "snapshot_input_budget_exceeded" {
++		t.Fatal("fixture did not exceed legacy budget", legacy.Reason, err)
++	}
++	opts.StreamFeatures = true
++	opts.MaxSnapshotBytes = snapshotTotalBytes
++	opts.MaxFeatureBytes = snapshotFeatureBytes
++	full, err := s.SnapshotEvidenceInput(context.Background(), snap, assets, opts)
++	if err != nil || full.Reason != "" || full.Manifest.LoadedHits != 20 || full.Manifest.Coverage != "complete" {
++		t.Fatal("stream failed", full.Reason, full.Manifest.LoadedHits, err)
++	}
++	if full.Manifest.RetainedFeatureBytes >= 1<<20 || len(full.Manifest.PhaseOne.Contacts) != 20 {
++		t.Fatal("retained raw projections or lost contacts")
++	}
++	opts.MaxSnapshotBytes = 1 << 20
++	partial, err := s.SnapshotEvidenceInput(context.Background(), snap, assets, opts)
++	if err != nil || partial.Reason != "snapshot_input_budget_exceeded" || partial.Manifest.Coverage == "complete" {
++		t.Fatal("total budget became complete", partial.Reason, err)
++	}
++	opts.MaxSnapshotBytes = snapshotTotalBytes
++	opts.MaxFeatureBytes = 100
++	partial, err = s.SnapshotEvidenceInput(context.Background(), snap, assets, opts)
++	if err != nil || partial.Reason != "snapshot_feature_budget_exceeded" || partial.Manifest.PhaseOne.Complete {
++		t.Fatal("feature budget became complete", partial.Reason, err)
++	}
++}
++
++// Replay the actual K2.7 responses through the final adapter/validation code.
++// No model/network call; the saved transcript remains an independently
++// inspectable artifact and controlled wire inputs are never called real events.
++func TestPhaseOneSavedModelResponseReplay(t *testing.T) {
++	path := filepath.Join("..", "..", "..", "..", ".local", "round2-model.json")
++	raw, err := os.ReadFile(path)
++	if os.IsNotExist(err) {
++		t.Skip("optional saved isolated K2.7 transcript")
++	}
++	if err != nil {
++		t.Fatal(err)
++	}
++	var saved struct {
++		Calls []struct {
++			Response string `json:"response"`
++		} `json:"calls"`
++	}
++	if err = json.Unmarshal(raw, &saved); err != nil || len(saved.Calls) != 2 {
++		t.Fatal("invalid model transcript", err)
++	}
++	at := time.Date(2026, 10, 12, 4, 0, 0, 0, time.UTC)
++	for index, protocol := range []string{"http", "dns"} {
++		s := phaseOneFixture(t)
++		payload := phaseOneHTTP("cmd=636174202f6574632f706173737764")
++		if protocol == "dns" {
++			name, _ := dnsmessage.NewName("636174202f6574632f706173737764.agent.test.")
++			m := dnsmessage.Message{Header: dnsmessage.Header{ID: 17}, Questions: []dnsmessage.Question{{Name: name, Type: dnsmessage.TypeTXT, Class: dnsmessage.ClassINET}}}
++			payload, _ = m.Pack()
++		}
++		seq := uint32(100)
++		if protocol == "dns" {
++			seq = 10
++		}
++		snap := phaseOneInstallSnapshot(t, s, "model-isolated-"+protocol, 1, []map[string]any{phaseOneWire(t, at, seq, payload, protocol == "dns", false)})
++		s.SemanticModel = reportSemanticModelFunc(func(context.Context, evidence.SemanticCall) (string, error) { return saved.Calls[index].Response, nil })
++		p := phaseOneRun(t, s, snap, true)
++		ids := []string{"C05", "C06"}
++		if protocol == "dns" {
++			ids = []string{"C07"}
++		}
++		for _, id := range ids {
++			if u := phaseOneUnit(t, p, id); u.Status != "observed" {
++				t.Fatal("saved actual model output rejected by final code", id, u)
++			}
++		}
++	}
++}
++
++func TestPhaseOneSemanticNegativeMissingAndIncomplete(t *testing.T) {
++	for _, protocol := range []string{"http", "dns"} {
++		for _, branch := range []string{"contradict", "neutral", "model_error", "incomplete"} {
++			t.Run(protocol+"/"+branch, func(t *testing.T) {
++				s := phaseOneFixture(t)
++				at := time.Date(2026, 10, 12, 4, 0, 0, 0, time.UTC)
++				payload := phaseOneHTTP("cmd=636174202f6574632f706173737764")
++				if protocol == "dns" {
++					name, _ := dnsmessage.NewName("636174202f6574632f706173737764.agent.test.")
++					message := dnsmessage.Message{Header: dnsmessage.Header{ID: 17}, Questions: []dnsmessage.Question{{Name: name, Type: dnsmessage.TypeTXT, Class: dnsmessage.ClassINET}}}
++					payload, _ = message.Pack()
++				}
++				m := phaseOneWire(t, at, 10, payload, protocol == "dns", false)
++				if branch == "incomplete" {
++					nestedMap(m, "raw_packet")["capture_truncated"] = true
++				}
++				snap := phaseOneInstallSnapshot(t, s, protocol+branch, 1, []map[string]any{m})
++				s.SemanticModel = reportSemanticModelFunc(func(_ context.Context, call evidence.SemanticCall) (string, error) {
++					if branch == "model_error" {
++						return "", fmt.Errorf("controlled offline transport failure")
++					}
++					raw := acceptedSemanticResponse(t, call)
++					if branch == "contradict" {
++						raw = strings.ReplaceAll(raw, `"judgement":"support"`, `"judgement":"contradict"`)
++					}
++					if branch == "neutral" {
++						raw = strings.ReplaceAll(raw, `"judgement":"support"`, `"judgement":"neutral"`)
++						raw = strings.ReplaceAll(raw, `"strength":"weak"`, `"strength":"none"`)
++					}
++					return raw, nil
++				})
++				p := phaseOneRun(t, s, snap, true)
++				ids := []string{"C05", "C06"}
++				if protocol == "dns" {
++					ids = []string{"C07"}
++				}
++				for _, id := range ids {
++					u := phaseOneUnit(t, p, id)
++					want := "missing"
++					if branch == "contradict" {
++						want = "not_observed"
++					}
++					if u.Status != want || u.Score != 0 {
++						t.Fatal(id, branch, u)
++					}
++				}
++			})
++		}
++	}
++}
++
++func TestPhaseOneCompleteTemporalAndHTTPNegatives(t *testing.T) {
++	s := phaseOneFixture(t)
++	base := time.Date(2026, 10, 12, 0, 0, 0, 0, time.UTC)
++	for day := 0; day < 3; day++ {
++		messages := []map[string]any{}
++		for i := 0; i < 8; i++ {
++			messages = append(messages, phaseOneWire(t, base.Add(time.Duration(day)*24*time.Hour+time.Duration(i*i)*20*time.Minute), uint32(day*100+i), nil, false, true))
++		}
++		snap := phaseOneInstallSnapshot(t, s, fmt.Sprintf("negative-day-%d", day), int64(day+1), messages)
++		if day == 2 {
++			p := phaseOneRun(t, s, snap, false)
++			for _, id := range []string{"C02", "C03"} {
++				u := phaseOneUnit(t, p, id)
++				if u.Status != "not_observed" || u.Score != 0 {
++					t.Fatal(id, u)
++				}
++			}
++		}
++	}
++	s = phaseOneFixture(t)
++	messages := []map[string]any{}
++	for i := 0; i < 8; i++ {
++		messages = append(messages, phaseOneWire(t, base.Add(time.Duration(i*i)*time.Minute), uint32(i+1), phaseOneHTTP("cmd=id"), false, false))
++	}
++	snap := phaseOneInstallSnapshot(t, s, "http-negative-controlled", 1, messages)
++	p := phaseOneRun(t, s, snap, false)
++	u := phaseOneUnit(t, p, "C04")
++	if u.Status != "not_observed" || u.Score != 0 || u.Fact.Measurements.SampleCount != 8 || len(u.Fact.Measurements.HTTPGroups) != 1 {
++		t.Fatal(u)
++	}
++}
++
++func TestPhaseOneUnresolvedFrameExclusionRequiresWireProof(t *testing.T) {
++	s := phaseOneFixture(t)
++	assets, _ := s.Store.ListAssetsContext(context.Background())
++	at := time.Now().UTC()
++	m := phaseOneWire(t, at, 1, nil, false, true)
++	if phaseOneUnrelatedFrame(m, assets) {
++		t.Fatal("eligible frame excluded")
++	}
++	// Missing/mismatching raw bytes cannot prove an unrelated scope.
++	m["src_ip"] = "198.51.100.1"
++	m["dst_ip"] = "198.51.100.2"
++	if phaseOneUnrelatedFrame(m, assets) {
++		t.Fatal("metadata alone excluded unresolved frame")
++	}
++	raw, _ := hex.DecodeString("a4dcbeef19b08c2a8e81613808004500001c06a64000400186abb4686476903004810800926c65930000")
++	icmp := map[string]any{"protocol": "icmp", "src_ip": "180.104.100.118", "dst_ip": "144.48.4.129", "src_port": 0, "dst_port": 0, "raw_packet": map[string]any{"packet_hex": hex.EncodeToString(raw)}}
++	if !phaseOneUnrelatedFrame(icmp, assets) {
++		t.Fatal("verified ICMP poisoned TCP/UDP coverage")
++	}
++	icmp["src_ip"] = "198.51.100.1"
++	if phaseOneUnrelatedFrame(icmp, assets) {
++		t.Fatal("unverified ICMP tuple excluded")
++	}
++}
++
++func TestPhaseOneSemanticOmissionCannotRefute(t *testing.T) {
++	s := phaseOneFixture(t)
++	at := time.Date(2026, 10, 12, 4, 0, 0, 0, time.UTC)
++	snap := phaseOneInstallSnapshot(t, s, "semantic-budget", 1, []map[string]any{phaseOneWire(t, at, 1, phaseOneHTTP("cmd=id"), false, false), phaseOneWire(t, at.Add(time.Minute), 2, phaseOneHTTP("cmd=ls"), false, false)})
++	opts := DefaultReportSemanticOptions()
++	opts.Config.MaxTasks = 1
++	s.ReportSemantics = &opts
++	s.SemanticModel = reportSemanticModelFunc(func(_ context.Context, c evidence.SemanticCall) (string, error) {
++		return strings.ReplaceAll(acceptedSemanticResponse(t, c), `"judgement":"support"`, `"judgement":"contradict"`), nil
++	})
++	p := phaseOneRun(t, s, snap, true)
++	if u := phaseOneUnit(t, p, "C05"); u.Status != "missing" || u.Score != 0 {
++		t.Fatal("omitted operations became a valid negative", u)
++	}
++}
++
++func TestPhaseOneHTTPWireClassification(t *testing.T) {
++	for _, tc := range []struct {
++		name    string
++		payload []byte
++		want    string
++	}{
++		{"ack", nil, "observed"},
++		{"response", []byte("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"), "observed"},
++		{"tls", []byte{23, 3, 3, 0, 2, 0, 1}, "observed"},
++		{"unknown", []byte("GET /part"), "missing"},
++		{"incomplete-body", []byte("POST /agent HTTP/1.1\r\nHost: agent.test\r\nContent-Length: 50\r\n\r\nx"), "missing"},
++	} {
++		t.Run(tc.name, func(t *testing.T) {
++			s := phaseOneFixture(t)
++			at := time.Date(2026, 10, 12, 4, 0, 0, 0, time.UTC)
++			messages := []map[string]any{}
++			for i := 0; i < 8; i++ {
++				m := phaseOneWire(t, at.Add(time.Duration(i)*time.Minute), uint32(i+1), phaseOneHTTP("cmd=id"), false, false)
++				m["app"] = map[string]any{"http_url": "http://agent.test/agent"}
++				messages = append(messages, m)
++			}
++			m := phaseOneWire(t, at.Add(9*time.Minute), 100, tc.payload, false, false)
++			m["app"] = map[string]any{"http_url": "http://agent.test/agent"}
++			messages = append(messages, m)
++			snap := phaseOneInstallSnapshot(t, s, "http-class-"+tc.name, 1, messages)
++			p := phaseOneRun(t, s, snap, false)
++			u := phaseOneUnit(t, p, "C04")
++			if u.Status != tc.want {
++				t.Fatal(u)
++			}
++			if tc.want == "missing" && u.Score != 0 {
++				t.Fatal("incomplete input scored")
++			}
++		})
++	}
++}
++
++func TestPhaseOneStructuredRiskOverridesModel(t *testing.T) {
++	_, _, b := reportTestBundle(t)
++	cfg := evidence.DefaultPhaseOneConfig()
++	b.PhaseOne = &PhaseOneEvaluation{Result: evidence.PhaseOneResult{Version: evidence.PhaseOneVersion, Policy: cfg, Score: 15, ScoreMeaning: "policy_evidence_points_not_probability", Units: []evidence.PhaseOneUnit{{ID: "C04", Status: "observed", Score: 15, SourceIDs: []string{"wire"}}}}}
++	a := validReportAssessment(b)
++	a.EvidenceRisk = &evidence.PhaseOneResult{Score: 999}
++	raw, _ := json.Marshal(a)
++	got, err := decodeReportAssessment(string(raw), b)
++	if err != nil || got.EvidenceRisk == nil || got.EvidenceRisk.Score != 15 || *got.Probability != *a.Probability {
++		t.Fatal("backend policy was overridden or changed probability", got, err)
++	}
++	b.PhaseOne = nil
++	got, err = decodeReportAssessment(string(raw), b)
++	if err != nil || got.EvidenceRisk != nil {
++		t.Fatal("model forged a risk contribution", err)
++	}
++}
++
++func TestPhaseOneC02SurvivesIncompleteDailyExtension(t *testing.T) {
++	s := phaseOneFixture(t)
++	at := time.Date(2026, 10, 12, 4, 0, 0, 0, time.UTC)
++	messages := []map[string]any{}
++	for i := 0; i < 20; i++ {
++		messages = append(messages, phaseOneWire(t, at.Add(time.Duration(i*i+1)*time.Second), uint32(i+1), nil, false, true))
++	}
++	snap := phaseOneInstallSnapshot(t, s, "current-negative", 1, messages)
++	assets, _ := s.Store.ListAssetsContext(context.Background())
++	opts := DefaultSnapshotEvidenceOptions()
++	opts.ReportMaterialMode = true
++	opts.Facts = evidence.PhaseOneFacts()
++	f, err := s.EvaluateSnapshotFacts(context.Background(), snap, assets, opts, evidence.DefaultConfig())
++	if err != nil {
++		t.Fatal(err)
++	}
++	p, err := s.ExecutePhaseOne(context.Background(), snap, f, ReportSemanticEvaluation{}, ReportHistory{Status: "unavailable"}, assets, false)
++	if err != nil {
++		t.Fatal(err)
++	}
++	for _, u := range p.Result.Units {
++		if u.ID == "C02" && u.Status != "not_observed" {
++			t.Fatal("C02 inherited history failure", u)
++		}
++		if u.ID == "C03" && u.Status != "missing" {
++			t.Fatal("C03 lost coverage failure", u)
++		}
++	}
++	// Round trip the expanded manifest as formal preparation does before S/C.
++	raw, _ := json.Marshal(p.Materials)
++	var expanded PhaseOneMaterials
++	_ = json.Unmarshal(raw, &expanded)
++	f.Manifest.PhaseOne = &expanded
++	again, err := s.ExecutePhaseOne(context.Background(), snap, f, ReportSemanticEvaluation{}, ReportHistory{}, assets, false)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if digest(p.Facts) != digest(again.Facts) {
++		t.Fatal("second formal C join changed deterministic F results")
++	}
++	expanded.CurrentComplete = false
++	partial, err := s.ExecutePhaseOne(context.Background(), snap, f, ReportSemanticEvaluation{}, ReportHistory{}, assets, false)
++	if err != nil {
++		t.Fatal(err)
++	}
++	for _, u := range partial.Result.Units {
++		if u.ID == "C02" && (u.Status != "missing" || u.Score != 0) {
++			t.Fatal("incomplete current timeline became negative", u)
++		}
++	}
++}
+diff --git a/tools/phase1-round2-acceptance.ps1 b/tools/phase1-round2-acceptance.ps1
+new file mode 100644
+index 0000000..c3d43f3
+--- /dev/null
++++ b/tools/phase1-round2-acceptance.ps1
+@@ -0,0 +1,30 @@
++param(
++    [string]$ArchiveDir = (Join-Path $PSScriptRoot '../.local'),
++    [string]$OutputPrefix = 'round2-coverage180'
++)
++$ErrorActionPreference = 'Stop'
++$ArchiveDir = (Resolve-Path -LiteralPath $ArchiveDir).Path
++$module = Join-Path (Split-Path -Parent $PSScriptRoot) 'vulnscan-backend'
++$names = @('PHASE_ONE_COVERAGE_ARCHIVE','PHASE_ONE_COVERAGE_SUPPLEMENT','PHASE_ONE_COVERAGE_OUTPUT_PREFIX','PHASE_ONE_COVERAGE_MODEL_EVENT','PHASE_ONE_COVERAGE_EXPANDED_DIAGNOSTIC','PHASE_ONE_MODEL_ENDPOINT')
++$saved = @{}
++foreach ($name in $names) { $saved[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
++Push-Location $module
++try {
++    # Offline by default, even when the caller has model variables configured.
++    foreach ($name in $names) { [Environment]::SetEnvironmentVariable($name, $null, 'Process') }
++    & go build ./traffic/...
++    if ($LASTEXITCODE -ne 0) { throw 'Build failed' }
++    & go test ./evidence ./traffic/... -count=1
++    if ($LASTEXITCODE -ne 0) { throw 'Tests failed' }
++    & go vet ./evidence ./traffic/internal/store ./traffic/internal/service
++    if ($LASTEXITCODE -ne 0) { throw 'Vet failed' }
++    $env:PHASE_ONE_COVERAGE_ARCHIVE = $ArchiveDir
++    $env:PHASE_ONE_COVERAGE_SUPPLEMENT = Join-Path $ArchiveDir 'round2-history-metadata.json'
++    $env:PHASE_ONE_COVERAGE_OUTPUT_PREFIX = $OutputPrefix
++    if (-not (Test-Path -LiteralPath $env:PHASE_ONE_COVERAGE_SUPPLEMENT)) { throw 'Frozen supplemental snapshot metadata missing' }
++    & go test ./traffic/internal/service -run '^TestPhaseOneCoverageFrozenReportReplay$' -count=1 -v
++    if ($LASTEXITCODE -ne 0) { throw 'Real frozen report acceptance failed' }
++} finally {
++    Pop-Location
++    foreach ($name in $names) { [Environment]::SetEnvironmentVariable($name, $saved[$name], 'Process') }
++}

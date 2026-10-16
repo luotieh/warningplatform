@@ -72,6 +72,9 @@ func (e *Engine) httpFact(f Finding, g *observations) Finding {
 		return absent(f, MissingInput)
 	}
 	h := g.input.HTTP
+	if f.FactID == "F_HTTP_ENDPOINT_REPEAT" {
+		f.Measurements.SampleCount = len(h.Records)
+	}
 	dependency(&f, "http", h.Provenance)
 	if !provenance(h.Provenance) || !h.Complete || len(h.Records) == 0 {
 		return absent(f, UnverifiedCoverage)
@@ -112,7 +115,13 @@ func (e *Engine) httpFact(f Finding, g *observations) Finding {
 			groups[key] = append(groups[key], r)
 		}
 		best := 0.0
-		for _, records := range groups {
+		keys := []string{}
+		for key := range groups {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			records := groups[key]
 			if len(records) < 6 {
 				continue
 			}
@@ -122,6 +131,7 @@ func (e *Engine) httpFact(f Finding, g *observations) Finding {
 				intervals = append(intervals, records[i].Time.Sub(records[i-1].Time).Seconds())
 			}
 			avg, cv := moments(intervals)
+			f.Measurements.HTTPGroups = append(f.Measurements.HTTPGroups, HTTPRepeatGroup{Endpoint: key, Requests: len(records), IntervalMeanSeconds: avg, IntervalCV: cv})
 			if avg > 0 && cv <= 0.3 && float64(len(records)) > best {
 				best = float64(len(records))
 			}

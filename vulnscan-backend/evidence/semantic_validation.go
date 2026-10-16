@@ -35,6 +35,9 @@ func ValidateSemanticResult(plan SemanticPlan, result SemanticResult) error {
 	}
 	for _, f := range result.Findings {
 		task, ok := tasks[f.TaskID]
+		if f.StructureValidation != "passed" || f.SemanticSupport != f.Judgement || f.BehaviorOutcome != "not_established" || !reflect.DeepEqual(f.EvidenceContract, semanticContract(task.Slot)) {
+			return fmt.Errorf("invalid cached semantic claim boundary")
+		}
 		if !ok || seen[f.TaskID] || f.Slot != task.Slot.Key || f.SubjectID != task.SubjectID || f.PropositionID != task.PropositionID || f.Scope != task.Scope || !sameSemanticWindow(f.Window, task.Window) || f.SnapshotVersion != plan.SnapshotVersion || f.RuleVersion != plan.RuleVersion || f.ExplanationOnly != task.Slot.ExplanationOnly || !reflect.DeepEqual(f.NonAdditiveWith, task.NonAdditiveWith) || validateSemanticItem(task, f.SemanticItem) != "" {
 			return fmt.Errorf("invalid cached semantic finding")
 		}
