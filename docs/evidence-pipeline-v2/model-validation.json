@@ -1,0 +1,13 @@
+{
+  "model": "K2.7",
+  "semantic_attempts": 5,
+  "validated_outputs": 0,
+  "support": 0,
+  "neutral": 0,
+  "upstream_status": 403,
+  "status": "skipped_after_quota_exhausted",
+  "final_assessment_model_called": false,
+  "actual_input_tokens_known": false,
+  "semantic_accuracy_certified": false,
+  "production_writes": 0
+}

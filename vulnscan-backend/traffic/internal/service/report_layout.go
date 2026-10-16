@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"vulnscan-backend/evidence"
 	"vulnscan-backend/traffic/internal/domain"
 )
 
@@ -85,8 +86,21 @@ func renderFivePartReport(doc ReportDocument) string {
 	w.WriteString("\n## 三、关键证据\n\n")
 	if b.PhaseOne != nil {
 		fmt.Fprintf(&w, "一期证据策略分：%d（策略版本：%s；该分数不是已校准概率）。\n\n", b.PhaseOne.Result.Score, reportCell(b.PhaseOne.Result.Policy.Version))
-		for _, u := range b.PhaseOne.Result.Units {
-			fmt.Fprintf(&w, "- %s：%s；加分%d；原因=%s。\n", u.ID, reportCell(u.Status), u.Score, reportCell(u.Reason))
+		if b.Pipeline != nil {
+			for _, d := range evidence.PhaseOneDefinitions() {
+				states := map[string]int{}
+				for _, u := range b.PhaseOne.Result.Units {
+					if u.ID == d.ID {
+						states[u.Status]++
+					}
+				}
+				fmt.Fprintf(&w, "- %s：成立%d；完整未命中%d；材料不足%d；错误%d。\n", d.ID, states["observed"], states["not_observed"], states["missing"], states["execution_error"])
+			}
+			fmt.Fprintf(&w, "\n逐实例测量值、来源和去重关系见审计键 %s。\n", b.Pipeline.Key)
+		} else {
+			for _, u := range b.PhaseOne.Result.Units {
+				fmt.Fprintf(&w, "- %s：%s；加分%d；原因=%s。\n", u.ID, reportCell(u.Status), u.Score, reportCell(u.Reason))
+			}
 		}
 		w.WriteString("\n")
 	}

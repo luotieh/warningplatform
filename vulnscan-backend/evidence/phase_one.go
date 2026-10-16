@@ -112,7 +112,12 @@ func EvaluatePhaseOne(event string, version int64, facts []Finding, sem *Semanti
 	}
 	if validSem {
 		for _, f := range sem.Findings {
-			scopes[f.Scope] = true
+			for _, slot := range PhaseOneSlots() {
+				if f.Slot == slot {
+					scopes[f.Scope] = true
+					break
+				}
+			}
 		}
 	}
 	if len(scopes) == 0 {
@@ -182,7 +187,10 @@ func EvaluatePhaseOne(event string, version int64, facts []Finding, sem *Semanti
 				semanticOK := len(d.Slots) == 0
 				if validSem {
 					for _, f := range sem.Findings {
-						if f.Scope != scope || f.Judgement != "support" || f.Strength == "none" || f.ExplanationOnly || f.DuplicateOf != "" {
+						// A semantic display duplicate still satisfies its own slot's
+						// predicate. C-level source deduplication below controls points;
+						// an unrelated S13/other must not suppress the required S04.
+						if f.Scope != scope || f.Judgement != "support" || f.Strength == "none" || f.ExplanationOnly {
 							continue
 						}
 						for _, slot := range d.Slots {
@@ -324,7 +332,7 @@ func phaseOneSemanticNegative(sem *SemanticResult, scope Scope, d PhaseOneDefini
 		}
 	}
 	for _, x := range sem.Plan.Executions {
-		if x.Reason == "task_budget_exceeded" {
+		if relevant(x.Slot) && x.Reason == "task_budget_exceeded" {
 			return false
 		}
 		if subjects[x.SubjectID] && relevant(x.Slot) && x.Status == "skipped" {

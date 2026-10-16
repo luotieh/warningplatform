@@ -34,10 +34,12 @@ type ReportEssenceTrace struct {
 	SourceIDs          []string `json:"source_ids,omitempty"`
 }
 type ReportEssenceBundle struct {
-	Version string                `json:"version"`
-	Items   []ReportEssence       `json:"items"`
-	Details []ReportEssenceDetail `json:"details"`
-	Trace   []ReportEssenceTrace  `json:"trace"`
+	ProjectionOmitted    int                   `json:"projection_omitted,omitempty"`
+	ProjectionByteBudget int                   `json:"projection_byte_budget,omitempty"`
+	Version              string                `json:"version"`
+	Items                []ReportEssence       `json:"items"`
+	Details              []ReportEssenceDetail `json:"details"`
+	Trace                []ReportEssenceTrace  `json:"trace"`
 }
 
 func buildReportEssence(b ReportEvidenceBundle) ReportEssenceBundle {

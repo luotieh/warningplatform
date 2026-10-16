@@ -107,7 +107,13 @@ func collectPhaseOneMaterials(manifest *SnapshotEvidenceManifest, h store.Hit, m
 		reject("capture_time_binding_invalid")
 		return
 	}
-	p := gopacket.NewPacket(raw, layers.LayerTypeEthernet, gopacket.Default)
+	var p gopacket.Packet
+	if c := snapshotParsing(m); c != nil {
+		p = c.decoded
+	}
+	if p == nil {
+		p = gopacket.NewPacket(raw, layers.LayerTypeEthernet, gopacket.Default)
+	}
 	if p.ErrorLayer() != nil {
 		reject("wire_decode_failed")
 		return
@@ -130,8 +136,10 @@ func collectPhaseOneMaterials(manifest *SnapshotEvidenceManifest, h store.Hit, m
 	if tcp != nil && len(dnsBytes) > 2 && int(binary.BigEndian.Uint16(dnsBytes[:2])) == len(dnsBytes)-2 {
 		dnsBytes = dnsBytes[2:]
 	}
-	if (udp != nil && (udp.SrcPort == 53 || udp.DstPort == 53) || tcp != nil && (tcp.SrcPort == 53 || tcp.DstPort == 53)) && dns.Unpack(dnsBytes) == nil && !dns.Truncated && len(dns.Questions) == 1 {
-		dnsOK = true
+	if udp != nil && (udp.SrcPort == 53 || udp.DstPort == 53) || tcp != nil && (tcp.SrcPort == 53 || tcp.DstPort == 53) {
+		var dnsErr error
+		dns, dnsErr = snapshotDecodeDNS(m, dnsBytes)
+		dnsOK = dnsErr == nil && !dns.Truncated && len(dns.Questions) == 1
 	}
 	var request *evidence.HTTPRecord
 	if input.HTTP != nil {
@@ -322,7 +330,8 @@ func (s Services) phaseOneTimeline(ctx context.Context, snap EvidenceSnapshot, c
 		return dedupPhaseOneContacts(out), nil
 	}
 	out.Complete = out.Complete && !h.Truncated && h.ExcludedCount == 0 && h.Status == "available"
-	maxSnapshots, maxHits, maxBytes := 100, int64(20000), snapshotTotalBytes
+	limits := contextPipelineLimits(ctx)
+	maxSnapshots, maxHits, maxBytes := limits.HistorySnapshots, limits.HistoryHits, limits.HistoryBytes
 	featureBytes := int64(0)
 	loaded, rawBytes := int64(0), int64(0)
 	for index, row := range h.Rows {
@@ -334,7 +343,17 @@ func (s Services) phaseOneTimeline(ctx context.Context, snap EvidenceSnapshot, c
 			out.Diagnostics = append(out.Diagnostics, "timeline_snapshot_budget_exceeded")
 			break
 		}
-		hs, err := s.EvidenceSnapshot(ctx, row.EventID, 0)
+		var hs EvidenceSnapshot
+		var err error
+		if h.FrozenSnapshots != nil {
+			var ok bool
+			hs, ok = h.FrozenSnapshots[row.EventID]
+			if !ok {
+				err = fmt.Errorf("historical_snapshot_not_frozen")
+			}
+		} else {
+			hs, err = s.EvidenceSnapshot(ctx, row.EventID, 0)
+		}
 		if err != nil {
 			out.Complete = false
 			out.Diagnostics = append(out.Diagnostics, row.EventID+":historical_snapshot_unavailable")
@@ -350,6 +369,9 @@ func (s Services) phaseOneTimeline(ctx context.Context, snap EvidenceSnapshot, c
 		seenHits := map[string]bool{}
 		for {
 			page, readErr := snapshotBoundedPage(ctx, s.Store, q, hs.RevisionWatermark)
+			if m := pipelineMetrics(ctx); m != nil {
+				m.HistoricalReadPages++
+			}
 			if readErr != nil {
 				return out, readErr
 			}
@@ -358,6 +380,9 @@ func (s Services) phaseOneTimeline(ctx context.Context, snap EvidenceSnapshot, c
 				break
 			}
 			for _, hit := range page {
+				if m := pipelineMetrics(ctx); m != nil {
+					m.HistoricalReadBytes += int64(len(hit.Raw))
+				}
 				loaded++
 				source.LoadedHits++
 				rawBytes += int64(len(hit.Raw))
@@ -383,6 +408,8 @@ func (s Services) phaseOneTimeline(ctx context.Context, snap EvidenceSnapshot, c
 					out.Complete = false
 					continue
 				}
+				parsed := &snapshotParseContext{}
+				m[snapshotParseContextKey] = parsed
 				scope, remote, port, ok := snapshotScope(m, assets)
 				if !ok {
 					if !phaseOneUnrelatedFrame(m, assets) {
@@ -408,9 +435,15 @@ func (s Services) phaseOneTimeline(ctx context.Context, snap EvidenceSnapshot, c
 				temp := SnapshotEvidenceManifest{}
 				enrichSnapshotProtocols(&input, hit, m, &temp)
 				collectPhaseOneMaterials(&temp, hit, m, input, assets, hs)
+				if metrics := pipelineMetrics(ctx); metrics != nil {
+					metrics.JSONDecodes++
+					metrics.WireFrameDecodes += parsed.frameDecodes
+					metrics.HTTPRequestParses += parsed.httpParses
+					metrics.DNSMessageParses += parsed.dnsParses
+				}
 				if temp.PhaseOne != nil {
 					featureBytes += snapshotFeatureCharge(temp.PhaseOne.Contacts, temp.PhaseOne.Diagnostics)
-					if featureBytes > snapshotFeatureBytes {
+					if featureBytes > limits.FeatureBytes {
 						out.Complete = false
 						out.Diagnostics = append(out.Diagnostics, "timeline_feature_budget_exceeded")
 						out.Sources = append(out.Sources, source)

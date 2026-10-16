@@ -1,0 +1,110 @@
+{
+  "cold": {
+    "audit_index": {
+      "p50_us": 14000,
+      "p95_us": 16001
+    },
+    "audit_storage": {
+      "p50_us": 27141,
+      "p95_us": 32591
+    },
+    "current_snapshot": {
+      "p50_us": 0,
+      "p95_us": 1000
+    },
+    "deterministic_facts": {
+      "p50_us": 998,
+      "p95_us": 1988
+    },
+    "freeze_history": {
+      "p50_us": 0,
+      "p95_us": 0
+    },
+    "history_metadata": {
+      "p50_us": 0,
+      "p95_us": 1000
+    },
+    "independent_facts": {
+      "p50_us": 0,
+      "p95_us": 999
+    },
+    "joint_c": {
+      "p50_us": 11757,
+      "p95_us": 12999
+    },
+    "normalize_project": {
+      "p50_us": 14518,
+      "p95_us": 18414
+    },
+    "normalized_contract_validate": {
+      "p50_us": 4151,
+      "p95_us": 6001
+    },
+    "preprocess": {
+      "p50_us": 1001,
+      "p95_us": 3515
+    },
+    "semantic_execute_validate": {
+      "p50_us": 47619,
+      "p95_us": 55513
+    },
+    "semantic_plan": {
+      "p50_us": 22515,
+      "p95_us": 43195
+    },
+    "semantic_plan_execute_validate": {
+      "p50_us": 95163,
+      "p95_us": 128139
+    },
+    "timeline": {
+      "p50_us": 958,
+      "p95_us": 1053
+    }
+  },
+  "warm": {
+    "audit_index": {
+      "p50_us": 12968,
+      "p95_us": 15999
+    },
+    "audit_storage": {
+      "p50_us": 24991,
+      "p95_us": 28999
+    },
+    "current_snapshot": {
+      "p50_us": 0,
+      "p95_us": 1001
+    },
+    "freeze_history": {
+      "p50_us": 0,
+      "p95_us": 0
+    },
+    "history_metadata": {
+      "p50_us": 0,
+      "p95_us": 0
+    },
+    "independent_facts": {
+      "p50_us": 0,
+      "p95_us": 1010
+    },
+    "joint_c": {
+      "p50_us": 11969,
+      "p95_us": 14184
+    },
+    "normalize_project": {
+      "p50_us": 14387,
+      "p95_us": 16034
+    },
+    "normalized_contract_validate": {
+      "p50_us": 4001,
+      "p95_us": 5998
+    },
+    "semantic_plan": {
+      "p50_us": 23000,
+      "p95_us": 25999
+    },
+    "semantic_plan_execute_validate": {
+      "p50_us": 66961,
+      "p95_us": 72999
+    }
+  }
+}

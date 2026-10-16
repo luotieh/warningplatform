@@ -70,3 +70,27 @@ func (s *Server) exportReportDocument(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", `attachment; filename="evidence-report.docx"`)
 	_, _ = w.Write(data)
 }
+
+func (s *Server) getReportEvidenceDetails(w http.ResponseWriter, r *http.Request) {
+	doc, ok := s.readReportDocument(w, r)
+	if !ok {
+		return
+	}
+	offset, limit := 0, 50
+	for key, target := range map[string]*int{"offset": &offset, "limit": &limit} {
+		if raw := r.URL.Query().Get(key); raw != "" {
+			n, err := strconv.Atoi(raw)
+			if err != nil {
+				writeError(w, 400, "evidence_page_invalid")
+				return
+			}
+			*target = n
+		}
+	}
+	page, err := s.services.ReportEvidenceDetails(r.Context(), doc, offset, limit)
+	if err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
+	writeJSON(w, 200, domain.APIResponse{Status: "success", Data: page})
+}

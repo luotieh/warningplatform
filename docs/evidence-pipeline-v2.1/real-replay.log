@@ -1,0 +1,27 @@
+=== RUN   TestPhaseOneCoverageFrozenReportReplay
+=== RUN   TestPhaseOneCoverageFrozenReportReplay/ly-030bb1f5-25cc-4f08-988b-b89798b11e1c
+    phase_one_coverage_audit_test.go:689: snapshot=5079 loaded=2651/2651 status=evaluated reason= phase_one=true
+=== RUN   TestPhaseOneCoverageFrozenReportReplay/ly-14725b4b-84f0-4233-b6f3-98d6444ce2e6
+    phase_one_coverage_audit_test.go:689: snapshot=2076 loaded=874/874 status=evaluated reason= phase_one=true
+=== RUN   TestPhaseOneCoverageFrozenReportReplay/ly-1ffb21c0-18cc-44d5-81f7-f5e4bda651f4
+    phase_one_coverage_audit_test.go:689: snapshot=4 loaded=4/4 status=evaluated reason= phase_one=true
+=== RUN   TestPhaseOneCoverageFrozenReportReplay/ly-2e5b8c5b-438d-4a63-a432-35a8fc1a4a37
+    phase_one_coverage_audit_test.go:689: snapshot=4560 loaded=2350/2350 status=evaluated reason= phase_one=true
+=== RUN   TestPhaseOneCoverageFrozenReportReplay/ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8
+    phase_one_coverage_audit_test.go:689: snapshot=14747 loaded=7684/7684 status=evaluated reason= phase_one=true
+=== RUN   TestPhaseOneCoverageFrozenReportReplay/ly-bd71faed-5aea-4b76-9287-da41d34fcc63
+    phase_one_coverage_audit_test.go:689: snapshot=67 loaded=32/32 status=evaluated reason= phase_one=true
+=== RUN   TestPhaseOneCoverageFrozenReportReplay/ly-fd1496c4-14e6-40ae-bb29-57d162a9d94f
+    phase_one_coverage_audit_test.go:689: snapshot=12 loaded=6/6 status=evaluated reason= phase_one=true
+--- PASS: TestPhaseOneCoverageFrozenReportReplay (65.95s)
+    --- PASS: TestPhaseOneCoverageFrozenReportReplay/ly-030bb1f5-25cc-4f08-988b-b89798b11e1c (8.37s)
+    --- PASS: TestPhaseOneCoverageFrozenReportReplay/ly-14725b4b-84f0-4233-b6f3-98d6444ce2e6 (1.71s)
+    --- PASS: TestPhaseOneCoverageFrozenReportReplay/ly-1ffb21c0-18cc-44d5-81f7-f5e4bda651f4 (5.98s)
+    --- PASS: TestPhaseOneCoverageFrozenReportReplay/ly-2e5b8c5b-438d-4a63-a432-35a8fc1a4a37 (10.15s)
+    --- PASS: TestPhaseOneCoverageFrozenReportReplay/ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8 (24.22s)
+    --- PASS: TestPhaseOneCoverageFrozenReportReplay/ly-bd71faed-5aea-4b76-9287-da41d34fcc63 (4.51s)
+    --- PASS: TestPhaseOneCoverageFrozenReportReplay/ly-fd1496c4-14e6-40ae-bb29-57d162a9d94f (2.86s)
+=== RUN   TestPhaseOneArchivedSnapshot34C01
+--- PASS: TestPhaseOneArchivedSnapshot34C01 (0.04s)
+PASS
+ok  	vulnscan-backend/traffic/internal/service	66.286s

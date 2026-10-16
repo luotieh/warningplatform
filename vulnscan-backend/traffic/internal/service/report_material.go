@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"vulnscan-backend/evidence"
 	"vulnscan-backend/traffic/internal/store"
@@ -83,11 +82,11 @@ func reportVerifyDatagram(m map[string]any) {
 	if truncated, known := packet["capture_truncated"].(bool); known && truncated {
 		return
 	}
-	raw, err := hex.DecodeString(asString(packet["packet_hex"]))
-	if err != nil || len(raw) == 0 {
+	p, err := snapshotDecodeFrame(m, asString(packet["packet_hex"]))
+	if err != nil {
 		return
 	}
-	p := gopacket.NewPacket(raw, layers.LayerTypeEthernet, gopacket.Default)
+
 	complete := false
 	if l := p.Layer(layers.LayerTypeIPv4); l != nil {
 		ip := l.(*layers.IPv4)

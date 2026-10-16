@@ -1,0 +1,1168 @@
+{
+  "schema_version": "evidence-input-1.0.0",
+  "bundle_id": "example-dns",
+  "producer": {
+    "name": "controlled-example",
+    "version": "1"
+  },
+  "created_at": "2026-10-16T00:00:00Z",
+  "event": {
+    "event_id": "event-1",
+    "occurred_at": "2026-10-15T01:00:00Z",
+    "indicator_refs": [
+      "ioc-1"
+    ]
+  },
+  "snapshots": [
+    {
+      "id": "snap-1",
+      "event_id": "event-1",
+      "version": 1,
+      "watermark": 2,
+      "revision_watermark": 0,
+      "as_of": "2026-10-16T00:00:00Z"
+    }
+  ],
+  "sources": [
+    {
+      "id": "src-1",
+      "kind": "dns_log",
+      "snapshot_ref": "snap-1",
+      "origin": "controlled-offline-fixture",
+      "record_key": "fixture-transactions",
+      "version": "1",
+      "sha256": null
+    }
+  ],
+  "windows": [
+    {
+      "id": "window-1",
+      "start": "2026-10-15T00:00:00Z",
+      "end": "2026-10-16T00:00:00Z",
+      "timezone": "Asia/Shanghai",
+      "boundary": "[start,end)"
+    }
+  ],
+  "scopes": [
+    {
+      "id": "scope-1",
+      "kind": "asset_endpoint",
+      "asset_id": "asset-1",
+      "device_id": "device-1",
+      "endpoint": {
+        "transport": "udp",
+        "ip": "192.0.2.53",
+        "port": 53
+      },
+      "group_id": null,
+      "identity_source_ids": [
+        "src-1"
+      ]
+    }
+  ],
+  "indicators": [
+    {
+      "id": "ioc-1",
+      "type": "domain",
+      "value": "MRSW23ZNN5XGY6JB.example.test",
+      "upstream_labels": [
+        "controlled"
+      ],
+      "source_ids": [
+        "src-1"
+      ]
+    }
+  ],
+  "coverage": [
+    {
+      "id": "cov-alert_matches",
+      "family": "alert_matches",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "saved_alert_matches",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    },
+    {
+      "id": "cov-ioc_bindings",
+      "family": "ioc_bindings",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "supplied_materials",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "available",
+      "population_completeness": "complete",
+      "content_completeness": "complete",
+      "expected_records": 1,
+      "loaded_records": 1,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [],
+      "denominator_description": "All explicitly enumerated controlled fixture records; no real-world coverage claim."
+    },
+    {
+      "id": "cov-contacts",
+      "family": "contacts",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "independent_contacts",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    },
+    {
+      "id": "cov-dns_transactions",
+      "family": "dns_transactions",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "dns_transactions",
+      "selection": "All controlled DNS questions; response population not supplied.",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "available",
+      "population_completeness": "complete",
+      "content_completeness": "partial",
+      "expected_records": 1,
+      "loaded_records": 1,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [
+        "response_at",
+        "rcode",
+        "answers",
+        "response_artifact_ref"
+      ],
+      "reason_codes": [
+        "response_not_supplied"
+      ],
+      "denominator_description": "All explicitly enumerated controlled fixture records; no real-world coverage claim."
+    },
+    {
+      "id": "cov-http_transactions",
+      "family": "http_transactions",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "http_transactions",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    },
+    {
+      "id": "cov-connections",
+      "family": "connections",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "connection_attempts",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    },
+    {
+      "id": "cov-sessions",
+      "family": "sessions",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "sessions",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    },
+    {
+      "id": "cov-tls_handshakes",
+      "family": "tls_handshakes",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "supplied_materials",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    },
+    {
+      "id": "cov-history_events",
+      "family": "history_events",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "historical_events",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    },
+    {
+      "id": "cov-group_memberships",
+      "family": "group_memberships",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "supplied_materials",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    },
+    {
+      "id": "cov-authorizations",
+      "family": "authorizations",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "supplied_materials",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    },
+    {
+      "id": "cov-baselines",
+      "family": "baselines",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "supplied_materials",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    },
+    {
+      "id": "cov-brand_references",
+      "family": "brand_references",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "supplied_materials",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    },
+    {
+      "id": "cov-service_references",
+      "family": "service_references",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "supplied_materials",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    },
+    {
+      "id": "cov-infrastructure_references",
+      "family": "infrastructure_references",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "supplied_materials",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    },
+    {
+      "id": "cov-tls_references",
+      "family": "tls_references",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "supplied_materials",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    },
+    {
+      "id": "cov-lexical_references",
+      "family": "lexical_references",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "supplied_materials",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    },
+    {
+      "id": "cov-domain_patterns",
+      "family": "domain_patterns",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "supplied_materials",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    },
+    {
+      "id": "cov-rule_origins",
+      "family": "rule_origins",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "supplied_materials",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    },
+    {
+      "id": "cov-intel_origins",
+      "family": "intel_origins",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "supplied_materials",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    },
+    {
+      "id": "cov-decode_chains",
+      "family": "decode_chains",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "supplied_materials",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "available",
+      "population_completeness": "complete",
+      "content_completeness": "complete",
+      "expected_records": 1,
+      "loaded_records": 1,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [],
+      "denominator_description": "All explicitly enumerated controlled fixture records; no real-world coverage claim."
+    },
+    {
+      "id": "cov-semantic_materials",
+      "family": "semantic_materials",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "supplied_materials",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "available",
+      "population_completeness": "complete",
+      "content_completeness": "complete",
+      "expected_records": 1,
+      "loaded_records": 1,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [],
+      "denominator_description": "All explicitly enumerated controlled fixture records; no real-world coverage claim."
+    },
+    {
+      "id": "cov-content_classifications",
+      "family": "content_classifications",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "supplied_materials",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    },
+    {
+      "id": "cov-transfer_chunks",
+      "family": "transfer_chunks",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "supplied_materials",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    },
+    {
+      "id": "cov-transfer_links",
+      "family": "transfer_links",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "supplied_materials",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    },
+    {
+      "id": "cov-business_schedules",
+      "family": "business_schedules",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "supplied_materials",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    },
+    {
+      "id": "cov-stage_campaign_proofs",
+      "family": "stage_campaign_proofs",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "supplied_materials",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    }
+  ],
+  "artifacts": [
+    {
+      "id": "dns-question",
+      "source_ids": [
+        "src-1"
+      ],
+      "source_field": "dns.question_name_raw",
+      "media_type": "text/plain",
+      "visibility": "plaintext",
+      "encoding": "utf8",
+      "content": "MRSW23ZNN5XGY6JB.example.test",
+      "byte_length": 29,
+      "sha256": "0b05d32666ecdb02280870aa76fa1eadb980b76866b560122365aa139329528d",
+      "complete": true,
+      "redacted": false
+    },
+    {
+      "id": "encoded-label",
+      "source_ids": [
+        "src-1"
+      ],
+      "source_field": "dns.question_name_raw.labels[0]",
+      "media_type": "text/plain",
+      "visibility": "plaintext",
+      "encoding": "utf8",
+      "content": "MRSW23ZNN5XGY6JB",
+      "byte_length": 16,
+      "sha256": "8ad1efb5a4abb083eaf44dd60ffa423e6877693498b70ddac348d6eb9d154a69",
+      "complete": true,
+      "redacted": false
+    },
+    {
+      "id": "decoded-label",
+      "source_ids": [
+        "src-1"
+      ],
+      "source_field": "decode.base32.output",
+      "media_type": "text/plain",
+      "visibility": "plaintext",
+      "encoding": "utf8",
+      "content": "demo-only!",
+      "byte_length": 10,
+      "sha256": "94748d6f57820630fb8d2c83b82042e09be37d01851f041113481eae672c26e9",
+      "complete": true,
+      "redacted": false
+    }
+  ],
+  "relations": [],
+  "datasets": {
+    "alert_matches": [],
+    "ioc_bindings": [
+      {
+        "meta": {
+          "id": "binding-dns",
+          "scope_ref": "scope-1",
+          "window_ref": "window-1",
+          "indicator_refs": [
+            "ioc-1"
+          ],
+          "coverage_ref": "cov-ioc_bindings",
+          "source_ids": [
+            "src-1"
+          ],
+          "producer": {
+            "name": "controlled-example",
+            "version": "1"
+          },
+          "verification": "verified",
+          "verification_checks": [
+            "controlled_fixture_identity"
+          ],
+          "missing_fields": [],
+          "field_sources": [
+            {
+              "field": "indicator_ref",
+              "source_id": "src-1",
+              "source_field": "ioc_bindings/binding-dns/indicator_ref"
+            },
+            {
+              "field": "observation_ref",
+              "source_id": "src-1",
+              "source_field": "ioc_bindings/binding-dns/observation_ref"
+            },
+            {
+              "field": "field_path",
+              "source_id": "src-1",
+              "source_field": "ioc_bindings/binding-dns/field_path"
+            },
+            {
+              "field": "observed_type",
+              "source_id": "src-1",
+              "source_field": "ioc_bindings/binding-dns/observed_type"
+            },
+            {
+              "field": "observed_value",
+              "source_id": "src-1",
+              "source_field": "ioc_bindings/binding-dns/observed_value"
+            },
+            {
+              "field": "asset_id",
+              "source_id": "src-1",
+              "source_field": "ioc_bindings/binding-dns/asset_id"
+            },
+            {
+              "field": "device_id",
+              "source_id": "src-1",
+              "source_field": "ioc_bindings/binding-dns/device_id"
+            },
+            {
+              "field": "remote_endpoint",
+              "source_id": "src-1",
+              "source_field": "ioc_bindings/binding-dns/remote_endpoint"
+            },
+            {
+              "field": "direction",
+              "source_id": "src-1",
+              "source_field": "ioc_bindings/binding-dns/direction"
+            }
+          ]
+        },
+        "data": {
+          "indicator_ref": "ioc-1",
+          "observation_ref": "dns-1",
+          "field_path": "question_name_raw",
+          "observed_type": "domain",
+          "observed_value": "MRSW23ZNN5XGY6JB.example.test",
+          "asset_id": "asset-1",
+          "device_id": "device-1",
+          "remote_endpoint": {
+            "transport": "udp",
+            "ip": "192.0.2.53",
+            "port": 53
+          },
+          "direction": "outbound"
+        }
+      }
+    ],
+    "contacts": [],
+    "dns_transactions": [
+      {
+        "meta": {
+          "id": "dns-1",
+          "scope_ref": "scope-1",
+          "window_ref": "window-1",
+          "indicator_refs": [
+            "ioc-1"
+          ],
+          "coverage_ref": "cov-dns_transactions",
+          "source_ids": [
+            "src-1"
+          ],
+          "producer": {
+            "name": "controlled-example",
+            "version": "1"
+          },
+          "verification": "verified",
+          "verification_checks": [
+            "controlled_fixture_identity"
+          ],
+          "missing_fields": [],
+          "field_sources": [
+            {
+              "field": "transaction_id",
+              "source_id": "src-1",
+              "source_field": "dns_transactions/dns-1/transaction_id"
+            },
+            {
+              "field": "question_at",
+              "source_id": "src-1",
+              "source_field": "dns_transactions/dns-1/question_at"
+            },
+            {
+              "field": "question_name_raw",
+              "source_id": "src-1",
+              "source_field": "dns_transactions/dns-1/question_name_raw"
+            },
+            {
+              "field": "question_name_ascii",
+              "source_id": "src-1",
+              "source_field": "dns_transactions/dns-1/question_name_ascii"
+            },
+            {
+              "field": "registrable_domain",
+              "source_id": "src-1",
+              "source_field": "dns_transactions/dns-1/registrable_domain"
+            },
+            {
+              "field": "psl_version",
+              "source_id": "src-1",
+              "source_field": "dns_transactions/dns-1/psl_version"
+            },
+            {
+              "field": "qtype",
+              "source_id": "src-1",
+              "source_field": "dns_transactions/dns-1/qtype"
+            },
+            {
+              "field": "answers",
+              "source_id": "src-1",
+              "source_field": "dns_transactions/dns-1/answers"
+            },
+            {
+              "field": "request_artifact_ref",
+              "source_id": "src-1",
+              "source_field": "dns_transactions/dns-1/request_artifact_ref"
+            },
+            {
+              "field": "connection_refs",
+              "source_id": "src-1",
+              "source_field": "dns_transactions/dns-1/connection_refs"
+            },
+            {
+              "field": "retransmission_key",
+              "source_id": "src-1",
+              "source_field": "dns_transactions/dns-1/retransmission_key"
+            }
+          ]
+        },
+        "data": {
+          "transaction_id": "dns-tx-1",
+          "question_at": "2026-10-15T01:00:00Z",
+          "response_at": null,
+          "question_name_raw": "MRSW23ZNN5XGY6JB.example.test",
+          "question_name_ascii": "MRSW23ZNN5XGY6JB.example.test",
+          "registrable_domain": "example.test",
+          "psl_version": "controlled-fixture-1",
+          "qtype": "TXT",
+          "rcode": null,
+          "answers": [],
+          "request_artifact_ref": "dns-question",
+          "response_artifact_ref": null,
+          "connection_refs": [],
+          "retransmission_key": "dns-query-1"
+        }
+      }
+    ],
+    "http_transactions": [],
+    "connections": [],
+    "sessions": [],
+    "tls_handshakes": [],
+    "history_events": [],
+    "group_memberships": [],
+    "authorizations": [],
+    "baselines": [],
+    "brand_references": [],
+    "service_references": [],
+    "infrastructure_references": [],
+    "tls_references": [],
+    "lexical_references": [],
+    "domain_patterns": [],
+    "rule_origins": [],
+    "intel_origins": [],
+    "decode_chains": [
+      {
+        "meta": {
+          "id": "decode-1",
+          "scope_ref": "scope-1",
+          "window_ref": "window-1",
+          "indicator_refs": [
+            "ioc-1"
+          ],
+          "coverage_ref": "cov-decode_chains",
+          "source_ids": [
+            "src-1"
+          ],
+          "producer": {
+            "name": "controlled-example",
+            "version": "1"
+          },
+          "verification": "verified",
+          "verification_checks": [
+            "controlled_fixture_identity"
+          ],
+          "missing_fields": [],
+          "field_sources": [
+            {
+              "field": "origin_observation_ref",
+              "source_id": "src-1",
+              "source_field": "decode_chains/decode-1/origin_observation_ref"
+            },
+            {
+              "field": "origin_field_path",
+              "source_id": "src-1",
+              "source_field": "decode_chains/decode-1/origin_field_path"
+            },
+            {
+              "field": "origin_slice",
+              "source_id": "src-1",
+              "source_field": "decode_chains/decode-1/origin_slice"
+            },
+            {
+              "field": "steps",
+              "source_id": "src-1",
+              "source_field": "decode_chains/decode-1/steps"
+            }
+          ]
+        },
+        "data": {
+          "origin_observation_ref": "dns-1",
+          "origin_field_path": "question_name_raw",
+          "origin_slice": {
+            "offset_bytes": 0,
+            "length_bytes": 16
+          },
+          "steps": [
+            {
+              "encoding": "base32",
+              "input_artifact_ref": "encoded-label",
+              "output_artifact_ref": "decoded-label",
+              "decoder_version": "python-base64-1",
+              "roundtrip_verified": true
+            }
+          ]
+        }
+      }
+    ],
+    "semantic_materials": [
+      {
+        "meta": {
+          "id": "material-1",
+          "scope_ref": "scope-1",
+          "window_ref": "window-1",
+          "indicator_refs": [
+            "ioc-1"
+          ],
+          "coverage_ref": "cov-semantic_materials",
+          "source_ids": [
+            "src-1"
+          ],
+          "producer": {
+            "name": "controlled-example",
+            "version": "1"
+          },
+          "verification": "verified",
+          "verification_checks": [
+            "controlled_fixture_identity"
+          ],
+          "missing_fields": [],
+          "field_sources": [
+            {
+              "field": "subject_id",
+              "source_id": "src-1",
+              "source_field": "semantic_materials/material-1/subject_id"
+            },
+            {
+              "field": "proposition_id",
+              "source_id": "src-1",
+              "source_field": "semantic_materials/material-1/proposition_id"
+            },
+            {
+              "field": "kind",
+              "source_id": "src-1",
+              "source_field": "semantic_materials/material-1/kind"
+            },
+            {
+              "field": "artifact_ref",
+              "source_id": "src-1",
+              "source_field": "semantic_materials/material-1/artifact_ref"
+            },
+            {
+              "field": "field_path",
+              "source_id": "src-1",
+              "source_field": "semantic_materials/material-1/field_path"
+            },
+            {
+              "field": "observation_ref",
+              "source_id": "src-1",
+              "source_field": "semantic_materials/material-1/observation_ref"
+            },
+            {
+              "field": "transaction_id",
+              "source_id": "src-1",
+              "source_field": "semantic_materials/material-1/transaction_id"
+            },
+            {
+              "field": "direction",
+              "source_id": "src-1",
+              "source_field": "semantic_materials/material-1/direction"
+            },
+            {
+              "field": "protocol",
+              "source_id": "src-1",
+              "source_field": "semantic_materials/material-1/protocol"
+            },
+            {
+              "field": "destination",
+              "source_id": "src-1",
+              "source_field": "semantic_materials/material-1/destination"
+            },
+            {
+              "field": "related_record_refs",
+              "source_id": "src-1",
+              "source_field": "semantic_materials/material-1/related_record_refs"
+            },
+            {
+              "field": "decode_chain_ref",
+              "source_id": "src-1",
+              "source_field": "semantic_materials/material-1/decode_chain_ref"
+            },
+            {
+              "field": "field_names",
+              "source_id": "src-1",
+              "source_field": "semantic_materials/material-1/field_names"
+            },
+            {
+              "field": "bytes",
+              "source_id": "src-1",
+              "source_field": "semantic_materials/material-1/bytes"
+            }
+          ]
+        },
+        "data": {
+          "subject_id": "dns-1",
+          "proposition_id": "encoded-label-1",
+          "kind": "decoded_text",
+          "artifact_ref": "decoded-label",
+          "field_path": "question_name_raw",
+          "observation_ref": "dns-1",
+          "transaction_id": "dns-tx-1",
+          "direction": "outbound",
+          "protocol": "dns",
+          "method": null,
+          "destination": "MRSW23ZNN5XGY6JB.example.test",
+          "related_record_refs": [
+            "dns-1"
+          ],
+          "decode_chain_ref": "decode-1",
+          "adjudication_id": null,
+          "field_names": [
+            "question_name_raw"
+          ],
+          "bytes": 10,
+          "sequence": null
+        }
+      }
+    ],
+    "content_classifications": [],
+    "transfer_chunks": [],
+    "transfer_links": [],
+    "business_schedules": [],
+    "stage_campaign_proofs": []
+  },
+  "diagnostics": []
+}

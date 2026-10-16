@@ -27,6 +27,17 @@ func (s Services) publishReportDocument(ctx context.Context, doc ReportDocument,
 	if err != nil {
 		return summary, err
 	}
+	if doc.Evidence.Pipeline != nil {
+		if !doc.Evidence.Pipeline.Persisted {
+			audit := *doc.Evidence.Pipeline
+			audit.Persisted = true
+			if e := s.persistPipelineJournal(ctx, audit.Key, doc.EventID, pipelineJournal{Audit: audit, Evidence: doc.Evidence}); e != nil {
+				return summary, fmt.Errorf("pipeline_audit_not_persisted: %w", e)
+			}
+			doc.Evidence.Pipeline = &audit
+		}
+		doc = compactPipelineReport(doc)
+	}
 	doc.TechnicalAppendix = renderReportTechnicalAppendix(doc)
 	var message domain.Message
 	err = s.Store.AggregationTransaction(ctx, key, func(tx store.Store) error {

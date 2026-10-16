@@ -1,0 +1,434 @@
+{
+  "config": {
+    "Periodic": {
+      "min_samples": 8,
+      "min_interval_sec": 5,
+      "max_interval_sec": 86400,
+      "max_interval_cv": 0.15,
+      "max_packets_per_observation": 5
+    },
+    "MultiDay": {
+      "min_days": 2,
+      "timezone": "Asia/Shanghai"
+    },
+    "Policies": {}
+  },
+  "controlled": true,
+  "expected_status": "not_observed",
+  "request": {
+    "event_id": "synthetic-event",
+    "snapshot_version": 1,
+    "hits": [
+      {
+        "hit_id": "a",
+        "occurred_at": "2026-10-01T00:00:00Z",
+        "packets": 1,
+        "scope": {
+          "asset_id": "synthetic-asset",
+          "endpoint_id": "synthetic-endpoint",
+          "device_id": "synthetic-device"
+        }
+      },
+      {
+        "hit_id": "b",
+        "occurred_at": "2026-10-01T00:01:00Z",
+        "packets": 1,
+        "scope": {
+          "asset_id": "synthetic-asset",
+          "endpoint_id": "synthetic-endpoint",
+          "device_id": "synthetic-device"
+        }
+      },
+      {
+        "hit_id": "c",
+        "occurred_at": "2026-10-01T00:02:00Z",
+        "packets": 1,
+        "scope": {
+          "asset_id": "synthetic-asset",
+          "endpoint_id": "synthetic-endpoint",
+          "device_id": "synthetic-device"
+        }
+      },
+      {
+        "hit_id": "d",
+        "occurred_at": "2026-10-01T00:03:00Z",
+        "packets": 1,
+        "scope": {
+          "asset_id": "synthetic-asset",
+          "endpoint_id": "synthetic-endpoint",
+          "device_id": "synthetic-device"
+        }
+      },
+      {
+        "hit_id": "e",
+        "occurred_at": "2026-10-01T00:04:00Z",
+        "packets": 1,
+        "scope": {
+          "asset_id": "synthetic-asset",
+          "endpoint_id": "synthetic-endpoint",
+          "device_id": "synthetic-device"
+        }
+      },
+      {
+        "hit_id": "f",
+        "occurred_at": "2026-10-01T00:05:00Z",
+        "packets": 1,
+        "scope": {
+          "asset_id": "synthetic-asset",
+          "endpoint_id": "synthetic-endpoint",
+          "device_id": "synthetic-device"
+        }
+      },
+      {
+        "hit_id": "g",
+        "occurred_at": "2026-10-01T00:06:00Z",
+        "packets": 1,
+        "scope": {
+          "asset_id": "synthetic-asset",
+          "endpoint_id": "synthetic-endpoint",
+          "device_id": "synthetic-device"
+        }
+      },
+      {
+        "hit_id": "h",
+        "occurred_at": "2026-10-01T00:07:00Z",
+        "packets": 1,
+        "scope": {
+          "asset_id": "synthetic-asset",
+          "endpoint_id": "synthetic-endpoint",
+          "device_id": "synthetic-device"
+        }
+      }
+    ],
+    "quality": {
+      "coverage": "complete",
+      "capture_truncated": false
+    },
+    "facts": [
+      "F_INDEPENDENT_INTEL_CORROB"
+    ],
+    "inputs": [
+      {
+        "scope": {
+          "asset_id": "synthetic-asset",
+          "endpoint_id": "synthetic-endpoint",
+          "device_id": "synthetic-device"
+        },
+        "window": {
+          "start": "2026-10-01T00:00:00Z",
+          "end": "2026-10-01T01:00:00Z"
+        },
+        "baselines": null,
+        "dns": {
+          "verified": true,
+          "complete": true,
+          "version": "synthetic-fixture-v1",
+          "source_ids": [
+            "synthetic-source"
+          ],
+          "records": [
+            {
+              "source_id": "dns1",
+              "time": "2026-10-01T00:00:00Z",
+              "domain": "example.com",
+              "rcode": 3,
+              "r_code_known": true,
+              "answers": null
+            }
+          ],
+          "bigram_log_probabilities": null
+        },
+        "http": {
+          "verified": true,
+          "complete": true,
+          "version": "synthetic-fixture-v1",
+          "source_ids": [
+            "synthetic-source"
+          ],
+          "request_candidates": 0,
+          "non_request_packets": 0,
+          "records": [
+            {
+              "source_id": "http0",
+              "transaction_id": "tx0",
+              "session_id": "session1",
+              "time": "2026-10-01T00:00:00Z",
+              "url": "https://example.com/api",
+              "method": "GET",
+              "user_agent": "synthetic-agent",
+              "fields": null,
+              "body_length": 32,
+              "truncated": false,
+              "response_url": "",
+              "response_status": 0,
+              "response_location": "",
+              "response_verified": false,
+              "form_action": "",
+              "redirect_to_transaction_id": "",
+              "redirect_verified": false,
+              "declared_brand": "",
+              "brand_claim_verified": false
+            },
+            {
+              "source_id": "http1",
+              "transaction_id": "tx1",
+              "session_id": "session1",
+              "time": "2026-10-01T00:01:00Z",
+              "url": "https://example.com/api",
+              "method": "GET",
+              "user_agent": "synthetic-agent",
+              "fields": null,
+              "body_length": 32,
+              "truncated": false,
+              "response_url": "",
+              "response_status": 0,
+              "response_location": "",
+              "response_verified": false,
+              "form_action": "",
+              "redirect_to_transaction_id": "",
+              "redirect_verified": false,
+              "declared_brand": "",
+              "brand_claim_verified": false
+            },
+            {
+              "source_id": "http2",
+              "transaction_id": "tx2",
+              "session_id": "session1",
+              "time": "2026-10-01T00:02:00Z",
+              "url": "https://example.com/api",
+              "method": "GET",
+              "user_agent": "synthetic-agent",
+              "fields": null,
+              "body_length": 32,
+              "truncated": false,
+              "response_url": "",
+              "response_status": 0,
+              "response_location": "",
+              "response_verified": false,
+              "form_action": "",
+              "redirect_to_transaction_id": "",
+              "redirect_verified": false,
+              "declared_brand": "",
+              "brand_claim_verified": false
+            },
+            {
+              "source_id": "http3",
+              "transaction_id": "tx3",
+              "session_id": "session1",
+              "time": "2026-10-01T00:03:00Z",
+              "url": "https://example.com/api",
+              "method": "GET",
+              "user_agent": "synthetic-agent",
+              "fields": null,
+              "body_length": 32,
+              "truncated": false,
+              "response_url": "",
+              "response_status": 0,
+              "response_location": "",
+              "response_verified": false,
+              "form_action": "",
+              "redirect_to_transaction_id": "",
+              "redirect_verified": false,
+              "declared_brand": "",
+              "brand_claim_verified": false
+            },
+            {
+              "source_id": "http4",
+              "transaction_id": "tx4",
+              "session_id": "session1",
+              "time": "2026-10-01T00:04:00Z",
+              "url": "https://example.com/api",
+              "method": "GET",
+              "user_agent": "synthetic-agent",
+              "fields": null,
+              "body_length": 32,
+              "truncated": false,
+              "response_url": "",
+              "response_status": 0,
+              "response_location": "",
+              "response_verified": false,
+              "form_action": "",
+              "redirect_to_transaction_id": "",
+              "redirect_verified": false,
+              "declared_brand": "",
+              "brand_claim_verified": false
+            },
+            {
+              "source_id": "http5",
+              "transaction_id": "tx5",
+              "session_id": "session1",
+              "time": "2026-10-01T00:05:00Z",
+              "url": "https://example.com/api",
+              "method": "GET",
+              "user_agent": "synthetic-agent",
+              "fields": null,
+              "body_length": 32,
+              "truncated": false,
+              "response_url": "",
+              "response_status": 0,
+              "response_location": "",
+              "response_verified": false,
+              "form_action": "",
+              "redirect_to_transaction_id": "",
+              "redirect_verified": false,
+              "declared_brand": "",
+              "brand_claim_verified": false
+            },
+            {
+              "source_id": "http6",
+              "transaction_id": "tx6",
+              "session_id": "session1",
+              "time": "2026-10-01T00:06:00Z",
+              "url": "https://example.com/api",
+              "method": "GET",
+              "user_agent": "synthetic-agent",
+              "fields": null,
+              "body_length": 32,
+              "truncated": false,
+              "response_url": "",
+              "response_status": 0,
+              "response_location": "",
+              "response_verified": false,
+              "form_action": "",
+              "redirect_to_transaction_id": "",
+              "redirect_verified": false,
+              "declared_brand": "",
+              "brand_claim_verified": false
+            },
+            {
+              "source_id": "http7",
+              "transaction_id": "tx7",
+              "session_id": "session1",
+              "time": "2026-10-01T00:07:00Z",
+              "url": "https://example.com/api",
+              "method": "GET",
+              "user_agent": "synthetic-agent",
+              "fields": null,
+              "body_length": 32,
+              "truncated": false,
+              "response_url": "",
+              "response_status": 0,
+              "response_location": "",
+              "response_verified": false,
+              "form_action": "",
+              "redirect_to_transaction_id": "",
+              "redirect_verified": false,
+              "declared_brand": "",
+              "brand_claim_verified": false
+            }
+          ],
+          "brands": null,
+          "brands_verified": false
+        },
+        "network": {
+          "verified": true,
+          "complete": true,
+          "version": "synthetic-fixture-v1",
+          "source_ids": [
+            "synthetic-source"
+          ],
+          "connections": [
+            {
+              "transport": "",
+              "outcome_verified": false,
+              "source_id": "connection1",
+              "time": "2026-10-01T00:00:00Z",
+              "asset_id": "synthetic-asset",
+              "destination": "203.0.113.10",
+              "port": 22,
+              "app_protocol": "http",
+              "protocol_parsed": true,
+              "payload_bytes": null,
+              "tcp_state": "RST",
+              "session_id": ""
+            }
+          ],
+          "sessions": null,
+          "services": null,
+          "services_verified": false,
+          "asn": "",
+          "country": "",
+          "reputation": ""
+        },
+        "tls": null,
+        "history": {
+          "verified": true,
+          "complete": true,
+          "version": "synthetic-fixture-v1",
+          "source_ids": [
+            "synthetic-source"
+          ],
+          "events": null,
+          "as_of": "2026-10-01T00:00:00Z",
+          "lookback_start": "2026-09-01T00:00:00Z",
+          "ioc": "synthetic-ioc",
+          "family": "",
+          "endpoint": "synthetic-endpoint",
+          "current_stage": "",
+          "current_stage_source": "",
+          "current_stage_provenance": {
+            "verified": false,
+            "complete": false,
+            "version": "",
+            "source_ids": null
+          },
+          "campaign_id": "",
+          "campaign_provenance": {
+            "verified": false,
+            "complete": false,
+            "version": "",
+            "source_ids": null
+          },
+          "current_parameters": null,
+          "group_id": "",
+          "current_member_ids": null,
+          "current_parameters_verified": false,
+          "group_membership_verified": false
+        },
+        "corroboration": {
+          "verified": true,
+          "complete": true,
+          "version": "synthetic-fixture-v1",
+          "source_ids": [
+            "synthetic-source"
+          ],
+          "rules": [
+            {
+              "id": "rule1",
+              "independence_group": "group1",
+              "original_source": "original1"
+            },
+            {
+              "id": "rule2",
+              "independence_group": "group2",
+              "original_source": "original2"
+            }
+          ],
+          "intelligence": [
+            {
+              "id": "intel1",
+              "original_source": "original1",
+              "ioc": "ioc",
+              "type": ""
+            },
+            {
+              "id": "intel2",
+              "original_source": "original1",
+              "ioc": "ioc",
+              "type": ""
+            }
+          ],
+          "ioc": "ioc",
+          "ioc_type": "C2",
+          "hard_type_scores": {
+            "BT": 5,
+            "C2": 40,
+            "PH": 0
+          },
+          "hard_scores_verified": true
+        },
+        "authorizations": null
+      }
+    ]
+  }
+}

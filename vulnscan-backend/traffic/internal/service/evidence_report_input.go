@@ -11,18 +11,20 @@ import (
 
 	"vulnscan-backend/evidence"
 	"vulnscan-backend/traffic/internal/domain"
+	"vulnscan-backend/traffic/internal/store"
 )
 
 // PrepareReportEvidence reads the snapshot once and shares its exact version
 // with both the deterministic engine and the existing model projection.
-// Reports default to the phase-one registry; the explicit compatibility profile
-// retains the full registry. Missing dependencies cannot become negative evidence.
+// Reports schedule all 59F/23S; C remains restricted to the phase-one registry.
+// Missing dependencies cannot become negative evidence.
 func (s Services) PrepareReportEvidence(ctx context.Context, event domain.Event) (string, error) {
 	prepared, err := s.prepareReportInput(ctx, event)
 	return prepared.Context, err
 }
 
-type preparedReportInput struct {
+type PreparedEvidenceExecution struct {
+	Contract     *NormalizedExecutionContract `json:"contract,omitempty"`
 	Context      string
 	AssetSection string
 	Evaluation   SnapshotFactEvaluation
@@ -30,12 +32,21 @@ type preparedReportInput struct {
 	Evidence     ReportEvidenceBundle
 }
 
+// Existing report callers and offline replay share the same result type.
+type preparedReportInput = PreparedEvidenceExecution
+
 func (s Services) prepareReportInput(ctx context.Context, event domain.Event) (preparedReportInput, error) {
 	return s.prepareReportInputMode(ctx, event, true)
 }
 
 func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event, persist bool) (preparedReportInput, error) {
+	return (EvidencePipeline{Services: s}).executeEvent(ctx, event, EvidencePipelineOptions{Persist: persist})
+}
+
+func (s Services) executeEvidencePipeline(ctx context.Context, event domain.Event, persist bool) (preparedReportInput, error) {
+	snapshotTiming := pipelineMeasure(ctx, "current_snapshot")
 	snap, err := s.EvidenceSnapshot(ctx, event.EventID, 0)
+	snapshotTiming()
 	if err != nil {
 		if err.Error() != "legacy_event" {
 			return preparedReportInput{}, err
@@ -56,20 +67,41 @@ func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event
 		evaluation := SnapshotFactEvaluation{Status: "unavailable", Reason: "legacy_snapshot_unverified", Manifest: manifest}
 		return preparedReportInput{Context: string(b), AssetSection: assetMatchContext(event, s.Store.ListAssets()), Evaluation: evaluation, Semantics: semantics, Evidence: buildReportEvidence(event, EvidenceSnapshot{EventID: event.EventID, Context: c}, evaluation, semantics)}, err
 	}
+	source, err := s.collectPipelineInputs(ctx, event, snap)
+	if err != nil {
+		return preparedReportInput{}, err
+	}
+	return s.executePreparedPipeline(ctx, source, func() (SnapshotEvidenceInput, error) {
+		return s.loadPipelinePrepared(ctx, source, persist)
+	}, persist, true, persist)
+}
+
+type pipelinePreparedSource struct {
+	Event    domain.Event
+	Snapshot EvidenceSnapshot
+	Assets   []domain.Asset
+	Options  SnapshotEvidenceOptions
+	History  ReportHistory
+	Config   evidence.Config
+}
+
+func (s Services) collectPipelineInputs(ctx context.Context, event domain.Event, snap EvidenceSnapshot) (pipelinePreparedSource, error) {
+	var err error
 	// One registry read serves all hit/scope bindings in this evaluation. Cache
 	// identity includes the registry, so enrollment or address changes invalidate it.
 	assetCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	assets, assetErr := s.Store.ListAssetsContext(assetCtx)
 	cancel()
 	if ctx.Err() != nil {
-		return preparedReportInput{}, ctx.Err()
+		return pipelinePreparedSource{}, ctx.Err()
 	}
 	options := DefaultSnapshotEvidenceOptions()
 	options.ReportMaterialMode = true
+	options.DeferIndependentFacts = !s.LegacyReportEvidence
 	if !s.LegacyReportEvidence {
 		options.StreamFeatures = true
-		options.MaxSnapshotBytes = snapshotTotalBytes
-		options.MaxFeatureBytes = snapshotFeatureBytes
+		options.MaxSnapshotBytes = contextPipelineLimits(ctx).SnapshotBytes
+		options.MaxFeatureBytes = contextPipelineLimits(ctx).FeatureBytes
 	}
 	options.ReportSchedules = s.ReportSchedules
 	if assetErr != nil {
@@ -77,18 +109,15 @@ func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event
 		options.RegistryIssue = &issue
 		assets = nil
 	}
-	options.Facts = evidence.PhaseOneFacts()
-	if s.LegacyReportEvidence {
-		options.Facts = evidence.SupportedFacts()
-	}
+	options.Facts = evidence.SupportedFacts()
 	options.CaptureSemantic = true
 	options.Supplemental, options.SupplementalIssue, err = s.loadSnapshotSupplemental(ctx, snap)
 	if err != nil {
-		return preparedReportInput{}, err
+		return pipelinePreparedSource{}, err
 	}
 	options.Sources, options.SourceIssue, err = s.loadEvidenceSources(ctx)
 	if err != nil {
-		return preparedReportInput{}, err
+		return pipelinePreparedSource{}, err
 	}
 	config := evidence.DefaultConfig()
 	config.Policies = map[evidence.FactID]map[string]float64{
@@ -107,22 +136,83 @@ func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event
 		"F_HIST_SCHEDULE_MATCH":      {"kl_threshold": 0.5},
 		"F_HIST_COORD_PARAM_MATCH":   {"parameter_relative_tolerance": 0.25},
 	}
+	historyTiming := pipelineMeasure(ctx, "history_metadata")
 	history := s.loadReportHistoryMode(ctx, event, snap, assets, !s.LegacyReportEvidence)
+	historyTiming()
+	if m := pipelineMetrics(ctx); m != nil {
+		m.HistoryMetadataPages += history.ReadPages
+	}
+	s.freezePipelineHistory(ctx, &history)
 	if ctx.Err() != nil {
-		return preparedReportInput{}, ctx.Err()
+		return pipelinePreparedSource{}, ctx.Err()
 	}
 	options.PlatformHistory = &history
+	return pipelinePreparedSource{Event: event, Snapshot: snap, Assets: assets, Options: options, History: history, Config: config}, nil
+}
+
+func (s Services) loadPipelinePrepared(ctx context.Context, source pipelinePreparedSource, persist bool) (SnapshotEvidenceInput, error) {
+	snap, assets, options, history := source.Snapshot, source.Assets, source.Options, source.History
+	input, err := s.pipelinePreprocessed(ctx, snap, assets, options, persist)
+	if err != nil {
+		return input, err
+	}
+	if !s.LegacyReportEvidence {
+		if input.Manifest.PhaseOne != nil && !input.Manifest.PhaseOne.Expanded {
+			membershipComplete := input.Manifest.Coverage == "complete" || (input.Manifest.StreamVersion != "" && input.Manifest.LoadedHits == input.Manifest.DeclaredHits && input.Manifest.UnresolvedHits == input.Manifest.PhaseOneExcludedHits)
+			input.Manifest.PhaseOne.Complete = input.Manifest.PhaseOne.Complete && membershipComplete
+			timeline, timelineErr := s.pipelineTimeline(ctx, snap, *input.Manifest.PhaseOne, history, assets, persist)
+			if timelineErr != nil && ctx.Err() != nil {
+				return input, ctx.Err()
+			}
+			if timelineErr != nil {
+				timeline.Complete = false
+				timeline.Diagnostics = append(timeline.Diagnostics, "timeline_read_failed")
+			}
+			input.Manifest.PhaseOne = &timeline
+		}
+		if input.Manifest.PhaseOne == nil {
+			input.Manifest.PhaseOne = &PhaseOneMaterials{Expanded: true, Diagnostics: []string{"current_wire_materials_unavailable"}}
+		}
+		// Parse HTTP/DNS bodies and verify decode chains in L2. L3 only binds
+		// computed F dependencies and plans slots from these prepared materials.
+		materialInput := input
+		materialInput.Manifest.PhaseOneFactsPrepared = true
+		prepared := buildSnapshotSemanticRequest(snap, materialInput, &evidence.Result{}, evidence.SemanticRaw)
+		input.PreparedSemantics = &prepared
+	}
+	return input, nil
+}
+
+// executePreparedPipeline is shared by formal reports and storage-free replay.
+// load returns completed L2 inputs; no rule is allowed to fetch missing inputs.
+func (s Services) executePreparedPipeline(ctx context.Context, source pipelinePreparedSource, load func() (SnapshotEvidenceInput, error), persist, readCache, executeModel bool) (preparedReportInput, error) {
+	event, snap, assets, options, history, config := source.Event, source.Snapshot, source.Assets, source.Options, source.History, source.Config
 	assetVersions := append([]domain.Asset(nil), assets...)
 	sort.Slice(assetVersions, func(i, j int) bool { return assetVersions[i].ID < assetVersions[j].ID })
-	key := digest([]any{snap.EventID, snap.Version, snap.Watermark, snap.RevisionWatermark, evidence.RuleVersion, reportSnapshotAdapterVersion, config, options, assetVersions, options.Supplemental, options.SupplementalIssue, options.Sources, options.SourceIssue, options.RegistryIssue})
-	record, exists, err := s.Store.AggregateRecord(ctx, "evidence_result", key)
-	cacheAvailable := err == nil
+	key := digest([]any{PreparedEvidenceSchemaVersion, snap.EventID, snap.Version, snap.Watermark, snap.RevisionWatermark, evidence.RuleVersion, reportSnapshotAdapterVersion, config, options, assetVersions, options.Supplemental, options.SupplementalIssue, options.Sources, options.SourceIssue, options.RegistryIssue})
+	var record store.AggregateRecord
+	var exists bool
+	var err error
+	if readCache {
+		record, exists, err = s.Store.AggregateRecord(ctx, "evidence_result", key)
+	}
+	cacheAvailable := readCache && err == nil
 	if err != nil {
 		exists = false
 		log.Printf("[evidence] cache_read_failed event=%s snapshot=%d", snap.EventID, snap.Version)
 	}
 	var evaluation SnapshotFactEvaluation
 	var sharedInput *SnapshotEvidenceInput
+	loadPrepared := func() (SnapshotEvidenceInput, error) {
+		if sharedInput != nil {
+			return *sharedInput, nil
+		}
+		loaded, loadErr := load()
+		if loadErr == nil {
+			sharedInput = &loaded
+		}
+		return loaded, loadErr
+	}
 	resultPersisted := false
 	if exists {
 		if err := json.Unmarshal(record.Value, &evaluation); err != nil {
@@ -146,9 +236,14 @@ func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event
 	}
 	if !exists {
 		resultPersisted = false
-		loaded, loadErr := s.SnapshotEvidenceInput(ctx, snap, assets, options)
+		loaded, loadErr := loadPrepared()
 		sharedInput = &loaded
+		factTiming := pipelineMeasure(ctx, "deterministic_facts")
 		evaluation, err = evaluateSnapshotFactInput(ctx, snap, loaded, loadErr, options, config)
+		wire := capturePreparedInputs(loaded)
+		evaluation.InputCoverage = preparedFamilyCoverage(wire)
+		evaluation.InputDigest = digest([]any{wire.Request, wire.HTTP, wire.PlatformHistory, config})
+		factTiming()
 		if err != nil {
 			if ctx.Err() != nil {
 				return preparedReportInput{}, ctx.Err()
@@ -174,8 +269,13 @@ func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event
 			}
 		}
 	}
-	if !cacheAvailable {
+	if readCache && !cacheAvailable {
 		evaluation.Manifest.addIssue(SnapshotInputIssue{Code: "result_not_cached", Stage: "persist", Retryable: true})
+	}
+	if evaluation.CacheHit {
+		if m := pipelineMetrics(ctx); m != nil {
+			m.CacheHits["facts"]++
+		}
 	}
 	if ctx.Err() != nil {
 		return preparedReportInput{}, ctx.Err()
@@ -183,22 +283,35 @@ func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event
 	if !s.LegacyReportEvidence {
 		// Prepare independent F evidence before S planning. This does not call the
 		// model or write caches; the expanded manifest is reused by the final C join.
-		preparedPhase, phasePrepErr := s.ExecutePhaseOne(ctx, snap, evaluation, ReportSemanticEvaluation{}, history, assets, false)
+		phaseTiming := pipelineMeasure(ctx, "independent_facts")
+		preparedPhase := PhaseOneEvaluation{Materials: PhaseOneMaterials{Complete: false, Diagnostics: []string{"current_wire_materials_unavailable"}}}
+		if evaluation.Manifest.PhaseOne != nil {
+			preparedPhase.Materials = *evaluation.Manifest.PhaseOne
+		}
+		preparedFacts, phasePrepErr := computePhaseOneFacts(ctx, snap, preparedPhase.Materials, preparedPhase.Materials, history)
+		preparedPhase.Facts = preparedFacts
+		phaseTiming()
 		if phasePrepErr != nil {
 			return preparedReportInput{}, phasePrepErr
 		}
 		evaluation.Manifest.PhaseOne = &preparedPhase.Materials
+		evaluation.Manifest.PhaseOneFactsPrepared = true
 		if evaluation.Result != nil {
-			evaluation.Result.Findings = preparedPhase.Facts
+			additional, timeErr := pipelineIndependentTemporalFacts(ctx, snap, preparedPhase.Materials)
+			if timeErr != nil {
+				return preparedReportInput{}, timeErr
+			}
+			replacements := append(append([]evidence.Finding(nil), preparedPhase.Facts...), additional...)
+			evaluation.Result.Findings = mergePipelineFacts(evaluation.Result.Findings, replacements)
 			evaluation.Result.Executions = nil
-			for _, f := range preparedPhase.Facts {
+			for _, f := range evaluation.Result.Findings {
 				status := "executed"
 				if f.Status == evidence.Missing {
 					status = "skipped"
 				}
 				evaluation.Result.Executions = append(evaluation.Result.Executions, evidence.Execution{FactID: f.FactID, Scope: f.Scope, Status: status, ReasonCode: f.ReasonCode})
 			}
-			evaluation.Manifest.FactCoverage = snapshotFactCoverage(evidence.Request{Facts: evidence.PhaseOneFacts()}, *evaluation.Result)
+			evaluation.Manifest.FactCoverage = snapshotFactCoverage(evidence.Request{Facts: options.Facts}, *evaluation.Result)
 		}
 		key = digest([]any{key, evidence.PhaseOneVersion, preparedPhase.Facts, preparedPhase.Materials})
 		// Diagnostics and S planning must reference a persisted result containing
@@ -247,15 +360,35 @@ func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event
 		audit.write("fact-preparation.json", evaluation)
 		audit.write("snapshot-materials.json", map[string]any{"snapshot": snap, "history": history, "material_cache_key": key})
 	}
-	semantics, semanticErr := s.prepareReportSemantics(ctx, snap, evaluation, key, sharedInput, persist, resultPersisted, func() (SnapshotEvidenceInput, error) { return s.SnapshotEvidenceInput(ctx, snap, assets, options) })
+	semantics, semanticErr := s.prepareReportSemantics(ctx, snap, evaluation, key, sharedInput, persist, resultPersisted, loadPrepared, executeModel)
+	if semantics.CacheHit {
+		if m := pipelineMetrics(ctx); m != nil {
+			m.CacheHits["semantic_result"]++
+		}
+	}
 	if semanticErr != nil && ctx.Err() != nil {
 		return preparedReportInput{}, ctx.Err()
 	}
 	manifest["semantic_evidence"] = map[string]any{"result_key": semantics.ResultKey, "adapter_version": semantics.AdapterVersion, "input_mode": semantics.InputMode, "status": semantics.Status, "result_persisted": semantics.ResultPersisted}
 	projected, err := projectReportEvidence(snap, evaluation, semantics)
+	if evaluation.InputDigest == "" {
+		evaluation.InputDigest = key
+	}
+	if sharedInput != nil {
+		wire := capturePreparedInputs(*sharedInput)
+		// Storage lookup keys include collector options. The public algorithm
+		// digest binds actual typed inputs and parameters, independent of how
+		// they were fetched and whether a cache was used.
+		evaluation.InputDigest = digest([]any{wire.Request, wire.HTTP, wire.PlatformHistory, config})
+	}
+	normalizeTiming := pipelineMeasure(ctx, "normalize_project")
+	bundle := buildReportEvidence(event, snap, evaluation, semantics, history)
+	normalizeTiming()
 	var phaseOne *PhaseOneEvaluation
 	if !s.LegacyReportEvidence {
+		jointTiming := pipelineMeasure(ctx, "joint_c")
 		executed, phaseErr := s.ExecutePhaseOne(ctx, snap, evaluation, semantics, history, assets, persist)
+		jointTiming()
 		if phaseErr != nil {
 			return preparedReportInput{}, phaseErr
 		}
@@ -265,9 +398,24 @@ func (s Services) prepareReportInputMode(ctx context.Context, event domain.Event
 		}
 	}
 	assetSection := normalizeReportAssetSection(assetMatchContext(event, assets))
-	bundle := buildReportEvidence(event, snap, evaluation, semantics, history)
 	bundle.PhaseOne = phaseOne
-	return preparedReportInput{Context: projected, AssetSection: assetSection, Evaluation: evaluation, Semantics: semantics, Evidence: bundle}, err
+	attachPipelineJointNormalization(&bundle)
+	if !s.LegacyReportEvidence {
+		e := boundedPipelineEssence(bundle)
+		bundle.Essence = &e
+	}
+	out := preparedReportInput{Context: projected, AssetSection: assetSection, Evaluation: evaluation, Semantics: semantics, Evidence: bundle}
+	contractTiming := pipelineMeasure(ctx, "normalized_contract_validate")
+	if sharedInput != nil {
+		out.Contract = normalizedExecutionContract(snap, *sharedInput, out)
+	} else if !s.LegacyReportEvidence {
+		out.Contract = normalizedExecutionContract(snap, SnapshotEvidenceInput{Manifest: evaluation.Manifest}, out)
+	}
+	if err == nil && !s.LegacyReportEvidence {
+		err = validateNormalizedLedger(out)
+	}
+	contractTiming()
+	return out, err
 }
 
 // Report-only wording: packet direction and an IOC label do not establish an

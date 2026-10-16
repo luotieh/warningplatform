@@ -1,0 +1,1862 @@
+{
+  "facts": [
+    {
+      "definition": {
+        "feature_claim": "n≥8；5s≤Δt≤24h；CV(Δt)≤0.15；每次≤5 包（DetectHeartbeat）",
+        "security_interpretation": "严格周期信标；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "周期或重复请求不证明C2；累计FLOW包数不能替代逐次独立联系",
+        "required_correlations": [
+          "同资产、端点与IOC的原始字段绑定",
+          "完整独立联系或HTTP事务观测",
+          "适用的C02/C04前提；F_BEACON_PERIODIC不属于一期C"
+        ],
+        "fact_id": "F_BEACON_PERIODIC",
+        "description": "严格周期信标",
+        "algorithm": "n≥8；5s≤Δt≤24h；CV(Δt)≤0.15；每次≤5 包（DetectHeartbeat）"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "time_series",
+        "capture_quality"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "n≥16；median(Δt) 稳定且 0.15\u003cCV≤0.40；Ljung-Box p\u003c0.05 且 ACF 峰值\u003e0.3",
+        "security_interpretation": "抖动周期信标；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "周期或重复请求不证明C2；累计FLOW包数不能替代逐次独立联系",
+        "required_correlations": [
+          "同资产、端点与IOC的原始字段绑定",
+          "完整独立联系或HTTP事务观测",
+          "适用的C02/C04前提；F_BEACON_PERIODIC不属于一期C"
+        ],
+        "fact_id": "F_BEACON_JITTER",
+        "description": "抖动周期信标",
+        "algorithm": "n≥16；median(Δt) 稳定且 0.15\u003cCV≤0.40；Ljung-Box p\u003c0.05 且 ACF 峰值\u003e0.3"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "time_series",
+        "capture_quality"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "≥3 自然日且 ≥80% 命中落在同一 ≤2h 窗口",
+        "security_interpretation": "每天固定时间点；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "活跃日期或日内集中不证明持续在线、持久化或恶意作息",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_FIXED_DAILY_WINDOW",
+        "description": "每天固定时间点",
+        "algorithm": "≥3 自然日且 ≥80% 命中落在同一 ≤2h 窗口"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "time_series",
+        "capture_quality"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "锁定窗口内逐日桶活跃 ≥2 天为 days2 / ≥3 天为 days3（不用首末两点推持续；固定资产/端点，需跨段时联合快照）",
+        "security_interpretation": "跨日持续；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "活跃日期或日内集中不证明持续在线、持久化或恶意作息",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_MULTI_DAY_PERSIST",
+        "description": "跨日持续",
+        "algorithm": "锁定窗口内逐日桶活跃 ≥2 天为 days2 / ≥3 天为 days3（不用首末两点推持续；固定资产/端点，需跨段时联合快照）"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "time_series",
+        "capture_quality"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "peak_window(5m)/长期窗口均值 \u003ep99 基线",
+        "security_interpretation": "命中突发；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "不能单独证明恶意意图、攻击归属、主机感染或攻击成功",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_RATE_BURST",
+        "description": "命中突发",
+        "algorithm": "peak_window(5m)/长期窗口均值 \u003ep99 基线"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "time_series",
+        "capture_quality",
+        "baselines"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "至少5个固定等长窗口；无并列值时精确双侧Mann-Kendall p\u003c0.05；并列/缺窗标ineligible，禁止静默切渐近检验",
+        "security_interpretation": "速率阶梯上升；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "不能单独证明恶意意图、攻击归属、主机感染或攻击成功",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_RATE_RAMP",
+        "description": "速率阶梯上升",
+        "algorithm": "至少5个固定等长窗口；无并列值时精确双侧Mann-Kendall p\u003c0.05；并列/缺窗标ineligible，禁止静默切渐近检验"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "time_series",
+        "capture_quality"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "PSL 归一后：独特子域比 \u003ep95 且 标签长 p90 \u003ep95 且 查询速率 \u003ep95（同域基线）；单机高熵不支持 Botnet",
+        "security_interpretation": "长标签高基数子域（单资产）；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "未计算Shannon熵；高唯一率、长标签与高查询率不证明隧道或Botnet",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_DNS_HIGH_ENTROPY",
+        "description": "长标签高基数子域（单资产）",
+        "algorithm": "PSL 归一后：独特子域比 \u003ep95 且 标签长 p90 \u003ep95 且 查询速率 \u003ep95（同域基线）；单机高熵不支持 Botnet"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "dns_records",
+        "baselines"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "base32/hex 模式匹配且代码可验证解码链",
+        "security_interpretation": "子域编码结构；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "编码结构不证明恶意目的或数据外传",
+        "required_correlations": [
+          "S04对同一DNS问题及程序验证解码链的语义解释",
+          "C07同源关联及去重"
+        ],
+        "fact_id": "F_DNS_ENCODED_LABEL",
+        "description": "子域编码结构",
+        "algorithm": "base32/hex 模式匹配且代码可验证解码链"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "dns_records"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "bigram 对数概率 \u003c语料 p05；元音比/长度分布异常；单机随机域名不支持 Botnet",
+        "security_interpretation": "词形随机性（单资产）；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "词形代理指标不证明DGA生成机制或家族归属",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_DGA_LEXICAL",
+        "description": "词形随机性（单资产）",
+        "algorithm": "bigram 对数概率 \u003c语料 p05；元音比/长度分布异常；单机随机域名不支持 Botnet"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "dns_records",
+        "baselines",
+        "dns_lexical_corpus"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "单资产完整查询窗口内 NXDOMAIN 查询比例 \u003e nxdomain_rate_p99，且失败的不同 eTLD+1 ≥2；基线单位为查询比例",
+        "security_interpretation": "NXDOMAIN失败率与多注册域聚集（单资产）；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "不能单独证明恶意意图、攻击归属、主机感染或攻击成功",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_NXDOMAIN_CLUSTER",
+        "description": "NXDOMAIN失败率与多注册域聚集（单资产）",
+        "algorithm": "单资产完整查询窗口内 NXDOMAIN 查询比例 \u003e nxdomain_rate_p99，且失败的不同 eTLD+1 ≥2；基线单位为查询比例"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "dns_records",
+        "baselines"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "≥3 资产同窗口对同词形簇域名的失败解析率 \u003e群体基线 p99；需 rcode＋未命中分母；与单资产版为不同 fact",
+        "security_interpretation": "群体 NXDOMAIN 聚集（scope=asset_group）；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "不能单独证明恶意意图、攻击归属、主机感染或攻击成功",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_GROUP_NXDOMAIN_CLUSTER",
+        "description": "群体 NXDOMAIN 聚集（scope=asset_group）",
+        "algorithm": "≥3 资产同窗口对同词形簇域名的失败解析率 \u003e群体基线 p99；需 rcode＋未命中分母；与单资产版为不同 fact"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "group_membership",
+        "group_observations",
+        "baselines"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "同一规范DNS问题名至少min_failures次先前NXDOMAIN，随后NOERROR回答IP且同资产≤5min连接该IP；不要求连续失败",
+        "security_interpretation": "失败域→激活连接；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "同问题名失败后解析并连接不证明域名激活原因、C2或感染",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_FAILED_TO_ACTIVE",
+        "description": "失败域→激活连接",
+        "algorithm": "同一规范DNS问题名至少min_failures次先前NXDOMAIN，随后NOERROR回答IP且同资产≤5min连接该IP；不要求连续失败"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "dns_records",
+        "network_records",
+        "bound_connection_hits"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "≥3 资产共同查询一簇非常规域名（同注册域/同命名模式）",
+        "security_interpretation": "群体共同域名簇；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "不能单独证明恶意意图、攻击归属、主机感染或攻击成功",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_SHARED_DOMAIN_CLUSTER",
+        "description": "群体共同域名簇",
+        "algorithm": "≥3 资产共同查询一簇非常规域名（同注册域/同命名模式）"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "group_membership",
+        "group_observations",
+        "baselines"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "主机＋规范端点分组：重复 ≥6 次且间隔低抖动（CV≤0.3）；POST 本身不加分",
+        "security_interpretation": "端点重复回连；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "周期或重复请求不证明C2；累计FLOW包数不能替代逐次独立联系",
+        "required_correlations": [
+          "同资产、端点与IOC的原始字段绑定",
+          "完整独立联系或HTTP事务观测",
+          "适用的C02/C04前提；F_BEACON_PERIODIC不属于一期C"
+        ],
+        "fact_id": "F_HTTP_ENDPOINT_REPEAT",
+        "description": "端点重复回连",
+        "algorithm": "主机＋规范端点分组：重复 ≥6 次且间隔低抖动（CV≤0.3）；POST 本身不加分"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "http_records"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "编码链验证后异常长度/编码占比 \u003e同服务基线 p95；排除 JWT/OAuth",
+        "security_interpretation": "字段编码异常；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "不能单独证明恶意意图、攻击归属、主机感染或攻击成功",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_HTTP_FIELD_ENCODING",
+        "description": "字段编码异常",
+        "algorithm": "编码链验证后异常长度/编码占比 \u003e同服务基线 p95；排除 JWT/OAuth"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "http_records",
+        "baselines"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "同资产 UA 一致且全平台稀有度 \u003cp01；弱证据，与 S03 同事实取其一",
+        "security_interpretation": "UA一致且稀有；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "不能单独证明恶意意图、攻击归属、主机感染或攻击成功",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_HTTP_UA_RARITY",
+        "description": "UA一致且稀有",
+        "algorithm": "同资产 UA 一致且全平台稀有度 \u003cp01；弱证据，与 S03 同事实取其一"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "http_records",
+        "baselines"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "n≥12；仅请求BodyLength：CV\u003c size_cv_p05 且 unique_size_ratio\u003cunique_size_ratio_p05；不计算响应或z分数",
+        "security_interpretation": "HTTP请求体大小稳定；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "只计算请求体大小；未证明响应大小稳定、回连目的或传输内容",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_HTTP_SIZE_STABILITY",
+        "description": "HTTP请求体大小稳定",
+        "algorithm": "n≥12；仅请求BodyLength：CV\u003c size_cv_p05 且 unique_size_ratio\u003cunique_size_ratio_p05；不计算响应或z分数"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "http_records",
+        "baselines"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "会话 \u003e30min 且双向 \u003c10KB 且含周期小包（体量须 Q02 verified）",
+        "security_interpretation": "长会话低频小流量；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "不能单独证明恶意意图、攻击归属、主机感染或攻击成功",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_LONG_LOW_SESSION",
+        "description": "长会话低频小流量",
+        "algorithm": "会话 \u003e30min 且双向 \u003c10KB 且含周期小包（体量须 Q02 verified）"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "verified_sessions",
+        "time_series",
+        "capture_quality"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "userinfo `@` / IP·数字·十六进制主机；deception_strength: weak，不满足 Phishing 欺骗门槛",
+        "security_interpretation": "URL 授权部分异常（弱欺骗）；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "不能单独证明恶意意图、攻击归属、主机感染或攻击成功",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_URL_ODD_AUTHORITY",
+        "description": "URL 授权部分异常（弱欺骗）",
+        "algorithm": "userinfo `@` / IP·数字·十六进制主机；deception_strength: weak，不满足 Phishing 欺骗门槛"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "http_records"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "有限字符映射后与核验品牌域近似；不覆盖完整Unicode视觉混淆检测",
+        "security_interpretation": "域名有限字符映射近似；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "不能单独证明恶意意图、攻击归属、主机感染或攻击成功",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_URL_HOMOGLYPH",
+        "description": "域名有限字符映射近似",
+        "algorithm": "有限字符映射后与核验品牌域近似；不覆盖完整Unicode视觉混淆检测"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "http_records",
+        "brand_registry"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "品牌词在子域而注册域无关（PSL 提取），如 `brand.com.evil.tld`",
+        "security_interpretation": "子域品牌词与授权注册域冲突；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "不能单独证明恶意意图、攻击归属、主机感染或攻击成功",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_URL_BRAND_SUBDOMAIN_TRICK",
+        "description": "子域品牌词与授权注册域冲突",
+        "algorithm": "品牌词在子域而注册域无关（PSL 提取），如 `brand.com.evil.tld`"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "http_records",
+        "brand_registry"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "与审核品牌清单编辑距离/邻键比对，或授权域核验失败；需品牌清单",
+        "security_interpretation": "品牌仿冒；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "不能单独证明恶意意图、攻击归属、主机感染或攻击成功",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_BRAND_IMPOSTOR",
+        "description": "品牌仿冒",
+        "algorithm": "与审核品牌清单编辑距离/邻键比对，或授权域核验失败；需品牌清单"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "http_records",
+        "brand_registry"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "同请求 POST＋脱敏凭据字段名；正文截断标 insufficient",
+        "security_interpretation": "登录提交结构；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "不能单独证明恶意意图、攻击归属、主机感染或攻击成功",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_CRED_POST_STRUCTURE",
+        "description": "登录提交结构",
+        "algorithm": "同请求 POST＋脱敏凭据字段名；正文截断标 insufficient"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "http_records"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "action 与页面来源不同可注册域",
+        "security_interpretation": "表单跨站提交；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "不能单独证明恶意意图、攻击归属、主机感染或攻击成功",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_FORM_CROSSSITE",
+        "description": "表单跨站提交",
+        "algorithm": "action 与页面来源不同可注册域"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "http_records"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "事务 ID 关联的跨注册域跳转提交链；两条无关联命中不得拼接",
+        "security_interpretation": "落地页→异站提交链；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "不识别短链服务，不证明钓鱼；SessionID只用于限制现有已核验链，不能猜测浏览器跨连接身份",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_REDIRECT_CHAIN",
+        "description": "落地页→异站提交链",
+        "algorithm": "事务 ID 关联的跨注册域跳转提交链；两条无关联命中不得拼接"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "http_records"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "同一已关联会话内≥2条经RedirectVerified验证的事务跳转边；核验响应状态及Location，不识别短链服务",
+        "security_interpretation": "多次HTTP重定向；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "不识别短链服务，不证明钓鱼；SessionID只用于限制现有已核验链，不能猜测浏览器跨连接身份",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_MULTI_REDIRECT_CHAIN",
+        "description": "多次HTTP重定向",
+        "algorithm": "同一已关联会话内≥2条经RedirectVerified验证的事务跳转边；核验响应状态及Location，不识别短链服务"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "http_records"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "dst_port vs 可解析 app_proto 指纹＋服务清单不符（端口推断的 protocol 不算）",
+        "security_interpretation": "协议-端口错配；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "不能单独证明恶意意图、攻击归属、主机感染或攻击成功",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_PROTOCOL_PORT_MISMATCH",
+        "description": "协议-端口错配",
+        "algorithm": "dst_port vs 可解析 app_proto 指纹＋服务清单不符（端口推断的 protocol 不算）"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "network_records",
+        "service_registry"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "目的端口在同角色资产群体中频率 \u003cp01",
+        "security_interpretation": "稀有端口；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "不能单独证明恶意意图、攻击归属、主机感染或攻击成功",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_RARE_PORT",
+        "description": "稀有端口",
+        "algorithm": "目的端口在同角色资产群体中频率 \u003cp01"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "network_records",
+        "baselines"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "资产历史覆盖窗口内首现（只称\"首次告警\"）",
+        "security_interpretation": "目的端点新颖；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "不能单独证明恶意意图、攻击归属、主机感染或攻击成功",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_DST_NOVELTY",
+        "description": "目的端点新颖",
+        "algorithm": "资产历史覆盖窗口内首现（只称\"首次告警\"）"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "history"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "目的 IP 的 ASN/地理/信誉稀有（外部清单，二期）",
+        "security_interpretation": "目标基础设施稀有度；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "不能单独证明恶意意图、攻击归属、主机感染或攻击成功",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_INFRA_RARITY",
+        "description": "目标基础设施稀有度",
+        "algorithm": "目的 IP 的 ASN/地理/信誉稀有（外部清单，二期）"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "network_records",
+        "baselines",
+        "infrastructure_registry"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "跨事件按源去重 unique(dst,port)/小时 \u003e角色基线 p99",
+        "security_interpretation": "单源目标扇出；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "不能单独证明恶意意图、攻击归属、主机感染或攻击成功",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_FANOUT_SINGLE_SRC",
+        "description": "单源目标扇出",
+        "algorithm": "跨事件按源去重 unique(dst,port)/小时 \u003e角色基线 p99"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "network_records",
+        "baselines"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "目的端口序列呈顺序/逆序/伪随机（≥8 去重端口）",
+        "security_interpretation": "端口序列形态；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "不能单独证明恶意意图、攻击归属、主机感染或攻击成功",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_PORT_SEQUENCE",
+        "description": "端口序列形态",
+        "algorithm": "目的端口序列呈顺序/逆序/伪随机（≥8 去重端口）"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "network_records"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "≥80%独立连接观测的应用载荷字节数≤small_payload_bytes；另记录零载荷比例，不等同零载荷",
+        "security_interpretation": "低应用载荷占比；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "低应用载荷不等于零载荷，也不证明扫描或探测意图",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_SMALL_PACKET",
+        "description": "低应用载荷占比",
+        "algorithm": "≥80%独立连接观测的应用载荷字节数≤small_payload_bytes；另记录零载荷比例，不等同零载荷"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "network_records"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "完整窗口确认失败/(确认失败+确认成功)\u003econnection_failure_rate_p95；须OutcomeVerified；尝试中或未知结局返回missing，SYN_SENT不计失败",
+        "security_interpretation": "连接失败率；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "连接尝试、单独RST或CLOSED状态不证明最终连接失败；失败比例不证明扫描",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_CONN_FAIL_RATE",
+        "description": "连接失败率",
+        "algorithm": "完整窗口确认失败/(确认失败+确认成功)\u003econnection_failure_rate_p95；须OutcomeVerified；尝试中或未知结局返回missing，SYN_SENT不计失败"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "network_records",
+        "baselines",
+        "verified_connection_outcomes"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "by_rule＋规则库元数据判独立性；同 IOC 派生多 rule_id 只记一组",
+        "security_interpretation": "独立规则交叉佐证；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "不能单独证明恶意意图、攻击归属、主机感染或攻击成功",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_INDEPENDENT_RULE_CORROB",
+        "description": "独立规则交叉佐证",
+        "algorithm": "by_rule＋规则库元数据判独立性；同 IOC 派生多 rule_id 只记一组"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "independent_rule_and_intel_metadata"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "多情报源/引擎独立标记同一目的；须验证情报源独立性（同源转引不算）",
+        "security_interpretation": "跨情报源独立命中；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "不能单独证明恶意意图、攻击归属、主机感染或攻击成功",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_INDEPENDENT_INTEL_CORROB",
+        "description": "跨情报源独立命中",
+        "algorithm": "多情报源/引擎独立标记同一目的；须验证情报源独立性（同源转引不算）"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "independent_rule_and_intel_metadata"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "IOC 情报类型与成立硬行为事实类型一致（evaluation_stage=post_hard_type；抑制与 modifier 后的 hard_type_scores 满足 top1≥15、份额≥0.60、margin≥10 且情报标签与 top1 一致时成立）；不回填类型分",
+        "security_interpretation": "IOC 类型与行为证据一致；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "不能单独证明恶意意图、攻击归属、主机感染或攻击成功",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_IOC_TYPE_CORROB",
+        "description": "IOC 类型与行为证据一致",
+        "algorithm": "IOC 情报类型与成立硬行为事实类型一致（evaluation_stage=post_hard_type；抑制与 modifier 后的 hard_type_scores 满足 top1≥15、份额≥0.60、margin≥10 且情报标签与 top1 一致时成立）；不回填类型分"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "independent_rule_and_intel_metadata"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "已核验TLS握手SNI与证书名称匹配失败；需已核验CDN例外清单；不比较目的服务身份",
+        "security_interpretation": "SNI与证书名称不符；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "仅SNI与证书名称比较；不验证实际目的服务身份，不证明流量伪装",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_TLS_SNI_MISMATCH",
+        "description": "SNI与证书名称不符",
+        "algorithm": "已核验TLS握手SNI与证书名称匹配失败；需已核验CDN例外清单；不比较目的服务身份"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "tls_records",
+        "tls_trust_and_fingerprint_registry"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "证书链/有效期/颁发者异常",
+        "security_interpretation": "自签名/异常证书；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "不能单独证明恶意意图、攻击归属、主机感染或攻击成功",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_TLS_CERT_ANOMALY",
+        "description": "自签名/异常证书",
+        "algorithm": "证书链/有效期/颁发者异常"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "tls_records",
+        "tls_trust_and_fingerprint_registry"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "指纹库比对；浏览器声称 vs TLS 指纹",
+        "security_interpretation": "JA3/JA4 指纹与声明不符；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "不能单独证明恶意意图、攻击归属、主机感染或攻击成功",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_TLS_JA_MISMATCH",
+        "description": "JA3/JA4 指纹与声明不符",
+        "algorithm": "指纹库比对；浏览器声称 vs TLS 指纹"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "tls_records",
+        "tls_trust_and_fingerprint_registry"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "≥3 独立资产（NAT/代理/解析器归属去重）同 IOC 且时间聚集",
+        "security_interpretation": "多资产同 IOC；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "不能单独证明恶意意图、攻击归属、主机感染或攻击成功",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_MULTI_ASSET_IOC",
+        "description": "多资产同 IOC",
+        "algorithm": "≥3 独立资产（NAT/代理/解析器归属去重）同 IOC 且时间聚集"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "group_membership",
+        "group_observations"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "核验成员的子网熵及角色分布达到配置门槛；不推断随机感染或真实感染面",
+        "security_interpretation": "聚集分布形态；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "不能单独证明恶意意图、攻击归属、主机感染或攻击成功",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_MULTI_ASSET_DIST",
+        "description": "聚集分布形态",
+        "algorithm": "核验成员的子网熵及角色分布达到配置门槛；不推断随机感染或真实感染面"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "group_membership",
+        "group_observations"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "≥3资产到同一协议/IP/端口的有界时间桶序列；最小两两互相关\u003e0.7；Endpoint缺失不执行",
+        "security_interpretation": "多资产时间协同；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "不能单独证明恶意意图、攻击归属、主机感染或攻击成功",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_TIME_COORDINATION",
+        "description": "多资产时间协同",
+        "algorithm": "≥3资产到同一协议/IP/端口的有界时间桶序列；最小两两互相关\u003e0.7；Endpoint缺失不执行"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "group_membership",
+        "group_observations"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "多源目标集合重叠 \u003e70%，或不同资产分工覆盖目标段且时间衔接",
+        "security_interpretation": "多资产目标集合重叠或扇出衔接；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "不能单独证明恶意意图、攻击归属、主机感染或攻击成功",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_COORD_FANOUT",
+        "description": "多资产目标集合重叠或扇出衔接",
+        "algorithm": "多源目标集合重叠 \u003e70%，或不同资产分工覆盖目标段且时间衔接"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "group_membership",
+        "group_observations"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "A外联同一协议/IP/端口→A访问另一成员B的核验地址→B随后外联该端点；至少一条时序路径，不证明感染或利用成功",
+        "security_interpretation": "疑似横向传播时序；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "A→B时间顺序不证明感染、利用成功或因果传播；一条路径不证明多个B",
+        "required_correlations": [
+          "独立主机感染或执行证据",
+          "每条边的真实资产、协议、目的IP和端口绑定"
+        ],
+        "fact_id": "F_INFECTION_CHAIN",
+        "description": "疑似横向传播时序",
+        "algorithm": "A外联同一协议/IP/端口→A访问另一成员B的核验地址→B随后外联该端点；至少一条时序路径，不证明感染或利用成功"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "group_membership",
+        "group_observations"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "≥3核验资产连接同一协议/IP/端口，且endpoint_frequency\u003cendpoint_frequency_p01；DNS查询不充当连接",
+        "security_interpretation": "共享目的端点；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "不能单独证明恶意意图、攻击归属、主机感染或攻击成功",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_SHARED_ENDPOINT",
+        "description": "共享目的端点",
+        "algorithm": "≥3核验资产连接同一协议/IP/端口，且endpoint_frequency\u003cendpoint_frequency_p01；DNS查询不充当连接"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "group_membership",
+        "group_observations",
+        "baselines"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "完整历史窗口内无先前记录的同端点访问，≥3资产集中≤1h；不证明网络真实首访或点击",
+        "security_interpretation": "首次已保存访问时间聚集；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "不能单独证明恶意意图、攻击归属、主机感染或攻击成功",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_FIRST_VISIT_CLUSTER",
+        "description": "首次已保存访问时间聚集",
+        "algorithm": "完整历史窗口内无先前记录的同端点访问，≥3资产集中≤1h；不证明网络真实首访或点击"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "group_membership",
+        "group_observations",
+        "history"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "同一资产组的协同模式（相位/突发窗口）在 ≥2 个自然日重现",
+        "security_interpretation": "协同模式跨日重复；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "不能单独证明恶意意图、攻击归属、主机感染或攻击成功",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_COORD_PATTERN_RECURRENCE",
+        "description": "协同模式跨日重复",
+        "algorithm": "同一资产组的协同模式（相位/突发窗口）在 ≥2 个自然日重现"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "group_membership",
+        "group_observations"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "30天窗≥2自然日独立事件；允许有来源的partial阳性；F不按审核状态计分，C01按一期联合策略计分",
+        "security_interpretation": "同 IOC→同资产跨日复发；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "历史复发不证明恶意；不重复审核IOC；F不执行旧版审核加减分",
+        "required_correlations": [
+          "同资产设备与IOC真实关系",
+          "C01一期确定性联合策略；partial仅允许有来源的阳性"
+        ],
+        "fact_id": "F_HIST_ASSET_IOC_RECURRENCE",
+        "description": "同 IOC→同资产跨日复发",
+        "algorithm": "30天窗≥2自然日独立事件；允许有来源的partial阳性；F不按审核状态计分，C01按一期联合策略计分"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "history"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "同已核验群体及基础设施跨周重现；仅输出历史事实，不执行旧版审核加减分",
+        "security_interpretation": "群体+基础设施复发；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "不能单独证明恶意意图、攻击归属、主机感染或攻击成功",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_HIST_GROUP_RECURRENCE",
+        "description": "群体+基础设施复发",
+        "algorithm": "同已核验群体及基础设施跨周重现；仅输出历史事实，不执行旧版审核加减分"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "history"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "同IOC连续自然日由多个资产产生已保存历史记录；只输出关联事实，不证明服务存活、钓鱼或直接加分",
+        "security_interpretation": "连续跨日多资产IOC关联；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "已保存跨日多资产IOC关联不证明服务持续存活或钓鱼活动",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_HIST_INFRA_PERSISTENCE",
+        "description": "连续跨日多资产IOC关联",
+        "algorithm": "同IOC连续自然日由多个资产产生已保存历史记录；只输出关联事实，不证明服务存活、钓鱼或直接加分"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "history"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "历史事件与当前命中时刻分布一致（KL 散度 \u003c阈值）",
+        "security_interpretation": "历史时刻模式一致；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "不能单独证明恶意意图、攻击归属、主机感染或攻击成功",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_HIST_SCHEDULE_MATCH",
+        "description": "历史时刻模式一致",
+        "algorithm": "历史事件与当前命中时刻分布一致（KL 散度 \u003c阈值）"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "history"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "窗口内同资产被 ≥3 不同 IOC/规则族命中；按角色基线",
+        "security_interpretation": "同资产多 IOC 围攻；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "不能单独证明恶意意图、攻击归属、主机感染或攻击成功",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_HIST_MULTI_IOC_SIEGE",
+        "description": "同资产多 IOC 围攻",
+        "algorithm": "窗口内同资产被 ≥3 不同 IOC/规则族命中；按角色基线"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "history",
+        "baselines"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "同资产、同IOC或独立核验战役内，已定谳恶意历史与有来源证明的CurrentStage构成scan/exploit→c2→exfil推进；当前阶段须高于最近历史阶段，历史不得回退；不证明因果攻击链",
+        "security_interpretation": "攻击阶段递进；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "不能单独证明恶意意图、攻击归属、主机感染或攻击成功",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_HIST_STAGE_PROGRESSION",
+        "description": "攻击阶段递进",
+        "algorithm": "同资产、同IOC或独立核验战役内，已定谳恶意历史与有来源证明的CurrentStage构成scan/exploit→c2→exfil推进；当前阶段须高于最近历史阶段，历史不得回退；不证明因果攻击链"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "history",
+        "campaign_and_stage_proofs"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "同实际基础设施、独立核验战役及资产/完整群体范围内，核验的当前协同参数与已定谳历史按配置容限比较；群体ID及完整核验成员集合须一致；只说明受约束的参数相似",
+        "security_interpretation": "历史协同参数一致；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "不能单独证明恶意意图、攻击归属、主机感染或攻击成功",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_HIST_COORD_PARAM_MATCH",
+        "description": "历史协同参数一致",
+        "algorithm": "同实际基础设施、独立核验战役及资产/完整群体范围内，核验的当前协同参数与已定谳历史按配置容限比较；群体ID及完整核验成员集合须一致；只说明受约束的参数相似"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "history",
+        "campaign_and_stage_proofs"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "资产/域名属登记钓鱼演练或测试平台（留验证记录）；classification_effect: type=PH, effective_score_cap=34, status=candidate",
+        "security_interpretation": "登记演练平台命中；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "不能单独证明恶意意图、攻击归属、主机感染或攻击成功",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_HIST_EXERCISE",
+        "description": "登记演练平台命中",
+        "algorithm": "资产/域名属登记钓鱼演练或测试平台（留验证记录）；classification_effect: type=PH, effective_score_cap=34, status=candidate"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "authorization_records"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "历史库无记录；与 F_HIST_ASSET_IOC_RECURRENCE 互斥",
+        "security_interpretation": "IOC 平台首现；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "不能单独证明恶意意图、攻击归属、主机感染或攻击成功",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_IOC_NOVELTY",
+        "description": "IOC 平台首现",
+        "algorithm": "历史库无记录；与 F_HIST_ASSET_IOC_RECURRENCE 互斥"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "history"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "核验登记角色/任务与当前活动匹配，不由模型推断",
+        "security_interpretation": "已核验扫描任务；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "不能单独证明恶意意图、攻击归属、主机感染或攻击成功",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_EXCL_SCAN_TASK",
+        "description": "已核验扫描任务",
+        "algorithm": "核验登记角色/任务与当前活动匹配，不由模型推断"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "authorization_records"
+      ]
+    },
+    {
+      "definition": {
+        "feature_claim": "核验登记角色/任务与当前活动匹配，不由模型推断",
+        "security_interpretation": "已核验基础服务；仅作为已核验输入范围内的特征线索",
+        "cannot_prove": "不能单独证明恶意意图、攻击归属、主机感染或攻击成功",
+        "required_correlations": [
+          "同资产及真实通信来源绑定",
+          "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"
+        ],
+        "fact_id": "F_EXCL_INFRA_ROLE",
+        "description": "已核验基础服务",
+        "algorithm": "核验登记角色/任务与当前活动匹配，不由模型推断"
+      },
+      "entry": "evidence.Engine.Evaluate/evaluateFactSafely",
+      "field_validation": "existing per-rule gates; raw subject and provenance verified by snapshot adapter",
+      "input_families": [
+        "authorization_records"
+      ]
+    }
+  ],
+  "normalization_version": "evidence-normalization-0.3",
+  "rule_version": "evidence-algorithms-0.7",
+  "semantic_input_contracts": [
+    {
+      "slot": {
+        "id": "S01",
+        "target": "c2.command_intent"
+      },
+      "material_kinds": [
+        "protocol_request",
+        "direction"
+      ],
+      "all_facts": null,
+      "any_facts": null
+    },
+    {
+      "slot": {
+        "id": "S02",
+        "target": "c2.command_exchange"
+      },
+      "material_kinds": [
+        "protocol_request",
+        "protocol_response",
+        "pair"
+      ],
+      "all_facts": null,
+      "any_facts": null
+    },
+    {
+      "slot": {
+        "id": "S03",
+        "target": "c2.ua_behavior_conflict"
+      },
+      "material_kinds": [
+        "ua",
+        "protocol_request"
+      ],
+      "all_facts": [
+        "F_HTTP_ENDPOINT_REPEAT"
+      ],
+      "any_facts": null
+    },
+    {
+      "slot": {
+        "id": "S04",
+        "target": "c2.dns_encoded_intent"
+      },
+      "material_kinds": [
+        "domain",
+        "decode",
+        "decoded_payload"
+      ],
+      "all_facts": [
+        "F_DNS_ENCODED_LABEL"
+      ],
+      "any_facts": null
+    },
+    {
+      "slot": {
+        "id": "S05",
+        "target": "phishing.deception"
+      },
+      "material_kinds": [
+        "page",
+        "host",
+        "brand_authorization"
+      ],
+      "all_facts": null,
+      "any_facts": null
+    },
+    {
+      "slot": {
+        "id": "S06",
+        "target": "phishing.credential_action"
+      },
+      "material_kinds": [
+        "credential_fields",
+        "protocol_request"
+      ],
+      "all_facts": null,
+      "any_facts": [
+        "F_CRED_POST_STRUCTURE",
+        "F_FORM_CROSSSITE",
+        "F_REDIRECT_CHAIN"
+      ]
+    },
+    {
+      "slot": {
+        "id": "S07",
+        "target": "exfil.sensitive_upload"
+      },
+      "material_kinds": [
+        "protocol_request",
+        "direction",
+        "volume",
+        "content_classification"
+      ],
+      "all_facts": null,
+      "any_facts": null
+    },
+    {
+      "slot": {
+        "id": "S08",
+        "target": "exfil.chunk_sequence"
+      },
+      "material_kinds": [
+        "chunk",
+        "volume",
+        "transfer_join"
+      ],
+      "all_facts": null,
+      "any_facts": null
+    },
+    {
+      "slot": {
+        "id": "S09",
+        "target": "exploit.payload_intent"
+      },
+      "material_kinds": [
+        "protocol_request",
+        "parsed_payload",
+        "direction"
+      ],
+      "all_facts": null,
+      "any_facts": null
+    },
+    {
+      "slot": {
+        "id": "S10",
+        "target": "protocol.response_meaning"
+      },
+      "material_kinds": [
+        "protocol_request",
+        "protocol_response",
+        "pair"
+      ],
+      "all_facts": null,
+      "any_facts": null
+    },
+    {
+      "slot": {
+        "id": "S11",
+        "target": "mining.protocol_intent"
+      },
+      "material_kinds": [
+        "stratum_request",
+        "stratum_response",
+        "pair"
+      ],
+      "all_facts": null,
+      "any_facts": null
+    },
+    {
+      "slot": {
+        "id": "S12",
+        "target": "c2.domain_lexical",
+        "subtype": "dga_lexical"
+      },
+      "material_kinds": [
+        "domain",
+        "lexical_context"
+      ],
+      "all_facts": null,
+      "any_facts": null
+    },
+    {
+      "slot": {
+        "id": "S12",
+        "target": "phishing.deception",
+        "subtype": "brand_semantic_impostor"
+      },
+      "material_kinds": [
+        "brand",
+        "host",
+        "brand_authorization"
+      ],
+      "all_facts": null,
+      "any_facts": null
+    },
+    {
+      "slot": {
+        "id": "S13",
+        "target": "payload.decoded_intent",
+        "subtype": "command"
+      },
+      "material_kinds": [
+        "decode",
+        "decoded_payload",
+        "protocol_request",
+        "direction"
+      ],
+      "all_facts": null,
+      "any_facts": null
+    },
+    {
+      "slot": {
+        "id": "S13",
+        "target": "payload.decoded_intent",
+        "subtype": "other"
+      },
+      "material_kinds": [
+        "decode",
+        "decoded_payload",
+        "operation_context"
+      ],
+      "all_facts": null,
+      "any_facts": null
+    },
+    {
+      "slot": {
+        "id": "S14",
+        "target": "review.benign_alternative"
+      },
+      "material_kinds": [
+        "protocol_request",
+        "asset_role",
+        "task_context"
+      ],
+      "all_facts": null,
+      "any_facts": null
+    },
+    {
+      "slot": {
+        "id": "S15",
+        "target": "review.stage_and_gaps"
+      },
+      "material_kinds": [
+        "visibility",
+        "gaps"
+      ],
+      "all_facts": null,
+      "any_facts": null
+    },
+    {
+      "slot": {
+        "id": "BT-S01",
+        "target": "botnet.coordination"
+      },
+      "material_kinds": [
+        "group_member"
+      ],
+      "all_facts": null,
+      "any_facts": [
+        "F_TIME_COORDINATION",
+        "F_COORD_PATTERN_RECURRENCE",
+        "F_COORD_FANOUT",
+        "F_INFECTION_CHAIN"
+      ]
+    },
+    {
+      "slot": {
+        "id": "SC01",
+        "target": "c2.role_schedule_conflict"
+      },
+      "material_kinds": [
+        "asset_role",
+        "business_schedule",
+        "time_distribution"
+      ],
+      "all_facts": null,
+      "any_facts": null
+    },
+    {
+      "slot": {
+        "id": "SC02",
+        "target": "botnet.group_alternative"
+      },
+      "material_kinds": [
+        "group_member"
+      ],
+      "all_facts": null,
+      "any_facts": null
+    },
+    {
+      "slot": {
+        "id": "SC03",
+        "target": "phishing.brand_field_conflict"
+      },
+      "material_kinds": [
+        "brand",
+        "credential_fields",
+        "brand_authorization"
+      ],
+      "all_facts": null,
+      "any_facts": null
+    },
+    {
+      "slot": {
+        "id": "R06",
+        "target": "history.activity_association"
+      },
+      "material_kinds": [
+        "history",
+        "current_pattern"
+      ],
+      "all_facts": null,
+      "any_facts": null
+    },
+    {
+      "slot": {
+        "id": "R07",
+        "target": "history.alternative_explanation"
+      },
+      "material_kinds": [
+        "history",
+        "current_pattern"
+      ],
+      "all_facts": null,
+      "any_facts": null
+    }
+  ],
+  "semantic_version": "evidence-semantics-0.5",
+  "slots": [
+    {
+      "feature_claim": "在材料、引用、事务和前提结构验证后解释：可读协议、可信方向；strong须同事务双向语义对应；不证明执行成功",
+      "security_interpretation": "模型对c2.command_intent的受约束解释；语义正确性须独立评价",
+      "cannot_prove": "引用存在与结构校验通过不等于恶意语义正确，也不证明执行、利用成功、感染或送达",
+      "required_correlations": [
+        "槽位要求的原始材料及事实前提",
+        "确认行为结果须另有独立网络、主机或执行证据"
+      ],
+      "key": {
+        "id": "S01",
+        "target": "c2.command_intent"
+      },
+      "prerequisite": "可读协议、可信方向；strong须同事务双向语义对应；不证明执行成功",
+      "explanation_only": false,
+      "deduplication": "command"
+    },
+    {
+      "feature_claim": "在材料、引用、事务和前提结构验证后解释：同事务真实请求应答；排除文档与日志回显",
+      "security_interpretation": "模型对c2.command_exchange的受约束解释；语义正确性须独立评价",
+      "cannot_prove": "引用存在与结构校验通过不等于恶意语义正确，也不证明执行、利用成功、感染或送达",
+      "required_correlations": [
+        "槽位要求的原始材料及事实前提",
+        "确认行为结果须另有独立网络、主机或执行证据"
+      ],
+      "key": {
+        "id": "S02",
+        "target": "c2.command_exchange"
+      },
+      "prerequisite": "同事务真实请求应答；排除文档与日志回显",
+      "explanation_only": false,
+      "deduplication": "command"
+    },
+    {
+      "feature_claim": "在材料、引用、事务和前提结构验证后解释：重复端点事实及实际UA；浏览器声明不足",
+      "security_interpretation": "模型对c2.ua_behavior_conflict的受约束解释；语义正确性须独立评价",
+      "cannot_prove": "引用存在与结构校验通过不等于恶意语义正确，也不证明执行、利用成功、感染或送达",
+      "required_correlations": [
+        "槽位要求的原始材料及事实前提",
+        "确认行为结果须另有独立网络、主机或执行证据"
+      ],
+      "key": {
+        "id": "S03",
+        "target": "c2.ua_behavior_conflict"
+      },
+      "prerequisite": "重复端点事实及实际UA；浏览器声明不足",
+      "explanation_only": false,
+      "deduplication": "ua"
+    },
+    {
+      "feature_claim": "在材料、引用、事务和前提结构验证后解释：编码标签事实及代码验证解码链；考虑追踪token",
+      "security_interpretation": "模型对c2.dns_encoded_intent的受约束解释；语义正确性须独立评价",
+      "cannot_prove": "引用存在与结构校验通过不等于恶意语义正确，也不证明执行、利用成功、感染或送达",
+      "required_correlations": [
+        "槽位要求的原始材料及事实前提",
+        "确认行为结果须另有独立网络、主机或执行证据"
+      ],
+      "key": {
+        "id": "S04",
+        "target": "c2.dns_encoded_intent"
+      },
+      "prerequisite": "编码标签事实及代码验证解码链；考虑追踪token",
+      "explanation_only": false,
+      "deduplication": "payload"
+    },
+    {
+      "feature_claim": "在材料、引用、事务和前提结构验证后解释：页面正文、Host、核验品牌授权域；strong须明确仿冒依据",
+      "security_interpretation": "模型对phishing.deception的受约束解释；语义正确性须独立评价",
+      "cannot_prove": "引用存在与结构校验通过不等于恶意语义正确，也不证明执行、利用成功、感染或送达",
+      "required_correlations": [
+        "槽位要求的原始材料及事实前提",
+        "确认行为结果须另有独立网络、主机或执行证据"
+      ],
+      "key": {
+        "id": "S05",
+        "target": "phishing.deception"
+      },
+      "prerequisite": "页面正文、Host、核验品牌授权域；strong须明确仿冒依据",
+      "explanation_only": false,
+      "deduplication": "deception"
+    },
+    {
+      "feature_claim": "在材料、引用、事务和前提结构验证后解释：同请求字段名、方法、目的及行动事实；只解释收集意图",
+      "security_interpretation": "模型对phishing.credential_action的受约束解释；语义正确性须独立评价",
+      "cannot_prove": "引用存在与结构校验通过不等于恶意语义正确，也不证明执行、利用成功、感染或送达",
+      "required_correlations": [
+        "槽位要求的原始材料及事实前提",
+        "确认行为结果须另有独立网络、主机或执行证据"
+      ],
+      "key": {
+        "id": "S06",
+        "target": "phishing.credential_action"
+      },
+      "prerequisite": "同请求字段名、方法、目的及行动事实；只解释收集意图",
+      "explanation_only": false,
+      "deduplication": "credential"
+    },
+    {
+      "feature_claim": "在材料、引用、事务和前提结构验证后解释：完整请求、可信方向与体量、内容分类依据；不证明送达",
+      "security_interpretation": "模型对exfil.sensitive_upload的受约束解释；语义正确性须独立评价",
+      "cannot_prove": "引用存在与结构校验通过不等于恶意语义正确，也不证明执行、利用成功、感染或送达",
+      "required_correlations": [
+        "槽位要求的原始材料及事实前提",
+        "确认行为结果须另有独立网络、主机或执行证据"
+      ],
+      "key": {
+        "id": "S07",
+        "target": "exfil.sensitive_upload"
+      },
+      "prerequisite": "完整请求、可信方向与体量、内容分类依据；不证明送达",
+      "explanation_only": false,
+      "deduplication": "transfer"
+    },
+    {
+      "feature_claim": "在材料、引用、事务和前提结构验证后解释：至少两个可靠关联事务、块序号及可信体量；禁止拼接无关命中",
+      "security_interpretation": "模型对exfil.chunk_sequence的受约束解释；语义正确性须独立评价",
+      "cannot_prove": "引用存在与结构校验通过不等于恶意语义正确，也不证明执行、利用成功、感染或送达",
+      "required_correlations": [
+        "槽位要求的原始材料及事实前提",
+        "确认行为结果须另有独立网络、主机或执行证据"
+      ],
+      "key": {
+        "id": "S08",
+        "target": "exfil.chunk_sequence"
+      },
+      "prerequisite": "至少两个可靠关联事务、块序号及可信体量；禁止拼接无关命中",
+      "explanation_only": false,
+      "deduplication": "transfer"
+    },
+    {
+      "feature_claim": "在材料、引用、事务和前提结构验证后解释：已解析请求载荷、方法、目标协议及可信方向；不证明利用成功",
+      "security_interpretation": "模型对exploit.payload_intent的受约束解释；语义正确性须独立评价",
+      "cannot_prove": "引用存在与结构校验通过不等于恶意语义正确，也不证明执行、利用成功、感染或送达",
+      "required_correlations": [
+        "槽位要求的原始材料及事实前提",
+        "确认行为结果须另有独立网络、主机或执行证据"
+      ],
+      "key": {
+        "id": "S09",
+        "target": "exploit.payload_intent"
+      },
+      "prerequisite": "已解析请求载荷、方法、目标协议及可信方向；不证明利用成功",
+      "explanation_only": false,
+      "deduplication": "payload"
+    },
+    {
+      "feature_claim": "在材料、引用、事务和前提结构验证后解释：同事务真实双向应答；HTTP200不证明执行",
+      "security_interpretation": "模型对protocol.response_meaning的受约束解释；语义正确性须独立评价",
+      "cannot_prove": "引用存在与结构校验通过不等于恶意语义正确，也不证明执行、利用成功、感染或送达",
+      "required_correlations": [
+        "槽位要求的原始材料及事实前提",
+        "确认行为结果须另有独立网络、主机或执行证据"
+      ],
+      "key": {
+        "id": "S10",
+        "target": "protocol.response_meaning"
+      },
+      "prerequisite": "同事务真实双向应答；HTTP200不证明执行",
+      "explanation_only": false,
+      "deduplication": "command"
+    },
+    {
+      "feature_claim": "在材料、引用、事务和前提结构验证后解释：实际Stratum方法、参数和应答；不重复协议事实",
+      "security_interpretation": "模型对mining.protocol_intent的受约束解释；语义正确性须独立评价",
+      "cannot_prove": "引用存在与结构校验通过不等于恶意语义正确，也不证明执行、利用成功、感染或送达",
+      "required_correlations": [
+        "槽位要求的原始材料及事实前提",
+        "确认行为结果须另有独立网络、主机或执行证据"
+      ],
+      "key": {
+        "id": "S11",
+        "target": "mining.protocol_intent"
+      },
+      "prerequisite": "实际Stratum方法、参数和应答；不重复协议事实",
+      "explanation_only": false,
+      "deduplication": "mining"
+    },
+    {
+      "feature_claim": "在材料、引用、事务和前提结构验证后解释：原始域名及词形上下文；随机串不自动等于DGA",
+      "security_interpretation": "模型对c2.domain_lexical的受约束解释；语义正确性须独立评价",
+      "cannot_prove": "引用存在与结构校验通过不等于恶意语义正确，也不证明执行、利用成功、感染或送达",
+      "required_correlations": [
+        "槽位要求的原始材料及事实前提",
+        "确认行为结果须另有独立网络、主机或执行证据"
+      ],
+      "key": {
+        "id": "S12",
+        "target": "c2.domain_lexical",
+        "subtype": "dga_lexical"
+      },
+      "prerequisite": "原始域名及词形上下文；随机串不自动等于DGA",
+      "explanation_only": false,
+      "deduplication": "domain"
+    },
+    {
+      "feature_claim": "在材料、引用、事务和前提结构验证后解释：品牌、实际授权域与仿冒关系；仅品牌词最多weak",
+      "security_interpretation": "模型对phishing.deception的受约束解释；语义正确性须独立评价",
+      "cannot_prove": "引用存在与结构校验通过不等于恶意语义正确，也不证明执行、利用成功、感染或送达",
+      "required_correlations": [
+        "槽位要求的原始材料及事实前提",
+        "确认行为结果须另有独立网络、主机或执行证据"
+      ],
+      "key": {
+        "id": "S12",
+        "target": "phishing.deception",
+        "subtype": "brand_semantic_impostor"
+      },
+      "prerequisite": "品牌、实际授权域与仿冒关系；仅品牌词最多weak",
+      "explanation_only": false,
+      "deduplication": "deception"
+    },
+    {
+      "feature_claim": "在材料、引用、事务和前提结构验证后解释：代码验证解码链及实际命令上下文；strong遵循S01",
+      "security_interpretation": "模型对payload.decoded_intent的受约束解释；语义正确性须独立评价",
+      "cannot_prove": "引用存在与结构校验通过不等于恶意语义正确，也不证明执行、利用成功、感染或送达",
+      "required_correlations": [
+        "槽位要求的原始材料及事实前提",
+        "确认行为结果须另有独立网络、主机或执行证据"
+      ],
+      "key": {
+        "id": "S13",
+        "target": "payload.decoded_intent",
+        "subtype": "command"
+      },
+      "prerequisite": "代码验证解码链及实际命令上下文；strong遵循S01",
+      "explanation_only": false,
+      "deduplication": "command"
+    },
+    {
+      "feature_claim": "在材料、引用、事务和前提结构验证后解释：代码验证解码链及独立操作上下文；解码成功不等于恶意",
+      "security_interpretation": "模型对payload.decoded_intent的受约束解释；语义正确性须独立评价",
+      "cannot_prove": "引用存在与结构校验通过不等于恶意语义正确，也不证明执行、利用成功、感染或送达",
+      "required_correlations": [
+        "槽位要求的原始材料及事实前提",
+        "确认行为结果须另有独立网络、主机或执行证据"
+      ],
+      "key": {
+        "id": "S13",
+        "target": "payload.decoded_intent",
+        "subtype": "other"
+      },
+      "prerequisite": "代码验证解码链及独立操作上下文；解码成功不等于恶意",
+      "explanation_only": false,
+      "deduplication": "payload"
+    },
+    {
+      "feature_claim": "在材料、引用、事务和前提结构验证后解释：实际流量、事实规则、资产角色及任务上下文；仅记录异议",
+      "security_interpretation": "仅解释上下文、替代原因或缺项；不独立产生风险加减分",
+      "cannot_prove": "引用存在与结构校验通过不等于恶意语义正确，也不证明执行、利用成功、感染或送达",
+      "required_correlations": [
+        "槽位要求的原始材料及事实前提",
+        "确认行为结果须另有独立网络、主机或执行证据"
+      ],
+      "key": {
+        "id": "S14",
+        "target": "review.benign_alternative"
+      },
+      "prerequisite": "实际流量、事实规则、资产角色及任务上下文；仅记录异议",
+      "explanation_only": true,
+      "deduplication": ""
+    },
+    {
+      "feature_claim": "在材料、引用、事务和前提结构验证后解释：接受的事实、可见范围及缺项；成功性须独立证据",
+      "security_interpretation": "仅解释上下文、替代原因或缺项；不独立产生风险加减分",
+      "cannot_prove": "引用存在与结构校验通过不等于恶意语义正确，也不证明执行、利用成功、感染或送达",
+      "required_correlations": [
+        "槽位要求的原始材料及事实前提",
+        "确认行为结果须另有独立网络、主机或执行证据"
+      ],
+      "key": {
+        "id": "S15",
+        "target": "review.stage_and_gaps"
+      },
+      "prerequisite": "接受的事实、可见范围及缺项；成功性须独立证据",
+      "explanation_only": true,
+      "deduplication": ""
+    },
+    {
+      "feature_claim": "在材料、引用、事务和前提结构验证后解释：核验群体及协同硬事实；最多5资产；不替代硬门槛",
+      "security_interpretation": "模型对botnet.coordination的受约束解释；语义正确性须独立评价",
+      "cannot_prove": "引用存在与结构校验通过不等于恶意语义正确，也不证明执行、利用成功、感染或送达",
+      "required_correlations": [
+        "槽位要求的原始材料及事实前提",
+        "确认行为结果须另有独立网络、主机或执行证据"
+      ],
+      "key": {
+        "id": "BT-S01",
+        "target": "botnet.coordination"
+      },
+      "prerequisite": "核验群体及协同硬事实；最多5资产；不替代硬门槛",
+      "explanation_only": false,
+      "deduplication": "coordination"
+    },
+    {
+      "feature_claim": "在材料、引用、事务和前提结构验证后解释：核验角色、业务作息及实际时间分布；夜间服务器运行不自动异常",
+      "security_interpretation": "模型对c2.role_schedule_conflict的受约束解释；语义正确性须独立评价",
+      "cannot_prove": "引用存在与结构校验通过不等于恶意语义正确，也不证明执行、利用成功、感染或送达",
+      "required_correlations": [
+        "槽位要求的原始材料及事实前提",
+        "确认行为结果须另有独立网络、主机或执行证据"
+      ],
+      "key": {
+        "id": "SC01",
+        "target": "c2.role_schedule_conflict"
+      },
+      "prerequisite": "核验角色、业务作息及实际时间分布；夜间服务器运行不自动异常",
+      "explanation_only": false,
+      "deduplication": "schedule"
+    },
+    {
+      "feature_claim": "在材料、引用、事务和前提结构验证后解释：核验群体角色与实际行为摘要；供人工解释",
+      "security_interpretation": "仅解释上下文、替代原因或缺项；不独立产生风险加减分",
+      "cannot_prove": "引用存在与结构校验通过不等于恶意语义正确，也不证明执行、利用成功、感染或送达",
+      "required_correlations": [
+        "槽位要求的原始材料及事实前提",
+        "确认行为结果须另有独立网络、主机或执行证据"
+      ],
+      "key": {
+        "id": "SC02",
+        "target": "botnet.group_alternative"
+      },
+      "prerequisite": "核验群体角色与实际行为摘要；供人工解释",
+      "explanation_only": true,
+      "deduplication": ""
+    },
+    {
+      "feature_claim": "在材料、引用、事务和前提结构验证后解释：实际品牌、字段级引用及核验授权背景；不替代欺骗或行动门槛",
+      "security_interpretation": "模型对phishing.brand_field_conflict的受约束解释；语义正确性须独立评价",
+      "cannot_prove": "引用存在与结构校验通过不等于恶意语义正确，也不证明执行、利用成功、感染或送达",
+      "required_correlations": [
+        "槽位要求的原始材料及事实前提",
+        "确认行为结果须另有独立网络、主机或执行证据"
+      ],
+      "key": {
+        "id": "SC03",
+        "target": "phishing.brand_field_conflict"
+      },
+      "prerequisite": "实际品牌、字段级引用及核验授权背景；不替代欺骗或行动门槛",
+      "explanation_only": false,
+      "deduplication": "brand_field"
+    },
+    {
+      "feature_claim": "在材料、引用、事务和前提结构验证后解释：引用历史活动与当前模式，解释同IOC/资产关联；相似不自动等于同战役",
+      "security_interpretation": "仅解释上下文、替代原因或缺项；不独立产生风险加减分",
+      "cannot_prove": "引用存在与结构校验通过不等于恶意语义正确，也不证明执行、利用成功、感染或送达",
+      "required_correlations": [
+        "槽位要求的原始材料及事实前提",
+        "确认行为结果须另有独立网络、主机或执行证据"
+      ],
+      "key": {
+        "id": "R06",
+        "target": "history.activity_association"
+      },
+      "prerequisite": "引用历史活动与当前模式，解释同IOC/资产关联；相似不自动等于同战役",
+      "explanation_only": true,
+      "deduplication": ""
+    },
+    {
+      "feature_claim": "在材料、引用、事务和前提结构验证后解释：使用全部关联历史比较业务解释与异常解释，不按审核状态筛选，不以相似认定误报",
+      "security_interpretation": "仅解释上下文、替代原因或缺项；不独立产生风险加减分",
+      "cannot_prove": "引用存在与结构校验通过不等于恶意语义正确，也不证明执行、利用成功、感染或送达",
+      "required_correlations": [
+        "槽位要求的原始材料及事实前提",
+        "确认行为结果须另有独立网络、主机或执行证据"
+      ],
+      "key": {
+        "id": "R07",
+        "target": "history.alternative_explanation"
+      },
+      "prerequisite": "使用全部关联历史比较业务解释与异常解释，不按审核状态筛选，不以相似认定误报",
+      "explanation_only": true,
+      "deduplication": ""
+    }
+  ]
+}

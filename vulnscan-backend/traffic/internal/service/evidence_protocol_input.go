@@ -4,10 +4,8 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/binary"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"golang.org/x/net/html"
 	"io"
@@ -202,8 +200,8 @@ func enrichSnapshotProtocols(input *evidence.Input, hit store.Hit, m map[string]
 			}
 			data = data[2:]
 		}
-		var msg dnsmessage.Message
-		if err := msg.Unpack(data); err != nil || len(msg.Questions) != 1 || !full || msg.Truncated {
+		msg, dnsErr := snapshotDecodeDNS(m, data)
+		if dnsErr != nil || len(msg.Questions) != 1 || !full || msg.Truncated {
 			if strings.TrimSpace(asString(app["dns_query"])) != "" {
 				issue("dns_message_incomplete_or_invalid", "raw_packet.payload_hex")
 			}
@@ -255,7 +253,7 @@ func enrichSnapshotProtocols(input *evidence.Input, hit store.Hit, m map[string]
 
 // Recover missing payload bytes from an actual Ethernet frame, checking the
 // stored flow tuple. No live packet fetching or network access is performed.
-func snapshotFramePayload(packet, m map[string]any, input *evidence.Input) (map[string]any, string) {
+func computeSnapshotFramePayload(packet, m map[string]any, input *evidence.Input) (map[string]any, string) {
 	raw := asString(packet["packet_hex"])
 	if raw == "" {
 		return packet, ""
@@ -263,11 +261,10 @@ func snapshotFramePayload(packet, m map[string]any, input *evidence.Input) (map[
 	if len(raw) > 2*maxEvidenceMessageBytes {
 		return packet, "message_budget_exceeded"
 	}
-	frame, err := decodeSnapshotPayloadHex(raw)
+	p, err := snapshotDecodeFrame(m, raw)
 	if err != nil {
 		return packet, "packet_hex_invalid"
 	}
-	p := gopacket.NewPacket(frame, layers.LayerTypeEthernet, gopacket.Default)
 	if p.ErrorLayer() != nil {
 		return packet, "packet_frame_invalid"
 	}
@@ -409,6 +406,9 @@ func snapshotHTTPResponse(record *evidence.HTTPRecord, request, response map[str
 }
 
 func snapshotHTTPRequest(payload []byte, full bool, hit store.Hit, m, app map[string]any) (evidence.HTTPRecord, bool, string) {
+	if c := snapshotParsing(m); c != nil {
+		c.httpParses++
+	}
 	r := evidence.HTTPRecord{SourceID: hit.ID, Time: hit.OccurredAt, TransactionID: asString(m["transaction_id"]), SessionID: asString(m["session_id"]), Truncated: true}
 	reader := bufio.NewReader(bytes.NewReader(payload))
 	req, err := http.ReadRequest(reader)
@@ -559,8 +559,7 @@ func snapshotHTTPRequestID(m map[string]any, payload []byte) string {
 		packet = child
 	}
 	seq := packet["tcp_seq"]
-	if frame, err := hex.DecodeString(asString(packet["packet_hex"])); err == nil && len(frame) > 0 {
-		p := gopacket.NewPacket(frame, layers.LayerTypeEthernet, gopacket.Default)
+	if p, err := snapshotDecodeFrame(m, asString(packet["packet_hex"])); err == nil {
 		if l := p.Layer(layers.LayerTypeTCP); l != nil {
 			seq = uint64(l.(*layers.TCP).Seq)
 		}

@@ -45,8 +45,8 @@ func TestFormalWorkflowLogsActualInputAndPublishesProbability(t *testing.T) {
 					if err := json.Unmarshal([]byte(reply), &assessment); err != nil {
 						t.Fatal(err)
 					}
-					// This was rejected by the removed keyword checker. It must now
-					// publish, synchronize probability, and remain readable/exportable.
+					// Material-gap wording is allowed; source binding validation must
+					// still permit publication and probability synchronization.
 					assessment.ProbabilityReason = "但无恶意内容、凭据或指令等直接证据"
 					raw, _ := json.Marshal(assessment)
 					reply = string(raw)
@@ -65,7 +65,7 @@ func TestFormalWorkflowLogsActualInputAndPublishesProbability(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if doc.Validation != "json_and_probability_parsed_only" || doc.Assessment.ProbabilityReason != "但无恶意内容、凭据或指令等直接证据" {
+			if doc.Validation != pipelineReportValidation || doc.Assessment.ProbabilityReason != "但无恶意内容、凭据或指令等直接证据" {
 				t.Fatal("removed checker still applied or result changed")
 			}
 			event := mustEvent(t, svc, snap.EventID)
@@ -158,14 +158,14 @@ func TestNewProbabilityRequiredButLegacyStillReadable(t *testing.T) {
 	if _, err := decodeReportAssessment(string(raw), bundle); err == nil || err.Error() != "report_probability_required" {
 		t.Fatal(err)
 	}
-	a = validReportAssessment(bundle)
+	a = validPipelineAssessment(bundle)
 	a.ProbabilityReason = ""
 	raw, _ = json.Marshal(a)
-	if _, err := decodeReportAssessment(string(raw), bundle); err != nil {
-		t.Fatal("optional reason blocked report", err)
+	if _, err := decodeReportAssessment(string(raw), bundle); err == nil || err.Error() != "report_text_bounds" {
+		t.Fatal("v2 report requires a source-bound probability explanation", err)
 	}
 	for _, n := range []int{0, 55, 101, -1} {
-		a = validReportAssessment(bundle)
+		a = validPipelineAssessment(bundle)
 		a.Probability = &n
 		raw, _ = json.Marshal(a)
 		_, err := decodeReportAssessment(string(raw), bundle)
@@ -189,7 +189,7 @@ func (s reportMessageFailTx) AddMessage(m domain.Message) (domain.Message, error
 
 func TestReportAtomicPublicationAndRollback(t *testing.T) {
 	svc, event, bundle := reportTestBundle(t)
-	a := validReportAssessment(bundle)
+	a := validPipelineAssessment(bundle)
 	old := 17
 	_, _ = svc.Store.UpdateEvent(event.EventID, map[string]any{"context": `{"ai_probability":17,"business_marker":"keep"}`})
 	doc := ReportDocument{SchemaVersion: reportEvidenceVersion, EventID: event.EventID, AnalysisVersion: 3, Kind: AnalysisKindManual, Assessment: a, Evidence: bundle}

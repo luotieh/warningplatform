@@ -1,0 +1,586 @@
+{
+  "config": {
+    "Periodic": {
+      "min_samples": 8,
+      "min_interval_sec": 5,
+      "max_interval_sec": 86400,
+      "max_interval_cv": 0.15,
+      "max_packets_per_observation": 5
+    },
+    "MultiDay": {
+      "min_days": 2,
+      "timezone": "Asia/Shanghai"
+    },
+    "Policies": {}
+  },
+  "controlled": true,
+  "expected_status": "not_observed",
+  "request": {
+    "event_id": "synthetic-event",
+    "snapshot_version": 1,
+    "hits": [
+      {
+        "hit_id": "connection0-0",
+        "occurred_at": "2026-10-01T00:00:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "asset0",
+          "endpoint_id": "tcp://203.0.113.10:443",
+          "device_id": "device"
+        }
+      },
+      {
+        "hit_id": "connection0-1",
+        "occurred_at": "2026-10-01T00:01:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "asset0",
+          "endpoint_id": "tcp://203.0.113.10:443",
+          "device_id": "device"
+        }
+      },
+      {
+        "hit_id": "connection0-2",
+        "occurred_at": "2026-10-01T00:02:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "asset0",
+          "endpoint_id": "tcp://203.0.113.10:443",
+          "device_id": "device"
+        }
+      },
+      {
+        "hit_id": "connection0-3",
+        "occurred_at": "2026-10-01T00:03:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "asset0",
+          "endpoint_id": "tcp://203.0.113.10:443",
+          "device_id": "device"
+        }
+      },
+      {
+        "hit_id": "connection0-4",
+        "occurred_at": "2026-10-01T00:04:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "asset0",
+          "endpoint_id": "tcp://203.0.113.10:443",
+          "device_id": "device"
+        }
+      },
+      {
+        "hit_id": "connection0-5",
+        "occurred_at": "2026-10-01T00:05:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "asset0",
+          "endpoint_id": "tcp://203.0.113.10:443",
+          "device_id": "device"
+        }
+      },
+      {
+        "hit_id": "connection0-6",
+        "occurred_at": "2026-10-01T00:06:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "asset0",
+          "endpoint_id": "tcp://203.0.113.10:443",
+          "device_id": "device"
+        }
+      },
+      {
+        "hit_id": "connection0-7",
+        "occurred_at": "2026-10-01T00:07:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "asset0",
+          "endpoint_id": "tcp://203.0.113.10:443",
+          "device_id": "device"
+        }
+      },
+      {
+        "hit_id": "connection1-0",
+        "occurred_at": "2026-10-01T00:00:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "asset1",
+          "endpoint_id": "tcp://203.0.113.10:443",
+          "device_id": "device"
+        }
+      },
+      {
+        "hit_id": "connection1-1",
+        "occurred_at": "2026-10-01T00:01:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "asset1",
+          "endpoint_id": "tcp://203.0.113.10:443",
+          "device_id": "device"
+        }
+      },
+      {
+        "hit_id": "connection1-2",
+        "occurred_at": "2026-10-01T00:02:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "asset1",
+          "endpoint_id": "tcp://203.0.113.10:443",
+          "device_id": "device"
+        }
+      },
+      {
+        "hit_id": "connection1-3",
+        "occurred_at": "2026-10-01T00:03:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "asset1",
+          "endpoint_id": "tcp://203.0.113.10:443",
+          "device_id": "device"
+        }
+      },
+      {
+        "hit_id": "connection1-4",
+        "occurred_at": "2026-10-01T00:04:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "asset1",
+          "endpoint_id": "tcp://203.0.113.10:443",
+          "device_id": "device"
+        }
+      },
+      {
+        "hit_id": "connection1-5",
+        "occurred_at": "2026-10-01T00:05:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "asset1",
+          "endpoint_id": "tcp://203.0.113.10:443",
+          "device_id": "device"
+        }
+      },
+      {
+        "hit_id": "connection1-6",
+        "occurred_at": "2026-10-01T00:06:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "asset1",
+          "endpoint_id": "tcp://203.0.113.10:443",
+          "device_id": "device"
+        }
+      },
+      {
+        "hit_id": "connection1-7",
+        "occurred_at": "2026-10-01T00:07:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "asset1",
+          "endpoint_id": "tcp://203.0.113.10:443",
+          "device_id": "device"
+        }
+      },
+      {
+        "hit_id": "connection2-0",
+        "occurred_at": "2026-10-01T00:00:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "asset2",
+          "endpoint_id": "tcp://203.0.113.10:443",
+          "device_id": "device"
+        }
+      },
+      {
+        "hit_id": "connection2-1",
+        "occurred_at": "2026-10-01T00:01:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "asset2",
+          "endpoint_id": "tcp://203.0.113.10:443",
+          "device_id": "device"
+        }
+      },
+      {
+        "hit_id": "connection2-2",
+        "occurred_at": "2026-10-01T00:02:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "asset2",
+          "endpoint_id": "tcp://203.0.113.10:443",
+          "device_id": "device"
+        }
+      },
+      {
+        "hit_id": "connection2-3",
+        "occurred_at": "2026-10-01T00:03:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "asset2",
+          "endpoint_id": "tcp://203.0.113.10:443",
+          "device_id": "device"
+        }
+      },
+      {
+        "hit_id": "connection2-4",
+        "occurred_at": "2026-10-01T00:04:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "asset2",
+          "endpoint_id": "tcp://203.0.113.10:443",
+          "device_id": "device"
+        }
+      },
+      {
+        "hit_id": "connection2-5",
+        "occurred_at": "2026-10-01T00:05:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "asset2",
+          "endpoint_id": "tcp://203.0.113.10:443",
+          "device_id": "device"
+        }
+      },
+      {
+        "hit_id": "connection2-6",
+        "occurred_at": "2026-10-01T00:06:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "asset2",
+          "endpoint_id": "tcp://203.0.113.10:443",
+          "device_id": "device"
+        }
+      },
+      {
+        "hit_id": "connection2-7",
+        "occurred_at": "2026-10-01T00:07:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "asset2",
+          "endpoint_id": "tcp://203.0.113.10:443",
+          "device_id": "device"
+        }
+      }
+    ],
+    "quality": {
+      "coverage": "complete",
+      "capture_truncated": false
+    },
+    "facts": [
+      "F_SHARED_ENDPOINT"
+    ],
+    "groups": [
+      {
+        "verified": true,
+        "complete": true,
+        "version": "synthetic-fixture-v1",
+        "source_ids": [
+          "synthetic-source"
+        ],
+        "id": "synthetic-group",
+        "window": {
+          "start": "2026-10-01T00:00:00Z",
+          "end": "2026-10-01T00:10:00Z"
+        },
+        "members": [
+          {
+            "asset_id": "asset0",
+            "scope": {
+              "asset_id": "asset0",
+              "endpoint_id": "endpoint",
+              "device_id": "device"
+            },
+            "hit_ids": [
+              "connection0-0",
+              "connection0-1",
+              "connection0-2",
+              "connection0-3",
+              "connection0-4",
+              "connection0-5",
+              "connection0-6",
+              "connection0-7"
+            ],
+            "subnet": "192.0.0.0/24",
+            "role": "workstation",
+            "membership_verified": true,
+            "addresses": [
+              "192.0.2.1"
+            ]
+          },
+          {
+            "asset_id": "asset1",
+            "scope": {
+              "asset_id": "asset1",
+              "endpoint_id": "endpoint",
+              "device_id": "device"
+            },
+            "hit_ids": [
+              "connection1-0",
+              "connection1-1",
+              "connection1-2",
+              "connection1-3",
+              "connection1-4",
+              "connection1-5",
+              "connection1-6",
+              "connection1-7"
+            ],
+            "subnet": "192.0.1.0/24",
+            "role": "workstation",
+            "membership_verified": true,
+            "addresses": [
+              "192.0.2.2"
+            ]
+          }
+        ],
+        "baselines": [
+          {
+            "verified": true,
+            "complete": true,
+            "version": "synthetic-fixture-v1",
+            "source_ids": [
+              "synthetic-source"
+            ],
+            "fact_id": "F_SHARED_ENDPOINT",
+            "metrics": {
+              "endpoint_frequency": 0.001,
+              "endpoint_frequency_p01": 0.01
+            },
+            "frequencies": null
+          }
+        ],
+        "dns": [],
+        "connections": [
+          {
+            "transport": "tcp",
+            "outcome_verified": false,
+            "source_id": "connection0-0",
+            "time": "2026-10-01T00:00:00Z",
+            "asset_id": "asset0",
+            "destination": "203.0.113.10",
+            "port": 443,
+            "app_protocol": "",
+            "protocol_parsed": false,
+            "payload_bytes": null,
+            "tcp_state": "",
+            "session_id": ""
+          },
+          {
+            "transport": "tcp",
+            "outcome_verified": false,
+            "source_id": "connection0-1",
+            "time": "2026-10-01T00:01:00Z",
+            "asset_id": "asset0",
+            "destination": "203.0.113.10",
+            "port": 443,
+            "app_protocol": "",
+            "protocol_parsed": false,
+            "payload_bytes": null,
+            "tcp_state": "",
+            "session_id": ""
+          },
+          {
+            "transport": "tcp",
+            "outcome_verified": false,
+            "source_id": "connection0-2",
+            "time": "2026-10-01T00:02:00Z",
+            "asset_id": "asset0",
+            "destination": "203.0.113.10",
+            "port": 443,
+            "app_protocol": "",
+            "protocol_parsed": false,
+            "payload_bytes": null,
+            "tcp_state": "",
+            "session_id": ""
+          },
+          {
+            "transport": "tcp",
+            "outcome_verified": false,
+            "source_id": "connection0-3",
+            "time": "2026-10-01T00:03:00Z",
+            "asset_id": "asset0",
+            "destination": "203.0.113.10",
+            "port": 443,
+            "app_protocol": "",
+            "protocol_parsed": false,
+            "payload_bytes": null,
+            "tcp_state": "",
+            "session_id": ""
+          },
+          {
+            "transport": "tcp",
+            "outcome_verified": false,
+            "source_id": "connection0-4",
+            "time": "2026-10-01T00:04:00Z",
+            "asset_id": "asset0",
+            "destination": "203.0.113.10",
+            "port": 443,
+            "app_protocol": "",
+            "protocol_parsed": false,
+            "payload_bytes": null,
+            "tcp_state": "",
+            "session_id": ""
+          },
+          {
+            "transport": "tcp",
+            "outcome_verified": false,
+            "source_id": "connection0-5",
+            "time": "2026-10-01T00:05:00Z",
+            "asset_id": "asset0",
+            "destination": "203.0.113.10",
+            "port": 443,
+            "app_protocol": "",
+            "protocol_parsed": false,
+            "payload_bytes": null,
+            "tcp_state": "",
+            "session_id": ""
+          },
+          {
+            "transport": "tcp",
+            "outcome_verified": false,
+            "source_id": "connection0-6",
+            "time": "2026-10-01T00:06:00Z",
+            "asset_id": "asset0",
+            "destination": "203.0.113.10",
+            "port": 443,
+            "app_protocol": "",
+            "protocol_parsed": false,
+            "payload_bytes": null,
+            "tcp_state": "",
+            "session_id": ""
+          },
+          {
+            "transport": "tcp",
+            "outcome_verified": false,
+            "source_id": "connection0-7",
+            "time": "2026-10-01T00:07:00Z",
+            "asset_id": "asset0",
+            "destination": "203.0.113.10",
+            "port": 443,
+            "app_protocol": "",
+            "protocol_parsed": false,
+            "payload_bytes": null,
+            "tcp_state": "",
+            "session_id": ""
+          },
+          {
+            "transport": "tcp",
+            "outcome_verified": false,
+            "source_id": "connection1-0",
+            "time": "2026-10-01T00:00:00Z",
+            "asset_id": "asset1",
+            "destination": "203.0.113.10",
+            "port": 443,
+            "app_protocol": "",
+            "protocol_parsed": false,
+            "payload_bytes": null,
+            "tcp_state": "",
+            "session_id": ""
+          },
+          {
+            "transport": "tcp",
+            "outcome_verified": false,
+            "source_id": "connection1-1",
+            "time": "2026-10-01T00:01:00Z",
+            "asset_id": "asset1",
+            "destination": "203.0.113.10",
+            "port": 443,
+            "app_protocol": "",
+            "protocol_parsed": false,
+            "payload_bytes": null,
+            "tcp_state": "",
+            "session_id": ""
+          },
+          {
+            "transport": "tcp",
+            "outcome_verified": false,
+            "source_id": "connection1-2",
+            "time": "2026-10-01T00:02:00Z",
+            "asset_id": "asset1",
+            "destination": "203.0.113.10",
+            "port": 443,
+            "app_protocol": "",
+            "protocol_parsed": false,
+            "payload_bytes": null,
+            "tcp_state": "",
+            "session_id": ""
+          },
+          {
+            "transport": "tcp",
+            "outcome_verified": false,
+            "source_id": "connection1-3",
+            "time": "2026-10-01T00:03:00Z",
+            "asset_id": "asset1",
+            "destination": "203.0.113.10",
+            "port": 443,
+            "app_protocol": "",
+            "protocol_parsed": false,
+            "payload_bytes": null,
+            "tcp_state": "",
+            "session_id": ""
+          },
+          {
+            "transport": "tcp",
+            "outcome_verified": false,
+            "source_id": "connection1-4",
+            "time": "2026-10-01T00:04:00Z",
+            "asset_id": "asset1",
+            "destination": "203.0.113.10",
+            "port": 443,
+            "app_protocol": "",
+            "protocol_parsed": false,
+            "payload_bytes": null,
+            "tcp_state": "",
+            "session_id": ""
+          },
+          {
+            "transport": "tcp",
+            "outcome_verified": false,
+            "source_id": "connection1-5",
+            "time": "2026-10-01T00:05:00Z",
+            "asset_id": "asset1",
+            "destination": "203.0.113.10",
+            "port": 443,
+            "app_protocol": "",
+            "protocol_parsed": false,
+            "payload_bytes": null,
+            "tcp_state": "",
+            "session_id": ""
+          },
+          {
+            "transport": "tcp",
+            "outcome_verified": false,
+            "source_id": "connection1-6",
+            "time": "2026-10-01T00:06:00Z",
+            "asset_id": "asset1",
+            "destination": "203.0.113.10",
+            "port": 443,
+            "app_protocol": "",
+            "protocol_parsed": false,
+            "payload_bytes": null,
+            "tcp_state": "",
+            "session_id": ""
+          },
+          {
+            "transport": "tcp",
+            "outcome_verified": false,
+            "source_id": "connection1-7",
+            "time": "2026-10-01T00:07:00Z",
+            "asset_id": "asset1",
+            "destination": "203.0.113.10",
+            "port": 443,
+            "app_protocol": "",
+            "protocol_parsed": false,
+            "payload_bytes": null,
+            "tcp_state": "",
+            "session_id": ""
+          }
+        ],
+        "dns_ownership": {},
+        "ioc": "203.0.113.10",
+        "endpoint": "tcp://203.0.113.10:443",
+        "family": "",
+        "history": null,
+        "domain_patterns": null,
+        "domain_patterns_verified": false
+      }
+    ]
+  }
+}

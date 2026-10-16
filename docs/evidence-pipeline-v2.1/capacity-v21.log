@@ -1,0 +1,4 @@
+=== RUN   TestEvidenceV21Capacity
+--- PASS: TestEvidenceV21Capacity (3.40s)
+PASS
+ok  	vulnscan-backend/traffic/internal/service	3.533s

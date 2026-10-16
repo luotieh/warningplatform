@@ -1,0 +1,45 @@
+ok  	vulnscan-backend/evidence	1.900s
+2026/10/16 23:39:35 [evidence] input_failed event=ly-602c29f0-0f42-41ee-b1cb-8be58697c282 snapshot=8 reason=snapshot_read_failed
+--- FAIL: TestEvidencePipelineAll82AndModelCacheIsolation (0.08s)
+    evidence_pipeline_test.go:84: model change reread raw or reused old model result normalized_input_digest_missing 7 7 22 11
+2026/10/16 23:39:36 INFO LLM调用完成 model=local-fixture endpoint=http://127.0.0.1:53738/chat/completions latency_ms=2 prompt_tokens=0 completion_tokens=0 finish_reason=stop max_tokens=1024
+2026/10/16 23:39:36 INFO LLM调用完成 model=local-fixture endpoint=http://127.0.0.1:53738/chat/completions latency_ms=7 prompt_tokens=0 completion_tokens=0 finish_reason=stop max_tokens=4000
+2026/10/16 23:39:36 INFO LLM调用完成 model=local-fixture endpoint=http://127.0.0.1:53738/chat/completions latency_ms=7 prompt_tokens=0 completion_tokens=0 finish_reason=stop max_tokens=4000
+2026/10/16 23:39:36 INFO LLM调用完成 model=local-fixture endpoint=http://127.0.0.1:53738/chat/completions latency_ms=8 prompt_tokens=0 completion_tokens=0 finish_reason=stop max_tokens=4000
+2026/10/16 23:39:36 INFO LLM调用完成 model=local-fixture endpoint=http://127.0.0.1:53738/chat/completions latency_ms=9 prompt_tokens=0 completion_tokens=0 finish_reason=stop max_tokens=6000
+2026/10/16 23:39:36 INFO LLM调用完成 model=local-fixture endpoint=http://127.0.0.1:53740/chat/completions latency_ms=1 prompt_tokens=0 completion_tokens=0 finish_reason=stop max_tokens=1024
+2026/10/16 23:39:36 INFO LLM调用完成 model=local-fixture endpoint=http://127.0.0.1:53740/chat/completions latency_ms=9 prompt_tokens=0 completion_tokens=0 finish_reason=stop max_tokens=4000
+2026/10/16 23:39:37 INFO LLM调用完成 model=local-fixture endpoint=http://127.0.0.1:53740/chat/completions latency_ms=6 prompt_tokens=0 completion_tokens=0 finish_reason=stop max_tokens=4000
+2026/10/16 23:39:37 INFO LLM调用完成 model=local-fixture endpoint=http://127.0.0.1:53740/chat/completions latency_ms=7 prompt_tokens=0 completion_tokens=0 finish_reason=stop max_tokens=4000
+2026/10/16 23:39:37 INFO LLM调用完成 model=local-fixture endpoint=http://127.0.0.1:53740/chat/completions latency_ms=9 prompt_tokens=0 completion_tokens=0 finish_reason=stop max_tokens=6000
+2026/10/16 23:39:37 INFO LLM调用完成 model=local-fixture endpoint=http://127.0.0.1:53742/chat/completions latency_ms=1 prompt_tokens=0 completion_tokens=0 finish_reason=stop max_tokens=1024
+2026/10/16 23:39:37 INFO LLM调用完成 model=local-fixture endpoint=http://127.0.0.1:53742/chat/completions latency_ms=8 prompt_tokens=0 completion_tokens=0 finish_reason=stop max_tokens=4000
+2026/10/16 23:39:37 INFO LLM调用完成 model=local-fixture endpoint=http://127.0.0.1:53742/chat/completions latency_ms=8 prompt_tokens=0 completion_tokens=0 finish_reason=stop max_tokens=4000
+2026/10/16 23:39:37 INFO LLM调用完成 model=local-fixture endpoint=http://127.0.0.1:53742/chat/completions latency_ms=7 prompt_tokens=0 completion_tokens=0 finish_reason=stop max_tokens=4000
+2026/10/16 23:39:37 INFO LLM调用完成 model=local-fixture endpoint=http://127.0.0.1:53742/chat/completions latency_ms=8 prompt_tokens=0 completion_tokens=0 finish_reason=stop max_tokens=6000
+2026/10/16 23:39:37 INFO LLM调用完成 model=fixture endpoint=http://127.0.0.1:53745/chat/completions latency_ms=2 prompt_tokens=0 completion_tokens=0 finish_reason=stop max_tokens=1024
+2026/10/16 23:39:37 INFO LLM调用完成 model=fixture endpoint=http://127.0.0.1:53745/chat/completions latency_ms=8 prompt_tokens=0 completion_tokens=0 finish_reason=stop max_tokens=4000
+2026/10/16 23:39:37 INFO LLM调用完成 model=fixture endpoint=http://127.0.0.1:53745/chat/completions latency_ms=8 prompt_tokens=0 completion_tokens=0 finish_reason=stop max_tokens=6000
+2026/10/16 23:39:37 INFO LLM调用完成 model=fixture endpoint=http://127.0.0.1:53747/chat/completions latency_ms=1 prompt_tokens=0 completion_tokens=0 finish_reason=stop max_tokens=1024
+2026/10/16 23:39:37 INFO LLM调用完成 model=fixture endpoint=http://127.0.0.1:53747/chat/completions latency_ms=10 prompt_tokens=0 completion_tokens=0 finish_reason=stop max_tokens=4000
+2026/10/16 23:39:37 INFO LLM调用完成 model=fixture endpoint=http://127.0.0.1:53747/chat/completions latency_ms=7 prompt_tokens=0 completion_tokens=0 finish_reason=stop max_tokens=6000
+2026/10/16 23:39:37 INFO LLM调用完成 model=fixture endpoint=http://127.0.0.1:53749/chat/completions latency_ms=1 prompt_tokens=0 completion_tokens=0 finish_reason=stop max_tokens=1024
+2026/10/16 23:39:37 INFO LLM调用完成 model=fixture endpoint=http://127.0.0.1:53749/chat/completions latency_ms=7 prompt_tokens=0 completion_tokens=0 finish_reason=stop max_tokens=4000
+2026/10/16 23:39:37 INFO LLM调用完成 model=fixture endpoint=http://127.0.0.1:53749/chat/completions latency_ms=8 prompt_tokens=0 completion_tokens=0 finish_reason=stop max_tokens=6000
+2026/10/16 23:39:37 INFO LLM调用完成 model=fixture endpoint=http://127.0.0.1:53751/chat/completions latency_ms=2 prompt_tokens=0 completion_tokens=0 finish_reason=stop max_tokens=1024
+2026/10/16 23:39:37 INFO LLM调用完成 model=fixture endpoint=http://127.0.0.1:53751/chat/completions latency_ms=8 prompt_tokens=0 completion_tokens=0 finish_reason=stop max_tokens=4000
+2026/10/16 23:39:37 INFO LLM调用完成 model=fixture endpoint=http://127.0.0.1:53751/chat/completions latency_ms=8 prompt_tokens=0 completion_tokens=0 finish_reason=stop max_tokens=6000
+--- FAIL: TestPhaseOneHTTPChainAndCache (0.08s)
+    phase_one_test.go:235: normalized_input_digest_missing
+2026/10/16 23:39:38 INFO LLM调用完成 model=local-fixture endpoint=http://127.0.0.1:53757/chat/completions latency_ms=2 prompt_tokens=0 completion_tokens=0 finish_reason=stop max_tokens=1024
+2026/10/16 23:39:38 INFO LLM调用完成 model=local-fixture endpoint=http://127.0.0.1:53757/chat/completions latency_ms=8 prompt_tokens=0 completion_tokens=0 finish_reason=stop max_tokens=6000
+2026/10/16 23:39:38 INFO LLM调用完成 model=local-fixture endpoint=http://127.0.0.1:53757/chat/completions latency_ms=8 prompt_tokens=0 completion_tokens=0 finish_reason=stop max_tokens=6000
+2026/10/16 23:39:39 INFO LLM调用完成 model=fixture endpoint=http://127.0.0.1:53759/chat/completions latency_ms=3 prompt_tokens=1234 completion_tokens=456 finish_reason=stop max_tokens=1024
+2026/10/16 23:39:39 INFO LLM调用完成 model=fixture endpoint=http://127.0.0.1:53759/chat/completions latency_ms=5 prompt_tokens=1234 completion_tokens=456 finish_reason=stop max_tokens=7000
+2026/10/16 23:39:39 [repLogs] directory_unavailable event=ly-3a83953c-33f2-4361-b751-439b7c789c33
+2026/10/16 23:39:39 INFO LLM调用完成 model=fixture endpoint=http://127.0.0.1:53761/chat/completions latency_ms=1 prompt_tokens=1234 completion_tokens=456 finish_reason=stop max_tokens=1024
+2026/10/16 23:39:39 INFO LLM调用完成 model=fixture endpoint=http://127.0.0.1:53761/chat/completions latency_ms=1 prompt_tokens=1234 completion_tokens=456 finish_reason=stop max_tokens=7000
+2026/10/16 23:39:39 [repLogs] directory_unavailable event=event
+FAIL
+FAIL	vulnscan-backend/traffic/internal/service	9.272s
+FAIL

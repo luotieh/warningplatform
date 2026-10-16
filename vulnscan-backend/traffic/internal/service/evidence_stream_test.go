@@ -69,7 +69,8 @@ func TestPhaseOneSavedModelResponseReplay(t *testing.T) {
 	}
 	var saved struct {
 		Calls []struct {
-			Response string `json:"response"`
+			Call     evidence.SemanticCall `json:"call"`
+			Response string                `json:"response"`
 		} `json:"calls"`
 	}
 	if err = json.Unmarshal(raw, &saved); err != nil || len(saved.Calls) != 2 {
@@ -89,7 +90,36 @@ func TestPhaseOneSavedModelResponseReplay(t *testing.T) {
 			seq = 10
 		}
 		snap := phaseOneInstallSnapshot(t, s, "model-isolated-"+protocol, 1, []map[string]any{phaseOneWire(t, at, seq, payload, protocol == "dns", false)})
-		s.SemanticModel = reportSemanticModelFunc(func(context.Context, evidence.SemanticCall) (string, error) { return saved.Calls[index].Response, nil })
+		s.SemanticModel = reportSemanticModelFunc(func(_ context.Context, call evidence.SemanticCall) (string, error) {
+			// V2 schedules all slots and changes sequential task IDs. Replay only
+			// matching saved tasks/materials, remapping the envelope ID. New tasks
+			// deliberately stay unavailable; no new model judgement is invented.
+			var old, current struct {
+				Tasks []evidence.SemanticTask `json:"tasks"`
+			}
+			var response struct {
+				Items []evidence.SemanticItem `json:"items"`
+			}
+			if json.Unmarshal([]byte(saved.Calls[index].Call.Prompt), &old) != nil || json.Unmarshal([]byte(call.Prompt), &current) != nil || json.Unmarshal([]byte(saved.Calls[index].Response), &response) != nil {
+				return "", fmt.Errorf("invalid saved replay envelope")
+			}
+			items := []evidence.SemanticItem{}
+			for _, task := range current.Tasks {
+				for _, previous := range old.Tasks {
+					if task.Slot.Key != previous.Slot.Key || task.SubjectID != previous.SubjectID || digest(task.Materials) != digest(previous.Materials) || digest(task.Facts) != digest(previous.Facts) {
+						continue
+					}
+					for _, item := range response.Items {
+						if item.TaskID == previous.ID {
+							item.TaskID = task.ID
+							items = append(items, item)
+						}
+					}
+				}
+			}
+			raw, err := json.Marshal(map[string]any{"items": items})
+			return string(raw), err
+		})
 		p := phaseOneRun(t, s, snap, true)
 		ids := []string{"C05", "C06"}
 		if protocol == "dns" {
@@ -268,7 +298,7 @@ func TestPhaseOneStructuredRiskOverridesModel(t *testing.T) {
 	_, _, b := reportTestBundle(t)
 	cfg := evidence.DefaultPhaseOneConfig()
 	b.PhaseOne = &PhaseOneEvaluation{Result: evidence.PhaseOneResult{Version: evidence.PhaseOneVersion, Policy: cfg, Score: 15, ScoreMeaning: "policy_evidence_points_not_probability", Units: []evidence.PhaseOneUnit{{ID: "C04", Status: "observed", Score: 15, SourceIDs: []string{"wire"}}}}}
-	a := validReportAssessment(b)
+	a := validPipelineAssessment(b)
 	a.EvidenceRisk = &evidence.PhaseOneResult{Score: 999}
 	raw, _ := json.Marshal(a)
 	got, err := decodeReportAssessment(string(raw), b)

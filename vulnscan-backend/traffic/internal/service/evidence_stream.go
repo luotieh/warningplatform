@@ -15,8 +15,12 @@ const snapshotTotalBytes = int64(512 << 20)
 const snapshotFeatureBytes = int64(32 << 20)
 
 func snapshotBoundedPage(ctx context.Context, st store.Store, q store.HitQuery, rw int64) ([]store.Hit, error) {
+	limits := contextPipelineLimits(ctx)
+	if q.Limit <= 0 || q.Limit > limits.PageRows {
+		q.Limit = limits.PageRows
+	}
 	if reader, ok := st.(store.SnapshotPageReader); ok {
-		return reader.SnapshotPage(ctx, q, rw, snapshotPageBytes, snapshotRowBytes)
+		return reader.SnapshotPage(ctx, q, rw, limits.PageBytes, limits.RowBytes)
 	}
 	// Stores without a byte-aware reader may only supply one row per call.
 	q.Limit = 1
@@ -25,7 +29,7 @@ func snapshotBoundedPage(ctx context.Context, st store.Store, q store.HitQuery, 
 		return nil, err
 	}
 	for _, h := range page {
-		if int64(len(h.Raw)) > snapshotRowBytes {
+		if int64(len(h.Raw)) > limits.RowBytes {
 			return nil, fmt.Errorf("snapshot_row_budget_exceeded:%s", h.ID)
 		}
 	}
@@ -74,10 +78,16 @@ func retainedFeatureSize(v reflect.Value) int64 {
 	return n
 }
 
-type featureMark struct{ http, dns, records, bindings, contacts, semantic int }
+type featureMark struct{ http, dns, records, bindings, contacts, semantic, network, tls int }
 
 func snapshotFeatureMark(in *evidence.Input, p *PhaseOneMaterials, sem int) featureMark {
 	m := featureMark{semantic: sem}
+	if in.Network != nil {
+		m.network = len(in.Network.Connections)
+	}
+	if in.TLS != nil {
+		m.tls = len(in.TLS.Records)
+	}
 	if in.HTTP != nil {
 		m.http = len(in.HTTP.Records)
 	}
@@ -93,6 +103,12 @@ func snapshotFeatureMark(in *evidence.Input, p *PhaseOneMaterials, sem int) feat
 }
 func snapshotFeatureDelta(in *evidence.Input, out *SnapshotEvidenceInput, m featureMark, hit evidence.Hit) int64 {
 	n := snapshotFeatureCharge(hit, hit) // request and scope timeline metadata
+	if in.Network != nil && len(in.Network.Connections) > m.network {
+		n += snapshotFeatureCharge(in.Network.Connections[m.network:])
+	}
+	if in.TLS != nil && len(in.TLS.Records) > m.tls {
+		n += snapshotFeatureCharge(in.TLS.Records[m.tls:])
+	}
 	// Enrichment may remove the current metadata projection; prior records remain.
 	if in.HTTP != nil && len(in.HTTP.Records) > m.http {
 		n += snapshotFeatureCharge(in.HTTP.Records[m.http:])

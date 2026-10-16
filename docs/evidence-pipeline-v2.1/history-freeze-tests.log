@@ -1,0 +1,4 @@
+=== RUN   TestEvidencePipelineHistoryFreezeWorkersAndBudget
+--- PASS: TestEvidencePipelineHistoryFreezeWorkersAndBudget (0.30s)
+PASS
+ok  	vulnscan-backend/traffic/internal/service	1.350s

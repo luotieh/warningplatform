@@ -1,0 +1,14 @@
+{
+  "actions": {
+    "run": 1932,
+    "output": 4001,
+    "pass": 1911,
+    "skip": 21
+  },
+  "failed": false,
+  "controlled_f_cases": 295,
+  "controlled_s_cases": 184,
+  "semantic_role_cases": 69,
+  "fixtures": 141,
+  "real_replay_snapshots": 7
+}

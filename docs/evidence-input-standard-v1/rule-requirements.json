@@ -1,0 +1,4633 @@
+{
+  "schema_version": "evidence-input-1.0.0",
+  "expected_facts": 59,
+  "expected_semantics": 23,
+  "catalog_source_sha256": {
+    "catalog.go": "d3192476b79597c46198944ddb4bfa3055ab952f434919e03c2562aeff69fc3f",
+    "semantic_catalog.go": "b908ee85c16ab4e7478b9e3964498df61b6d2d2f9db6ae060e790d591b27502a",
+    "semantic_prerequisites.go": "9a5b28f741b8f148de9bb814e1e84799c140f0fe209c377c898156af871225a7"
+  },
+  "input_requirement_rows": 82,
+  "note": "Requirements include conditional/alternative branches explained by special_condition and executable gates. This is a design contract, not an implemented provider claim.",
+  "rules": [
+    {
+      "rule_id": "F_BEACON_PERIODIC",
+      "kind": "F",
+      "name": "严格周期信标",
+      "sample_and_decision_gate": "n≥8；5s≤Δt≤24h；CV(Δt)≤0.15；每次≤5 包（DetectHeartbeat）",
+      "existing_gate_source": "vulnscan-backend/evidence/types.go:10",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "contacts",
+          "fields": [
+            "contact_id",
+            "occurred_at",
+            "kind",
+            "observation_ref",
+            "dedup_key",
+            "packets_per_contact"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "same_asset_and_device",
+        "same_transport_endpoint",
+        "single_indicator_binding",
+        "single_observation_kind",
+        "deduplicate_retransmissions_and_multirule_hits"
+      ],
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": "Per-contact packet count must be measured; alert counts or cumulative flow packets cannot substitute."
+    },
+    {
+      "rule_id": "F_BEACON_JITTER",
+      "kind": "F",
+      "name": "抖动周期信标",
+      "sample_and_decision_gate": "n≥16；median(Δt) 稳定且 0.15<CV≤0.40；Ljung-Box p<0.05 且 ACF 峰值>0.3",
+      "existing_gate_source": "vulnscan-backend/evidence/config.go:62",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "contacts",
+          "fields": [
+            "contact_id",
+            "occurred_at",
+            "kind",
+            "observation_ref",
+            "dedup_key"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "same_asset_and_device",
+        "same_transport_endpoint",
+        "single_indicator_binding",
+        "single_observation_kind",
+        "deduplicate_retransmissions_and_multirule_hits"
+      ],
+      "parameter_keys": [
+        "ljung_box_lags",
+        "median_relative_tolerance"
+      ],
+      "baseline_metric_keys": [],
+      "special_condition": "Independent contact population; existing n>=16 and statistical rules remain authoritative."
+    },
+    {
+      "rule_id": "F_FIXED_DAILY_WINDOW",
+      "kind": "F",
+      "name": "每天固定时间点",
+      "sample_and_decision_gate": "≥3 自然日且 ≥80% 命中落在同一 ≤2h 窗口",
+      "existing_gate_source": "vulnscan-backend/evidence/engine.go:185",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "contacts",
+          "fields": [
+            "contact_id",
+            "occurred_at",
+            "kind",
+            "observation_ref",
+            "dedup_key"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "same_asset_and_device",
+        "same_transport_endpoint",
+        "single_indicator_binding",
+        "single_observation_kind",
+        "deduplicate_retransmissions_and_multirule_hits"
+      ],
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": "Explicit day timezone; separate multi-day coverage from jitter coverage; keep >=3 days and 80%/2h rule."
+    },
+    {
+      "rule_id": "F_MULTI_DAY_PERSIST",
+      "kind": "F",
+      "name": "跨日持续",
+      "sample_and_decision_gate": "锁定窗口内逐日桶活跃 ≥2 天为 days2 / ≥3 天为 days3（不用首末两点推持续；固定资产/端点，需跨段时联合快照）",
+      "existing_gate_source": "vulnscan-backend/evidence/types.go:11",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "contacts",
+          "fields": [
+            "contact_id",
+            "occurred_at",
+            "kind",
+            "observation_ref",
+            "dedup_key"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "same_asset_and_device",
+        "same_transport_endpoint",
+        "single_indicator_binding",
+        "single_observation_kind",
+        "deduplicate_retransmissions_and_multirule_hits"
+      ],
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": "Daily occupancy within a declared covered window, not merely first/last timestamps."
+    },
+    {
+      "rule_id": "F_RATE_BURST",
+      "kind": "F",
+      "name": "命中突发",
+      "sample_and_decision_gate": "peak_window(5m)/长期窗口均值 >p99 基线",
+      "existing_gate_source": "vulnscan-backend/evidence/engine.go:185",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "alert_matches",
+          "fields": [
+            "hit_id",
+            "occurred_at",
+            "rule_id"
+          ]
+        },
+        {
+          "family": "baselines",
+          "fields": [
+            "baseline_id",
+            "version",
+            "population_definition",
+            "dimension_key",
+            "training_window_ref",
+            "sample_count",
+            "metrics",
+            "frequencies"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "fixed_equal_time_buckets",
+        "include_zero_count_buckets",
+        "baseline_population_matches_counted_objects"
+      ],
+      "parameter_keys": [],
+      "baseline_metric_keys": [
+        "mean_per_5m",
+        "burst_ratio_p99"
+      ],
+      "special_condition": ""
+    },
+    {
+      "rule_id": "F_RATE_RAMP",
+      "kind": "F",
+      "name": "速率阶梯上升",
+      "sample_and_decision_gate": "至少5个固定等长窗口；无并列值时精确双侧Mann-Kendall p<0.05；并列/缺窗标ineligible，禁止静默切渐近检验",
+      "existing_gate_source": "vulnscan-backend/evidence/config.go:62",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "alert_matches",
+          "fields": [
+            "hit_id",
+            "occurred_at",
+            "rule_id"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "fixed_equal_time_buckets",
+        "include_zero_count_buckets"
+      ],
+      "parameter_keys": [
+        "window_seconds"
+      ],
+      "baseline_metric_keys": [],
+      "special_condition": "Counts saved matches per current contract; this is deliberately distinct from independent contacts."
+    },
+    {
+      "rule_id": "F_DNS_HIGH_ENTROPY",
+      "kind": "F",
+      "name": "长标签高基数子域（单资产）",
+      "sample_and_decision_gate": "PSL 归一后：独特子域比 >p95 且 标签长 p90 >p95 且 查询速率 >p95（同域基线）；单机高熵不支持 Botnet",
+      "existing_gate_source": "vulnscan-backend/evidence/dns_rules.go:90",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "dns_transactions",
+          "fields": [
+            "transaction_id",
+            "question_at",
+            "question_name_raw",
+            "question_name_ascii",
+            "registrable_domain",
+            "psl_version"
+          ]
+        },
+        {
+          "family": "baselines",
+          "fields": [
+            "baseline_id",
+            "version",
+            "population_definition",
+            "dimension_key",
+            "training_window_ref",
+            "sample_count",
+            "metrics",
+            "frequencies"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "same_asset_device",
+        "same_registrable_domain",
+        "complete_query_denominator"
+      ],
+      "parameter_keys": [],
+      "baseline_metric_keys": [
+        "unique_subdomain_ratio_p95",
+        "label_length_p95",
+        "query_rate_p95"
+      ],
+      "special_condition": ""
+    },
+    {
+      "rule_id": "F_DNS_ENCODED_LABEL",
+      "kind": "F",
+      "name": "子域编码结构",
+      "sample_and_decision_gate": "base32/hex 模式匹配且代码可验证解码链",
+      "existing_gate_source": "vulnscan-backend/evidence/dns_rules.go:76",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "dns_transactions",
+          "fields": [
+            "transaction_id",
+            "question_at",
+            "question_name_raw",
+            "question_name_ascii",
+            "registrable_domain",
+            "psl_version"
+          ]
+        },
+        {
+          "family": "decode_chains",
+          "fields": [
+            "origin_observation_ref",
+            "origin_field_path",
+            "steps.encoding",
+            "steps.input_artifact_ref",
+            "steps.output_artifact_ref",
+            "steps.roundtrip_verified"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "decode_origin_is_exact_question_label"
+      ],
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": "F supports hex/base32; semantic decode support is an independent capability and must not be inferred."
+    },
+    {
+      "rule_id": "F_DGA_LEXICAL",
+      "kind": "F",
+      "name": "词形随机性（单资产）",
+      "sample_and_decision_gate": "bigram 对数概率 <语料 p05；元音比/长度分布异常；单机随机域名不支持 Botnet",
+      "existing_gate_source": "vulnscan-backend/evidence/dns_rules.go:118",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "dns_transactions",
+          "fields": [
+            "transaction_id",
+            "question_at",
+            "question_name_raw",
+            "question_name_ascii",
+            "registrable_domain",
+            "psl_version"
+          ]
+        },
+        {
+          "family": "lexical_references",
+          "fields": [
+            "corpus_id",
+            "language",
+            "normalization_version",
+            "bigram_log_probabilities"
+          ]
+        },
+        {
+          "family": "baselines",
+          "fields": [
+            "baseline_id",
+            "version",
+            "population_definition",
+            "dimension_key",
+            "training_window_ref",
+            "sample_count",
+            "metrics",
+            "frequencies"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "same_normalization_and_corpus_units"
+      ],
+      "parameter_keys": [],
+      "baseline_metric_keys": [
+        "bigram_log_probability_p05",
+        "vowel_ratio_p05",
+        "vowel_ratio_p95",
+        "length_p05",
+        "length_p95"
+      ],
+      "special_condition": ""
+    },
+    {
+      "rule_id": "F_NXDOMAIN_CLUSTER",
+      "kind": "F",
+      "name": "NXDOMAIN失败率与多注册域聚集（单资产）",
+      "sample_and_decision_gate": "单资产完整查询窗口内 NXDOMAIN 查询比例 > nxdomain_rate_p99，且失败的不同 eTLD+1 ≥2；基线单位为查询比例",
+      "existing_gate_source": "vulnscan-backend/evidence/dns_rules.go:154",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "dns_transactions",
+          "fields": [
+            "transaction_id",
+            "question_at",
+            "question_name_raw",
+            "question_name_ascii",
+            "registrable_domain",
+            "psl_version",
+            "rcode"
+          ]
+        },
+        {
+          "family": "baselines",
+          "fields": [
+            "baseline_id",
+            "version",
+            "population_definition",
+            "dimension_key",
+            "training_window_ref",
+            "sample_count",
+            "metrics",
+            "frequencies"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "same_asset_device",
+        "include_nonfailed_queries_in_denominator"
+      ],
+      "parameter_keys": [],
+      "baseline_metric_keys": [
+        "nxdomain_rate_p99"
+      ],
+      "special_condition": ""
+    },
+    {
+      "rule_id": "F_GROUP_NXDOMAIN_CLUSTER",
+      "kind": "F",
+      "name": "群体 NXDOMAIN 聚集（scope=asset_group）",
+      "sample_and_decision_gate": "≥3 资产同窗口对同词形簇域名的失败解析率 >群体基线 p99；需 rcode＋未命中分母；与单资产版为不同 fact",
+      "existing_gate_source": "vulnscan-backend/evidence/group_rules.go:105",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "group_memberships",
+          "fields": [
+            "group_id",
+            "asset_id",
+            "device_id",
+            "addresses",
+            "membership_verified",
+            "nat_proxy_dedup_key",
+            "observation_refs"
+          ]
+        },
+        {
+          "family": "dns_transactions",
+          "fields": [
+            "transaction_id",
+            "question_at",
+            "question_name_raw",
+            "question_name_ascii",
+            "registrable_domain",
+            "psl_version",
+            "rcode"
+          ]
+        },
+        {
+          "family": "domain_patterns",
+          "fields": [
+            "pattern_id",
+            "expression",
+            "engine",
+            "normalization_version"
+          ]
+        },
+        {
+          "family": "baselines",
+          "fields": [
+            "baseline_id",
+            "version",
+            "population_definition",
+            "dimension_key",
+            "training_window_ref",
+            "sample_count",
+            "metrics",
+            "frequencies"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "each_dns_question_belongs_to_verified_member",
+        "complete_query_denominator_per_member"
+      ],
+      "parameter_keys": [],
+      "baseline_metric_keys": [
+        "group_nxdomain_rate_p99"
+      ],
+      "special_condition": "Pattern reference is conditional when a named pattern is used; existing skeleton fallback is not removed."
+    },
+    {
+      "rule_id": "F_FAILED_TO_ACTIVE",
+      "kind": "F",
+      "name": "失败域→激活连接",
+      "sample_and_decision_gate": "同一规范DNS问题名至少min_failures次先前NXDOMAIN，随后NOERROR回答IP且同资产≤5min连接该IP；不要求连续失败",
+      "existing_gate_source": "vulnscan-backend/evidence/config.go:63",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "dns_transactions",
+          "fields": [
+            "transaction_id",
+            "question_at",
+            "question_name_raw",
+            "question_name_ascii",
+            "registrable_domain",
+            "psl_version",
+            "rcode",
+            "answers",
+            "response_at",
+            "connection_refs"
+          ]
+        },
+        {
+          "family": "connections",
+          "fields": [
+            "connection_id",
+            "started_at",
+            "destination",
+            "source_ip",
+            "source_port"
+          ]
+        },
+        {
+          "family": "relations",
+          "fields": [
+            "kind",
+            "from_ref",
+            "to_ref",
+            "method",
+            "verified"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "same_asset_device",
+        "exact_normalized_question",
+        "connection_ip_is_answer",
+        "verified_dns_answer_connection_link"
+      ],
+      "parameter_keys": [
+        "min_failures"
+      ],
+      "baseline_metric_keys": [],
+      "special_condition": ""
+    },
+    {
+      "rule_id": "F_SHARED_DOMAIN_CLUSTER",
+      "kind": "F",
+      "name": "群体共同域名簇",
+      "sample_and_decision_gate": "≥3 资产共同查询一簇非常规域名（同注册域/同命名模式）",
+      "existing_gate_source": "vulnscan-backend/evidence/group_rules.go:154",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "group_memberships",
+          "fields": [
+            "group_id",
+            "asset_id",
+            "device_id",
+            "addresses",
+            "membership_verified",
+            "nat_proxy_dedup_key",
+            "observation_refs"
+          ]
+        },
+        {
+          "family": "dns_transactions",
+          "fields": [
+            "transaction_id",
+            "question_at",
+            "question_name_raw",
+            "question_name_ascii",
+            "registrable_domain",
+            "psl_version"
+          ]
+        },
+        {
+          "family": "domain_patterns",
+          "fields": [
+            "pattern_id",
+            "expression",
+            "engine",
+            "normalization_version"
+          ]
+        },
+        {
+          "family": "baselines",
+          "fields": [
+            "baseline_id",
+            "version",
+            "population_definition",
+            "dimension_key",
+            "training_window_ref",
+            "sample_count",
+            "metrics",
+            "frequencies"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "verified_dns_ownership",
+        "shared_registrable_domain_or_verified_pattern"
+      ],
+      "parameter_keys": [],
+      "baseline_metric_keys": [
+        "domain_frequency_p01"
+      ],
+      "special_condition": ""
+    },
+    {
+      "rule_id": "F_HTTP_ENDPOINT_REPEAT",
+      "kind": "F",
+      "name": "端点重复回连",
+      "sample_and_decision_gate": "主机＋规范端点分组：重复 ≥6 次且间隔低抖动（CV≤0.3）；POST 本身不加分",
+      "existing_gate_source": "vulnscan-backend/evidence/http_rules.go:75",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "http_transactions",
+          "fields": [
+            "transaction_id",
+            "request_at",
+            "request.method",
+            "request.url_raw",
+            "request.host_ascii",
+            "request.path_escaped",
+            "request.raw_artifact_ref",
+            "request.completeness",
+            "request.assembly"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "same_asset_device",
+        "canonical_host_and_escaped_path",
+        "distinct_complete_request_transactions",
+        "retransmissions_do_not_increase_sample_count"
+      ],
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": "Original >=6 requests/CV<=0.3 rule; nonrequests do not pollute HTTP coverage, unknown candidates still do."
+    },
+    {
+      "rule_id": "F_HTTP_FIELD_ENCODING",
+      "kind": "F",
+      "name": "字段编码异常",
+      "sample_and_decision_gate": "编码链验证后异常长度/编码占比 >同服务基线 p95；排除 JWT/OAuth",
+      "existing_gate_source": "vulnscan-backend/evidence/http_rules.go:140",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "http_transactions",
+          "fields": [
+            "transaction_id",
+            "request_at",
+            "request.method",
+            "request.url_raw",
+            "request.host_ascii",
+            "request.path_escaped",
+            "request.raw_artifact_ref",
+            "request.completeness",
+            "request.assembly",
+            "request.fields",
+            "request.encoding_summary"
+          ]
+        },
+        {
+          "family": "decode_chains",
+          "fields": [
+            "origin_observation_ref",
+            "origin_field_path",
+            "steps"
+          ]
+        },
+        {
+          "family": "baselines",
+          "fields": [
+            "baseline_id",
+            "version",
+            "population_definition",
+            "dimension_key",
+            "training_window_ref",
+            "sample_count",
+            "metrics",
+            "frequencies"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "field_values_bound_to_same_request",
+        "redacted_values_require_verified_encoding_summary",
+        "exclude_JWT_OAuth_as_existing_rule"
+      ],
+      "parameter_keys": [],
+      "baseline_metric_keys": [
+        "encoded_field_ratio_p95",
+        "encoded_field_length_p95"
+      ],
+      "special_condition": ""
+    },
+    {
+      "rule_id": "F_HTTP_UA_RARITY",
+      "kind": "F",
+      "name": "UA一致且稀有",
+      "sample_and_decision_gate": "同资产 UA 一致且全平台稀有度 <p01；弱证据，与 S03 同事实取其一",
+      "existing_gate_source": "vulnscan-backend/evidence/http_rules.go:179",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "http_transactions",
+          "fields": [
+            "transaction_id",
+            "request_at",
+            "request.method",
+            "request.url_raw",
+            "request.host_ascii",
+            "request.path_escaped",
+            "request.raw_artifact_ref",
+            "request.completeness",
+            "request.assembly",
+            "request.user_agent"
+          ]
+        },
+        {
+          "family": "baselines",
+          "fields": [
+            "baseline_id",
+            "version",
+            "population_definition",
+            "dimension_key",
+            "training_window_ref",
+            "sample_count",
+            "metrics",
+            "frequencies"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "same_asset_UA_consistency",
+        "platform_baseline_has_declared_denominator"
+      ],
+      "parameter_keys": [],
+      "baseline_metric_keys": [
+        "ua_frequency",
+        "ua_frequency_p01"
+      ],
+      "special_condition": ""
+    },
+    {
+      "rule_id": "F_HTTP_SIZE_STABILITY",
+      "kind": "F",
+      "name": "HTTP请求体大小稳定",
+      "sample_and_decision_gate": "n≥12；仅请求BodyLength：CV< size_cv_p05 且 unique_size_ratio<unique_size_ratio_p05；不计算响应或z分数",
+      "existing_gate_source": "vulnscan-backend/evidence/http_rules.go:194",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "http_transactions",
+          "fields": [
+            "transaction_id",
+            "request_at",
+            "request.method",
+            "request.url_raw",
+            "request.host_ascii",
+            "request.path_escaped",
+            "request.raw_artifact_ref",
+            "request.completeness",
+            "request.assembly",
+            "request.body_bytes"
+          ]
+        },
+        {
+          "family": "baselines",
+          "fields": [
+            "baseline_id",
+            "version",
+            "population_definition",
+            "dimension_key",
+            "training_window_ref",
+            "sample_count",
+            "metrics",
+            "frequencies"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "complete_request_body_lengths_only",
+        "distinct_requests"
+      ],
+      "parameter_keys": [],
+      "baseline_metric_keys": [
+        "size_cv_p05",
+        "unique_size_ratio_p05"
+      ],
+      "special_condition": ""
+    },
+    {
+      "rule_id": "F_LONG_LOW_SESSION",
+      "kind": "F",
+      "name": "长会话低频小流量",
+      "sample_and_decision_gate": "会话 >30min 且双向 <10KB 且含周期小包（体量须 Q02 verified）",
+      "existing_gate_source": "vulnscan-backend/evidence/http_rules.go:68",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "sessions",
+          "fields": [
+            "session_id",
+            "started_at",
+            "ended_at",
+            "connection_refs",
+            "contact_refs",
+            "up_bytes",
+            "down_bytes",
+            "volume_verified",
+            "volume_basis"
+          ]
+        },
+        {
+          "family": "contacts",
+          "fields": [
+            "contact_id",
+            "occurred_at",
+            "kind",
+            "observation_ref",
+            "dedup_key",
+            "packets_per_contact",
+            "application_payload_bytes"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "contacts_bound_to_exact_session",
+        "verified_bidirectional_bytes"
+      ],
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": ""
+    },
+    {
+      "rule_id": "F_URL_ODD_AUTHORITY",
+      "kind": "F",
+      "name": "URL 授权部分异常（弱欺骗）",
+      "sample_and_decision_gate": "userinfo `@` / IP·数字·十六进制主机；deception_strength: weak，不满足 Phishing 欺骗门槛",
+      "existing_gate_source": "vulnscan-backend/evidence/http_rules.go:214",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "http_transactions",
+          "fields": [
+            "transaction_id",
+            "request_at",
+            "request.method",
+            "request.url_raw",
+            "request.host_ascii",
+            "request.path_escaped",
+            "request.raw_artifact_ref",
+            "request.completeness",
+            "request.assembly",
+            "request.authority"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "actual_request_URL_not_IOC_description"
+      ],
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": ""
+    },
+    {
+      "rule_id": "F_URL_HOMOGLYPH",
+      "kind": "F",
+      "name": "域名有限字符映射近似",
+      "sample_and_decision_gate": "有限字符映射后与核验品牌域近似；不覆盖完整Unicode视觉混淆检测",
+      "existing_gate_source": "vulnscan-backend/evidence/http_rules.go:230",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "http_transactions",
+          "fields": [
+            "transaction_id",
+            "request_at",
+            "request.method",
+            "request.url_raw",
+            "request.host_ascii",
+            "request.path_escaped",
+            "request.raw_artifact_ref",
+            "request.completeness",
+            "request.assembly"
+          ]
+        },
+        {
+          "family": "brand_references",
+          "fields": [
+            "brand_id",
+            "display_name",
+            "authorized_domains",
+            "normalization_version",
+            "effective_start",
+            "effective_end"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "brand_reference_effective_at_request",
+        "original_URL_preserved"
+      ],
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": ""
+    },
+    {
+      "rule_id": "F_URL_BRAND_SUBDOMAIN_TRICK",
+      "kind": "F",
+      "name": "子域品牌词与授权注册域冲突",
+      "sample_and_decision_gate": "品牌词在子域而注册域无关（PSL 提取），如 `brand.com.evil.tld`",
+      "existing_gate_source": "vulnscan-backend/evidence/http_rules.go:265",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "http_transactions",
+          "fields": [
+            "transaction_id",
+            "request_at",
+            "request.method",
+            "request.url_raw",
+            "request.host_ascii",
+            "request.path_escaped",
+            "request.raw_artifact_ref",
+            "request.completeness",
+            "request.assembly"
+          ]
+        },
+        {
+          "family": "brand_references",
+          "fields": [
+            "brand_id",
+            "display_name",
+            "authorized_domains",
+            "normalization_version",
+            "effective_start",
+            "effective_end"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "PSL_normalization",
+        "verified_brand_domains"
+      ],
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": ""
+    },
+    {
+      "rule_id": "F_BRAND_IMPOSTOR",
+      "kind": "F",
+      "name": "品牌仿冒",
+      "sample_and_decision_gate": "与审核品牌清单编辑距离/邻键比对，或授权域核验失败；需品牌清单",
+      "existing_gate_source": "vulnscan-backend/evidence/config.go:63",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "http_transactions",
+          "fields": [
+            "transaction_id",
+            "request_at",
+            "request.method",
+            "request.url_raw",
+            "request.host_ascii",
+            "request.path_escaped",
+            "request.raw_artifact_ref",
+            "request.completeness",
+            "request.assembly",
+            "declared_brand"
+          ]
+        },
+        {
+          "family": "brand_references",
+          "fields": [
+            "brand_id",
+            "display_name",
+            "authorized_domains",
+            "normalization_version",
+            "effective_start",
+            "effective_end"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "actual_host_against_verified_brand"
+      ],
+      "parameter_keys": [
+        "max_edit_distance"
+      ],
+      "baseline_metric_keys": [],
+      "special_condition": ""
+    },
+    {
+      "rule_id": "F_CRED_POST_STRUCTURE",
+      "kind": "F",
+      "name": "登录提交结构",
+      "sample_and_decision_gate": "同请求 POST＋脱敏凭据字段名；正文截断标 insufficient",
+      "existing_gate_source": "vulnscan-backend/evidence/http_rules.go:316",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "http_transactions",
+          "fields": [
+            "transaction_id",
+            "request_at",
+            "request.method",
+            "request.url_raw",
+            "request.host_ascii",
+            "request.path_escaped",
+            "request.raw_artifact_ref",
+            "request.completeness",
+            "request.assembly",
+            "request.fields",
+            "request.body_artifact_ref"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "method_and_credential_field_names_from_same_complete_request",
+        "credential_values_not_required"
+      ],
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": ""
+    },
+    {
+      "rule_id": "F_FORM_CROSSSITE",
+      "kind": "F",
+      "name": "表单跨站提交",
+      "sample_and_decision_gate": "action 与页面来源不同可注册域",
+      "existing_gate_source": "vulnscan-backend/evidence/http_rules.go:327",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "http_transactions",
+          "fields": [
+            "transaction_id",
+            "request_at",
+            "request.method",
+            "request.url_raw",
+            "request.host_ascii",
+            "request.path_escaped",
+            "request.raw_artifact_ref",
+            "request.completeness",
+            "request.assembly",
+            "form_action"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "page_origin_and_action_bound_to_same_transaction",
+        "compare_registrable_domains"
+      ],
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": ""
+    },
+    {
+      "rule_id": "F_REDIRECT_CHAIN",
+      "kind": "F",
+      "name": "落地页→异站提交链",
+      "sample_and_decision_gate": "事务 ID 关联的跨注册域跳转提交链；两条无关联命中不得拼接",
+      "existing_gate_source": "vulnscan-backend/evidence/http_rules.go:355",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "http_transactions",
+          "fields": [
+            "transaction_id",
+            "request_at",
+            "request.method",
+            "request.url_raw",
+            "request.host_ascii",
+            "request.path_escaped",
+            "request.raw_artifact_ref",
+            "request.completeness",
+            "request.assembly",
+            "form_action",
+            "redirect_link_refs"
+          ]
+        },
+        {
+          "family": "relations",
+          "fields": [
+            "kind",
+            "from_ref",
+            "to_ref",
+            "method",
+            "verified"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "verified_landing_to_submission_chain",
+        "no_cross_event_guessing"
+      ],
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": ""
+    },
+    {
+      "rule_id": "F_MULTI_REDIRECT_CHAIN",
+      "kind": "F",
+      "name": "多次HTTP重定向",
+      "sample_and_decision_gate": "同一已关联会话内≥2条经RedirectVerified验证的事务跳转边；核验响应状态及Location，不识别短链服务",
+      "existing_gate_source": "vulnscan-backend/evidence/http_rules.go:355",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "http_transactions",
+          "fields": [
+            "transaction_id",
+            "request_at",
+            "request.method",
+            "request.url_raw",
+            "request.host_ascii",
+            "request.path_escaped",
+            "request.raw_artifact_ref",
+            "request.completeness",
+            "request.assembly",
+            "session_ref",
+            "response.status",
+            "response.location",
+            "redirect_link_refs"
+          ]
+        },
+        {
+          "family": "relations",
+          "fields": [
+            "kind",
+            "from_ref",
+            "to_ref",
+            "method",
+            "verified"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "same_session",
+        "verified_HTTP_redirect_edges",
+        "status_and_location_from_actual_response"
+      ],
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": ""
+    },
+    {
+      "rule_id": "F_PROTOCOL_PORT_MISMATCH",
+      "kind": "F",
+      "name": "协议-端口错配",
+      "sample_and_decision_gate": "dst_port vs 可解析 app_proto 指纹＋服务清单不符（端口推断的 protocol 不算）",
+      "existing_gate_source": "vulnscan-backend/evidence/network_rules.go:34",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "connections",
+          "fields": [
+            "connection_id",
+            "started_at",
+            "destination",
+            "source_ip",
+            "source_port",
+            "application_protocol",
+            "protocol_basis"
+          ]
+        },
+        {
+          "family": "service_references",
+          "fields": [
+            "service_id",
+            "transport",
+            "port",
+            "application_protocol"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "application_protocol_not_inferred_from_port"
+      ],
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": ""
+    },
+    {
+      "rule_id": "F_RARE_PORT",
+      "kind": "F",
+      "name": "稀有端口",
+      "sample_and_decision_gate": "目的端口在同角色资产群体中频率 <p01",
+      "existing_gate_source": "vulnscan-backend/evidence/network_rules.go:61",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "connections",
+          "fields": [
+            "connection_id",
+            "started_at",
+            "destination",
+            "source_ip",
+            "source_port"
+          ]
+        },
+        {
+          "family": "group_memberships",
+          "fields": [
+            "group_id",
+            "asset_id",
+            "device_id",
+            "addresses",
+            "membership_verified",
+            "nat_proxy_dedup_key",
+            "observation_refs",
+            "role"
+          ]
+        },
+        {
+          "family": "baselines",
+          "fields": [
+            "baseline_id",
+            "version",
+            "population_definition",
+            "dimension_key",
+            "training_window_ref",
+            "sample_count",
+            "metrics",
+            "frequencies"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "baseline_matches_asset_role_and_port"
+      ],
+      "parameter_keys": [],
+      "baseline_metric_keys": [
+        "port_frequency_p01"
+      ],
+      "special_condition": ""
+    },
+    {
+      "rule_id": "F_DST_NOVELTY",
+      "kind": "F",
+      "name": "目的端点新颖",
+      "sample_and_decision_gate": "资产历史覆盖窗口内首现（只称\"首次告警\"）",
+      "existing_gate_source": "vulnscan-backend/evidence/history_rules.go:39",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "connections",
+          "fields": [
+            "connection_id",
+            "started_at",
+            "destination",
+            "source_ip",
+            "source_port"
+          ]
+        },
+        {
+          "family": "history_events",
+          "fields": [
+            "historical_event_id",
+            "occurred_at",
+            "asset_ids",
+            "indicator_refs",
+            "snapshot_ref",
+            "binding_refs",
+            "observation_kind",
+            "endpoint"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "exact_asset_and_transport_endpoint",
+        "complete_lookback_denominator"
+      ],
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": "Empty but fully queried history is representable; only proves first saved observation."
+    },
+    {
+      "rule_id": "F_INFRA_RARITY",
+      "kind": "F",
+      "name": "目标基础设施稀有度",
+      "sample_and_decision_gate": "目的 IP 的 ASN/地理/信誉稀有（外部清单，二期）",
+      "existing_gate_source": "vulnscan-backend/evidence/network_rules.go:78",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "connections",
+          "fields": [
+            "connection_id",
+            "started_at",
+            "destination",
+            "source_ip",
+            "source_port"
+          ]
+        },
+        {
+          "family": "infrastructure_references",
+          "fields": [
+            "ip",
+            "asn",
+            "country",
+            "reputation_label",
+            "as_of"
+          ]
+        },
+        {
+          "family": "baselines",
+          "fields": [
+            "baseline_id",
+            "version",
+            "population_definition",
+            "dimension_key",
+            "training_window_ref",
+            "sample_count",
+            "metrics",
+            "frequencies"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "reference_ip_equals_destination",
+        "as_of_and_version_fixed"
+      ],
+      "parameter_keys": [],
+      "baseline_metric_keys": [
+        "infra_frequency_p01"
+      ],
+      "special_condition": ""
+    },
+    {
+      "rule_id": "F_FANOUT_SINGLE_SRC",
+      "kind": "F",
+      "name": "单源目标扇出",
+      "sample_and_decision_gate": "跨事件按源去重 unique(dst,port)/小时 >角色基线 p99",
+      "existing_gate_source": "vulnscan-backend/evidence/network_rules.go:91",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "connections",
+          "fields": [
+            "connection_id",
+            "started_at",
+            "destination",
+            "source_ip",
+            "source_port"
+          ]
+        },
+        {
+          "family": "baselines",
+          "fields": [
+            "baseline_id",
+            "version",
+            "population_definition",
+            "dimension_key",
+            "training_window_ref",
+            "sample_count",
+            "metrics",
+            "frequencies"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "same_source_asset",
+        "distinct_destination_ip_port",
+        "hour_aligned_window"
+      ],
+      "parameter_keys": [],
+      "baseline_metric_keys": [
+        "unique_targets_per_hour_p99"
+      ],
+      "special_condition": ""
+    },
+    {
+      "rule_id": "F_PORT_SEQUENCE",
+      "kind": "F",
+      "name": "端口序列形态",
+      "sample_and_decision_gate": "目的端口序列呈顺序/逆序/伪随机（≥8 去重端口）",
+      "existing_gate_source": "vulnscan-backend/evidence/config.go:64",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "connections",
+          "fields": [
+            "connection_id",
+            "started_at",
+            "destination",
+            "source_ip",
+            "source_port"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "ordered_deduplicated_ports",
+        "same_asset_device"
+      ],
+      "parameter_keys": [
+        "difference_entropy_threshold"
+      ],
+      "baseline_metric_keys": [],
+      "special_condition": ""
+    },
+    {
+      "rule_id": "F_SMALL_PACKET",
+      "kind": "F",
+      "name": "低应用载荷占比",
+      "sample_and_decision_gate": "≥80%独立连接观测的应用载荷字节数≤small_payload_bytes；另记录零载荷比例，不等同零载荷",
+      "existing_gate_source": "vulnscan-backend/evidence/config.go:64",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "connections",
+          "fields": [
+            "connection_id",
+            "started_at",
+            "destination",
+            "source_ip",
+            "source_port",
+            "payload_bytes"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "one_payload_measurement_per_independent_connection",
+        "unknown_bytes_are_null"
+      ],
+      "parameter_keys": [
+        "small_payload_bytes"
+      ],
+      "baseline_metric_keys": [],
+      "special_condition": ""
+    },
+    {
+      "rule_id": "F_CONN_FAIL_RATE",
+      "kind": "F",
+      "name": "连接失败率",
+      "sample_and_decision_gate": "完整窗口确认失败/(确认失败+确认成功)>connection_failure_rate_p95；须OutcomeVerified；尝试中或未知结局返回missing，SYN_SENT不计失败",
+      "existing_gate_source": "vulnscan-backend/evidence/network_rules.go:180",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "connections",
+          "fields": [
+            "connection_id",
+            "started_at",
+            "destination",
+            "source_ip",
+            "source_port",
+            "outcome",
+            "outcome_basis",
+            "outcome_verified",
+            "tcp_state"
+          ]
+        },
+        {
+          "family": "baselines",
+          "fields": [
+            "baseline_id",
+            "version",
+            "population_definition",
+            "dimension_key",
+            "training_window_ref",
+            "sample_count",
+            "metrics",
+            "frequencies"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "all_connection_attempts_in_denominator",
+        "pending_unknown_do_not_become_failure"
+      ],
+      "parameter_keys": [],
+      "baseline_metric_keys": [
+        "connection_failure_rate_p95"
+      ],
+      "special_condition": ""
+    },
+    {
+      "rule_id": "F_INDEPENDENT_RULE_CORROB",
+      "kind": "F",
+      "name": "独立规则交叉佐证",
+      "sample_and_decision_gate": "by_rule＋规则库元数据判独立性；同 IOC 派生多 rule_id 只记一组",
+      "existing_gate_source": "vulnscan-backend/evidence/network_rules.go:12",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "rule_origins",
+          "fields": [
+            "rule_id",
+            "independence_group",
+            "original_source",
+            "hit_refs"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "distinct_original_sources_and_independence_groups"
+      ],
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": ""
+    },
+    {
+      "rule_id": "F_INDEPENDENT_INTEL_CORROB",
+      "kind": "F",
+      "name": "跨情报源独立命中",
+      "sample_and_decision_gate": "多情报源/引擎独立标记同一目的；须验证情报源独立性（同源转引不算）",
+      "existing_gate_source": "vulnscan-backend/evidence/network_rules.go:12",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "intel_origins",
+          "fields": [
+            "indicator_ref",
+            "original_source",
+            "record_id"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "same_indicator",
+        "deduplicate_republished_source"
+      ],
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": "Upstream owns IOC trust/review/expiry; source independence is evidence lineage, not reputation review."
+    },
+    {
+      "rule_id": "F_IOC_TYPE_CORROB",
+      "kind": "F",
+      "name": "IOC 类型与行为证据一致",
+      "sample_and_decision_gate": "IOC 情报类型与成立硬行为事实类型一致（evaluation_stage=post_hard_type；抑制与 modifier 后的 hard_type_scores 满足 top1≥15、份额≥0.60、margin≥10 且情报标签与 top1 一致时成立）；不回填类型分",
+      "existing_gate_source": "vulnscan-backend/evidence/network_rules.go:12",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {
+        "stage": "post_hard_type",
+        "fields": [
+          "hard_type_scores",
+          "source_fact_ids",
+          "policy_version",
+          "verified"
+        ]
+      },
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "intel_origins",
+          "fields": [
+            "indicator_ref",
+            "upstream_type_labels",
+            "original_source"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "same_indicator_and_current_scope"
+      ],
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": "Requires generated post-hard-type result; never accept hard_type_scores as a raw L2 fact."
+    },
+    {
+      "rule_id": "F_TLS_SNI_MISMATCH",
+      "kind": "F",
+      "name": "SNI与证书名称不符",
+      "sample_and_decision_gate": "已核验TLS握手SNI与证书名称匹配失败；需已核验CDN例外清单；不比较目的服务身份",
+      "existing_gate_source": "vulnscan-backend/evidence/rule_helpers.go:153",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "tls_handshakes",
+          "fields": [
+            "handshake_id",
+            "occurred_at",
+            "connection_ref",
+            "sni",
+            "certificate_names"
+          ]
+        },
+        {
+          "family": "tls_references",
+          "fields": [
+            "reference_id",
+            "cdn_exception_patterns",
+            "cdn_exceptions_verified"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "same_verified_handshake",
+        "exceptions_version_fixed"
+      ],
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": ""
+    },
+    {
+      "rule_id": "F_TLS_CERT_ANOMALY",
+      "kind": "F",
+      "name": "自签名/异常证书",
+      "sample_and_decision_gate": "证书链/有效期/颁发者异常",
+      "existing_gate_source": "vulnscan-backend/evidence/rule_helpers.go:153",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "tls_handshakes",
+          "fields": [
+            "handshake_id",
+            "occurred_at",
+            "sni",
+            "certificate_artifact_refs",
+            "not_before",
+            "not_after",
+            "issuer",
+            "chain_verification",
+            "trust_reference_ref"
+          ]
+        },
+        {
+          "family": "tls_references",
+          "fields": [
+            "reference_id",
+            "trust_root_artifact_refs",
+            "trusted_issuers",
+            "issuers_verified"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "certificate_chain_and_trust_anchor_proof",
+        "verification_time_is_handshake_time"
+      ],
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": "DER plus trust roots OR independently verified chain fields; conditional alternatives, not all fields blindly mandatory."
+    },
+    {
+      "rule_id": "F_TLS_JA_MISMATCH",
+      "kind": "F",
+      "name": "JA3/JA4 指纹与声明不符",
+      "sample_and_decision_gate": "指纹库比对；浏览器声称 vs TLS 指纹",
+      "existing_gate_source": "vulnscan-backend/evidence/rule_helpers.go:153",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "tls_handshakes",
+          "fields": [
+            "handshake_id",
+            "occurred_at",
+            "fingerprint",
+            "fingerprint_type",
+            "declared_user_agent"
+          ]
+        },
+        {
+          "family": "tls_references",
+          "fields": [
+            "reference_id",
+            "fingerprint_clients",
+            "fingerprints_verified"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "UA_and_fingerprint_bound_to_same_client_connection"
+      ],
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": ""
+    },
+    {
+      "rule_id": "F_MULTI_ASSET_IOC",
+      "kind": "F",
+      "name": "多资产同 IOC",
+      "sample_and_decision_gate": "≥3 独立资产（NAT/代理/解析器归属去重）同 IOC 且时间聚集",
+      "existing_gate_source": "vulnscan-backend/evidence/config.go:65",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "group_memberships",
+          "fields": [
+            "group_id",
+            "asset_id",
+            "device_id",
+            "addresses",
+            "membership_verified",
+            "nat_proxy_dedup_key",
+            "observation_refs"
+          ]
+        },
+        {
+          "family": "connections",
+          "fields": [
+            "connection_id",
+            "started_at",
+            "destination",
+            "source_ip",
+            "source_port"
+          ]
+        },
+        {
+          "family": "dns_transactions",
+          "fields": [
+            "transaction_id",
+            "question_at",
+            "question_name_raw",
+            "question_name_ascii",
+            "registrable_domain",
+            "psl_version"
+          ]
+        },
+        {
+          "family": "ioc_bindings",
+          "fields": [
+            "indicator_ref",
+            "observation_ref",
+            "field_path",
+            "asset_id",
+            "device_id"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "same_indicator",
+        "deduplicate_NAT_proxy_resolver_ownership"
+      ],
+      "parameter_keys": [
+        "cluster_window_seconds"
+      ],
+      "baseline_metric_keys": [],
+      "special_condition": "Connections or DNS observations according to indicator type; do not require both when one is the applicable population."
+    },
+    {
+      "rule_id": "F_MULTI_ASSET_DIST",
+      "kind": "F",
+      "name": "聚集分布形态",
+      "sample_and_decision_gate": "核验成员的子网熵及角色分布达到配置门槛；不推断随机感染或真实感染面",
+      "existing_gate_source": "vulnscan-backend/evidence/config.go:65",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "group_memberships",
+          "fields": [
+            "group_id",
+            "asset_id",
+            "device_id",
+            "addresses",
+            "membership_verified",
+            "nat_proxy_dedup_key",
+            "observation_refs",
+            "subnet",
+            "role"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "independent_verified_asset_members"
+      ],
+      "parameter_keys": [
+        "subnet_entropy_min"
+      ],
+      "baseline_metric_keys": [],
+      "special_condition": ""
+    },
+    {
+      "rule_id": "F_TIME_COORDINATION",
+      "kind": "F",
+      "name": "多资产时间协同",
+      "sample_and_decision_gate": "≥3资产到同一协议/IP/端口的有界时间桶序列；最小两两互相关>0.7；Endpoint缺失不执行",
+      "existing_gate_source": "vulnscan-backend/evidence/config.go:66",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "group_memberships",
+          "fields": [
+            "group_id",
+            "asset_id",
+            "device_id",
+            "addresses",
+            "membership_verified",
+            "nat_proxy_dedup_key",
+            "observation_refs"
+          ]
+        },
+        {
+          "family": "connections",
+          "fields": [
+            "connection_id",
+            "started_at",
+            "destination",
+            "source_ip",
+            "source_port"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "same_full_transport_endpoint",
+        "complete_time_buckets_per_member"
+      ],
+      "parameter_keys": [
+        "bucket_seconds",
+        "max_lag_bins"
+      ],
+      "baseline_metric_keys": [],
+      "special_condition": ""
+    },
+    {
+      "rule_id": "F_COORD_FANOUT",
+      "kind": "F",
+      "name": "多资产目标集合重叠或扇出衔接",
+      "sample_and_decision_gate": "多源目标集合重叠 >70%，或不同资产分工覆盖目标段且时间衔接",
+      "existing_gate_source": "vulnscan-backend/evidence/config.go:66",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "group_memberships",
+          "fields": [
+            "group_id",
+            "asset_id",
+            "device_id",
+            "addresses",
+            "membership_verified",
+            "nat_proxy_dedup_key",
+            "observation_refs"
+          ]
+        },
+        {
+          "family": "connections",
+          "fields": [
+            "connection_id",
+            "started_at",
+            "destination",
+            "source_ip",
+            "source_port"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "targets_and_time_order_bound_to_member",
+        "no_DNS_as_connection"
+      ],
+      "parameter_keys": [
+        "handoff_seconds"
+      ],
+      "baseline_metric_keys": [],
+      "special_condition": ""
+    },
+    {
+      "rule_id": "F_INFECTION_CHAIN",
+      "kind": "F",
+      "name": "疑似横向传播时序",
+      "sample_and_decision_gate": "A外联同一协议/IP/端口→A访问另一成员B的核验地址→B随后外联该端点；至少一条时序路径，不证明感染或利用成功",
+      "existing_gate_source": "vulnscan-backend/evidence/config.go:67",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "group_memberships",
+          "fields": [
+            "group_id",
+            "asset_id",
+            "device_id",
+            "addresses",
+            "membership_verified",
+            "nat_proxy_dedup_key",
+            "observation_refs"
+          ]
+        },
+        {
+          "family": "connections",
+          "fields": [
+            "connection_id",
+            "started_at",
+            "destination",
+            "source_ip",
+            "source_port"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "A_external_endpoint_then_A_to_verified_B_address_then_B_to_same_endpoint"
+      ],
+      "parameter_keys": [
+        "chain_window_seconds"
+      ],
+      "baseline_metric_keys": [],
+      "special_condition": ""
+    },
+    {
+      "rule_id": "F_SHARED_ENDPOINT",
+      "kind": "F",
+      "name": "共享目的端点",
+      "sample_and_decision_gate": "≥3核验资产连接同一协议/IP/端口，且endpoint_frequency<endpoint_frequency_p01；DNS查询不充当连接",
+      "existing_gate_source": "vulnscan-backend/evidence/group_rules.go:198",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "group_memberships",
+          "fields": [
+            "group_id",
+            "asset_id",
+            "device_id",
+            "addresses",
+            "membership_verified",
+            "nat_proxy_dedup_key",
+            "observation_refs"
+          ]
+        },
+        {
+          "family": "connections",
+          "fields": [
+            "connection_id",
+            "started_at",
+            "destination",
+            "source_ip",
+            "source_port"
+          ]
+        },
+        {
+          "family": "baselines",
+          "fields": [
+            "baseline_id",
+            "version",
+            "population_definition",
+            "dimension_key",
+            "training_window_ref",
+            "sample_count",
+            "metrics",
+            "frequencies"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "same_transport_ip_port",
+        "verified_connections_not_DNS"
+      ],
+      "parameter_keys": [],
+      "baseline_metric_keys": [
+        "endpoint_frequency",
+        "endpoint_frequency_p01"
+      ],
+      "special_condition": ""
+    },
+    {
+      "rule_id": "F_FIRST_VISIT_CLUSTER",
+      "kind": "F",
+      "name": "首次已保存访问时间聚集",
+      "sample_and_decision_gate": "完整历史窗口内无先前记录的同端点访问，≥3资产集中≤1h；不证明网络真实首访或点击",
+      "existing_gate_source": "vulnscan-backend/evidence/group_rules.go:87",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "group_memberships",
+          "fields": [
+            "group_id",
+            "asset_id",
+            "device_id",
+            "addresses",
+            "membership_verified",
+            "nat_proxy_dedup_key",
+            "observation_refs"
+          ]
+        },
+        {
+          "family": "connections",
+          "fields": [
+            "connection_id",
+            "started_at",
+            "destination",
+            "source_ip",
+            "source_port"
+          ]
+        },
+        {
+          "family": "history_events",
+          "fields": [
+            "historical_event_id",
+            "occurred_at",
+            "asset_ids",
+            "indicator_refs",
+            "snapshot_ref",
+            "binding_refs",
+            "observation_kind",
+            "endpoint"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "full_history_per_asset_endpoint",
+        "first_saved_visits_only"
+      ],
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": ""
+    },
+    {
+      "rule_id": "F_COORD_PATTERN_RECURRENCE",
+      "kind": "F",
+      "name": "协同模式跨日重复",
+      "sample_and_decision_gate": "同一资产组的协同模式（相位/突发窗口）在 ≥2 个自然日重现",
+      "existing_gate_source": "vulnscan-backend/evidence/config.go:67",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "group_memberships",
+          "fields": [
+            "group_id",
+            "asset_id",
+            "device_id",
+            "addresses",
+            "membership_verified",
+            "nat_proxy_dedup_key",
+            "observation_refs"
+          ]
+        },
+        {
+          "family": "connections",
+          "fields": [
+            "connection_id",
+            "started_at",
+            "destination",
+            "source_ip",
+            "source_port"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "same_verified_members_and_endpoint",
+        "multi_day_complete_time_buckets"
+      ],
+      "parameter_keys": [
+        "bucket_seconds"
+      ],
+      "baseline_metric_keys": [],
+      "special_condition": ""
+    },
+    {
+      "rule_id": "F_HIST_ASSET_IOC_RECURRENCE",
+      "kind": "F",
+      "name": "同 IOC→同资产跨日复发",
+      "sample_and_decision_gate": "30天窗≥2自然日独立事件；允许有来源的partial阳性；F不按审核状态计分，C01按一期联合策略计分",
+      "existing_gate_source": "vulnscan-backend/evidence/history_rules.go:45",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "history_events",
+          "fields": [
+            "historical_event_id",
+            "occurred_at",
+            "asset_ids",
+            "indicator_refs",
+            "snapshot_ref",
+            "binding_refs",
+            "observation_kind"
+          ]
+        },
+        {
+          "family": "ioc_bindings",
+          "fields": [
+            "indicator_ref",
+            "observation_ref",
+            "field_path",
+            "asset_id",
+            "device_id"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "same_asset_device_and_exact_indicator",
+        "independent_historical_event_ids",
+        "lookback_ends_before_current"
+      ],
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": "30-day window; evidence-backed partial positive allowed; partial nonmatch cannot refute."
+    },
+    {
+      "rule_id": "F_HIST_GROUP_RECURRENCE",
+      "kind": "F",
+      "name": "群体+基础设施复发",
+      "sample_and_decision_gate": "同已核验群体及基础设施跨周重现；仅输出历史事实，不执行旧版审核加减分",
+      "existing_gate_source": "vulnscan-backend/evidence/history_rules.go:39",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "history_events",
+          "fields": [
+            "historical_event_id",
+            "occurred_at",
+            "asset_ids",
+            "indicator_refs",
+            "snapshot_ref",
+            "binding_refs",
+            "observation_kind",
+            "group_id",
+            "member_asset_ids",
+            "endpoint",
+            "family"
+          ]
+        },
+        {
+          "family": "group_memberships",
+          "fields": [
+            "group_id",
+            "asset_id",
+            "device_id",
+            "addresses",
+            "membership_verified",
+            "nat_proxy_dedup_key",
+            "observation_refs"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "same_complete_member_set",
+        "exact_infrastructure",
+        "distinct_calendar_weeks"
+      ],
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": ""
+    },
+    {
+      "rule_id": "F_HIST_INFRA_PERSISTENCE",
+      "kind": "F",
+      "name": "连续跨日多资产IOC关联",
+      "sample_and_decision_gate": "同IOC连续自然日由多个资产产生已保存历史记录；只输出关联事实，不证明服务存活、钓鱼或直接加分",
+      "existing_gate_source": "vulnscan-backend/evidence/history_rules.go:45",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "history_events",
+          "fields": [
+            "historical_event_id",
+            "occurred_at",
+            "asset_ids",
+            "indicator_refs",
+            "snapshot_ref",
+            "binding_refs",
+            "observation_kind"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "same_indicator",
+        "independent_asset_identity",
+        "consecutive_natural_days"
+      ],
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": "Evidence-backed partial positive allowed; does not prove service uptime."
+    },
+    {
+      "rule_id": "F_HIST_SCHEDULE_MATCH",
+      "kind": "F",
+      "name": "历史时刻模式一致",
+      "sample_and_decision_gate": "历史事件与当前命中时刻分布一致（KL 散度 <阈值）",
+      "existing_gate_source": "vulnscan-backend/evidence/config.go:68",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "history_events",
+          "fields": [
+            "historical_event_id",
+            "occurred_at",
+            "asset_ids",
+            "indicator_refs",
+            "snapshot_ref",
+            "binding_refs",
+            "observation_kind"
+          ]
+        },
+        {
+          "family": "contacts",
+          "fields": [
+            "contact_id",
+            "occurred_at",
+            "kind",
+            "observation_ref",
+            "dedup_key"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "same_indicator_asset_and_timezone",
+        "current_and_history_time_distributions"
+      ],
+      "parameter_keys": [
+        "kl_threshold"
+      ],
+      "baseline_metric_keys": [],
+      "special_condition": ""
+    },
+    {
+      "rule_id": "F_HIST_MULTI_IOC_SIEGE",
+      "kind": "F",
+      "name": "同资产多 IOC 围攻",
+      "sample_and_decision_gate": "窗口内同资产被 ≥3 不同 IOC/规则族命中；按角色基线",
+      "existing_gate_source": "vulnscan-backend/evidence/history_rules.go:219",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "history_events",
+          "fields": [
+            "historical_event_id",
+            "occurred_at",
+            "asset_ids",
+            "indicator_refs",
+            "snapshot_ref",
+            "binding_refs",
+            "observation_kind",
+            "rule_family"
+          ]
+        },
+        {
+          "family": "baselines",
+          "fields": [
+            "baseline_id",
+            "version",
+            "population_definition",
+            "dimension_key",
+            "training_window_ref",
+            "sample_count",
+            "metrics",
+            "frequencies"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "same_asset",
+        "distinct_indicator_or_rule_family"
+      ],
+      "parameter_keys": [],
+      "baseline_metric_keys": [
+        "distinct_ioc_families_p99"
+      ],
+      "special_condition": ""
+    },
+    {
+      "rule_id": "F_HIST_STAGE_PROGRESSION",
+      "kind": "F",
+      "name": "攻击阶段递进",
+      "sample_and_decision_gate": "同资产、同IOC或独立核验战役内，已定谳恶意历史与有来源证明的CurrentStage构成scan/exploit→c2→exfil推进；当前阶段须高于最近历史阶段，历史不得回退；不证明因果攻击链",
+      "existing_gate_source": "vulnscan-backend/evidence/history_rules.go:39",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "history_events",
+          "fields": [
+            "historical_event_id",
+            "occurred_at",
+            "asset_ids",
+            "indicator_refs",
+            "snapshot_ref",
+            "binding_refs",
+            "observation_kind",
+            "adjudication",
+            "stage_proof_ref",
+            "campaign_proof_ref"
+          ]
+        },
+        {
+          "family": "stage_campaign_proofs",
+          "fields": [
+            "proof_type",
+            "asset_ids",
+            "indicator_refs",
+            "stage",
+            "campaign_id",
+            "authority",
+            "adjudication_id"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "verified_current_stage",
+        "reviewed_history",
+        "exact_asset_indicator_or_verified_campaign",
+        "no_stage_regression"
+      ],
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": ""
+    },
+    {
+      "rule_id": "F_HIST_COORD_PARAM_MATCH",
+      "kind": "F",
+      "name": "历史协同参数一致",
+      "sample_and_decision_gate": "同实际基础设施、独立核验战役及资产/完整群体范围内，核验的当前协同参数与已定谳历史按配置容限比较；群体ID及完整核验成员集合须一致；只说明受约束的参数相似",
+      "existing_gate_source": "vulnscan-backend/evidence/config.go:68",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "history_events",
+          "fields": [
+            "historical_event_id",
+            "occurred_at",
+            "asset_ids",
+            "indicator_refs",
+            "snapshot_ref",
+            "binding_refs",
+            "observation_kind",
+            "adjudication",
+            "group_id",
+            "member_asset_ids",
+            "endpoint",
+            "coordination_parameters",
+            "campaign_proof_ref"
+          ]
+        },
+        {
+          "family": "stage_campaign_proofs",
+          "fields": [
+            "proof_type",
+            "asset_ids",
+            "indicator_refs",
+            "group_id",
+            "member_asset_ids",
+            "campaign_id",
+            "parameters",
+            "authority"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "same_infrastructure_campaign_and_complete_membership",
+        "verified_current_parameters"
+      ],
+      "parameter_keys": [
+        "parameter_relative_tolerance"
+      ],
+      "baseline_metric_keys": [],
+      "special_condition": ""
+    },
+    {
+      "rule_id": "F_HIST_EXERCISE",
+      "kind": "F",
+      "name": "登记演练平台命中",
+      "sample_and_decision_gate": "资产/域名属登记钓鱼演练或测试平台（留验证记录）；classification_effect: type=PH, effective_score_cap=34, status=candidate",
+      "existing_gate_source": "vulnscan-backend/evidence/history_rules.go:32",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "authorizations",
+          "fields": [
+            "authorization_id",
+            "effective_start",
+            "effective_end",
+            "asset_id",
+            "endpoint",
+            "domains",
+            "role",
+            "task_type",
+            "ports",
+            "protocols",
+            "targets"
+          ]
+        },
+        {
+          "family": "http_transactions",
+          "fields": [
+            "transaction_id",
+            "request_at",
+            "request.method",
+            "request.url_raw",
+            "request.host_ascii",
+            "request.path_escaped",
+            "request.raw_artifact_ref",
+            "request.completeness",
+            "request.assembly"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "effective_registration_matches_asset_endpoint_or_actual_domain"
+      ],
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": "HTTP/domain context conditional on registration target; does not require a readable HTTP request for every exercise registration."
+    },
+    {
+      "rule_id": "F_IOC_NOVELTY",
+      "kind": "F",
+      "name": "IOC 平台首现",
+      "sample_and_decision_gate": "历史库无记录；与 F_HIST_ASSET_IOC_RECURRENCE 互斥",
+      "existing_gate_source": "vulnscan-backend/evidence/history_rules.go:74",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "history_events",
+          "fields": [
+            "historical_event_id",
+            "occurred_at",
+            "asset_ids",
+            "indicator_refs",
+            "snapshot_ref",
+            "binding_refs",
+            "observation_kind"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "exact_indicator",
+        "complete_history_query_including_empty_result"
+      ],
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": "Absence conclusion requires complete declared history, not absence of returned rows alone."
+    },
+    {
+      "rule_id": "F_EXCL_SCAN_TASK",
+      "kind": "F",
+      "name": "已核验扫描任务",
+      "sample_and_decision_gate": "核验登记角色/任务与当前活动匹配，不由模型推断",
+      "existing_gate_source": "vulnscan-backend/evidence/history_rules.go:32",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "authorizations",
+          "fields": [
+            "authorization_id",
+            "effective_start",
+            "effective_end",
+            "asset_id",
+            "endpoint",
+            "domains",
+            "role",
+            "task_type",
+            "ports",
+            "protocols",
+            "targets"
+          ]
+        },
+        {
+          "family": "connections",
+          "fields": [
+            "connection_id",
+            "started_at",
+            "destination",
+            "source_ip",
+            "source_port",
+            "application_protocol",
+            "protocol_basis"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "effective_task_role_asset_endpoint_ports_protocols_targets_all_match"
+      ],
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": ""
+    },
+    {
+      "rule_id": "F_EXCL_INFRA_ROLE",
+      "kind": "F",
+      "name": "已核验基础服务",
+      "sample_and_decision_gate": "核验登记角色/任务与当前活动匹配，不由模型推断",
+      "existing_gate_source": "vulnscan-backend/evidence/history_rules.go:32",
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "coverage_contract": "Per-family/scope/window/population coverage; verified fields; missing inputs never imply not_observed. Follow existing per-rule positive/negative gates.",
+      "runtime_dependencies": {},
+      "migration_status": "not_migrated_to_new_standard",
+      "required_inputs": [
+        {
+          "family": "authorizations",
+          "fields": [
+            "authorization_id",
+            "effective_start",
+            "effective_end",
+            "asset_id",
+            "endpoint",
+            "domains",
+            "role",
+            "task_type",
+            "ports",
+            "protocols",
+            "targets"
+          ]
+        },
+        {
+          "family": "connections",
+          "fields": [
+            "connection_id",
+            "started_at",
+            "destination",
+            "source_ip",
+            "source_port",
+            "application_protocol",
+            "protocol_basis"
+          ]
+        }
+      ],
+      "association_constraints": [
+        "effective_registered_role_resolver_proxy_or_management",
+        "current_activity_matches_registration"
+      ],
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": ""
+    },
+    {
+      "rule_id": "S01/c2.command_intent/",
+      "kind": "S",
+      "name": "c2.command_intent",
+      "required_material_kinds": [
+        "protocol_request",
+        "direction"
+      ],
+      "required_inputs": [
+        {
+          "family": "semantic_materials",
+          "fields": [
+            "artifact_ref",
+            "destination",
+            "direction",
+            "field_path",
+            "kind",
+            "method",
+            "observation_ref",
+            "proposition_id",
+            "protocol",
+            "related_record_refs",
+            "subject_id",
+            "transaction_id"
+          ]
+        },
+        {
+          "family": "ioc_bindings",
+          "fields": [
+            "asset_id",
+            "device_id",
+            "direction",
+            "observation_ref",
+            "remote_endpoint"
+          ]
+        }
+      ],
+      "runtime_dependencies": {
+        "all_facts": [],
+        "any_facts": [],
+        "fields": []
+      },
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "association_constraints": [
+        "same_proposition_and_origin_object",
+        "exact_transaction_and_direction",
+        "verified_decode_step_chain_when_used",
+        "source_version_pinned",
+        "no_F_or_S_verdicts_in_L2"
+      ],
+      "coverage_contract": "Readable applicable artifacts, exact originating object and per-material completeness; incomplete material cannot support stronger claims.",
+      "sample_and_decision_gate": "可读协议、可信方向；strong须同事务双向语义对应；不证明执行成功",
+      "existing_gate_source": "vulnscan-backend/evidence/semantic_prerequisites.go",
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": "",
+      "migration_status": "not_migrated_to_new_standard"
+    },
+    {
+      "rule_id": "S02/c2.command_exchange/",
+      "kind": "S",
+      "name": "c2.command_exchange",
+      "required_material_kinds": [
+        "protocol_request",
+        "protocol_response",
+        "pair"
+      ],
+      "required_inputs": [
+        {
+          "family": "semantic_materials",
+          "fields": [
+            "artifact_ref",
+            "destination",
+            "direction",
+            "field_path",
+            "kind",
+            "method",
+            "observation_ref",
+            "proposition_id",
+            "protocol",
+            "related_record_refs",
+            "subject_id",
+            "transaction_id"
+          ]
+        },
+        {
+          "family": "relations",
+          "fields": [
+            "from_ref",
+            "kind",
+            "method",
+            "to_ref",
+            "verified"
+          ]
+        }
+      ],
+      "runtime_dependencies": {
+        "all_facts": [],
+        "any_facts": [],
+        "fields": []
+      },
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "association_constraints": [
+        "same_proposition_and_origin_object",
+        "exact_transaction_and_direction",
+        "verified_decode_step_chain_when_used",
+        "source_version_pinned",
+        "no_F_or_S_verdicts_in_L2"
+      ],
+      "coverage_contract": "Readable applicable artifacts, exact originating object and per-material completeness; incomplete material cannot support stronger claims.",
+      "sample_and_decision_gate": "同事务真实请求应答；排除文档与日志回显",
+      "existing_gate_source": "vulnscan-backend/evidence/semantic_prerequisites.go",
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": "",
+      "migration_status": "not_migrated_to_new_standard"
+    },
+    {
+      "rule_id": "S03/c2.ua_behavior_conflict/",
+      "kind": "S",
+      "name": "c2.ua_behavior_conflict",
+      "required_material_kinds": [
+        "ua",
+        "protocol_request"
+      ],
+      "required_inputs": [
+        {
+          "family": "http_transactions",
+          "fields": [
+            "request.user_agent"
+          ]
+        },
+        {
+          "family": "semantic_materials",
+          "fields": [
+            "artifact_ref",
+            "destination",
+            "direction",
+            "field_path",
+            "kind",
+            "method",
+            "observation_ref",
+            "proposition_id",
+            "protocol",
+            "related_record_refs",
+            "subject_id",
+            "transaction_id"
+          ]
+        }
+      ],
+      "runtime_dependencies": {
+        "all_facts": [
+          "F_HTTP_ENDPOINT_REPEAT"
+        ],
+        "any_facts": [],
+        "fields": []
+      },
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "association_constraints": [
+        "same_proposition_and_origin_object",
+        "exact_transaction_and_direction",
+        "verified_decode_step_chain_when_used",
+        "source_version_pinned",
+        "no_F_or_S_verdicts_in_L2"
+      ],
+      "coverage_contract": "Readable applicable artifacts, exact originating object and per-material completeness; incomplete material cannot support stronger claims.",
+      "sample_and_decision_gate": "重复端点事实及实际UA；浏览器声明不足",
+      "existing_gate_source": "vulnscan-backend/evidence/semantic_prerequisites.go",
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": "",
+      "migration_status": "not_migrated_to_new_standard"
+    },
+    {
+      "rule_id": "S04/c2.dns_encoded_intent/",
+      "kind": "S",
+      "name": "c2.dns_encoded_intent",
+      "required_material_kinds": [
+        "domain",
+        "decode",
+        "decoded_payload"
+      ],
+      "required_inputs": [
+        {
+          "family": "dns_transactions",
+          "fields": [
+            "psl_version",
+            "question_at",
+            "question_name_ascii",
+            "question_name_raw",
+            "registrable_domain",
+            "transaction_id"
+          ]
+        },
+        {
+          "family": "decode_chains",
+          "fields": [
+            "origin_field_path",
+            "origin_observation_ref",
+            "steps"
+          ]
+        },
+        {
+          "family": "semantic_materials",
+          "fields": [
+            "artifact_ref",
+            "decode_chain_ref",
+            "field_path",
+            "kind",
+            "observation_ref",
+            "proposition_id",
+            "related_record_refs",
+            "subject_id"
+          ]
+        }
+      ],
+      "runtime_dependencies": {
+        "all_facts": [
+          "F_DNS_ENCODED_LABEL"
+        ],
+        "any_facts": [],
+        "fields": []
+      },
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "association_constraints": [
+        "same_proposition_and_origin_object",
+        "exact_transaction_and_direction",
+        "verified_decode_step_chain_when_used",
+        "source_version_pinned",
+        "no_F_or_S_verdicts_in_L2"
+      ],
+      "coverage_contract": "Readable applicable artifacts, exact originating object and per-material completeness; incomplete material cannot support stronger claims.",
+      "sample_and_decision_gate": "编码标签事实及代码验证解码链；考虑追踪token",
+      "existing_gate_source": "vulnscan-backend/evidence/semantic_prerequisites.go",
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": "",
+      "migration_status": "not_migrated_to_new_standard"
+    },
+    {
+      "rule_id": "S05/phishing.deception/",
+      "kind": "S",
+      "name": "phishing.deception",
+      "required_material_kinds": [
+        "page",
+        "host",
+        "brand_authorization"
+      ],
+      "required_inputs": [
+        {
+          "family": "http_transactions",
+          "fields": [
+            "request.host_ascii",
+            "response.body_artifact_ref",
+            "response_pair_ref"
+          ]
+        },
+        {
+          "family": "brand_references",
+          "fields": [
+            "authorized_domains",
+            "brand_id",
+            "display_name",
+            "effective_end",
+            "effective_start"
+          ]
+        },
+        {
+          "family": "semantic_materials",
+          "fields": [
+            "artifact_ref",
+            "field_path",
+            "kind",
+            "observation_ref",
+            "proposition_id",
+            "related_record_refs",
+            "subject_id"
+          ]
+        }
+      ],
+      "runtime_dependencies": {
+        "all_facts": [],
+        "any_facts": [],
+        "fields": []
+      },
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "association_constraints": [
+        "same_proposition_and_origin_object",
+        "exact_transaction_and_direction",
+        "verified_decode_step_chain_when_used",
+        "source_version_pinned",
+        "no_F_or_S_verdicts_in_L2"
+      ],
+      "coverage_contract": "Readable applicable artifacts, exact originating object and per-material completeness; incomplete material cannot support stronger claims.",
+      "sample_and_decision_gate": "页面正文、Host、核验品牌授权域；strong须明确仿冒依据",
+      "existing_gate_source": "vulnscan-backend/evidence/semantic_prerequisites.go",
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": "",
+      "migration_status": "not_migrated_to_new_standard"
+    },
+    {
+      "rule_id": "S06/phishing.credential_action/",
+      "kind": "S",
+      "name": "phishing.credential_action",
+      "required_material_kinds": [
+        "credential_fields",
+        "protocol_request"
+      ],
+      "required_inputs": [
+        {
+          "family": "http_transactions",
+          "fields": [
+            "request.completeness",
+            "request.fields",
+            "request.method",
+            "transaction_id"
+          ]
+        },
+        {
+          "family": "semantic_materials",
+          "fields": [
+            "artifact_ref",
+            "destination",
+            "direction",
+            "field_path",
+            "kind",
+            "method",
+            "observation_ref",
+            "proposition_id",
+            "protocol",
+            "related_record_refs",
+            "subject_id",
+            "transaction_id"
+          ]
+        }
+      ],
+      "runtime_dependencies": {
+        "all_facts": [],
+        "any_facts": [
+          "F_CRED_POST_STRUCTURE",
+          "F_FORM_CROSSSITE",
+          "F_REDIRECT_CHAIN"
+        ],
+        "fields": []
+      },
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "association_constraints": [
+        "same_proposition_and_origin_object",
+        "exact_transaction_and_direction",
+        "verified_decode_step_chain_when_used",
+        "source_version_pinned",
+        "no_F_or_S_verdicts_in_L2"
+      ],
+      "coverage_contract": "Readable applicable artifacts, exact originating object and per-material completeness; incomplete material cannot support stronger claims.",
+      "sample_and_decision_gate": "同请求字段名、方法、目的及行动事实；只解释收集意图",
+      "existing_gate_source": "vulnscan-backend/evidence/semantic_prerequisites.go",
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": "",
+      "migration_status": "not_migrated_to_new_standard"
+    },
+    {
+      "rule_id": "S07/exfil.sensitive_upload/",
+      "kind": "S",
+      "name": "exfil.sensitive_upload",
+      "required_material_kinds": [
+        "protocol_request",
+        "direction",
+        "volume",
+        "content_classification"
+      ],
+      "required_inputs": [
+        {
+          "family": "semantic_materials",
+          "fields": [
+            "artifact_ref",
+            "bytes",
+            "destination",
+            "direction",
+            "field_path",
+            "kind",
+            "method",
+            "observation_ref",
+            "proposition_id",
+            "protocol",
+            "related_record_refs",
+            "subject_id",
+            "transaction_id"
+          ]
+        },
+        {
+          "family": "ioc_bindings",
+          "fields": [
+            "asset_id",
+            "device_id",
+            "direction",
+            "observation_ref",
+            "remote_endpoint"
+          ]
+        },
+        {
+          "family": "content_classifications",
+          "fields": [
+            "artifact_ref",
+            "category",
+            "classifier_version",
+            "method",
+            "spans",
+            "transaction_ref"
+          ]
+        }
+      ],
+      "runtime_dependencies": {
+        "all_facts": [],
+        "any_facts": [],
+        "fields": []
+      },
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "association_constraints": [
+        "same_proposition_and_origin_object",
+        "exact_transaction_and_direction",
+        "verified_decode_step_chain_when_used",
+        "source_version_pinned",
+        "no_F_or_S_verdicts_in_L2"
+      ],
+      "coverage_contract": "Readable applicable artifacts, exact originating object and per-material completeness; incomplete material cannot support stronger claims.",
+      "sample_and_decision_gate": "完整请求、可信方向与体量、内容分类依据；不证明送达",
+      "existing_gate_source": "vulnscan-backend/evidence/semantic_prerequisites.go",
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": "S07 requires independent content classification; S08 requires >=2 separately identified transactions with distinct chunk sequences and verified transfer linkage.",
+      "migration_status": "not_migrated_to_new_standard"
+    },
+    {
+      "rule_id": "S08/exfil.chunk_sequence/",
+      "kind": "S",
+      "name": "exfil.chunk_sequence",
+      "required_material_kinds": [
+        "chunk",
+        "volume",
+        "transfer_join"
+      ],
+      "required_inputs": [
+        {
+          "family": "transfer_chunks",
+          "fields": [
+            "artifact_ref",
+            "bytes",
+            "direction",
+            "sequence",
+            "sequence_basis",
+            "transaction_ref",
+            "transfer_id"
+          ]
+        },
+        {
+          "family": "semantic_materials",
+          "fields": [
+            "artifact_ref",
+            "bytes",
+            "field_path",
+            "kind",
+            "observation_ref",
+            "proposition_id",
+            "related_record_refs",
+            "subject_id",
+            "transaction_id"
+          ]
+        },
+        {
+          "family": "transfer_links",
+          "fields": [
+            "chunk_refs",
+            "join_key",
+            "join_method",
+            "join_verified",
+            "transfer_id"
+          ]
+        }
+      ],
+      "runtime_dependencies": {
+        "all_facts": [],
+        "any_facts": [],
+        "fields": []
+      },
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "association_constraints": [
+        "same_proposition_and_origin_object",
+        "exact_transaction_and_direction",
+        "verified_decode_step_chain_when_used",
+        "source_version_pinned",
+        "no_F_or_S_verdicts_in_L2"
+      ],
+      "coverage_contract": "Readable applicable artifacts, exact originating object and per-material completeness; incomplete material cannot support stronger claims.",
+      "sample_and_decision_gate": "至少两个可靠关联事务、块序号及可信体量；禁止拼接无关命中",
+      "existing_gate_source": "vulnscan-backend/evidence/semantic_prerequisites.go",
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": "S07 requires independent content classification; S08 requires >=2 separately identified transactions with distinct chunk sequences and verified transfer linkage.",
+      "migration_status": "not_migrated_to_new_standard"
+    },
+    {
+      "rule_id": "S09/exploit.payload_intent/",
+      "kind": "S",
+      "name": "exploit.payload_intent",
+      "required_material_kinds": [
+        "protocol_request",
+        "parsed_payload",
+        "direction"
+      ],
+      "required_inputs": [
+        {
+          "family": "semantic_materials",
+          "fields": [
+            "artifact_ref",
+            "destination",
+            "direction",
+            "field_path",
+            "kind",
+            "method",
+            "observation_ref",
+            "proposition_id",
+            "protocol",
+            "related_record_refs",
+            "subject_id",
+            "transaction_id"
+          ]
+        },
+        {
+          "family": "ioc_bindings",
+          "fields": [
+            "asset_id",
+            "device_id",
+            "direction",
+            "observation_ref",
+            "remote_endpoint"
+          ]
+        }
+      ],
+      "runtime_dependencies": {
+        "all_facts": [],
+        "any_facts": [],
+        "fields": []
+      },
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "association_constraints": [
+        "same_proposition_and_origin_object",
+        "exact_transaction_and_direction",
+        "verified_decode_step_chain_when_used",
+        "source_version_pinned",
+        "no_F_or_S_verdicts_in_L2"
+      ],
+      "coverage_contract": "Readable applicable artifacts, exact originating object and per-material completeness; incomplete material cannot support stronger claims.",
+      "sample_and_decision_gate": "已解析请求载荷、方法、目标协议及可信方向；不证明利用成功",
+      "existing_gate_source": "vulnscan-backend/evidence/semantic_prerequisites.go",
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": "",
+      "migration_status": "not_migrated_to_new_standard"
+    },
+    {
+      "rule_id": "S10/protocol.response_meaning/",
+      "kind": "S",
+      "name": "protocol.response_meaning",
+      "required_material_kinds": [
+        "protocol_request",
+        "protocol_response",
+        "pair"
+      ],
+      "required_inputs": [
+        {
+          "family": "semantic_materials",
+          "fields": [
+            "artifact_ref",
+            "destination",
+            "direction",
+            "field_path",
+            "kind",
+            "method",
+            "observation_ref",
+            "proposition_id",
+            "protocol",
+            "related_record_refs",
+            "subject_id",
+            "transaction_id"
+          ]
+        },
+        {
+          "family": "relations",
+          "fields": [
+            "from_ref",
+            "kind",
+            "method",
+            "to_ref",
+            "verified"
+          ]
+        }
+      ],
+      "runtime_dependencies": {
+        "all_facts": [],
+        "any_facts": [],
+        "fields": []
+      },
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "association_constraints": [
+        "same_proposition_and_origin_object",
+        "exact_transaction_and_direction",
+        "verified_decode_step_chain_when_used",
+        "source_version_pinned",
+        "no_F_or_S_verdicts_in_L2"
+      ],
+      "coverage_contract": "Readable applicable artifacts, exact originating object and per-material completeness; incomplete material cannot support stronger claims.",
+      "sample_and_decision_gate": "同事务真实双向应答；HTTP200不证明执行",
+      "existing_gate_source": "vulnscan-backend/evidence/semantic_prerequisites.go",
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": "",
+      "migration_status": "not_migrated_to_new_standard"
+    },
+    {
+      "rule_id": "S11/mining.protocol_intent/",
+      "kind": "S",
+      "name": "mining.protocol_intent",
+      "required_material_kinds": [
+        "stratum_request",
+        "stratum_response",
+        "pair"
+      ],
+      "required_inputs": [
+        {
+          "family": "semantic_materials",
+          "fields": [
+            "artifact_ref",
+            "direction",
+            "field_path",
+            "kind",
+            "method",
+            "observation_ref",
+            "proposition_id",
+            "protocol",
+            "related_record_refs",
+            "subject_id",
+            "transaction_id"
+          ]
+        },
+        {
+          "family": "relations",
+          "fields": [
+            "from_ref",
+            "kind",
+            "method",
+            "to_ref",
+            "verified"
+          ]
+        }
+      ],
+      "runtime_dependencies": {
+        "all_facts": [],
+        "any_facts": [],
+        "fields": []
+      },
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "association_constraints": [
+        "same_proposition_and_origin_object",
+        "exact_transaction_and_direction",
+        "verified_decode_step_chain_when_used",
+        "source_version_pinned",
+        "no_F_or_S_verdicts_in_L2"
+      ],
+      "coverage_contract": "Readable applicable artifacts, exact originating object and per-material completeness; incomplete material cannot support stronger claims.",
+      "sample_and_decision_gate": "实际Stratum方法、参数和应答；不重复协议事实",
+      "existing_gate_source": "vulnscan-backend/evidence/semantic_prerequisites.go",
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": "",
+      "migration_status": "not_migrated_to_new_standard"
+    },
+    {
+      "rule_id": "S12/c2.domain_lexical/dga_lexical",
+      "kind": "S",
+      "name": "c2.domain_lexical",
+      "required_material_kinds": [
+        "domain",
+        "lexical_context"
+      ],
+      "required_inputs": [
+        {
+          "family": "dns_transactions",
+          "fields": [
+            "psl_version",
+            "question_at",
+            "question_name_ascii",
+            "question_name_raw",
+            "registrable_domain",
+            "transaction_id"
+          ]
+        },
+        {
+          "family": "lexical_references",
+          "fields": [
+            "bigram_log_probabilities",
+            "corpus_id",
+            "normalization_version"
+          ]
+        },
+        {
+          "family": "semantic_materials",
+          "fields": [
+            "artifact_ref",
+            "field_path",
+            "kind",
+            "observation_ref",
+            "proposition_id",
+            "related_record_refs",
+            "subject_id"
+          ]
+        }
+      ],
+      "runtime_dependencies": {
+        "all_facts": [],
+        "any_facts": [],
+        "fields": []
+      },
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "association_constraints": [
+        "same_proposition_and_origin_object",
+        "exact_transaction_and_direction",
+        "verified_decode_step_chain_when_used",
+        "source_version_pinned",
+        "no_F_or_S_verdicts_in_L2"
+      ],
+      "coverage_contract": "Readable applicable artifacts, exact originating object and per-material completeness; incomplete material cannot support stronger claims.",
+      "sample_and_decision_gate": "原始域名及词形上下文；随机串不自动等于DGA",
+      "existing_gate_source": "vulnscan-backend/evidence/semantic_prerequisites.go",
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": "",
+      "migration_status": "not_migrated_to_new_standard"
+    },
+    {
+      "rule_id": "S12/phishing.deception/brand_semantic_impostor",
+      "kind": "S",
+      "name": "phishing.deception",
+      "required_material_kinds": [
+        "brand",
+        "host",
+        "brand_authorization"
+      ],
+      "required_inputs": [
+        {
+          "family": "semantic_materials",
+          "fields": [
+            "artifact_ref",
+            "field_path",
+            "kind",
+            "observation_ref",
+            "proposition_id",
+            "related_record_refs",
+            "subject_id"
+          ]
+        },
+        {
+          "family": "http_transactions",
+          "fields": [
+            "request.host_ascii"
+          ]
+        },
+        {
+          "family": "brand_references",
+          "fields": [
+            "authorized_domains",
+            "brand_id",
+            "display_name",
+            "effective_end",
+            "effective_start"
+          ]
+        }
+      ],
+      "runtime_dependencies": {
+        "all_facts": [],
+        "any_facts": [],
+        "fields": []
+      },
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "association_constraints": [
+        "same_proposition_and_origin_object",
+        "exact_transaction_and_direction",
+        "verified_decode_step_chain_when_used",
+        "source_version_pinned",
+        "no_F_or_S_verdicts_in_L2"
+      ],
+      "coverage_contract": "Readable applicable artifacts, exact originating object and per-material completeness; incomplete material cannot support stronger claims.",
+      "sample_and_decision_gate": "品牌、实际授权域与仿冒关系；仅品牌词最多weak",
+      "existing_gate_source": "vulnscan-backend/evidence/semantic_prerequisites.go",
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": "",
+      "migration_status": "not_migrated_to_new_standard"
+    },
+    {
+      "rule_id": "S13/payload.decoded_intent/command",
+      "kind": "S",
+      "name": "payload.decoded_intent",
+      "required_material_kinds": [
+        "decode",
+        "decoded_payload",
+        "protocol_request",
+        "direction"
+      ],
+      "required_inputs": [
+        {
+          "family": "decode_chains",
+          "fields": [
+            "origin_field_path",
+            "origin_observation_ref",
+            "steps"
+          ]
+        },
+        {
+          "family": "semantic_materials",
+          "fields": [
+            "artifact_ref",
+            "decode_chain_ref",
+            "destination",
+            "direction",
+            "field_path",
+            "kind",
+            "method",
+            "observation_ref",
+            "proposition_id",
+            "protocol",
+            "related_record_refs",
+            "subject_id",
+            "transaction_id"
+          ]
+        },
+        {
+          "family": "ioc_bindings",
+          "fields": [
+            "asset_id",
+            "device_id",
+            "direction",
+            "observation_ref",
+            "remote_endpoint"
+          ]
+        }
+      ],
+      "runtime_dependencies": {
+        "all_facts": [],
+        "any_facts": [],
+        "fields": []
+      },
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "association_constraints": [
+        "same_proposition_and_origin_object",
+        "exact_transaction_and_direction",
+        "verified_decode_step_chain_when_used",
+        "source_version_pinned",
+        "no_F_or_S_verdicts_in_L2"
+      ],
+      "coverage_contract": "Readable applicable artifacts, exact originating object and per-material completeness; incomplete material cannot support stronger claims.",
+      "sample_and_decision_gate": "代码验证解码链及实际命令上下文；strong遵循S01",
+      "existing_gate_source": "vulnscan-backend/evidence/semantic_prerequisites.go",
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": "",
+      "migration_status": "not_migrated_to_new_standard"
+    },
+    {
+      "rule_id": "S13/payload.decoded_intent/other",
+      "kind": "S",
+      "name": "payload.decoded_intent",
+      "required_material_kinds": [
+        "decode",
+        "decoded_payload",
+        "operation_context"
+      ],
+      "required_inputs": [
+        {
+          "family": "decode_chains",
+          "fields": [
+            "origin_field_path",
+            "origin_observation_ref",
+            "steps"
+          ]
+        },
+        {
+          "family": "semantic_materials",
+          "fields": [
+            "artifact_ref",
+            "decode_chain_ref",
+            "field_path",
+            "kind",
+            "observation_ref",
+            "proposition_id",
+            "related_record_refs",
+            "subject_id"
+          ]
+        }
+      ],
+      "runtime_dependencies": {
+        "all_facts": [],
+        "any_facts": [],
+        "fields": []
+      },
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "association_constraints": [
+        "same_proposition_and_origin_object",
+        "exact_transaction_and_direction",
+        "verified_decode_step_chain_when_used",
+        "source_version_pinned",
+        "no_F_or_S_verdicts_in_L2"
+      ],
+      "coverage_contract": "Readable applicable artifacts, exact originating object and per-material completeness; incomplete material cannot support stronger claims.",
+      "sample_and_decision_gate": "代码验证解码链及独立操作上下文；解码成功不等于恶意",
+      "existing_gate_source": "vulnscan-backend/evidence/semantic_prerequisites.go",
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": "",
+      "migration_status": "not_migrated_to_new_standard"
+    },
+    {
+      "rule_id": "S14/review.benign_alternative/",
+      "kind": "S",
+      "name": "review.benign_alternative",
+      "required_material_kinds": [
+        "protocol_request",
+        "asset_role",
+        "task_context"
+      ],
+      "required_inputs": [
+        {
+          "family": "semantic_materials",
+          "fields": [
+            "artifact_ref",
+            "destination",
+            "direction",
+            "field_path",
+            "kind",
+            "method",
+            "observation_ref",
+            "proposition_id",
+            "protocol",
+            "related_record_refs",
+            "subject_id",
+            "transaction_id"
+          ]
+        },
+        {
+          "family": "authorizations",
+          "fields": [
+            "asset_id",
+            "authorization_id",
+            "domains",
+            "effective_end",
+            "effective_start",
+            "endpoint",
+            "ports",
+            "protocols",
+            "role",
+            "targets",
+            "task_type"
+          ]
+        }
+      ],
+      "runtime_dependencies": {
+        "all_facts": [],
+        "any_facts": [],
+        "fields": []
+      },
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "association_constraints": [
+        "same_proposition_and_origin_object",
+        "exact_transaction_and_direction",
+        "verified_decode_step_chain_when_used",
+        "source_version_pinned",
+        "no_F_or_S_verdicts_in_L2"
+      ],
+      "coverage_contract": "Readable applicable artifacts, exact originating object and per-material completeness; incomplete material cannot support stronger claims.",
+      "sample_and_decision_gate": "实际流量、事实规则、资产角色及任务上下文；仅记录异议",
+      "existing_gate_source": "vulnscan-backend/evidence/semantic_prerequisites.go",
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": "",
+      "migration_status": "not_migrated_to_new_standard"
+    },
+    {
+      "rule_id": "S15/review.stage_and_gaps/",
+      "kind": "S",
+      "name": "review.stage_and_gaps",
+      "required_material_kinds": [
+        "visibility",
+        "gaps"
+      ],
+      "required_inputs": [
+        {
+          "family": "coverage",
+          "fields": [
+            "content_completeness",
+            "missing_fields",
+            "population",
+            "population_completeness",
+            "reason_codes",
+            "selection"
+          ]
+        },
+        {
+          "family": "semantic_materials",
+          "fields": [
+            "artifact_ref",
+            "field_path",
+            "kind",
+            "observation_ref",
+            "proposition_id",
+            "related_record_refs",
+            "subject_id"
+          ]
+        }
+      ],
+      "runtime_dependencies": {
+        "all_facts": [],
+        "any_facts": [],
+        "fields": []
+      },
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "association_constraints": [
+        "same_proposition_and_origin_object",
+        "exact_transaction_and_direction",
+        "verified_decode_step_chain_when_used",
+        "source_version_pinned",
+        "no_F_or_S_verdicts_in_L2"
+      ],
+      "coverage_contract": "Readable applicable artifacts, exact originating object and per-material completeness; incomplete material cannot support stronger claims.",
+      "sample_and_decision_gate": "接受的事实、可见范围及缺项；成功性须独立证据",
+      "existing_gate_source": "vulnscan-backend/evidence/semantic_prerequisites.go",
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": "",
+      "migration_status": "not_migrated_to_new_standard"
+    },
+    {
+      "rule_id": "BT-S01/botnet.coordination/",
+      "kind": "S",
+      "name": "botnet.coordination",
+      "required_material_kinds": [
+        "group_member"
+      ],
+      "required_inputs": [
+        {
+          "family": "group_memberships",
+          "fields": [
+            "addresses",
+            "asset_id",
+            "device_id",
+            "group_id",
+            "membership_verified",
+            "nat_proxy_dedup_key",
+            "observation_refs",
+            "role"
+          ]
+        },
+        {
+          "family": "semantic_materials",
+          "fields": [
+            "artifact_ref",
+            "field_path",
+            "kind",
+            "observation_ref",
+            "proposition_id",
+            "related_record_refs",
+            "subject_id"
+          ]
+        }
+      ],
+      "runtime_dependencies": {
+        "all_facts": [],
+        "any_facts": [
+          "F_TIME_COORDINATION",
+          "F_COORD_PATTERN_RECURRENCE",
+          "F_COORD_FANOUT",
+          "F_INFECTION_CHAIN"
+        ],
+        "fields": []
+      },
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "association_constraints": [
+        "same_proposition_and_origin_object",
+        "exact_transaction_and_direction",
+        "verified_decode_step_chain_when_used",
+        "source_version_pinned",
+        "no_F_or_S_verdicts_in_L2"
+      ],
+      "coverage_contract": "Readable applicable artifacts, exact originating object and per-material completeness; incomplete material cannot support stronger claims.",
+      "sample_and_decision_gate": "核验群体及协同硬事实；最多5资产；不替代硬门槛",
+      "existing_gate_source": "vulnscan-backend/evidence/semantic_prerequisites.go",
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": "",
+      "migration_status": "not_migrated_to_new_standard"
+    },
+    {
+      "rule_id": "SC01/c2.role_schedule_conflict/",
+      "kind": "S",
+      "name": "c2.role_schedule_conflict",
+      "required_material_kinds": [
+        "asset_role",
+        "business_schedule",
+        "time_distribution"
+      ],
+      "required_inputs": [
+        {
+          "family": "authorizations",
+          "fields": [
+            "asset_id",
+            "effective_end",
+            "effective_start",
+            "role"
+          ]
+        },
+        {
+          "family": "business_schedules",
+          "fields": [
+            "asset_id",
+            "effective_end",
+            "effective_start",
+            "role",
+            "timezone",
+            "weekly_windows"
+          ]
+        },
+        {
+          "family": "contacts",
+          "fields": [
+            "contact_id",
+            "dedup_key",
+            "kind",
+            "observation_ref",
+            "occurred_at"
+          ]
+        },
+        {
+          "family": "semantic_materials",
+          "fields": [
+            "artifact_ref",
+            "field_path",
+            "kind",
+            "observation_ref",
+            "proposition_id",
+            "related_record_refs",
+            "subject_id"
+          ]
+        }
+      ],
+      "runtime_dependencies": {
+        "all_facts": [],
+        "any_facts": [],
+        "fields": []
+      },
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "association_constraints": [
+        "same_proposition_and_origin_object",
+        "exact_transaction_and_direction",
+        "verified_decode_step_chain_when_used",
+        "source_version_pinned",
+        "no_F_or_S_verdicts_in_L2"
+      ],
+      "coverage_contract": "Readable applicable artifacts, exact originating object and per-material completeness; incomplete material cannot support stronger claims.",
+      "sample_and_decision_gate": "核验角色、业务作息及实际时间分布；夜间服务器运行不自动异常",
+      "existing_gate_source": "vulnscan-backend/evidence/semantic_prerequisites.go",
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": "",
+      "migration_status": "not_migrated_to_new_standard"
+    },
+    {
+      "rule_id": "SC02/botnet.group_alternative/",
+      "kind": "S",
+      "name": "botnet.group_alternative",
+      "required_material_kinds": [
+        "group_member"
+      ],
+      "required_inputs": [
+        {
+          "family": "group_memberships",
+          "fields": [
+            "addresses",
+            "asset_id",
+            "device_id",
+            "group_id",
+            "membership_verified",
+            "nat_proxy_dedup_key",
+            "observation_refs",
+            "role"
+          ]
+        },
+        {
+          "family": "semantic_materials",
+          "fields": [
+            "artifact_ref",
+            "field_path",
+            "kind",
+            "observation_ref",
+            "proposition_id",
+            "related_record_refs",
+            "subject_id"
+          ]
+        }
+      ],
+      "runtime_dependencies": {
+        "all_facts": [],
+        "any_facts": [],
+        "fields": []
+      },
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "association_constraints": [
+        "same_proposition_and_origin_object",
+        "exact_transaction_and_direction",
+        "verified_decode_step_chain_when_used",
+        "source_version_pinned",
+        "no_F_or_S_verdicts_in_L2"
+      ],
+      "coverage_contract": "Readable applicable artifacts, exact originating object and per-material completeness; incomplete material cannot support stronger claims.",
+      "sample_and_decision_gate": "核验群体角色与实际行为摘要；供人工解释",
+      "existing_gate_source": "vulnscan-backend/evidence/semantic_prerequisites.go",
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": "",
+      "migration_status": "not_migrated_to_new_standard"
+    },
+    {
+      "rule_id": "SC03/phishing.brand_field_conflict/",
+      "kind": "S",
+      "name": "phishing.brand_field_conflict",
+      "required_material_kinds": [
+        "brand",
+        "credential_fields",
+        "brand_authorization"
+      ],
+      "required_inputs": [
+        {
+          "family": "semantic_materials",
+          "fields": [
+            "artifact_ref",
+            "field_path",
+            "kind",
+            "observation_ref",
+            "proposition_id",
+            "related_record_refs",
+            "subject_id"
+          ]
+        },
+        {
+          "family": "http_transactions",
+          "fields": [
+            "request.completeness",
+            "request.fields",
+            "request.method",
+            "transaction_id"
+          ]
+        },
+        {
+          "family": "brand_references",
+          "fields": [
+            "authorized_domains",
+            "brand_id",
+            "display_name",
+            "effective_end",
+            "effective_start"
+          ]
+        }
+      ],
+      "runtime_dependencies": {
+        "all_facts": [],
+        "any_facts": [],
+        "fields": []
+      },
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "association_constraints": [
+        "same_proposition_and_origin_object",
+        "exact_transaction_and_direction",
+        "verified_decode_step_chain_when_used",
+        "source_version_pinned",
+        "no_F_or_S_verdicts_in_L2"
+      ],
+      "coverage_contract": "Readable applicable artifacts, exact originating object and per-material completeness; incomplete material cannot support stronger claims.",
+      "sample_and_decision_gate": "实际品牌、字段级引用及核验授权背景；不替代欺骗或行动门槛",
+      "existing_gate_source": "vulnscan-backend/evidence/semantic_prerequisites.go",
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": "",
+      "migration_status": "not_migrated_to_new_standard"
+    },
+    {
+      "rule_id": "R06/history.activity_association/",
+      "kind": "S",
+      "name": "history.activity_association",
+      "required_material_kinds": [
+        "history",
+        "current_pattern"
+      ],
+      "required_inputs": [
+        {
+          "family": "history_events",
+          "fields": [
+            "adjudication",
+            "asset_ids",
+            "binding_refs",
+            "historical_event_id",
+            "indicator_refs",
+            "observation_kind",
+            "occurred_at",
+            "snapshot_ref"
+          ]
+        },
+        {
+          "family": "semantic_materials",
+          "fields": [
+            "artifact_ref",
+            "field_path",
+            "kind",
+            "observation_ref",
+            "proposition_id",
+            "related_record_refs",
+            "subject_id"
+          ]
+        }
+      ],
+      "runtime_dependencies": {
+        "all_facts": [],
+        "any_facts": [],
+        "fields": [
+          "validated_current_facts",
+          "measurements",
+          "source_ids",
+          "window"
+        ]
+      },
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "association_constraints": [
+        "same_proposition_and_origin_object",
+        "exact_transaction_and_direction",
+        "verified_decode_step_chain_when_used",
+        "source_version_pinned",
+        "no_F_or_S_verdicts_in_L2"
+      ],
+      "coverage_contract": "Readable applicable artifacts, exact originating object and per-material completeness; incomplete material cannot support stronger claims.",
+      "sample_and_decision_gate": "引用历史活动与当前模式，解释同IOC/资产关联；相似不自动等于同战役",
+      "existing_gate_source": "vulnscan-backend/evidence/semantic_prerequisites.go",
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": "",
+      "migration_status": "not_migrated_to_new_standard"
+    },
+    {
+      "rule_id": "R07/history.alternative_explanation/",
+      "kind": "S",
+      "name": "history.alternative_explanation",
+      "required_material_kinds": [
+        "history",
+        "current_pattern"
+      ],
+      "required_inputs": [
+        {
+          "family": "history_events",
+          "fields": [
+            "adjudication",
+            "asset_ids",
+            "binding_refs",
+            "historical_event_id",
+            "indicator_refs",
+            "observation_kind",
+            "occurred_at",
+            "snapshot_ref"
+          ]
+        },
+        {
+          "family": "semantic_materials",
+          "fields": [
+            "artifact_ref",
+            "field_path",
+            "kind",
+            "observation_ref",
+            "proposition_id",
+            "related_record_refs",
+            "subject_id"
+          ]
+        }
+      ],
+      "runtime_dependencies": {
+        "all_facts": [],
+        "any_facts": [],
+        "fields": [
+          "validated_current_facts",
+          "measurements",
+          "source_ids",
+          "window"
+        ]
+      },
+      "common_requirements": [
+        "meta.scope_ref",
+        "meta.window_ref",
+        "meta.source_ids",
+        "meta.field_sources",
+        "meta.verification",
+        "meta.coverage_ref"
+      ],
+      "association_constraints": [
+        "same_proposition_and_origin_object",
+        "exact_transaction_and_direction",
+        "verified_decode_step_chain_when_used",
+        "source_version_pinned",
+        "no_F_or_S_verdicts_in_L2"
+      ],
+      "coverage_contract": "Readable applicable artifacts, exact originating object and per-material completeness; incomplete material cannot support stronger claims.",
+      "sample_and_decision_gate": "使用全部关联历史比较业务解释与异常解释，不按审核状态筛选，不以相似认定误报",
+      "existing_gate_source": "vulnscan-backend/evidence/semantic_prerequisites.go",
+      "parameter_keys": [],
+      "baseline_metric_keys": [],
+      "special_condition": "",
+      "migration_status": "not_migrated_to_new_standard"
+    }
+  ]
+}

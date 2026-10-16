@@ -1,0 +1,6 @@
+=== RUN   TestPreparedEvidenceFormalParity
+--- PASS: TestPreparedEvidenceFormalParity (0.12s)
+=== RUN   TestPreparedEvidenceMockNoStore
+--- PASS: TestPreparedEvidenceMockNoStore (0.12s)
+PASS
+ok  	vulnscan-backend/traffic/internal/service	1.276s

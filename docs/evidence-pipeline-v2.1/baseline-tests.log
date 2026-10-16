@@ -1,0 +1,3 @@
+ok  	vulnscan-backend/evidence	1.529s
+ok  	vulnscan-backend/traffic/internal/service	9.115s
+ok  	vulnscan-backend/traffic/internal/httpapi	1.665s

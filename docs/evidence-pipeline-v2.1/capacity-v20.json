@@ -1,0 +1,33 @@
+{
+  "samples": [
+    {
+      "concurrent_p50_us": 156095,
+      "concurrent_p95_us": 175999,
+      "concurrent_samples": 20,
+      "concurrent_workers": 4,
+      "items": 1000,
+      "max_sampled_heap_bytes": 11822016,
+      "mean_allocated_bytes": 33103691,
+      "persist_us": 121400,
+      "single_p50_us": 112000,
+      "single_p95_us": 116558,
+      "single_samples": 15,
+      "sources_per_instance": 500
+    },
+    {
+      "concurrent_p50_us": 1582782,
+      "concurrent_p95_us": 1658387,
+      "concurrent_samples": 20,
+      "concurrent_workers": 4,
+      "items": 10000,
+      "max_sampled_heap_bytes": 42334128,
+      "mean_allocated_bytes": 334886013,
+      "persist_us": 1076576,
+      "single_p50_us": 1108157,
+      "single_p95_us": 1116124,
+      "single_samples": 15,
+      "sources_per_instance": 500
+    }
+  ],
+  "workload": "controlled synthetic ledger, no database/model capacity claim"
+}

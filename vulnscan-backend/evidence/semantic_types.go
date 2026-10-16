@@ -106,17 +106,19 @@ type SemanticConfig struct {
 	ReportPractical bool
 	ReportSchedule  bool
 	// Report-only bounded batches avoid truncating a large multi-slot reply.
-	ReportBatchSize   int
-	ReportHistory     bool
-	CompactProvenance bool
-	MaxTasks          int
-	MaxInputBytes     int // includes system prompt; bytes are NOT tokenizer tokens
-	MaxOutputBytes    int
-	MaxMaterialBytes  int
-	MaxOutputTokens   int
-	Timeout           time.Duration
+	ReportBatchSize int
+	// Zero/one is serial. At most four batches may execute concurrently.
+	MaxConcurrentBatches int
+	ReportHistory        bool
+	CompactProvenance    bool
+	MaxTasks             int
+	MaxInputBytes        int // includes system prompt; bytes are NOT tokenizer tokens
+	MaxOutputBytes       int
+	MaxMaterialBytes     int
+	MaxOutputTokens      int
+	Timeout              time.Duration
 	// Optional actual tokenizer. Required when MaxInputTokens is configured.
-	CountTokens    func(system, user string) (int, error)
+	CountTokens    func(system, user string) (int, error) `json:"-"`
 	MaxInputTokens int
 }
 
@@ -253,9 +255,20 @@ type SemanticFinding struct {
 }
 
 type SemanticResult struct {
-	CoverageIncomplete bool              `json:"operation_coverage_incomplete,omitempty"`
-	Plan               SemanticPlan      `json:"plan"`
-	Findings           []SemanticFinding `json:"semantic_findings"`
-	Calls              int               `json:"calls"`
-	ResponseSHA256     string            `json:"response_sha256,omitempty"`
+	Batches            []SemanticBatchMetric `json:"batches,omitempty"`
+	CoverageIncomplete bool                  `json:"operation_coverage_incomplete,omitempty"`
+	Plan               SemanticPlan          `json:"plan"`
+	Findings           []SemanticFinding     `json:"semantic_findings"`
+	Calls              int                   `json:"calls"`
+	ResponseSHA256     string                `json:"response_sha256,omitempty"`
+}
+
+type SemanticBatchMetric struct {
+	TaskIDs         []string `json:"task_ids"`
+	InputBytes      int      `json:"input_bytes"`
+	InputTokens     int      `json:"input_tokens,omitempty"`
+	TokenCountKnown bool     `json:"token_count_known"`
+	OutputBytes     int      `json:"output_bytes"`
+	ElapsedMS       int64    `json:"elapsed_ms"`
+	ResponseSHA256  string   `json:"response_sha256,omitempty"`
 }

@@ -43,7 +43,7 @@ func TestReportAPIAuthenticationPinnedVersionAndExport(t *testing.T) {
 			var input struct {
 				Entries []struct {
 					ID string `json:"id"`
-				} `json:"selected_evidence"`
+				} `json:"key_evidence"`
 			}
 			_ = json.Unmarshal([]byte(m.Content), &input)
 			interpretations := []map[string]string{}
@@ -93,11 +93,14 @@ func TestReportAPIAuthenticationPinnedVersionAndExport(t *testing.T) {
 	}{
 		{base, "", 401, ""},
 		{base + "/export", "", 401, ""},
+		{base + "/evidence", "", 401, ""},
+		{base + fmt.Sprintf("/evidence?summary_id=%d&limit=10", summary.ID), "report-token", 200, "instance_states"},
+		{base + fmt.Sprintf("/evidence?summary_id=%d&limit=1000", summary.ID), "report-token", 400, "evidence_page_invalid"},
 		{base + "/export", "report-token", 200, ""},
 		{base + "?summary_id=0", "report-token", 400, "正整数"},
 		{base + "?summary_id=garbage", "report-token", 400, "正整数"},
 		{base, "report-token", 400, "legacy_report_without_evidence_document"},
-		{base + fmt.Sprintf("?summary_id=%d", summary.ID), "report-token", 200, "evidence-report-1.7"},
+		{base + fmt.Sprintf("?summary_id=%d", summary.ID), "report-token", 200, "evidence-report-2.0"},
 		{base + "/export" + fmt.Sprintf("?summary_id=%d", summary.ID), "report-token", 200, ""},
 		{base + "/export" + fmt.Sprintf("?summary_id=%d&include_appendix=true", summary.ID), "report-token", 200, ""},
 		{base + "/export" + fmt.Sprintf("?summary_id=%d&include_appendix=wrong", summary.ID), "report-token", 400, "布尔值"},

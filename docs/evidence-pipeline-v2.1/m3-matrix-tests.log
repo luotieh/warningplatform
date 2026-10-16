@@ -1,0 +1,964 @@
+=== RUN   TestV21FactValidationMatrix
+=== RUN   TestV21FactValidationMatrix/F_BEACON_PERIODIC/positive
+=== RUN   TestV21FactValidationMatrix/F_BEACON_PERIODIC/negative
+=== RUN   TestV21FactValidationMatrix/F_BEACON_PERIODIC/missing
+=== RUN   TestV21FactValidationMatrix/F_BEACON_PERIODIC/binding
+=== RUN   TestV21FactValidationMatrix/F_BEACON_PERIODIC/boundary
+=== RUN   TestV21FactValidationMatrix/F_BEACON_JITTER/positive
+=== RUN   TestV21FactValidationMatrix/F_BEACON_JITTER/negative
+=== RUN   TestV21FactValidationMatrix/F_BEACON_JITTER/missing
+=== RUN   TestV21FactValidationMatrix/F_BEACON_JITTER/binding
+=== RUN   TestV21FactValidationMatrix/F_BEACON_JITTER/boundary
+=== RUN   TestV21FactValidationMatrix/F_FIXED_DAILY_WINDOW/positive
+=== RUN   TestV21FactValidationMatrix/F_FIXED_DAILY_WINDOW/negative
+=== RUN   TestV21FactValidationMatrix/F_FIXED_DAILY_WINDOW/missing
+=== RUN   TestV21FactValidationMatrix/F_FIXED_DAILY_WINDOW/binding
+=== RUN   TestV21FactValidationMatrix/F_FIXED_DAILY_WINDOW/boundary
+=== RUN   TestV21FactValidationMatrix/F_MULTI_DAY_PERSIST/positive
+=== RUN   TestV21FactValidationMatrix/F_MULTI_DAY_PERSIST/negative
+=== RUN   TestV21FactValidationMatrix/F_MULTI_DAY_PERSIST/missing
+=== RUN   TestV21FactValidationMatrix/F_MULTI_DAY_PERSIST/binding
+=== RUN   TestV21FactValidationMatrix/F_MULTI_DAY_PERSIST/boundary
+=== RUN   TestV21FactValidationMatrix/F_RATE_BURST/positive
+=== RUN   TestV21FactValidationMatrix/F_RATE_BURST/negative
+=== RUN   TestV21FactValidationMatrix/F_RATE_BURST/missing
+=== RUN   TestV21FactValidationMatrix/F_RATE_BURST/binding
+=== RUN   TestV21FactValidationMatrix/F_RATE_BURST/boundary
+=== RUN   TestV21FactValidationMatrix/F_RATE_RAMP/positive
+=== RUN   TestV21FactValidationMatrix/F_RATE_RAMP/negative
+=== RUN   TestV21FactValidationMatrix/F_RATE_RAMP/missing
+=== RUN   TestV21FactValidationMatrix/F_RATE_RAMP/binding
+=== RUN   TestV21FactValidationMatrix/F_RATE_RAMP/boundary
+=== RUN   TestV21FactValidationMatrix/F_DNS_HIGH_ENTROPY/positive
+=== RUN   TestV21FactValidationMatrix/F_DNS_HIGH_ENTROPY/negative
+=== RUN   TestV21FactValidationMatrix/F_DNS_HIGH_ENTROPY/missing
+=== RUN   TestV21FactValidationMatrix/F_DNS_HIGH_ENTROPY/binding
+=== RUN   TestV21FactValidationMatrix/F_DNS_HIGH_ENTROPY/boundary
+=== RUN   TestV21FactValidationMatrix/F_DNS_ENCODED_LABEL/positive
+=== RUN   TestV21FactValidationMatrix/F_DNS_ENCODED_LABEL/negative
+=== RUN   TestV21FactValidationMatrix/F_DNS_ENCODED_LABEL/missing
+=== RUN   TestV21FactValidationMatrix/F_DNS_ENCODED_LABEL/binding
+=== RUN   TestV21FactValidationMatrix/F_DNS_ENCODED_LABEL/boundary
+=== RUN   TestV21FactValidationMatrix/F_DGA_LEXICAL/positive
+=== RUN   TestV21FactValidationMatrix/F_DGA_LEXICAL/negative
+=== RUN   TestV21FactValidationMatrix/F_DGA_LEXICAL/missing
+=== RUN   TestV21FactValidationMatrix/F_DGA_LEXICAL/binding
+=== RUN   TestV21FactValidationMatrix/F_DGA_LEXICAL/boundary
+=== RUN   TestV21FactValidationMatrix/F_NXDOMAIN_CLUSTER/positive
+=== RUN   TestV21FactValidationMatrix/F_NXDOMAIN_CLUSTER/negative
+=== RUN   TestV21FactValidationMatrix/F_NXDOMAIN_CLUSTER/missing
+=== RUN   TestV21FactValidationMatrix/F_NXDOMAIN_CLUSTER/binding
+=== RUN   TestV21FactValidationMatrix/F_NXDOMAIN_CLUSTER/boundary
+=== RUN   TestV21FactValidationMatrix/F_GROUP_NXDOMAIN_CLUSTER/positive
+=== RUN   TestV21FactValidationMatrix/F_GROUP_NXDOMAIN_CLUSTER/negative
+=== RUN   TestV21FactValidationMatrix/F_GROUP_NXDOMAIN_CLUSTER/missing
+=== RUN   TestV21FactValidationMatrix/F_GROUP_NXDOMAIN_CLUSTER/binding
+=== RUN   TestV21FactValidationMatrix/F_GROUP_NXDOMAIN_CLUSTER/boundary
+=== RUN   TestV21FactValidationMatrix/F_FAILED_TO_ACTIVE/positive
+=== RUN   TestV21FactValidationMatrix/F_FAILED_TO_ACTIVE/negative
+=== RUN   TestV21FactValidationMatrix/F_FAILED_TO_ACTIVE/missing
+=== RUN   TestV21FactValidationMatrix/F_FAILED_TO_ACTIVE/binding
+=== RUN   TestV21FactValidationMatrix/F_FAILED_TO_ACTIVE/boundary
+=== RUN   TestV21FactValidationMatrix/F_SHARED_DOMAIN_CLUSTER/positive
+=== RUN   TestV21FactValidationMatrix/F_SHARED_DOMAIN_CLUSTER/negative
+=== RUN   TestV21FactValidationMatrix/F_SHARED_DOMAIN_CLUSTER/missing
+=== RUN   TestV21FactValidationMatrix/F_SHARED_DOMAIN_CLUSTER/binding
+=== RUN   TestV21FactValidationMatrix/F_SHARED_DOMAIN_CLUSTER/boundary
+=== RUN   TestV21FactValidationMatrix/F_HTTP_ENDPOINT_REPEAT/positive
+=== RUN   TestV21FactValidationMatrix/F_HTTP_ENDPOINT_REPEAT/negative
+=== RUN   TestV21FactValidationMatrix/F_HTTP_ENDPOINT_REPEAT/missing
+=== RUN   TestV21FactValidationMatrix/F_HTTP_ENDPOINT_REPEAT/binding
+=== RUN   TestV21FactValidationMatrix/F_HTTP_ENDPOINT_REPEAT/boundary
+=== RUN   TestV21FactValidationMatrix/F_HTTP_FIELD_ENCODING/positive
+=== RUN   TestV21FactValidationMatrix/F_HTTP_FIELD_ENCODING/negative
+=== RUN   TestV21FactValidationMatrix/F_HTTP_FIELD_ENCODING/missing
+=== RUN   TestV21FactValidationMatrix/F_HTTP_FIELD_ENCODING/binding
+=== RUN   TestV21FactValidationMatrix/F_HTTP_FIELD_ENCODING/boundary
+=== RUN   TestV21FactValidationMatrix/F_HTTP_UA_RARITY/positive
+=== RUN   TestV21FactValidationMatrix/F_HTTP_UA_RARITY/negative
+=== RUN   TestV21FactValidationMatrix/F_HTTP_UA_RARITY/missing
+=== RUN   TestV21FactValidationMatrix/F_HTTP_UA_RARITY/binding
+=== RUN   TestV21FactValidationMatrix/F_HTTP_UA_RARITY/boundary
+=== RUN   TestV21FactValidationMatrix/F_HTTP_SIZE_STABILITY/positive
+=== RUN   TestV21FactValidationMatrix/F_HTTP_SIZE_STABILITY/negative
+=== RUN   TestV21FactValidationMatrix/F_HTTP_SIZE_STABILITY/missing
+=== RUN   TestV21FactValidationMatrix/F_HTTP_SIZE_STABILITY/binding
+=== RUN   TestV21FactValidationMatrix/F_HTTP_SIZE_STABILITY/boundary
+=== RUN   TestV21FactValidationMatrix/F_LONG_LOW_SESSION/positive
+=== RUN   TestV21FactValidationMatrix/F_LONG_LOW_SESSION/negative
+=== RUN   TestV21FactValidationMatrix/F_LONG_LOW_SESSION/missing
+=== RUN   TestV21FactValidationMatrix/F_LONG_LOW_SESSION/binding
+=== RUN   TestV21FactValidationMatrix/F_LONG_LOW_SESSION/boundary
+=== RUN   TestV21FactValidationMatrix/F_URL_ODD_AUTHORITY/positive
+=== RUN   TestV21FactValidationMatrix/F_URL_ODD_AUTHORITY/negative
+=== RUN   TestV21FactValidationMatrix/F_URL_ODD_AUTHORITY/missing
+=== RUN   TestV21FactValidationMatrix/F_URL_ODD_AUTHORITY/binding
+=== RUN   TestV21FactValidationMatrix/F_URL_ODD_AUTHORITY/boundary
+=== RUN   TestV21FactValidationMatrix/F_URL_HOMOGLYPH/positive
+=== RUN   TestV21FactValidationMatrix/F_URL_HOMOGLYPH/negative
+=== RUN   TestV21FactValidationMatrix/F_URL_HOMOGLYPH/missing
+=== RUN   TestV21FactValidationMatrix/F_URL_HOMOGLYPH/binding
+=== RUN   TestV21FactValidationMatrix/F_URL_HOMOGLYPH/boundary
+=== RUN   TestV21FactValidationMatrix/F_URL_BRAND_SUBDOMAIN_TRICK/positive
+=== RUN   TestV21FactValidationMatrix/F_URL_BRAND_SUBDOMAIN_TRICK/negative
+=== RUN   TestV21FactValidationMatrix/F_URL_BRAND_SUBDOMAIN_TRICK/missing
+=== RUN   TestV21FactValidationMatrix/F_URL_BRAND_SUBDOMAIN_TRICK/binding
+=== RUN   TestV21FactValidationMatrix/F_URL_BRAND_SUBDOMAIN_TRICK/boundary
+=== RUN   TestV21FactValidationMatrix/F_BRAND_IMPOSTOR/positive
+=== RUN   TestV21FactValidationMatrix/F_BRAND_IMPOSTOR/negative
+=== RUN   TestV21FactValidationMatrix/F_BRAND_IMPOSTOR/missing
+=== RUN   TestV21FactValidationMatrix/F_BRAND_IMPOSTOR/binding
+=== RUN   TestV21FactValidationMatrix/F_BRAND_IMPOSTOR/boundary
+=== RUN   TestV21FactValidationMatrix/F_CRED_POST_STRUCTURE/positive
+=== RUN   TestV21FactValidationMatrix/F_CRED_POST_STRUCTURE/negative
+=== RUN   TestV21FactValidationMatrix/F_CRED_POST_STRUCTURE/missing
+=== RUN   TestV21FactValidationMatrix/F_CRED_POST_STRUCTURE/binding
+=== RUN   TestV21FactValidationMatrix/F_CRED_POST_STRUCTURE/boundary
+=== RUN   TestV21FactValidationMatrix/F_FORM_CROSSSITE/positive
+=== RUN   TestV21FactValidationMatrix/F_FORM_CROSSSITE/negative
+=== RUN   TestV21FactValidationMatrix/F_FORM_CROSSSITE/missing
+=== RUN   TestV21FactValidationMatrix/F_FORM_CROSSSITE/binding
+=== RUN   TestV21FactValidationMatrix/F_FORM_CROSSSITE/boundary
+=== RUN   TestV21FactValidationMatrix/F_REDIRECT_CHAIN/positive
+=== RUN   TestV21FactValidationMatrix/F_REDIRECT_CHAIN/negative
+=== RUN   TestV21FactValidationMatrix/F_REDIRECT_CHAIN/missing
+=== RUN   TestV21FactValidationMatrix/F_REDIRECT_CHAIN/binding
+=== RUN   TestV21FactValidationMatrix/F_REDIRECT_CHAIN/boundary
+=== RUN   TestV21FactValidationMatrix/F_MULTI_REDIRECT_CHAIN/positive
+=== RUN   TestV21FactValidationMatrix/F_MULTI_REDIRECT_CHAIN/negative
+=== RUN   TestV21FactValidationMatrix/F_MULTI_REDIRECT_CHAIN/missing
+=== RUN   TestV21FactValidationMatrix/F_MULTI_REDIRECT_CHAIN/binding
+=== RUN   TestV21FactValidationMatrix/F_MULTI_REDIRECT_CHAIN/boundary
+=== RUN   TestV21FactValidationMatrix/F_PROTOCOL_PORT_MISMATCH/positive
+=== RUN   TestV21FactValidationMatrix/F_PROTOCOL_PORT_MISMATCH/negative
+=== RUN   TestV21FactValidationMatrix/F_PROTOCOL_PORT_MISMATCH/missing
+=== RUN   TestV21FactValidationMatrix/F_PROTOCOL_PORT_MISMATCH/binding
+=== RUN   TestV21FactValidationMatrix/F_PROTOCOL_PORT_MISMATCH/boundary
+=== RUN   TestV21FactValidationMatrix/F_RARE_PORT/positive
+=== RUN   TestV21FactValidationMatrix/F_RARE_PORT/negative
+=== RUN   TestV21FactValidationMatrix/F_RARE_PORT/missing
+=== RUN   TestV21FactValidationMatrix/F_RARE_PORT/binding
+=== RUN   TestV21FactValidationMatrix/F_RARE_PORT/boundary
+=== RUN   TestV21FactValidationMatrix/F_DST_NOVELTY/positive
+=== RUN   TestV21FactValidationMatrix/F_DST_NOVELTY/negative
+=== RUN   TestV21FactValidationMatrix/F_DST_NOVELTY/missing
+=== RUN   TestV21FactValidationMatrix/F_DST_NOVELTY/binding
+=== RUN   TestV21FactValidationMatrix/F_DST_NOVELTY/boundary
+=== RUN   TestV21FactValidationMatrix/F_INFRA_RARITY/positive
+=== RUN   TestV21FactValidationMatrix/F_INFRA_RARITY/negative
+=== RUN   TestV21FactValidationMatrix/F_INFRA_RARITY/missing
+=== RUN   TestV21FactValidationMatrix/F_INFRA_RARITY/binding
+=== RUN   TestV21FactValidationMatrix/F_INFRA_RARITY/boundary
+=== RUN   TestV21FactValidationMatrix/F_FANOUT_SINGLE_SRC/positive
+=== RUN   TestV21FactValidationMatrix/F_FANOUT_SINGLE_SRC/negative
+=== RUN   TestV21FactValidationMatrix/F_FANOUT_SINGLE_SRC/missing
+=== RUN   TestV21FactValidationMatrix/F_FANOUT_SINGLE_SRC/binding
+=== RUN   TestV21FactValidationMatrix/F_FANOUT_SINGLE_SRC/boundary
+=== RUN   TestV21FactValidationMatrix/F_PORT_SEQUENCE/positive
+=== RUN   TestV21FactValidationMatrix/F_PORT_SEQUENCE/negative
+=== RUN   TestV21FactValidationMatrix/F_PORT_SEQUENCE/missing
+=== RUN   TestV21FactValidationMatrix/F_PORT_SEQUENCE/binding
+=== RUN   TestV21FactValidationMatrix/F_PORT_SEQUENCE/boundary
+=== RUN   TestV21FactValidationMatrix/F_SMALL_PACKET/positive
+=== RUN   TestV21FactValidationMatrix/F_SMALL_PACKET/negative
+=== RUN   TestV21FactValidationMatrix/F_SMALL_PACKET/missing
+=== RUN   TestV21FactValidationMatrix/F_SMALL_PACKET/binding
+=== RUN   TestV21FactValidationMatrix/F_SMALL_PACKET/boundary
+=== RUN   TestV21FactValidationMatrix/F_CONN_FAIL_RATE/positive
+=== RUN   TestV21FactValidationMatrix/F_CONN_FAIL_RATE/negative
+=== RUN   TestV21FactValidationMatrix/F_CONN_FAIL_RATE/missing
+=== RUN   TestV21FactValidationMatrix/F_CONN_FAIL_RATE/binding
+=== RUN   TestV21FactValidationMatrix/F_CONN_FAIL_RATE/boundary
+=== RUN   TestV21FactValidationMatrix/F_INDEPENDENT_RULE_CORROB/positive
+=== RUN   TestV21FactValidationMatrix/F_INDEPENDENT_RULE_CORROB/negative
+=== RUN   TestV21FactValidationMatrix/F_INDEPENDENT_RULE_CORROB/missing
+=== RUN   TestV21FactValidationMatrix/F_INDEPENDENT_RULE_CORROB/binding
+=== RUN   TestV21FactValidationMatrix/F_INDEPENDENT_RULE_CORROB/boundary
+=== RUN   TestV21FactValidationMatrix/F_INDEPENDENT_INTEL_CORROB/positive
+=== RUN   TestV21FactValidationMatrix/F_INDEPENDENT_INTEL_CORROB/negative
+=== RUN   TestV21FactValidationMatrix/F_INDEPENDENT_INTEL_CORROB/missing
+=== RUN   TestV21FactValidationMatrix/F_INDEPENDENT_INTEL_CORROB/binding
+=== RUN   TestV21FactValidationMatrix/F_INDEPENDENT_INTEL_CORROB/boundary
+=== RUN   TestV21FactValidationMatrix/F_IOC_TYPE_CORROB/positive
+=== RUN   TestV21FactValidationMatrix/F_IOC_TYPE_CORROB/negative
+=== RUN   TestV21FactValidationMatrix/F_IOC_TYPE_CORROB/missing
+=== RUN   TestV21FactValidationMatrix/F_IOC_TYPE_CORROB/binding
+=== RUN   TestV21FactValidationMatrix/F_IOC_TYPE_CORROB/boundary
+=== RUN   TestV21FactValidationMatrix/F_TLS_SNI_MISMATCH/positive
+=== RUN   TestV21FactValidationMatrix/F_TLS_SNI_MISMATCH/negative
+=== RUN   TestV21FactValidationMatrix/F_TLS_SNI_MISMATCH/missing
+=== RUN   TestV21FactValidationMatrix/F_TLS_SNI_MISMATCH/binding
+=== RUN   TestV21FactValidationMatrix/F_TLS_SNI_MISMATCH/boundary
+=== RUN   TestV21FactValidationMatrix/F_TLS_CERT_ANOMALY/positive
+=== RUN   TestV21FactValidationMatrix/F_TLS_CERT_ANOMALY/negative
+=== RUN   TestV21FactValidationMatrix/F_TLS_CERT_ANOMALY/missing
+=== RUN   TestV21FactValidationMatrix/F_TLS_CERT_ANOMALY/binding
+=== RUN   TestV21FactValidationMatrix/F_TLS_CERT_ANOMALY/boundary
+=== RUN   TestV21FactValidationMatrix/F_TLS_JA_MISMATCH/positive
+=== RUN   TestV21FactValidationMatrix/F_TLS_JA_MISMATCH/negative
+=== RUN   TestV21FactValidationMatrix/F_TLS_JA_MISMATCH/missing
+=== RUN   TestV21FactValidationMatrix/F_TLS_JA_MISMATCH/binding
+=== RUN   TestV21FactValidationMatrix/F_TLS_JA_MISMATCH/boundary
+=== RUN   TestV21FactValidationMatrix/F_MULTI_ASSET_IOC/positive
+=== RUN   TestV21FactValidationMatrix/F_MULTI_ASSET_IOC/negative
+=== RUN   TestV21FactValidationMatrix/F_MULTI_ASSET_IOC/missing
+=== RUN   TestV21FactValidationMatrix/F_MULTI_ASSET_IOC/binding
+=== RUN   TestV21FactValidationMatrix/F_MULTI_ASSET_IOC/boundary
+=== RUN   TestV21FactValidationMatrix/F_MULTI_ASSET_DIST/positive
+=== RUN   TestV21FactValidationMatrix/F_MULTI_ASSET_DIST/negative
+=== RUN   TestV21FactValidationMatrix/F_MULTI_ASSET_DIST/missing
+=== RUN   TestV21FactValidationMatrix/F_MULTI_ASSET_DIST/binding
+=== RUN   TestV21FactValidationMatrix/F_MULTI_ASSET_DIST/boundary
+=== RUN   TestV21FactValidationMatrix/F_TIME_COORDINATION/positive
+=== RUN   TestV21FactValidationMatrix/F_TIME_COORDINATION/negative
+=== RUN   TestV21FactValidationMatrix/F_TIME_COORDINATION/missing
+=== RUN   TestV21FactValidationMatrix/F_TIME_COORDINATION/binding
+=== RUN   TestV21FactValidationMatrix/F_TIME_COORDINATION/boundary
+=== RUN   TestV21FactValidationMatrix/F_COORD_FANOUT/positive
+=== RUN   TestV21FactValidationMatrix/F_COORD_FANOUT/negative
+=== RUN   TestV21FactValidationMatrix/F_COORD_FANOUT/missing
+=== RUN   TestV21FactValidationMatrix/F_COORD_FANOUT/binding
+=== RUN   TestV21FactValidationMatrix/F_COORD_FANOUT/boundary
+=== RUN   TestV21FactValidationMatrix/F_INFECTION_CHAIN/positive
+=== RUN   TestV21FactValidationMatrix/F_INFECTION_CHAIN/negative
+=== RUN   TestV21FactValidationMatrix/F_INFECTION_CHAIN/missing
+=== RUN   TestV21FactValidationMatrix/F_INFECTION_CHAIN/binding
+=== RUN   TestV21FactValidationMatrix/F_INFECTION_CHAIN/boundary
+=== RUN   TestV21FactValidationMatrix/F_SHARED_ENDPOINT/positive
+=== RUN   TestV21FactValidationMatrix/F_SHARED_ENDPOINT/negative
+=== RUN   TestV21FactValidationMatrix/F_SHARED_ENDPOINT/missing
+=== RUN   TestV21FactValidationMatrix/F_SHARED_ENDPOINT/binding
+=== RUN   TestV21FactValidationMatrix/F_SHARED_ENDPOINT/boundary
+=== RUN   TestV21FactValidationMatrix/F_FIRST_VISIT_CLUSTER/positive
+=== RUN   TestV21FactValidationMatrix/F_FIRST_VISIT_CLUSTER/negative
+=== RUN   TestV21FactValidationMatrix/F_FIRST_VISIT_CLUSTER/missing
+=== RUN   TestV21FactValidationMatrix/F_FIRST_VISIT_CLUSTER/binding
+=== RUN   TestV21FactValidationMatrix/F_FIRST_VISIT_CLUSTER/boundary
+=== RUN   TestV21FactValidationMatrix/F_COORD_PATTERN_RECURRENCE/positive
+=== RUN   TestV21FactValidationMatrix/F_COORD_PATTERN_RECURRENCE/negative
+=== RUN   TestV21FactValidationMatrix/F_COORD_PATTERN_RECURRENCE/missing
+=== RUN   TestV21FactValidationMatrix/F_COORD_PATTERN_RECURRENCE/binding
+=== RUN   TestV21FactValidationMatrix/F_COORD_PATTERN_RECURRENCE/boundary
+=== RUN   TestV21FactValidationMatrix/F_HIST_ASSET_IOC_RECURRENCE/positive
+=== RUN   TestV21FactValidationMatrix/F_HIST_ASSET_IOC_RECURRENCE/negative
+=== RUN   TestV21FactValidationMatrix/F_HIST_ASSET_IOC_RECURRENCE/missing
+=== RUN   TestV21FactValidationMatrix/F_HIST_ASSET_IOC_RECURRENCE/binding
+=== RUN   TestV21FactValidationMatrix/F_HIST_ASSET_IOC_RECURRENCE/boundary
+=== RUN   TestV21FactValidationMatrix/F_HIST_GROUP_RECURRENCE/positive
+=== RUN   TestV21FactValidationMatrix/F_HIST_GROUP_RECURRENCE/negative
+=== RUN   TestV21FactValidationMatrix/F_HIST_GROUP_RECURRENCE/missing
+=== RUN   TestV21FactValidationMatrix/F_HIST_GROUP_RECURRENCE/binding
+=== RUN   TestV21FactValidationMatrix/F_HIST_GROUP_RECURRENCE/boundary
+=== RUN   TestV21FactValidationMatrix/F_HIST_INFRA_PERSISTENCE/positive
+=== RUN   TestV21FactValidationMatrix/F_HIST_INFRA_PERSISTENCE/negative
+=== RUN   TestV21FactValidationMatrix/F_HIST_INFRA_PERSISTENCE/missing
+=== RUN   TestV21FactValidationMatrix/F_HIST_INFRA_PERSISTENCE/binding
+=== RUN   TestV21FactValidationMatrix/F_HIST_INFRA_PERSISTENCE/boundary
+=== RUN   TestV21FactValidationMatrix/F_HIST_SCHEDULE_MATCH/positive
+=== RUN   TestV21FactValidationMatrix/F_HIST_SCHEDULE_MATCH/negative
+=== RUN   TestV21FactValidationMatrix/F_HIST_SCHEDULE_MATCH/missing
+=== RUN   TestV21FactValidationMatrix/F_HIST_SCHEDULE_MATCH/binding
+=== RUN   TestV21FactValidationMatrix/F_HIST_SCHEDULE_MATCH/boundary
+=== RUN   TestV21FactValidationMatrix/F_HIST_MULTI_IOC_SIEGE/positive
+=== RUN   TestV21FactValidationMatrix/F_HIST_MULTI_IOC_SIEGE/negative
+=== RUN   TestV21FactValidationMatrix/F_HIST_MULTI_IOC_SIEGE/missing
+=== RUN   TestV21FactValidationMatrix/F_HIST_MULTI_IOC_SIEGE/binding
+=== RUN   TestV21FactValidationMatrix/F_HIST_MULTI_IOC_SIEGE/boundary
+=== RUN   TestV21FactValidationMatrix/F_HIST_STAGE_PROGRESSION/positive
+=== RUN   TestV21FactValidationMatrix/F_HIST_STAGE_PROGRESSION/negative
+=== RUN   TestV21FactValidationMatrix/F_HIST_STAGE_PROGRESSION/missing
+=== RUN   TestV21FactValidationMatrix/F_HIST_STAGE_PROGRESSION/binding
+=== RUN   TestV21FactValidationMatrix/F_HIST_STAGE_PROGRESSION/boundary
+=== RUN   TestV21FactValidationMatrix/F_HIST_COORD_PARAM_MATCH/positive
+=== RUN   TestV21FactValidationMatrix/F_HIST_COORD_PARAM_MATCH/negative
+=== RUN   TestV21FactValidationMatrix/F_HIST_COORD_PARAM_MATCH/missing
+=== RUN   TestV21FactValidationMatrix/F_HIST_COORD_PARAM_MATCH/binding
+=== RUN   TestV21FactValidationMatrix/F_HIST_COORD_PARAM_MATCH/boundary
+=== RUN   TestV21FactValidationMatrix/F_HIST_EXERCISE/positive
+=== RUN   TestV21FactValidationMatrix/F_HIST_EXERCISE/negative
+=== RUN   TestV21FactValidationMatrix/F_HIST_EXERCISE/missing
+=== RUN   TestV21FactValidationMatrix/F_HIST_EXERCISE/binding
+=== RUN   TestV21FactValidationMatrix/F_HIST_EXERCISE/boundary
+=== RUN   TestV21FactValidationMatrix/F_IOC_NOVELTY/positive
+=== RUN   TestV21FactValidationMatrix/F_IOC_NOVELTY/negative
+=== RUN   TestV21FactValidationMatrix/F_IOC_NOVELTY/missing
+=== RUN   TestV21FactValidationMatrix/F_IOC_NOVELTY/binding
+=== RUN   TestV21FactValidationMatrix/F_IOC_NOVELTY/boundary
+=== RUN   TestV21FactValidationMatrix/F_EXCL_SCAN_TASK/positive
+=== RUN   TestV21FactValidationMatrix/F_EXCL_SCAN_TASK/negative
+=== RUN   TestV21FactValidationMatrix/F_EXCL_SCAN_TASK/missing
+=== RUN   TestV21FactValidationMatrix/F_EXCL_SCAN_TASK/binding
+=== RUN   TestV21FactValidationMatrix/F_EXCL_SCAN_TASK/boundary
+=== RUN   TestV21FactValidationMatrix/F_EXCL_INFRA_ROLE/positive
+=== RUN   TestV21FactValidationMatrix/F_EXCL_INFRA_ROLE/negative
+=== RUN   TestV21FactValidationMatrix/F_EXCL_INFRA_ROLE/missing
+=== RUN   TestV21FactValidationMatrix/F_EXCL_INFRA_ROLE/binding
+=== RUN   TestV21FactValidationMatrix/F_EXCL_INFRA_ROLE/boundary
+--- PASS: TestV21FactValidationMatrix (0.03s)
+    --- PASS: TestV21FactValidationMatrix/F_BEACON_PERIODIC/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_BEACON_PERIODIC/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_BEACON_PERIODIC/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_BEACON_PERIODIC/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_BEACON_PERIODIC/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_BEACON_JITTER/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_BEACON_JITTER/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_BEACON_JITTER/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_BEACON_JITTER/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_BEACON_JITTER/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_FIXED_DAILY_WINDOW/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_FIXED_DAILY_WINDOW/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_FIXED_DAILY_WINDOW/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_FIXED_DAILY_WINDOW/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_FIXED_DAILY_WINDOW/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_MULTI_DAY_PERSIST/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_MULTI_DAY_PERSIST/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_MULTI_DAY_PERSIST/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_MULTI_DAY_PERSIST/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_MULTI_DAY_PERSIST/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_RATE_BURST/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_RATE_BURST/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_RATE_BURST/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_RATE_BURST/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_RATE_BURST/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_RATE_RAMP/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_RATE_RAMP/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_RATE_RAMP/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_RATE_RAMP/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_RATE_RAMP/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_DNS_HIGH_ENTROPY/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_DNS_HIGH_ENTROPY/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_DNS_HIGH_ENTROPY/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_DNS_HIGH_ENTROPY/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_DNS_HIGH_ENTROPY/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_DNS_ENCODED_LABEL/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_DNS_ENCODED_LABEL/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_DNS_ENCODED_LABEL/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_DNS_ENCODED_LABEL/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_DNS_ENCODED_LABEL/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_DGA_LEXICAL/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_DGA_LEXICAL/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_DGA_LEXICAL/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_DGA_LEXICAL/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_DGA_LEXICAL/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_NXDOMAIN_CLUSTER/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_NXDOMAIN_CLUSTER/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_NXDOMAIN_CLUSTER/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_NXDOMAIN_CLUSTER/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_NXDOMAIN_CLUSTER/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_GROUP_NXDOMAIN_CLUSTER/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_GROUP_NXDOMAIN_CLUSTER/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_GROUP_NXDOMAIN_CLUSTER/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_GROUP_NXDOMAIN_CLUSTER/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_GROUP_NXDOMAIN_CLUSTER/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_FAILED_TO_ACTIVE/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_FAILED_TO_ACTIVE/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_FAILED_TO_ACTIVE/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_FAILED_TO_ACTIVE/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_FAILED_TO_ACTIVE/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_SHARED_DOMAIN_CLUSTER/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_SHARED_DOMAIN_CLUSTER/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_SHARED_DOMAIN_CLUSTER/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_SHARED_DOMAIN_CLUSTER/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_SHARED_DOMAIN_CLUSTER/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HTTP_ENDPOINT_REPEAT/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HTTP_ENDPOINT_REPEAT/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HTTP_ENDPOINT_REPEAT/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HTTP_ENDPOINT_REPEAT/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HTTP_ENDPOINT_REPEAT/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HTTP_FIELD_ENCODING/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HTTP_FIELD_ENCODING/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HTTP_FIELD_ENCODING/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HTTP_FIELD_ENCODING/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HTTP_FIELD_ENCODING/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HTTP_UA_RARITY/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HTTP_UA_RARITY/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HTTP_UA_RARITY/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HTTP_UA_RARITY/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HTTP_UA_RARITY/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HTTP_SIZE_STABILITY/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HTTP_SIZE_STABILITY/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HTTP_SIZE_STABILITY/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HTTP_SIZE_STABILITY/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HTTP_SIZE_STABILITY/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_LONG_LOW_SESSION/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_LONG_LOW_SESSION/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_LONG_LOW_SESSION/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_LONG_LOW_SESSION/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_LONG_LOW_SESSION/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_URL_ODD_AUTHORITY/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_URL_ODD_AUTHORITY/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_URL_ODD_AUTHORITY/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_URL_ODD_AUTHORITY/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_URL_ODD_AUTHORITY/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_URL_HOMOGLYPH/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_URL_HOMOGLYPH/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_URL_HOMOGLYPH/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_URL_HOMOGLYPH/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_URL_HOMOGLYPH/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_URL_BRAND_SUBDOMAIN_TRICK/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_URL_BRAND_SUBDOMAIN_TRICK/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_URL_BRAND_SUBDOMAIN_TRICK/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_URL_BRAND_SUBDOMAIN_TRICK/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_URL_BRAND_SUBDOMAIN_TRICK/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_BRAND_IMPOSTOR/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_BRAND_IMPOSTOR/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_BRAND_IMPOSTOR/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_BRAND_IMPOSTOR/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_BRAND_IMPOSTOR/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_CRED_POST_STRUCTURE/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_CRED_POST_STRUCTURE/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_CRED_POST_STRUCTURE/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_CRED_POST_STRUCTURE/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_CRED_POST_STRUCTURE/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_FORM_CROSSSITE/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_FORM_CROSSSITE/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_FORM_CROSSSITE/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_FORM_CROSSSITE/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_FORM_CROSSSITE/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_REDIRECT_CHAIN/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_REDIRECT_CHAIN/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_REDIRECT_CHAIN/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_REDIRECT_CHAIN/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_REDIRECT_CHAIN/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_MULTI_REDIRECT_CHAIN/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_MULTI_REDIRECT_CHAIN/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_MULTI_REDIRECT_CHAIN/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_MULTI_REDIRECT_CHAIN/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_MULTI_REDIRECT_CHAIN/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_PROTOCOL_PORT_MISMATCH/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_PROTOCOL_PORT_MISMATCH/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_PROTOCOL_PORT_MISMATCH/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_PROTOCOL_PORT_MISMATCH/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_PROTOCOL_PORT_MISMATCH/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_RARE_PORT/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_RARE_PORT/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_RARE_PORT/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_RARE_PORT/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_RARE_PORT/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_DST_NOVELTY/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_DST_NOVELTY/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_DST_NOVELTY/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_DST_NOVELTY/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_DST_NOVELTY/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_INFRA_RARITY/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_INFRA_RARITY/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_INFRA_RARITY/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_INFRA_RARITY/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_INFRA_RARITY/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_FANOUT_SINGLE_SRC/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_FANOUT_SINGLE_SRC/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_FANOUT_SINGLE_SRC/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_FANOUT_SINGLE_SRC/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_FANOUT_SINGLE_SRC/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_PORT_SEQUENCE/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_PORT_SEQUENCE/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_PORT_SEQUENCE/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_PORT_SEQUENCE/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_PORT_SEQUENCE/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_SMALL_PACKET/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_SMALL_PACKET/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_SMALL_PACKET/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_SMALL_PACKET/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_SMALL_PACKET/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_CONN_FAIL_RATE/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_CONN_FAIL_RATE/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_CONN_FAIL_RATE/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_CONN_FAIL_RATE/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_CONN_FAIL_RATE/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_INDEPENDENT_RULE_CORROB/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_INDEPENDENT_RULE_CORROB/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_INDEPENDENT_RULE_CORROB/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_INDEPENDENT_RULE_CORROB/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_INDEPENDENT_RULE_CORROB/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_INDEPENDENT_INTEL_CORROB/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_INDEPENDENT_INTEL_CORROB/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_INDEPENDENT_INTEL_CORROB/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_INDEPENDENT_INTEL_CORROB/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_INDEPENDENT_INTEL_CORROB/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_IOC_TYPE_CORROB/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_IOC_TYPE_CORROB/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_IOC_TYPE_CORROB/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_IOC_TYPE_CORROB/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_IOC_TYPE_CORROB/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_TLS_SNI_MISMATCH/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_TLS_SNI_MISMATCH/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_TLS_SNI_MISMATCH/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_TLS_SNI_MISMATCH/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_TLS_SNI_MISMATCH/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_TLS_CERT_ANOMALY/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_TLS_CERT_ANOMALY/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_TLS_CERT_ANOMALY/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_TLS_CERT_ANOMALY/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_TLS_CERT_ANOMALY/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_TLS_JA_MISMATCH/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_TLS_JA_MISMATCH/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_TLS_JA_MISMATCH/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_TLS_JA_MISMATCH/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_TLS_JA_MISMATCH/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_MULTI_ASSET_IOC/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_MULTI_ASSET_IOC/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_MULTI_ASSET_IOC/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_MULTI_ASSET_IOC/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_MULTI_ASSET_IOC/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_MULTI_ASSET_DIST/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_MULTI_ASSET_DIST/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_MULTI_ASSET_DIST/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_MULTI_ASSET_DIST/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_MULTI_ASSET_DIST/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_TIME_COORDINATION/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_TIME_COORDINATION/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_TIME_COORDINATION/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_TIME_COORDINATION/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_TIME_COORDINATION/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_COORD_FANOUT/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_COORD_FANOUT/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_COORD_FANOUT/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_COORD_FANOUT/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_COORD_FANOUT/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_INFECTION_CHAIN/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_INFECTION_CHAIN/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_INFECTION_CHAIN/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_INFECTION_CHAIN/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_INFECTION_CHAIN/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_SHARED_ENDPOINT/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_SHARED_ENDPOINT/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_SHARED_ENDPOINT/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_SHARED_ENDPOINT/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_SHARED_ENDPOINT/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_FIRST_VISIT_CLUSTER/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_FIRST_VISIT_CLUSTER/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_FIRST_VISIT_CLUSTER/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_FIRST_VISIT_CLUSTER/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_FIRST_VISIT_CLUSTER/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_COORD_PATTERN_RECURRENCE/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_COORD_PATTERN_RECURRENCE/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_COORD_PATTERN_RECURRENCE/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_COORD_PATTERN_RECURRENCE/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_COORD_PATTERN_RECURRENCE/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HIST_ASSET_IOC_RECURRENCE/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HIST_ASSET_IOC_RECURRENCE/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HIST_ASSET_IOC_RECURRENCE/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HIST_ASSET_IOC_RECURRENCE/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HIST_ASSET_IOC_RECURRENCE/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HIST_GROUP_RECURRENCE/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HIST_GROUP_RECURRENCE/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HIST_GROUP_RECURRENCE/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HIST_GROUP_RECURRENCE/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HIST_GROUP_RECURRENCE/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HIST_INFRA_PERSISTENCE/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HIST_INFRA_PERSISTENCE/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HIST_INFRA_PERSISTENCE/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HIST_INFRA_PERSISTENCE/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HIST_INFRA_PERSISTENCE/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HIST_SCHEDULE_MATCH/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HIST_SCHEDULE_MATCH/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HIST_SCHEDULE_MATCH/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HIST_SCHEDULE_MATCH/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HIST_SCHEDULE_MATCH/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HIST_MULTI_IOC_SIEGE/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HIST_MULTI_IOC_SIEGE/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HIST_MULTI_IOC_SIEGE/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HIST_MULTI_IOC_SIEGE/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HIST_MULTI_IOC_SIEGE/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HIST_STAGE_PROGRESSION/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HIST_STAGE_PROGRESSION/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HIST_STAGE_PROGRESSION/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HIST_STAGE_PROGRESSION/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HIST_STAGE_PROGRESSION/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HIST_COORD_PARAM_MATCH/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HIST_COORD_PARAM_MATCH/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HIST_COORD_PARAM_MATCH/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HIST_COORD_PARAM_MATCH/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HIST_COORD_PARAM_MATCH/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HIST_EXERCISE/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HIST_EXERCISE/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HIST_EXERCISE/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HIST_EXERCISE/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_HIST_EXERCISE/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_IOC_NOVELTY/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_IOC_NOVELTY/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_IOC_NOVELTY/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_IOC_NOVELTY/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_IOC_NOVELTY/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_EXCL_SCAN_TASK/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_EXCL_SCAN_TASK/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_EXCL_SCAN_TASK/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_EXCL_SCAN_TASK/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_EXCL_SCAN_TASK/boundary (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_EXCL_INFRA_ROLE/positive (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_EXCL_INFRA_ROLE/negative (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_EXCL_INFRA_ROLE/missing (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_EXCL_INFRA_ROLE/binding (0.00s)
+    --- PASS: TestV21FactValidationMatrix/F_EXCL_INFRA_ROLE/boundary (0.00s)
+=== RUN   TestV21SemanticValidationMatrix
+=== RUN   TestV21SemanticValidationMatrix/S01/c2.command_intent//support
+=== RUN   TestV21SemanticValidationMatrix/S01/c2.command_intent//contradict
+=== RUN   TestV21SemanticValidationMatrix/S01/c2.command_intent//neutral
+=== RUN   TestV21SemanticValidationMatrix/S01/c2.command_intent//missing
+=== RUN   TestV21SemanticValidationMatrix/S01/c2.command_intent//invented_reference
+=== RUN   TestV21SemanticValidationMatrix/S01/c2.command_intent//cross_transaction
+=== RUN   TestV21SemanticValidationMatrix/S01/c2.command_intent//invalid_strength
+=== RUN   TestV21SemanticValidationMatrix/S01/c2.command_intent//model_failure
+=== RUN   TestV21SemanticValidationMatrix/S02/c2.command_exchange//support
+=== RUN   TestV21SemanticValidationMatrix/S02/c2.command_exchange//contradict
+=== RUN   TestV21SemanticValidationMatrix/S02/c2.command_exchange//neutral
+=== RUN   TestV21SemanticValidationMatrix/S02/c2.command_exchange//missing
+=== RUN   TestV21SemanticValidationMatrix/S02/c2.command_exchange//invented_reference
+=== RUN   TestV21SemanticValidationMatrix/S02/c2.command_exchange//cross_transaction
+=== RUN   TestV21SemanticValidationMatrix/S02/c2.command_exchange//invalid_strength
+=== RUN   TestV21SemanticValidationMatrix/S02/c2.command_exchange//model_failure
+=== RUN   TestV21SemanticValidationMatrix/S03/c2.ua_behavior_conflict//support
+=== RUN   TestV21SemanticValidationMatrix/S03/c2.ua_behavior_conflict//contradict
+=== RUN   TestV21SemanticValidationMatrix/S03/c2.ua_behavior_conflict//neutral
+=== RUN   TestV21SemanticValidationMatrix/S03/c2.ua_behavior_conflict//missing
+=== RUN   TestV21SemanticValidationMatrix/S03/c2.ua_behavior_conflict//invented_reference
+=== RUN   TestV21SemanticValidationMatrix/S03/c2.ua_behavior_conflict//cross_transaction
+=== RUN   TestV21SemanticValidationMatrix/S03/c2.ua_behavior_conflict//invalid_strength
+=== RUN   TestV21SemanticValidationMatrix/S03/c2.ua_behavior_conflict//model_failure
+=== RUN   TestV21SemanticValidationMatrix/S04/c2.dns_encoded_intent//support
+=== RUN   TestV21SemanticValidationMatrix/S04/c2.dns_encoded_intent//contradict
+=== RUN   TestV21SemanticValidationMatrix/S04/c2.dns_encoded_intent//neutral
+=== RUN   TestV21SemanticValidationMatrix/S04/c2.dns_encoded_intent//missing
+=== RUN   TestV21SemanticValidationMatrix/S04/c2.dns_encoded_intent//invented_reference
+=== RUN   TestV21SemanticValidationMatrix/S04/c2.dns_encoded_intent//cross_transaction
+=== RUN   TestV21SemanticValidationMatrix/S04/c2.dns_encoded_intent//invalid_strength
+=== RUN   TestV21SemanticValidationMatrix/S04/c2.dns_encoded_intent//model_failure
+=== RUN   TestV21SemanticValidationMatrix/S05/phishing.deception//support
+=== RUN   TestV21SemanticValidationMatrix/S05/phishing.deception//contradict
+=== RUN   TestV21SemanticValidationMatrix/S05/phishing.deception//neutral
+=== RUN   TestV21SemanticValidationMatrix/S05/phishing.deception//missing
+=== RUN   TestV21SemanticValidationMatrix/S05/phishing.deception//invented_reference
+=== RUN   TestV21SemanticValidationMatrix/S05/phishing.deception//cross_transaction
+=== RUN   TestV21SemanticValidationMatrix/S05/phishing.deception//invalid_strength
+=== RUN   TestV21SemanticValidationMatrix/S05/phishing.deception//model_failure
+=== RUN   TestV21SemanticValidationMatrix/S06/phishing.credential_action//support
+=== RUN   TestV21SemanticValidationMatrix/S06/phishing.credential_action//contradict
+=== RUN   TestV21SemanticValidationMatrix/S06/phishing.credential_action//neutral
+=== RUN   TestV21SemanticValidationMatrix/S06/phishing.credential_action//missing
+=== RUN   TestV21SemanticValidationMatrix/S06/phishing.credential_action//invented_reference
+=== RUN   TestV21SemanticValidationMatrix/S06/phishing.credential_action//cross_transaction
+=== RUN   TestV21SemanticValidationMatrix/S06/phishing.credential_action//invalid_strength
+=== RUN   TestV21SemanticValidationMatrix/S06/phishing.credential_action//model_failure
+=== RUN   TestV21SemanticValidationMatrix/S07/exfil.sensitive_upload//support
+=== RUN   TestV21SemanticValidationMatrix/S07/exfil.sensitive_upload//contradict
+=== RUN   TestV21SemanticValidationMatrix/S07/exfil.sensitive_upload//neutral
+=== RUN   TestV21SemanticValidationMatrix/S07/exfil.sensitive_upload//missing
+=== RUN   TestV21SemanticValidationMatrix/S07/exfil.sensitive_upload//invented_reference
+=== RUN   TestV21SemanticValidationMatrix/S07/exfil.sensitive_upload//cross_transaction
+=== RUN   TestV21SemanticValidationMatrix/S07/exfil.sensitive_upload//invalid_strength
+=== RUN   TestV21SemanticValidationMatrix/S07/exfil.sensitive_upload//model_failure
+=== RUN   TestV21SemanticValidationMatrix/S08/exfil.chunk_sequence//support
+=== RUN   TestV21SemanticValidationMatrix/S08/exfil.chunk_sequence//contradict
+=== RUN   TestV21SemanticValidationMatrix/S08/exfil.chunk_sequence//neutral
+=== RUN   TestV21SemanticValidationMatrix/S08/exfil.chunk_sequence//missing
+=== RUN   TestV21SemanticValidationMatrix/S08/exfil.chunk_sequence//invented_reference
+=== RUN   TestV21SemanticValidationMatrix/S08/exfil.chunk_sequence//cross_transaction
+=== RUN   TestV21SemanticValidationMatrix/S08/exfil.chunk_sequence//invalid_strength
+=== RUN   TestV21SemanticValidationMatrix/S08/exfil.chunk_sequence//model_failure
+=== RUN   TestV21SemanticValidationMatrix/S09/exploit.payload_intent//support
+=== RUN   TestV21SemanticValidationMatrix/S09/exploit.payload_intent//contradict
+=== RUN   TestV21SemanticValidationMatrix/S09/exploit.payload_intent//neutral
+=== RUN   TestV21SemanticValidationMatrix/S09/exploit.payload_intent//missing
+=== RUN   TestV21SemanticValidationMatrix/S09/exploit.payload_intent//invented_reference
+=== RUN   TestV21SemanticValidationMatrix/S09/exploit.payload_intent//cross_transaction
+=== RUN   TestV21SemanticValidationMatrix/S09/exploit.payload_intent//invalid_strength
+=== RUN   TestV21SemanticValidationMatrix/S09/exploit.payload_intent//model_failure
+=== RUN   TestV21SemanticValidationMatrix/S10/protocol.response_meaning//support
+=== RUN   TestV21SemanticValidationMatrix/S10/protocol.response_meaning//contradict
+=== RUN   TestV21SemanticValidationMatrix/S10/protocol.response_meaning//neutral
+=== RUN   TestV21SemanticValidationMatrix/S10/protocol.response_meaning//missing
+=== RUN   TestV21SemanticValidationMatrix/S10/protocol.response_meaning//invented_reference
+=== RUN   TestV21SemanticValidationMatrix/S10/protocol.response_meaning//cross_transaction
+=== RUN   TestV21SemanticValidationMatrix/S10/protocol.response_meaning//invalid_strength
+=== RUN   TestV21SemanticValidationMatrix/S10/protocol.response_meaning//model_failure
+=== RUN   TestV21SemanticValidationMatrix/S11/mining.protocol_intent//support
+=== RUN   TestV21SemanticValidationMatrix/S11/mining.protocol_intent//contradict
+=== RUN   TestV21SemanticValidationMatrix/S11/mining.protocol_intent//neutral
+=== RUN   TestV21SemanticValidationMatrix/S11/mining.protocol_intent//missing
+=== RUN   TestV21SemanticValidationMatrix/S11/mining.protocol_intent//invented_reference
+=== RUN   TestV21SemanticValidationMatrix/S11/mining.protocol_intent//cross_transaction
+=== RUN   TestV21SemanticValidationMatrix/S11/mining.protocol_intent//invalid_strength
+=== RUN   TestV21SemanticValidationMatrix/S11/mining.protocol_intent//model_failure
+=== RUN   TestV21SemanticValidationMatrix/S12/c2.domain_lexical/dga_lexical/support
+=== RUN   TestV21SemanticValidationMatrix/S12/c2.domain_lexical/dga_lexical/contradict
+=== RUN   TestV21SemanticValidationMatrix/S12/c2.domain_lexical/dga_lexical/neutral
+=== RUN   TestV21SemanticValidationMatrix/S12/c2.domain_lexical/dga_lexical/missing
+=== RUN   TestV21SemanticValidationMatrix/S12/c2.domain_lexical/dga_lexical/invented_reference
+=== RUN   TestV21SemanticValidationMatrix/S12/c2.domain_lexical/dga_lexical/cross_transaction
+=== RUN   TestV21SemanticValidationMatrix/S12/c2.domain_lexical/dga_lexical/invalid_strength
+=== RUN   TestV21SemanticValidationMatrix/S12/c2.domain_lexical/dga_lexical/model_failure
+=== RUN   TestV21SemanticValidationMatrix/S12/phishing.deception/brand_semantic_impostor/support
+=== RUN   TestV21SemanticValidationMatrix/S12/phishing.deception/brand_semantic_impostor/contradict
+=== RUN   TestV21SemanticValidationMatrix/S12/phishing.deception/brand_semantic_impostor/neutral
+=== RUN   TestV21SemanticValidationMatrix/S12/phishing.deception/brand_semantic_impostor/missing
+=== RUN   TestV21SemanticValidationMatrix/S12/phishing.deception/brand_semantic_impostor/invented_reference
+=== RUN   TestV21SemanticValidationMatrix/S12/phishing.deception/brand_semantic_impostor/cross_transaction
+=== RUN   TestV21SemanticValidationMatrix/S12/phishing.deception/brand_semantic_impostor/invalid_strength
+=== RUN   TestV21SemanticValidationMatrix/S12/phishing.deception/brand_semantic_impostor/model_failure
+=== RUN   TestV21SemanticValidationMatrix/S13/payload.decoded_intent/command/support
+=== RUN   TestV21SemanticValidationMatrix/S13/payload.decoded_intent/command/contradict
+=== RUN   TestV21SemanticValidationMatrix/S13/payload.decoded_intent/command/neutral
+=== RUN   TestV21SemanticValidationMatrix/S13/payload.decoded_intent/command/missing
+=== RUN   TestV21SemanticValidationMatrix/S13/payload.decoded_intent/command/invented_reference
+=== RUN   TestV21SemanticValidationMatrix/S13/payload.decoded_intent/command/cross_transaction
+=== RUN   TestV21SemanticValidationMatrix/S13/payload.decoded_intent/command/invalid_strength
+=== RUN   TestV21SemanticValidationMatrix/S13/payload.decoded_intent/command/model_failure
+=== RUN   TestV21SemanticValidationMatrix/S13/payload.decoded_intent/other/support
+=== RUN   TestV21SemanticValidationMatrix/S13/payload.decoded_intent/other/contradict
+=== RUN   TestV21SemanticValidationMatrix/S13/payload.decoded_intent/other/neutral
+=== RUN   TestV21SemanticValidationMatrix/S13/payload.decoded_intent/other/missing
+=== RUN   TestV21SemanticValidationMatrix/S13/payload.decoded_intent/other/invented_reference
+=== RUN   TestV21SemanticValidationMatrix/S13/payload.decoded_intent/other/cross_transaction
+=== RUN   TestV21SemanticValidationMatrix/S13/payload.decoded_intent/other/invalid_strength
+=== RUN   TestV21SemanticValidationMatrix/S13/payload.decoded_intent/other/model_failure
+=== RUN   TestV21SemanticValidationMatrix/S14/review.benign_alternative//support
+=== RUN   TestV21SemanticValidationMatrix/S14/review.benign_alternative//contradict
+=== RUN   TestV21SemanticValidationMatrix/S14/review.benign_alternative//neutral
+=== RUN   TestV21SemanticValidationMatrix/S14/review.benign_alternative//missing
+=== RUN   TestV21SemanticValidationMatrix/S14/review.benign_alternative//invented_reference
+=== RUN   TestV21SemanticValidationMatrix/S14/review.benign_alternative//cross_transaction
+=== RUN   TestV21SemanticValidationMatrix/S14/review.benign_alternative//invalid_strength
+=== RUN   TestV21SemanticValidationMatrix/S14/review.benign_alternative//model_failure
+=== RUN   TestV21SemanticValidationMatrix/S15/review.stage_and_gaps//support
+=== RUN   TestV21SemanticValidationMatrix/S15/review.stage_and_gaps//contradict
+=== RUN   TestV21SemanticValidationMatrix/S15/review.stage_and_gaps//neutral
+=== RUN   TestV21SemanticValidationMatrix/S15/review.stage_and_gaps//missing
+=== RUN   TestV21SemanticValidationMatrix/S15/review.stage_and_gaps//invented_reference
+=== RUN   TestV21SemanticValidationMatrix/S15/review.stage_and_gaps//cross_transaction
+=== RUN   TestV21SemanticValidationMatrix/S15/review.stage_and_gaps//invalid_strength
+=== RUN   TestV21SemanticValidationMatrix/S15/review.stage_and_gaps//model_failure
+=== RUN   TestV21SemanticValidationMatrix/BT-S01/botnet.coordination//support
+=== RUN   TestV21SemanticValidationMatrix/BT-S01/botnet.coordination//contradict
+=== RUN   TestV21SemanticValidationMatrix/BT-S01/botnet.coordination//neutral
+=== RUN   TestV21SemanticValidationMatrix/BT-S01/botnet.coordination//missing
+=== RUN   TestV21SemanticValidationMatrix/BT-S01/botnet.coordination//invented_reference
+=== RUN   TestV21SemanticValidationMatrix/BT-S01/botnet.coordination//cross_transaction
+=== RUN   TestV21SemanticValidationMatrix/BT-S01/botnet.coordination//invalid_strength
+=== RUN   TestV21SemanticValidationMatrix/BT-S01/botnet.coordination//model_failure
+=== RUN   TestV21SemanticValidationMatrix/SC01/c2.role_schedule_conflict//support
+=== RUN   TestV21SemanticValidationMatrix/SC01/c2.role_schedule_conflict//contradict
+=== RUN   TestV21SemanticValidationMatrix/SC01/c2.role_schedule_conflict//neutral
+=== RUN   TestV21SemanticValidationMatrix/SC01/c2.role_schedule_conflict//missing
+=== RUN   TestV21SemanticValidationMatrix/SC01/c2.role_schedule_conflict//invented_reference
+=== RUN   TestV21SemanticValidationMatrix/SC01/c2.role_schedule_conflict//cross_transaction
+=== RUN   TestV21SemanticValidationMatrix/SC01/c2.role_schedule_conflict//invalid_strength
+=== RUN   TestV21SemanticValidationMatrix/SC01/c2.role_schedule_conflict//model_failure
+=== RUN   TestV21SemanticValidationMatrix/SC02/botnet.group_alternative//support
+=== RUN   TestV21SemanticValidationMatrix/SC02/botnet.group_alternative//contradict
+=== RUN   TestV21SemanticValidationMatrix/SC02/botnet.group_alternative//neutral
+=== RUN   TestV21SemanticValidationMatrix/SC02/botnet.group_alternative//missing
+=== RUN   TestV21SemanticValidationMatrix/SC02/botnet.group_alternative//invented_reference
+=== RUN   TestV21SemanticValidationMatrix/SC02/botnet.group_alternative//cross_transaction
+=== RUN   TestV21SemanticValidationMatrix/SC02/botnet.group_alternative//invalid_strength
+=== RUN   TestV21SemanticValidationMatrix/SC02/botnet.group_alternative//model_failure
+=== RUN   TestV21SemanticValidationMatrix/SC03/phishing.brand_field_conflict//support
+=== RUN   TestV21SemanticValidationMatrix/SC03/phishing.brand_field_conflict//contradict
+=== RUN   TestV21SemanticValidationMatrix/SC03/phishing.brand_field_conflict//neutral
+=== RUN   TestV21SemanticValidationMatrix/SC03/phishing.brand_field_conflict//missing
+=== RUN   TestV21SemanticValidationMatrix/SC03/phishing.brand_field_conflict//invented_reference
+=== RUN   TestV21SemanticValidationMatrix/SC03/phishing.brand_field_conflict//cross_transaction
+=== RUN   TestV21SemanticValidationMatrix/SC03/phishing.brand_field_conflict//invalid_strength
+=== RUN   TestV21SemanticValidationMatrix/SC03/phishing.brand_field_conflict//model_failure
+=== RUN   TestV21SemanticValidationMatrix/R06/history.activity_association//support
+=== RUN   TestV21SemanticValidationMatrix/R06/history.activity_association//contradict
+=== RUN   TestV21SemanticValidationMatrix/R06/history.activity_association//neutral
+=== RUN   TestV21SemanticValidationMatrix/R06/history.activity_association//missing
+=== RUN   TestV21SemanticValidationMatrix/R06/history.activity_association//invented_reference
+=== RUN   TestV21SemanticValidationMatrix/R06/history.activity_association//cross_transaction
+=== RUN   TestV21SemanticValidationMatrix/R06/history.activity_association//invalid_strength
+=== RUN   TestV21SemanticValidationMatrix/R06/history.activity_association//model_failure
+=== RUN   TestV21SemanticValidationMatrix/R07/history.alternative_explanation//support
+=== RUN   TestV21SemanticValidationMatrix/R07/history.alternative_explanation//contradict
+=== RUN   TestV21SemanticValidationMatrix/R07/history.alternative_explanation//neutral
+=== RUN   TestV21SemanticValidationMatrix/R07/history.alternative_explanation//missing
+=== RUN   TestV21SemanticValidationMatrix/R07/history.alternative_explanation//invented_reference
+=== RUN   TestV21SemanticValidationMatrix/R07/history.alternative_explanation//cross_transaction
+=== RUN   TestV21SemanticValidationMatrix/R07/history.alternative_explanation//invalid_strength
+=== RUN   TestV21SemanticValidationMatrix/R07/history.alternative_explanation//model_failure
+--- PASS: TestV21SemanticValidationMatrix (0.05s)
+    --- PASS: TestV21SemanticValidationMatrix/S01/c2.command_intent//support (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S01/c2.command_intent//contradict (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S01/c2.command_intent//neutral (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S01/c2.command_intent//missing (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S01/c2.command_intent//invented_reference (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S01/c2.command_intent//cross_transaction (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S01/c2.command_intent//invalid_strength (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S01/c2.command_intent//model_failure (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S02/c2.command_exchange//support (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S02/c2.command_exchange//contradict (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S02/c2.command_exchange//neutral (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S02/c2.command_exchange//missing (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S02/c2.command_exchange//invented_reference (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S02/c2.command_exchange//cross_transaction (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S02/c2.command_exchange//invalid_strength (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S02/c2.command_exchange//model_failure (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S03/c2.ua_behavior_conflict//support (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S03/c2.ua_behavior_conflict//contradict (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S03/c2.ua_behavior_conflict//neutral (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S03/c2.ua_behavior_conflict//missing (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S03/c2.ua_behavior_conflict//invented_reference (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S03/c2.ua_behavior_conflict//cross_transaction (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S03/c2.ua_behavior_conflict//invalid_strength (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S03/c2.ua_behavior_conflict//model_failure (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S04/c2.dns_encoded_intent//support (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S04/c2.dns_encoded_intent//contradict (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S04/c2.dns_encoded_intent//neutral (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S04/c2.dns_encoded_intent//missing (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S04/c2.dns_encoded_intent//invented_reference (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S04/c2.dns_encoded_intent//cross_transaction (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S04/c2.dns_encoded_intent//invalid_strength (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S04/c2.dns_encoded_intent//model_failure (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S05/phishing.deception//support (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S05/phishing.deception//contradict (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S05/phishing.deception//neutral (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S05/phishing.deception//missing (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S05/phishing.deception//invented_reference (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S05/phishing.deception//cross_transaction (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S05/phishing.deception//invalid_strength (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S05/phishing.deception//model_failure (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S06/phishing.credential_action//support (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S06/phishing.credential_action//contradict (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S06/phishing.credential_action//neutral (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S06/phishing.credential_action//missing (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S06/phishing.credential_action//invented_reference (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S06/phishing.credential_action//cross_transaction (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S06/phishing.credential_action//invalid_strength (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S06/phishing.credential_action//model_failure (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S07/exfil.sensitive_upload//support (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S07/exfil.sensitive_upload//contradict (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S07/exfil.sensitive_upload//neutral (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S07/exfil.sensitive_upload//missing (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S07/exfil.sensitive_upload//invented_reference (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S07/exfil.sensitive_upload//cross_transaction (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S07/exfil.sensitive_upload//invalid_strength (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S07/exfil.sensitive_upload//model_failure (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S08/exfil.chunk_sequence//support (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S08/exfil.chunk_sequence//contradict (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S08/exfil.chunk_sequence//neutral (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S08/exfil.chunk_sequence//missing (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S08/exfil.chunk_sequence//invented_reference (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S08/exfil.chunk_sequence//cross_transaction (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S08/exfil.chunk_sequence//invalid_strength (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S08/exfil.chunk_sequence//model_failure (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S09/exploit.payload_intent//support (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S09/exploit.payload_intent//contradict (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S09/exploit.payload_intent//neutral (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S09/exploit.payload_intent//missing (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S09/exploit.payload_intent//invented_reference (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S09/exploit.payload_intent//cross_transaction (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S09/exploit.payload_intent//invalid_strength (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S09/exploit.payload_intent//model_failure (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S10/protocol.response_meaning//support (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S10/protocol.response_meaning//contradict (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S10/protocol.response_meaning//neutral (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S10/protocol.response_meaning//missing (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S10/protocol.response_meaning//invented_reference (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S10/protocol.response_meaning//cross_transaction (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S10/protocol.response_meaning//invalid_strength (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S10/protocol.response_meaning//model_failure (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S11/mining.protocol_intent//support (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S11/mining.protocol_intent//contradict (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S11/mining.protocol_intent//neutral (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S11/mining.protocol_intent//missing (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S11/mining.protocol_intent//invented_reference (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S11/mining.protocol_intent//cross_transaction (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S11/mining.protocol_intent//invalid_strength (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S11/mining.protocol_intent//model_failure (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S12/c2.domain_lexical/dga_lexical/support (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S12/c2.domain_lexical/dga_lexical/contradict (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S12/c2.domain_lexical/dga_lexical/neutral (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S12/c2.domain_lexical/dga_lexical/missing (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S12/c2.domain_lexical/dga_lexical/invented_reference (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S12/c2.domain_lexical/dga_lexical/cross_transaction (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S12/c2.domain_lexical/dga_lexical/invalid_strength (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S12/c2.domain_lexical/dga_lexical/model_failure (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S12/phishing.deception/brand_semantic_impostor/support (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S12/phishing.deception/brand_semantic_impostor/contradict (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S12/phishing.deception/brand_semantic_impostor/neutral (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S12/phishing.deception/brand_semantic_impostor/missing (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S12/phishing.deception/brand_semantic_impostor/invented_reference (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S12/phishing.deception/brand_semantic_impostor/cross_transaction (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S12/phishing.deception/brand_semantic_impostor/invalid_strength (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S12/phishing.deception/brand_semantic_impostor/model_failure (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S13/payload.decoded_intent/command/support (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S13/payload.decoded_intent/command/contradict (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S13/payload.decoded_intent/command/neutral (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S13/payload.decoded_intent/command/missing (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S13/payload.decoded_intent/command/invented_reference (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S13/payload.decoded_intent/command/cross_transaction (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S13/payload.decoded_intent/command/invalid_strength (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S13/payload.decoded_intent/command/model_failure (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S13/payload.decoded_intent/other/support (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S13/payload.decoded_intent/other/contradict (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S13/payload.decoded_intent/other/neutral (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S13/payload.decoded_intent/other/missing (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S13/payload.decoded_intent/other/invented_reference (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S13/payload.decoded_intent/other/cross_transaction (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S13/payload.decoded_intent/other/invalid_strength (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S13/payload.decoded_intent/other/model_failure (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S14/review.benign_alternative//support (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S14/review.benign_alternative//contradict (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S14/review.benign_alternative//neutral (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S14/review.benign_alternative//missing (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S14/review.benign_alternative//invented_reference (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S14/review.benign_alternative//cross_transaction (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S14/review.benign_alternative//invalid_strength (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S14/review.benign_alternative//model_failure (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S15/review.stage_and_gaps//support (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S15/review.stage_and_gaps//contradict (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S15/review.stage_and_gaps//neutral (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S15/review.stage_and_gaps//missing (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S15/review.stage_and_gaps//invented_reference (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S15/review.stage_and_gaps//cross_transaction (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S15/review.stage_and_gaps//invalid_strength (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/S15/review.stage_and_gaps//model_failure (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/BT-S01/botnet.coordination//support (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/BT-S01/botnet.coordination//contradict (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/BT-S01/botnet.coordination//neutral (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/BT-S01/botnet.coordination//missing (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/BT-S01/botnet.coordination//invented_reference (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/BT-S01/botnet.coordination//cross_transaction (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/BT-S01/botnet.coordination//invalid_strength (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/BT-S01/botnet.coordination//model_failure (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/SC01/c2.role_schedule_conflict//support (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/SC01/c2.role_schedule_conflict//contradict (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/SC01/c2.role_schedule_conflict//neutral (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/SC01/c2.role_schedule_conflict//missing (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/SC01/c2.role_schedule_conflict//invented_reference (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/SC01/c2.role_schedule_conflict//cross_transaction (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/SC01/c2.role_schedule_conflict//invalid_strength (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/SC01/c2.role_schedule_conflict//model_failure (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/SC02/botnet.group_alternative//support (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/SC02/botnet.group_alternative//contradict (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/SC02/botnet.group_alternative//neutral (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/SC02/botnet.group_alternative//missing (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/SC02/botnet.group_alternative//invented_reference (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/SC02/botnet.group_alternative//cross_transaction (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/SC02/botnet.group_alternative//invalid_strength (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/SC02/botnet.group_alternative//model_failure (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/SC03/phishing.brand_field_conflict//support (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/SC03/phishing.brand_field_conflict//contradict (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/SC03/phishing.brand_field_conflict//neutral (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/SC03/phishing.brand_field_conflict//missing (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/SC03/phishing.brand_field_conflict//invented_reference (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/SC03/phishing.brand_field_conflict//cross_transaction (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/SC03/phishing.brand_field_conflict//invalid_strength (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/SC03/phishing.brand_field_conflict//model_failure (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/R06/history.activity_association//support (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/R06/history.activity_association//contradict (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/R06/history.activity_association//neutral (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/R06/history.activity_association//missing (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/R06/history.activity_association//invented_reference (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/R06/history.activity_association//cross_transaction (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/R06/history.activity_association//invalid_strength (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/R06/history.activity_association//model_failure (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/R07/history.alternative_explanation//support (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/R07/history.alternative_explanation//contradict (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/R07/history.alternative_explanation//neutral (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/R07/history.alternative_explanation//missing (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/R07/history.alternative_explanation//invented_reference (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/R07/history.alternative_explanation//cross_transaction (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/R07/history.alternative_explanation//invalid_strength (0.00s)
+    --- PASS: TestV21SemanticValidationMatrix/R07/history.alternative_explanation//model_failure (0.00s)
+PASS
+ok  	vulnscan-backend/evidence	1.326s

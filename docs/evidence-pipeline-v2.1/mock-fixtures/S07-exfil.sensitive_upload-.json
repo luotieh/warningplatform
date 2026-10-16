@@ -1,0 +1,205 @@
+{
+  "controlled_prerequisite_facts": true,
+  "real_model": false,
+  "request": {
+    "event_id": "event",
+    "snapshot_version": 1,
+    "subjects": [
+      {
+        "id": "subject",
+        "proposition_id": "operation",
+        "scope": {
+          "asset_id": "asset",
+          "endpoint_id": "endpoint",
+          "device_id": "device"
+        },
+        "window": {
+          "start": "2026-10-08T00:00:00Z",
+          "end": "2026-10-09T00:00:00Z"
+        },
+        "facts": [
+          {
+            "feature_claim": "",
+            "security_interpretation": "",
+            "cannot_prove": "",
+            "required_correlations": null,
+            "fact_id": "F_BEACON_PERIODIC",
+            "rule_version": "evidence-algorithms-0.7",
+            "snapshot_version": 1,
+            "scope": {
+              "asset_id": "asset",
+              "endpoint_id": "endpoint",
+              "device_id": "device"
+            },
+            "window": {
+              "start": "2026-10-08T00:00:00Z",
+              "end": "2026-10-09T00:00:00Z",
+              "convention": ""
+            },
+            "status": "observed",
+            "eligibility": "eligible",
+            "quality": "",
+            "measurements": {
+              "sample_count": 0
+            },
+            "parameters": {},
+            "source_ids": [
+              "fact-source"
+            ],
+            "reason_code": "",
+            "limitations": null
+          }
+        ],
+        "materials": [
+          {
+            "id": "protocol_request",
+            "kind": "protocol_request",
+            "scope": {
+              "asset_id": "asset",
+              "endpoint_id": "endpoint",
+              "device_id": "device"
+            },
+            "snapshot_version": 1,
+            "window": {
+              "start": "2026-10-08T00:00:00Z",
+              "end": "2026-10-09T00:00:00Z"
+            },
+            "provenance": {
+              "verified": true,
+              "complete": true,
+              "version": "parsed-1",
+              "source_ids": [
+                "source-protocol_request"
+              ]
+            },
+            "text": "真实材料：protocol_request",
+            "field_path": "parsed.protocol_request",
+            "redacted": true,
+            "truncated": false,
+            "transaction_id": "txn",
+            "direction": "outbound",
+            "method": "POST",
+            "protocol": "http",
+            "destination": "https://example.test/submit",
+            "field_names": [
+              "username"
+            ],
+            "role": "workstation"
+          },
+          {
+            "id": "direction",
+            "kind": "direction",
+            "scope": {
+              "asset_id": "asset",
+              "endpoint_id": "endpoint",
+              "device_id": "device"
+            },
+            "snapshot_version": 1,
+            "window": {
+              "start": "2026-10-08T00:00:00Z",
+              "end": "2026-10-09T00:00:00Z"
+            },
+            "provenance": {
+              "verified": true,
+              "complete": true,
+              "version": "parsed-1",
+              "source_ids": [
+                "source-direction"
+              ]
+            },
+            "text": "真实材料：direction",
+            "field_path": "parsed.direction",
+            "redacted": true,
+            "truncated": false,
+            "transaction_id": "txn",
+            "direction": "outbound",
+            "method": "POST",
+            "protocol": "http",
+            "destination": "https://example.test/submit",
+            "field_names": [
+              "username"
+            ],
+            "role": "workstation"
+          },
+          {
+            "id": "volume",
+            "kind": "volume",
+            "scope": {
+              "asset_id": "asset",
+              "endpoint_id": "endpoint",
+              "device_id": "device"
+            },
+            "snapshot_version": 1,
+            "window": {
+              "start": "2026-10-08T00:00:00Z",
+              "end": "2026-10-09T00:00:00Z"
+            },
+            "provenance": {
+              "verified": true,
+              "complete": true,
+              "version": "parsed-1",
+              "source_ids": [
+                "source-volume"
+              ]
+            },
+            "text": "真实材料：volume",
+            "field_path": "parsed.volume",
+            "redacted": true,
+            "truncated": false,
+            "transaction_id": "txn",
+            "direction": "outbound",
+            "method": "POST",
+            "protocol": "http",
+            "destination": "https://example.test/submit",
+            "field_names": [
+              "username"
+            ],
+            "bytes": 512,
+            "role": "workstation"
+          },
+          {
+            "id": "content_classification",
+            "kind": "content_classification",
+            "scope": {
+              "asset_id": "asset",
+              "endpoint_id": "endpoint",
+              "device_id": "device"
+            },
+            "snapshot_version": 1,
+            "window": {
+              "start": "2026-10-08T00:00:00Z",
+              "end": "2026-10-09T00:00:00Z"
+            },
+            "provenance": {
+              "verified": true,
+              "complete": true,
+              "version": "parsed-1",
+              "source_ids": [
+                "source-content_classification"
+              ]
+            },
+            "text": "真实材料：content_classification",
+            "field_path": "parsed.content_classification",
+            "redacted": true,
+            "truncated": false,
+            "transaction_id": "txn",
+            "direction": "outbound",
+            "method": "POST",
+            "protocol": "http",
+            "destination": "https://example.test/submit",
+            "field_names": [
+              "username"
+            ],
+            "role": "workstation"
+          }
+        ]
+      }
+    ],
+    "slots": [
+      {
+        "id": "S07",
+        "target": "exfil.sensitive_upload"
+      }
+    ]
+  }
+}

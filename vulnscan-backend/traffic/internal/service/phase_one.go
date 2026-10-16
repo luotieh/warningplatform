@@ -24,32 +24,9 @@ type PhaseOneEvaluation struct {
 // and the read-only validator. persist=false never executes S or writes caches.
 func (s Services) ExecutePhaseOne(ctx context.Context, snap EvidenceSnapshot, facts SnapshotFactEvaluation, sem ReportSemanticEvaluation, history ReportHistory, assets []domain.Asset, persist bool) (PhaseOneEvaluation, error) {
 	out := PhaseOneEvaluation{}
-	cfg := evidence.DefaultPhaseOneConfig()
-	options := s.ReportOptions
-	if options == nil {
-		o, err := config.LoadReportOptions()
-		if err != nil {
-			return out, err
-		}
-		options = &o
-	}
-	if len(options.PhaseOnePoints) > 0 {
-		cfg.Points = options.PhaseOnePoints
-		if options.PhaseOnePolicyVersion == "" {
-			return out, fmt.Errorf("phase_one_policy_version_required_for_custom_points")
-		}
-	}
-	if options.PhaseOnePolicyVersion != "" {
-		cfg.Version = options.PhaseOnePolicyVersion
-	}
-	if options.PhaseOneMaxScore != 0 {
-		cfg.MaxScore = options.PhaseOneMaxScore
-	}
-	if s.PhaseOnePolicy != nil {
-		cfg = *s.PhaseOnePolicy
-	}
-	if err := cfg.Validate(); err != nil {
-		return out, err
+	cfg, cfgErr := s.phaseOneConfig()
+	if cfgErr != nil {
+		return out, cfgErr
 	}
 	materials := PhaseOneMaterials{Complete: false, Diagnostics: []string{"current_wire_materials_unavailable"}}
 	if facts.Manifest.PhaseOne != nil {
@@ -90,22 +67,64 @@ func (s Services) ExecutePhaseOne(ctx context.Context, snap EvidenceSnapshot, fa
 			var cached PhaseOneEvaluation
 			if json.Unmarshal(record.Value, &cached) == nil && cached.Result.Version == evidence.PhaseOneVersion && cached.CacheKey == key {
 				expected, validateErr := evidence.EvaluatePhaseOne(snap.EventID, snap.Version, cached.Facts, sem.Result, materials.Bindings, cfg)
-				if validateErr == nil && facts.Result != nil && digest(cached.Facts) == digest(facts.Result.Findings) && digest(expected) == digest(cached.Result) {
+				if validateErr == nil && facts.Result != nil && digest(cached.Facts) == digest(phaseOnePipelineFacts(facts.Result.Findings)) && digest(expected) == digest(cached.Result) {
 					cached.CacheHit = true
 					return cached, nil
 				}
 			}
 		}
 	}
+	var findings []evidence.Finding
+	if facts.Manifest.PhaseOneFactsPrepared && facts.Result != nil {
+		findings = phaseOnePipelineFacts(facts.Result.Findings)
+	} else {
+		findings, err = computePhaseOneFacts(ctx, snap, materials, merged, history)
+		if err != nil {
+			return out, err
+		}
+	}
+	out.Facts = findings
+	result, e := evidence.EvaluatePhaseOne(snap.EventID, snap.Version, findings, sem.Result, materials.Bindings, cfg)
+	if e != nil {
+		return out, e
+	}
+	out.Result = result
+	if !persist {
+		out.Result.Diagnostics = append(out.Result.Diagnostics, "read_only_no_cache_write")
+	}
+	if persist {
+		out.Persisted = true
+		if e := putRecord(ctx, s.Store, "phase_one_result", key, snap.EventID, out); e != nil {
+			out.Persisted = false
+			out.Result.Diagnostics = append(out.Result.Diagnostics, "phase_one_cache_write_failed")
+		}
+		if e := putRecord(ctx, s.Store, "phase_one_diagnostics", snapshotKey(snap.EventID, snap.Version), snap.EventID, out); e != nil {
+			out.Result.Diagnostics = append(out.Result.Diagnostics, "phase_one_diagnostics_write_failed")
+		}
+	}
+	return out, nil
+}
+
+func phaseOneContext(raw string, p PhaseOneEvaluation) (string, error) {
+	var c map[string]any
+	if err := json.Unmarshal([]byte(raw), &c); err != nil {
+		return "", err
+	}
+	c["phase_one_evidence"] = map[string]any{"result": p.Result, "cache_key": p.CacheKey, "persisted": p.Persisted, "diagnostics": p.Materials.Diagnostics, "independent_contacts": len(p.Materials.Contacts), "source_snapshots": p.Materials.Sources}
+	data, err := json.Marshal(c)
+	return string(data), err
+}
+
+func computePhaseOneFacts(ctx context.Context, snap EvidenceSnapshot, materials, merged PhaseOneMaterials, history ReportHistory) ([]evidence.Finding, error) {
 	findings, computeErr := phaseOneCurrentFacts(ctx, snap, materials, history)
 	if computeErr != nil {
-		return out, computeErr
+		return nil, computeErr
 	}
 	// Only independent contacts enter the existing temporal algorithms. Evaluate
 	// each IOC separately even when it shares an endpoint with another indicator.
 	groups := map[string][]PhaseOneContact{}
 	for _, c := range merged.Contacts {
-		k := scopeKey(c.Scope) + c.IOCType + ":" + c.IOCValue
+		k := scopeKey(c.Scope) + c.IOCType + ":" + c.IOCValue + "|" + c.Kind
 		groups[k] = append(groups[k], c)
 	}
 	for _, contacts := range groups {
@@ -114,7 +133,7 @@ func (s Services) ExecutePhaseOne(ctx context.Context, snap EvidenceSnapshot, fa
 		// extension. Failure of that optional extension cannot erase this set.
 		currentContacts := []PhaseOneContact{}
 		for _, c := range merged.CurrentContacts {
-			if scopeKey(c.Scope)+c.IOCType+":"+c.IOCValue == groupKey {
+			if scopeKey(c.Scope)+c.IOCType+":"+c.IOCValue == groupKey && c.Kind == contacts[0].Kind {
 				currentContacts = append(currentContacts, c)
 			}
 		}
@@ -141,10 +160,11 @@ func (s Services) ExecutePhaseOne(ctx context.Context, snap EvidenceSnapshot, fa
 			engine, _ := evidence.NewEngine(fc)
 			computed, e := engine.Evaluate(ctx, req)
 			if e != nil {
-				return out, e
+				return nil, e
 			}
 			for _, f := range computed.Findings {
 				f.IOCType, f.IOCValue = contacts[0].IOCType, contacts[0].IOCValue
+				f.ObservationKind = contacts[0].Kind
 				findings = append(findings, f)
 			}
 		}
@@ -170,34 +190,36 @@ func (s Services) ExecutePhaseOne(ctx context.Context, snap EvidenceSnapshot, fa
 		a, b := findings[i], findings[j]
 		return scopeKey(a.Scope)+a.IOCType+a.IOCValue+string(a.FactID)+fmt.Sprint(a.SourceIDs) < scopeKey(b.Scope)+b.IOCType+b.IOCValue+string(b.FactID)+fmt.Sprint(b.SourceIDs)
 	})
-	out.Facts = findings
-	result, e := evidence.EvaluatePhaseOne(snap.EventID, snap.Version, findings, sem.Result, materials.Bindings, cfg)
-	if e != nil {
-		return out, e
-	}
-	out.Result = result
-	if !persist {
-		out.Result.Diagnostics = append(out.Result.Diagnostics, "read_only_no_semantic_execution_no_cache_write")
-	}
-	if persist {
-		out.Persisted = true
-		if e := putRecord(ctx, s.Store, "phase_one_result", key, snap.EventID, out); e != nil {
-			out.Persisted = false
-			out.Result.Diagnostics = append(out.Result.Diagnostics, "phase_one_cache_write_failed")
-		}
-		if e := putRecord(ctx, s.Store, "phase_one_diagnostics", snapshotKey(snap.EventID, snap.Version), snap.EventID, out); e != nil {
-			out.Result.Diagnostics = append(out.Result.Diagnostics, "phase_one_diagnostics_write_failed")
-		}
-	}
-	return out, nil
+	return findings, nil
 }
 
-func phaseOneContext(raw string, p PhaseOneEvaluation) (string, error) {
-	var c map[string]any
-	if err := json.Unmarshal([]byte(raw), &c); err != nil {
-		return "", err
+func (s Services) phaseOneConfig() (evidence.PhaseOneConfig, error) {
+	cfg := evidence.DefaultPhaseOneConfig()
+	options := s.ReportOptions
+	if options == nil {
+		o, err := config.LoadReportOptions()
+		if err != nil {
+			return cfg, err
+		}
+		options = &o
 	}
-	c["phase_one_evidence"] = map[string]any{"result": p.Result, "cache_key": p.CacheKey, "persisted": p.Persisted, "diagnostics": p.Materials.Diagnostics, "independent_contacts": len(p.Materials.Contacts), "source_snapshots": p.Materials.Sources}
-	data, err := json.Marshal(c)
-	return string(data), err
+	if len(options.PhaseOnePoints) > 0 {
+		cfg.Points = options.PhaseOnePoints
+		if options.PhaseOnePolicyVersion == "" {
+			return cfg, fmt.Errorf("phase_one_policy_version_required_for_custom_points")
+		}
+	}
+	if options.PhaseOnePolicyVersion != "" {
+		cfg.Version = options.PhaseOnePolicyVersion
+	}
+	if options.PhaseOneMaxScore != 0 {
+		cfg.MaxScore = options.PhaseOneMaxScore
+	}
+	if s.PhaseOnePolicy != nil {
+		cfg = *s.PhaseOnePolicy
+	}
+	if err := cfg.Validate(); err != nil {
+		return cfg, err
+	}
+	return cfg, nil
 }

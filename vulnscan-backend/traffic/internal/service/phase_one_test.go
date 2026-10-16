@@ -337,10 +337,14 @@ func TestPhaseOneDNSChainAndTLSDoesNotBecomeHTTP(t *testing.T) {
 	if u := phaseOneUnit(t, p, "C07"); u.Status != "observed" || u.Score != 20 {
 		t.Fatal("DNS hard/semantic chain", u, p.Semantics)
 	}
+	foundDNS := false
 	for _, task := range p.Semantics.Result.Plan.Tasks {
-		if task.Slot.Key.ID != "S04" {
-			t.Fatal("non-phase semantic slot scheduled", task.Slot.Key)
+		if task.Slot.Key.ID == "S04" {
+			foundDNS = true
 		}
+	}
+	if !foundDNS || p.Evidence.Pipeline == nil || len(p.Evidence.Pipeline.Checks) != 82 {
+		t.Fatal("full registry or DNS slot missing")
 	}
 	s = phaseOneFixture(t)
 	snap = phaseOneInstallSnapshot(t, s, "tls-controlled", 1, []map[string]any{phaseOneWire(t, at, 10, []byte{23, 3, 3, 0, 4, 0, 1, 2, 3}, false, false)})

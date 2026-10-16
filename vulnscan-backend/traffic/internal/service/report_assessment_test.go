@@ -131,6 +131,16 @@ func validReportAssessment(b ReportEvidenceBundle) ReportAssessment {
 	return a
 }
 
+// Match the exact bounded projection accepted by the v2 report validator.
+func validPipelineAssessment(b ReportEvidenceBundle) ReportAssessment {
+	copy := b
+	copy.SelectedIDs = nil
+	for _, item := range reportEssenceFor(b).Items {
+		copy.SelectedIDs = append(copy.SelectedIDs, item.ID)
+	}
+	return validReportAssessment(copy)
+}
+
 func acceptedReportResponse(t *testing.T, prompt string) string {
 	t.Helper()
 	var request struct {
@@ -218,6 +228,7 @@ func TestReportRejectsUnboundOverclaimsAndChangedNumbers(t *testing.T) {
 			}
 		})
 	}
+	b.Pipeline = nil // This section exercises the legacy JSON decoder contract.
 	a := validReportAssessment(b)
 	raw, _ := json.Marshal(a)
 	if _, err := decodeReportAssessment(string(raw), b); err != nil {

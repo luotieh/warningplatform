@@ -185,18 +185,15 @@ func (e *Engine) Evaluate(ctx context.Context, request Request) (Result, error) 
 				if (id == BeaconPeriodic || id == MultiDayPersist || id == "F_FIXED_DAILY_WINDOW" || id == "F_BEACON_JITTER" || id == "F_RATE_BURST" || id == "F_RATE_RAMP") && request.Quality.SavedTimelineComplete != nil {
 					g.complete = request.Quality.Coverage == CoverageComplete && *request.Quality.SavedTimelineComplete
 				}
-				if id == BeaconPeriodic {
-					finding = e.periodic(g)
-				} else if id == MultiDayPersist {
-					finding = e.multiDay(g)
-				} else {
-					finding = e.additional(id, g)
-				}
+				finding = e.evaluateFactSafely(id, g)
 				g.complete = packetComplete
 				finding.SnapshotVersion = request.SnapshotVersion
 				execution.ReasonCode = finding.ReasonCode
 				if finding.Eligibility == "eligible" || finding.ReasonCode == IncompleteNegative {
 					execution.Status = "executed"
+				}
+				if finding.ReasonCode == "rule_execution_error" {
+					execution.Status = "execution_error"
 				}
 				result.Findings = append(result.Findings, finding)
 			}
@@ -231,11 +228,14 @@ func (e *Engine) Evaluate(ctx context.Context, request Request) (Result, error) 
 					}
 				}
 			}
-			finding := e.additional(id, g)
+			finding := e.evaluateFactSafely(id, g)
 			finding.SnapshotVersion = request.SnapshotVersion
 			status := "skipped"
 			if finding.Eligibility == "eligible" {
 				status = "executed"
+			}
+			if finding.ReasonCode == "rule_execution_error" {
+				status = "execution_error"
 			}
 			result.Findings = append(result.Findings, finding)
 			result.Executions = append(result.Executions, Execution{FactID: id, Scope: g.scope, Status: status, ReasonCode: finding.ReasonCode})
@@ -256,4 +256,21 @@ func baseFinding(id FactID, g *observations, parameters Parameters, limits []str
 		Eligibility: "ineligible", Quality: quality, Parameters: parameters,
 		Measurements: Measurements{SampleCount: len(g.hits)},
 		SourceIDs:    append([]string(nil), g.sourceIDs...), Limitations: limits}
+}
+
+// A failed rule cannot abort unrelated facts or become a valid negative.
+func (e *Engine) evaluateFactSafely(id FactID, g *observations) (finding Finding) {
+	defer func() {
+		if recover() != nil {
+			finding = baseFinding(id, g, Parameters{}, []string{"rule failed; no conclusion was produced"})
+			finding.ReasonCode = "rule_execution_error"
+		}
+	}()
+	if id == BeaconPeriodic {
+		return e.periodic(g)
+	}
+	if id == MultiDayPersist {
+		return e.multiDay(g)
+	}
+	return e.additional(id, g)
 }

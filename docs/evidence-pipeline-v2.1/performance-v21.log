@@ -1,0 +1,4 @@
+=== RUN   TestEvidencePipelinePerformanceSamples
+--- PASS: TestEvidencePipelinePerformanceSamples (5.39s)
+PASS
+ok  	vulnscan-backend/traffic/internal/service	5.531s

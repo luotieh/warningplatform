@@ -1,0 +1,8 @@
+=== RUN   TestPhaseOneCoverageFrozenReportReplay
+=== RUN   TestPhaseOneCoverageFrozenReportReplay/ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8
+    phase_one_coverage_audit_test.go:403: normalized_duplicate_instance: Nd176ead628e877bf kind=fact rule=F_BEACON_PERIODIC scope={AssetID:asset-0f4ef4d8ee0aa302 EndpointID:tcp://144.48.4.129:80 DeviceID:node-arm-offline-001 GroupID:}
+--- FAIL: TestPhaseOneCoverageFrozenReportReplay (24.25s)
+    --- FAIL: TestPhaseOneCoverageFrozenReportReplay/ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8 (18.51s)
+FAIL
+FAIL	vulnscan-backend/traffic/internal/service	25.338s
+FAIL

@@ -12,10 +12,10 @@ import (
 	"vulnscan-backend/traffic/internal/domain"
 )
 
-const reportEvidenceVersion = "evidence-report-1.7"
+const reportEvidenceVersion = "evidence-report-2.0"
 
 func narrativeReportVersion(v string) bool {
-	return v == reportEvidenceVersion || v == "evidence-report-1.6" || v == "evidence-report-1.4" || v == "evidence-report-1.5"
+	return v == reportEvidenceVersion || v == "evidence-report-1.7" || v == "evidence-report-1.6" || v == "evidence-report-1.4" || v == "evidence-report-1.5"
 }
 
 var ReportBuildRevision = "development"
@@ -46,6 +46,7 @@ type ReportEvidence struct {
 }
 
 type ReportEvidenceBundle struct {
+	Pipeline          *EvidencePipelineAudit       `json:"pipeline,omitempty"`
 	PhaseOne          *PhaseOneEvaluation          `json:"phase_one,omitempty"`
 	CurrentSourceIDs  []string                     `json:"current_source_ids,omitempty"`
 	Essence           *ReportEssenceBundle         `json:"evidence_essence,omitempty"`
@@ -191,8 +192,30 @@ func buildReportEvidence(event domain.Event, snap EvidenceSnapshot, f SnapshotFa
 		executions = f.Result.Executions
 	}
 	b.Normalized = evidence.Normalize(b.FactChecks, sem.Result, executions)
+	semanticDedupGroups := map[string]string{}
+	for _, d := range evidence.SemanticDefinitions() {
+		semanticDedupGroups[d.Key.String()] = d.Deduplication
+	}
+	semanticTaskDigests := map[string]string{}
+	if sem.Result != nil {
+		for _, task := range sem.Result.Plan.Tasks {
+			semanticTaskDigests[task.ID] = digest(task)
+		}
+	}
 	for k := range b.Normalized.Items {
 		u := &b.Normalized.Items[k]
+		u.Coverage = u.Quality
+		u.InputDigest = f.InputDigest
+		if u.Kind == "semantic" {
+			u.ModelVersion, u.InputDigest = sem.ModelVersion, sem.InputDigest
+			if sem.Status == "disabled" {
+				u.TerminalStatus = "skipped"
+			}
+			u.DedupGroup = semanticDedupGroups[u.RuleID]
+			if taskDigest := semanticTaskDigests[u.TaskID]; taskDigest != "" {
+				u.InputDigest = taskDigest
+			}
+		}
 		if u.Reason != "no_execution_result" {
 			continue
 		}
@@ -207,7 +230,7 @@ func buildReportEvidence(event domain.Event, snap EvidenceSnapshot, f SnapshotFa
 		e := &b.Entries[n]
 		idx := -1
 		for k, u := range b.Normalized.Items {
-			if e.Kind == "fact" && u.Kind == "fact" && u.ID == evidence.UnifiedID("fact", string(e.FactID), e.Scope, e.Window, "") {
+			if e.Kind == "fact" && u.Kind == "fact" && e.Finding != nil && u.ID == evidence.FindingUnifiedID(*e.Finding) {
 				idx = k
 				break
 			}
@@ -217,7 +240,7 @@ func buildReportEvidence(event domain.Event, snap EvidenceSnapshot, f SnapshotFa
 			}
 		}
 		if idx < 0 {
-			u := evidence.UnifiedEvidence{ID: evidence.UnifiedID(e.Kind, e.Family, e.Scope, e.Window, ""), Kind: e.Kind, RuleID: e.Family, Scope: e.Scope, Window: e.Window, Status: e.Status, Quality: "attributed", Role: "context", Interpretation: e.Result, SourceIDs: e.SourceIDs, Dependencies: e.Dependencies, Version: reportEvidenceVersion}
+			u := evidence.UnifiedEvidence{ID: evidence.UnifiedID(e.Kind, e.Family, e.Scope, e.Window, e.ID), Kind: e.Kind, RuleID: e.Family, Scope: e.Scope, Window: e.Window, Status: e.Status, Quality: "attributed", Role: "context", Interpretation: e.Result, SourceIDs: e.SourceIDs, Dependencies: e.Dependencies, Version: reportEvidenceVersion}
 			if e.Kind == "observation" {
 				u.Role = "observation"
 			}

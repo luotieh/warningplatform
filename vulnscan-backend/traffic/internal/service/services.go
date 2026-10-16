@@ -21,7 +21,8 @@ import (
 const maxOccurrences = 200
 
 type Services struct {
-	LegacyReportEvidence bool // explicit compatibility profile; default reports execute phase one
+	EvidenceLimits       *EvidencePipelineLimits // optional per-deployment data budgets
+	LegacyReportEvidence bool                    // explicit compatibility profile; default reports execute phase one
 	Store                store.Store
 	DeepSOC              client.DeepSOCClient
 	FlowShadow           client.FlowShadowClient

@@ -24,27 +24,28 @@ import (
 )
 
 const snapshotAdapterVersion = "snapshot-evidence-adapter-0.4"
-const reportSnapshotAdapterVersion = "report-snapshot-adapter-1.7-stream"
+const reportSnapshotAdapterVersion = "report-snapshot-adapter-2.1"
 
 // SnapshotEvidenceOptions limits the shared load, not each algorithm separately.
 // Large snapshots are explicitly deferred, never evaluated using model samples.
 type SnapshotEvidenceOptions struct {
-	ReportMaterialMode bool
-	ReportSchedules    map[string]ReportSchedulePolicy
-	PlatformHistory    *ReportHistory
-	CaptureSemantic    bool
-	Facts              []evidence.FactID
-	MaxHits            int64
-	MaxRawBytes        int64
-	StreamFeatures     bool
-	MaxSnapshotBytes   int64
-	MaxFeatureBytes    int64
-	MaxScopes          int
-	Supplemental       *SnapshotSupplementalInputs `json:"-"`
-	SupplementalIssue  *SnapshotInputIssue         `json:"-"`
-	Sources            *EvidenceSourceRegistry     `json:"-"`
-	SourceIssue        *SnapshotInputIssue         `json:"-"`
-	RegistryIssue      *SnapshotInputIssue         `json:"-"`
+	DeferIndependentFacts bool
+	ReportMaterialMode    bool
+	ReportSchedules       map[string]ReportSchedulePolicy
+	PlatformHistory       *ReportHistory
+	CaptureSemantic       bool
+	Facts                 []evidence.FactID
+	MaxHits               int64
+	MaxRawBytes           int64
+	StreamFeatures        bool
+	MaxSnapshotBytes      int64
+	MaxFeatureBytes       int64
+	MaxScopes             int
+	Supplemental          *SnapshotSupplementalInputs `json:"-"`
+	SupplementalIssue     *SnapshotInputIssue         `json:"-"`
+	Sources               *EvidenceSourceRegistry     `json:"-"`
+	SourceIssue           *SnapshotInputIssue         `json:"-"`
+	RegistryIssue         *SnapshotInputIssue         `json:"-"`
 }
 
 func DefaultSnapshotEvidenceOptions() SnapshotEvidenceOptions {
@@ -52,6 +53,12 @@ func DefaultSnapshotEvidenceOptions() SnapshotEvidenceOptions {
 }
 
 type SnapshotEvidenceManifest struct {
+	JSONDecodeCount            int64                           `json:"json_decode_count"`
+	WireFrameDecodeCount       int64                           `json:"wire_frame_decode_count"`
+	HTTPRequestParseCount      int64                           `json:"http_request_parse_count"`
+	DNSMessageParseCount       int64                           `json:"dns_message_parse_count"`
+	PreprocessCacheHit         bool                            `json:"preprocess_cache_hit,omitempty"`
+	PhaseOneFactsPrepared      bool                            `json:"phase_one_facts_prepared,omitempty"`
 	PhaseOne                   *PhaseOneMaterials              `json:"phase_one_materials,omitempty"`
 	ReportPractical            []ReportEvidence                `json:"report_practical_evidence,omitempty"`
 	ReportPracticalChecks      []ReportPracticalCheck          `json:"report_practical_checks,omitempty"`
@@ -92,6 +99,7 @@ type SnapshotEvidenceManifest struct {
 }
 
 type SnapshotEvidenceInput struct {
+	PreparedSemantics    *evidence.SemanticRequest     `json:"-"`
 	Request              evidence.Request              `json:"-"`
 	SemanticObservations []SnapshotSemanticObservation `json:"-"`
 	Manifest             SnapshotEvidenceManifest      `json:"manifest"`
@@ -99,11 +107,13 @@ type SnapshotEvidenceInput struct {
 }
 
 type SnapshotFactEvaluation struct {
-	Status   string                   `json:"status"`
-	Reason   string                   `json:"reason,omitempty"`
-	Manifest SnapshotEvidenceManifest `json:"manifest"`
-	Result   *evidence.Result         `json:"result,omitempty"`
-	CacheHit bool                     `json:"cache_hit"`
+	InputCoverage []PreparedFamilyCoverage `json:"input_coverage,omitempty"`
+	InputDigest   string                   `json:"input_digest,omitempty"`
+	Status        string                   `json:"status"`
+	Reason        string                   `json:"reason,omitempty"`
+	Manifest      SnapshotEvidenceManifest `json:"manifest"`
+	Result        *evidence.Result         `json:"result,omitempty"`
+	CacheHit      bool                     `json:"cache_hit"`
 }
 
 // snapshotHitPage shares one membership/revision query per page. No algorithm
@@ -149,7 +159,7 @@ func (s Services) SnapshotEvidenceInput(ctx context.Context, snap EvidenceSnapsh
 			return out, errors.New("positive stream budgets required")
 		}
 		out.Manifest.StreamVersion = snapshotStreamVersion
-		out.Manifest.PageByteBudget = snapshotPageBytes
+		out.Manifest.PageByteBudget = contextPipelineLimits(ctx).PageBytes
 		out.Manifest.SnapshotByteBudget = opts.MaxSnapshotBytes
 		out.Manifest.FeatureByteBudget = opts.MaxFeatureBytes
 	}
@@ -225,7 +235,10 @@ func (s Services) SnapshotEvidenceInput(ctx context.Context, snap EvidenceSnapsh
 	seenHits := map[string]bool{}
 	seenReportPackets := map[string]string{}
 	allCaptureKnown, anyTruncated := true, false
-	q := store.HitQuery{Sources: snap.Sources, Watermark: snap.Watermark, Limit: 500}
+	readCtx, cancelRead := context.WithTimeout(ctx, contextPipelineLimits(ctx).SnapshotTimeout)
+	defer cancelRead()
+	ctx = readCtx
+	q := store.HitQuery{Sources: snap.Sources, Watermark: snap.Watermark, Limit: contextPipelineLimits(ctx).PageRows}
 	for {
 		readPage := snapshotHitPage
 		if opts.StreamFeatures {
@@ -265,6 +278,7 @@ func (s Services) SnapshotEvidenceInput(ctx context.Context, snap EvidenceSnapsh
 				return out, nil
 			}
 			m := map[string]any{}
+			out.Manifest.JSONDecodeCount++
 			decoder := json.NewDecoder(bytes.NewReader(h.Raw))
 			decoder.UseNumber()
 			if err := decoder.Decode(&m); err != nil {
@@ -275,6 +289,8 @@ func (s Services) SnapshotEvidenceInput(ctx context.Context, snap EvidenceSnapsh
 			if decodeErr := decoder.Decode(&trailing); decodeErr != io.EOF {
 				return out, &SnapshotInputError{Code: "stored_json_invalid", Stage: "decode", HitID: h.ID, Cause: errors.New("trailing stored JSON")}
 			}
+			parsed := &snapshotParseContext{}
+			m[snapshotParseContextKey] = parsed
 			scope, remoteIP, remotePort, ok := snapshotScope(m, assets)
 			if !ok || h.OccurredAt.IsZero() {
 				out.Manifest.UnresolvedHits++
@@ -341,11 +357,13 @@ func (s Services) SnapshotEvidenceInput(ctx context.Context, snap EvidenceSnapsh
 			if opts.CaptureSemantic {
 				collectSnapshotSemanticObservation(&out, input, h, m, assets)
 			}
+			out.Manifest.WireFrameDecodeCount += parsed.frameDecodes
+			out.Manifest.HTTPRequestParseCount += parsed.httpParses
+			out.Manifest.DNSMessageParseCount += parsed.dnsParses
 			if opts.StreamFeatures {
 				out.Manifest.RetainedFeatureBytes += snapshotFeatureDelta(input, &out, mark, hit)
-				// Phase one uses verified contacts and application transactions. Do
-				// not retain packet payloads for unrelated legacy network/TLS facts.
-				input.Network, input.TLS = nil, nil
+				// Retain bounded protocol features for the full registry. Raw JSON
+				// pages are released; these values share the feature hard budget.
 				if out.Manifest.RetainedFeatureBytes > opts.MaxFeatureBytes {
 					out.Reason = "snapshot_feature_budget_exceeded"
 					out.Request.Hits, out.Request.Inputs = nil, nil
@@ -663,12 +681,19 @@ func evaluateSnapshotFactInput(ctx context.Context, snap EvidenceSnapshot, input
 	if input.Reason != "" {
 		return out, nil
 	}
-	result, err := engine.Evaluate(ctx, input.Request)
+	request := input.Request
+	if opts.DeferIndependentFacts {
+		request.Facts = pipelineBaseFacts(request.Facts)
+	}
+	result, err := engine.Evaluate(ctx, request)
 	if err != nil {
 		out.Reason = "algorithm_input_invalid"
 		out.Manifest.addIssue(SnapshotInputIssue{Code: out.Reason, Stage: "evaluate"})
 		out.Manifest.FactCoverage = snapshotUnavailableCoverage(opts.Facts, evidence.ReasonCode(out.Reason))
 		return out, &SnapshotInputError{Code: out.Reason, Stage: "evaluate", EventID: snap.EventID, SnapshotVersion: snap.Version, Cause: err}
+	}
+	if opts.DeferIndependentFacts {
+		pipelinePendingFacts(&result, input.Request)
 	}
 	for i := range result.Findings {
 		result.Findings[i].Dependencies = append(result.Findings[i].Dependencies,

@@ -1,0 +1,17 @@
+{
+  "scope": "input contract design validation only",
+  "command": "python docs/evidence-input-standard-v1/test_contract.py",
+  "tests": 17,
+  "failures": 0,
+  "errors": 0,
+  "successful": true,
+  "examples": 3,
+  "mapped_F": 59,
+  "mapped_S": 23,
+  "does_not_prove": [
+    "production provider completeness",
+    "F/S algorithm acceptance",
+    "model validation",
+    "backend migration"
+  ]
+}

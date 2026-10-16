@@ -75,9 +75,12 @@ func evidenceReportPrompt(event domain.Event, p preparedReportInput, b ReportEvi
 
 func evidenceReportPromptBudget(event domain.Event, p preparedReportInput, b ReportEvidenceBundle, dialogue string, userLimit, fullLimit, maxBytes int) (string, error) {
 	essence := reportEssenceFor(b)
-	input := map[string]any{"schema_version": reportEvidenceVersion, "event": map[string]any{"title": truncateRunes(event.EventName, 300)}, "event_overview": b.Overview, "asset_context": p.AssetSection, "key_evidence": essence.Items, "evidence_details": essence.Details, "weight_policy": essenceWeightPolicy(b), "report_requirements": "依据key_evidence的F/S/I编号形成结论、概率、风险和处置。D编号只是数据依据，不独立计证。正文关键证据由后端提供，不改写测量值。"}
+	input := map[string]any{"schema_version": reportEvidenceVersion, "event": map[string]any{"title": truncateRunes(event.EventName, 300)}, "event_overview": pipelineOverviewProjection(b.Overview), "asset_context": p.AssetSection, "key_evidence": essence.Items, "evidence_details": essence.Details, "evidence_projection_omitted": essence.ProjectionOmitted, "weight_policy": essenceWeightPolicy(b), "report_requirements": "依据key_evidence的F/S/I编号形成结论、概率、风险和处置。D编号只是数据依据，不独立计证。正文关键证据由后端提供，不改写测量值。"}
+	if b.Pipeline != nil {
+		input["pipeline_audit"] = map[string]any{"version": b.Pipeline.Version, "key": b.Pipeline.Key, "catalog_size": len(b.Pipeline.Checks), "states": b.Pipeline.Counts}
+	}
 	if b.PhaseOne != nil {
-		input["phase_one_evaluation"] = b.PhaseOne.Result
+		input["phase_one_evaluation"] = pipelineJointModelProjection(b.PhaseOne.Result)
 		input["score_interpretation"] = "C01-C07分数由后端策略确定，不是已校准概率；不得将分数转换为恶意概率，模型判断亦未经概率校准。"
 	}
 	// Report generation does not need an unbounded conversational transcript.
@@ -122,6 +125,11 @@ func decodeReportAssessment(raw string, b ReportEvidenceBundle) (ReportAssessmen
 	if b.PhaseOne != nil {
 		risk := b.PhaseOne.Result
 		a.EvidenceRisk = &risk
+	}
+	if b.Pipeline != nil {
+		if err := validatePipelineAssessment(a, b); err != nil {
+			return a, err
+		}
 	}
 	return a, nil
 }

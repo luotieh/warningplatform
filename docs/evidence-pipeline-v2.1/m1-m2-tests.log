@@ -1,0 +1,52 @@
+=== RUN   TestPreparedContractRejectsInvalidInputs
+=== RUN   TestPreparedContractRejectsInvalidInputs/scope
+=== RUN   TestPreparedContractRejectsInvalidInputs/ioc_cross_object
+=== RUN   TestPreparedContractRejectsInvalidInputs/time_range
+=== RUN   TestPreparedContractRejectsInvalidInputs/duplicate_source
+=== RUN   TestPreparedContractRejectsInvalidInputs/forged_source
+=== RUN   TestPreparedContractRejectsInvalidInputs/transaction_relation
+=== RUN   TestPreparedContractRejectsInvalidInputs/coverage
+=== RUN   TestPreparedContractRejectsInvalidInputs/version
+=== RUN   TestPreparedContractRejectsInvalidInputs/material_window
+--- PASS: TestPreparedContractRejectsInvalidInputs (0.17s)
+    --- PASS: TestPreparedContractRejectsInvalidInputs/scope (0.01s)
+    --- PASS: TestPreparedContractRejectsInvalidInputs/ioc_cross_object (0.01s)
+    --- PASS: TestPreparedContractRejectsInvalidInputs/time_range (0.01s)
+    --- PASS: TestPreparedContractRejectsInvalidInputs/duplicate_source (0.01s)
+    --- PASS: TestPreparedContractRejectsInvalidInputs/forged_source (0.01s)
+    --- PASS: TestPreparedContractRejectsInvalidInputs/transaction_relation (0.01s)
+    --- PASS: TestPreparedContractRejectsInvalidInputs/coverage (0.01s)
+    --- PASS: TestPreparedContractRejectsInvalidInputs/version (0.01s)
+    --- PASS: TestPreparedContractRejectsInvalidInputs/material_window (0.01s)
+=== RUN   TestPreparedEvidenceWithoutStore
+--- PASS: TestPreparedEvidenceWithoutStore (0.12s)
+=== RUN   TestPreparedVsFormalPipelineEquivalence
+--- PASS: TestPreparedVsFormalPipelineEquivalence (0.10s)
+=== RUN   TestPreparedSemanticExecutionModes
+--- PASS: TestPreparedSemanticExecutionModes (0.03s)
+=== RUN   TestPreparedContractExport
+--- PASS: TestPreparedContractExport (0.05s)
+=== RUN   TestPreparedEvidenceFormalParity
+--- PASS: TestPreparedEvidenceFormalParity (0.09s)
+=== RUN   TestPreparedEvidenceMockNoStore
+--- PASS: TestPreparedEvidenceMockNoStore (0.10s)
+=== RUN   TestPreparedEvidenceImportRejectsInvalidBindings
+=== RUN   TestPreparedEvidenceImportRejectsInvalidBindings/snapshot
+=== RUN   TestPreparedEvidenceImportRejectsInvalidBindings/watermark
+=== RUN   TestPreparedEvidenceImportRejectsInvalidBindings/catalog
+=== RUN   TestPreparedEvidenceImportRejectsInvalidBindings/unexpanded
+=== RUN   TestPreparedEvidenceImportRejectsInvalidBindings/contact_source
+=== RUN   TestPreparedEvidenceImportRejectsInvalidBindings/semantic_event
+=== RUN   TestPreparedEvidenceImportRejectsInvalidBindings/precomputed_verdict
+--- PASS: TestPreparedEvidenceImportRejectsInvalidBindings (0.05s)
+    --- PASS: TestPreparedEvidenceImportRejectsInvalidBindings/snapshot (0.01s)
+    --- PASS: TestPreparedEvidenceImportRejectsInvalidBindings/watermark (0.01s)
+    --- PASS: TestPreparedEvidenceImportRejectsInvalidBindings/catalog (0.01s)
+    --- PASS: TestPreparedEvidenceImportRejectsInvalidBindings/unexpanded (0.01s)
+    --- PASS: TestPreparedEvidenceImportRejectsInvalidBindings/contact_source (0.01s)
+    --- PASS: TestPreparedEvidenceImportRejectsInvalidBindings/semantic_event (0.01s)
+    --- PASS: TestPreparedEvidenceImportRejectsInvalidBindings/precomputed_verdict (0.01s)
+=== RUN   TestPreparedEvidenceModelFailureIsolated
+--- PASS: TestPreparedEvidenceModelFailureIsolated (0.05s)
+PASS
+ok  	vulnscan-backend/traffic/internal/service	1.865s

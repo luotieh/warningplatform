@@ -1,0 +1,6 @@
+--- FAIL: TestV21SemanticValidationMatrix (0.05s)
+    --- FAIL: TestV21SemanticValidationMatrix/S08/exfil.chunk_sequence//cross_transaction (0.00s)
+        validation_matrix_v21_test.go:114: cross-transaction fixture did not plan two tasks: 1
+FAIL
+FAIL	vulnscan-backend/evidence	1.277s
+FAIL

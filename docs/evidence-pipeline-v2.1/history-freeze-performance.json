@@ -1,0 +1,42 @@
+{
+  "controlled_snapshot_lookup_delay_ms": 1,
+  "peak_workers": 4,
+  "samples": [
+    {
+      "elapsed_us": 1586,
+      "snapshot_digest": "a5d5a173df5e76701ee9119a088f8901a1d17b0444bf0d3c97a3fbf3681bce37",
+      "snapshots": 1,
+      "workers": 1
+    },
+    {
+      "elapsed_us": 1571,
+      "snapshot_digest": "a5d5a173df5e76701ee9119a088f8901a1d17b0444bf0d3c97a3fbf3681bce37",
+      "snapshots": 1,
+      "workers": 4
+    },
+    {
+      "elapsed_us": 41956,
+      "snapshot_digest": "084d22e5fb53384f64f6911cd5c5153b72a9e666a94ba52ae2b8bce98bd7b8a4",
+      "snapshots": 25,
+      "workers": 1
+    },
+    {
+      "elapsed_us": 11265,
+      "snapshot_digest": "084d22e5fb53384f64f6911cd5c5153b72a9e666a94ba52ae2b8bce98bd7b8a4",
+      "snapshots": 25,
+      "workers": 4
+    },
+    {
+      "elapsed_us": 179498,
+      "snapshot_digest": "6f8113280b210419bdf0887a821f7dc1bbadbbb76b231058aff4e7df7eae64a9",
+      "snapshots": 100,
+      "workers": 1
+    },
+    {
+      "elapsed_us": 43665,
+      "snapshot_digest": "6f8113280b210419bdf0887a821f7dc1bbadbbb76b231058aff4e7df7eae64a9",
+      "snapshots": 100,
+      "workers": 4
+    }
+  ]
+}

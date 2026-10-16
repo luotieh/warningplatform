@@ -1,0 +1,53 @@
+{
+  "scope": "L2 prepared contract correction; not complete task acceptance",
+  "commands": [
+    {
+      "command": "go build ./...",
+      "exit_code": 0
+    },
+    {
+      "command": "go test ./evidence ./traffic/... -count=1",
+      "exit_code": 0,
+      "service_seconds": 15.478
+    },
+    {
+      "command": "go vet ./evidence ./traffic/...",
+      "exit_code": 0
+    },
+    {
+      "command": "go vet ./traffic/cmd/evidence-replay",
+      "exit_code": 0
+    },
+    {
+      "command": "go test ./traffic/internal/service -run '^TestPreparedEvidence' -count=1 -v",
+      "exit_code": 0,
+      "service_seconds": 1.358
+    },
+    {
+      "command": "go test ./traffic/internal/service -run '^TestPhaseOneCoverageFrozenReportReplay$|^TestPhaseOneArchivedSnapshot34C01$' -count=1 -v",
+      "exit_code": 0,
+      "service_seconds": 58.066,
+      "material": "saved local archive; no remote fetch"
+    },
+    {
+      "command": "go run ./traffic/cmd/evidence-replay -input traffic/internal/service/testdata/prepared-controlled-http.json -output ../docs/evidence-pipeline-v2/prepared-cli-mock-result.json -mock-semantics",
+      "exit_code": 0,
+      "completed": 82,
+      "database": false,
+      "real_model_executed": false
+    },
+    {
+      "command": "git apply --check --reverse docs/evidence-pipeline-v2/code-changes.patch",
+      "exit_code": 0
+    }
+  ],
+  "not_completed": [
+    "real-model semantic acceptance",
+    "race test with a working CGO compiler",
+    "current-version peak RSS and capacity acceptance"
+  ],
+  "production_modified": false,
+  "deployed": false,
+  "committed": false,
+  "pushed": false
+}

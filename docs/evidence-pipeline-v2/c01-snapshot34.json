@@ -1,0 +1,2690 @@
+{
+  "facts": [
+    {
+      "feature_claim": "base32/hex 模式匹配且代码可验证解码链",
+      "security_interpretation": "子域编码结构；仅作为已核验输入范围内的特征线索",
+      "cannot_prove": "编码结构不证明恶意目的或数据外传",
+      "required_correlations": [
+        "S04对同一DNS问题及程序验证解码链的语义解释",
+        "C07同源关联及去重"
+      ],
+      "fact_id": "F_DNS_ENCODED_LABEL",
+      "rule_version": "evidence-algorithms-0.7",
+      "snapshot_version": 34,
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://104.21.57.117:443",
+        "device_id": "node-arm-offline-001"
+      },
+      "window": null,
+      "status": "missing",
+      "eligibility": "ineligible",
+      "quality": "partial",
+      "measurements": {
+        "sample_count": 0
+      },
+      "parameters": {},
+      "source_ids": [
+        "hit-fb78c55dcfe33f0b827ecc8cef9affb6546c61c62c5521b2aa074bc2a9e490e0",
+        "hit-7e1642e74b5870ddfdcdf4b0a352a35566d04948201897d8ce98d640350e1202",
+        "hit-731c3bb4bb45511e61d6ee7ebb6c16ae47293458c22b16b2a1896a0628a6c59a",
+        "hit-242c2985c67e9d8a3585868ec1c594ee6e067f723ef0584b188865779a74dc9c",
+        "hit-9a4720fd8a24ec0482d0c0aa5352d7d9f274d26cacc517110dcfb442a4f627db",
+        "hit-978e6ffb3cdb5ca5d7eec718c4dfa75150fdf7deade6813bead6299c531b19ae",
+        "hit-4de5ebd1a835c09766416e60d1ac5979d9541d551011ebacdf1a1f570561a1c2",
+        "hit-ecf3f6eaca158a8ecfa3d978c7ac22e129031f1df223420f0df0b2841aded895",
+        "hit-a7ec5639957e4ccfec59e89b4b75f42f7ad75454cff82fee0819b8afc3eb6229",
+        "hit-c6ed2e2286168f53854e8a350439e5b41b3b4186f365c04bc8a40b6d3e8a38c2",
+        "hit-46531be5a2ddca50bf242298c7a1ddb6ddb192c97e25b80da56719a00065e999",
+        "hit-c0b7556642144f4082eb0762b67919768d0d7bdf5d8bcde0c268c45ea7847847",
+        "hit-88ba7aaaef2d5307bbc51fe3854b4aefff8bd4001cec2a5cd4f8c9a27d4953a0",
+        "hit-9bb026d836de3760497dd9105d00418f354983c9ac148e2842338a2bb0527188"
+      ],
+      "reason_code": "missing_input",
+      "limitations": [
+        "independent observation or protocol supply unavailable"
+      ],
+      "dependencies": [
+        {
+          "kind": "asset_registry",
+          "version": "41eba2d0610c8e3f39e7af7b7be5b3d34304f54552fc8369abb60add093ead6b",
+          "source_ids": null
+        },
+        {
+          "kind": "hit_snapshot",
+          "version": "ly-e0eeedcf-1be2-4469-9482-1306573557a3:34:66209:126313",
+          "source_ids": [
+            "ly-e0eeedcf-1be2-4469-9482-1306573557a3"
+          ]
+        }
+      ]
+    },
+    {
+      "feature_claim": "",
+      "security_interpretation": "",
+      "cannot_prove": "",
+      "required_correlations": null,
+      "ioc_type": "ip",
+      "ioc_value": "104.21.57.117",
+      "fact_id": "F_BEACON_JITTER",
+      "rule_version": "evidence-algorithms-0.7",
+      "snapshot_version": 34,
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://104.21.57.117:443",
+        "device_id": "node-arm-offline-001"
+      },
+      "window": null,
+      "status": "missing",
+      "eligibility": "ineligible",
+      "quality": "partial",
+      "measurements": {
+        "sample_count": 0
+      },
+      "parameters": {},
+      "source_ids": null,
+      "reason_code": "insufficient_samples",
+      "limitations": [
+        "no independent communication observations; packet count is not contact count"
+      ]
+    },
+    {
+      "feature_claim": "",
+      "security_interpretation": "",
+      "cannot_prove": "",
+      "required_correlations": null,
+      "ioc_type": "ip",
+      "ioc_value": "104.21.57.117",
+      "fact_id": "F_FIXED_DAILY_WINDOW",
+      "rule_version": "evidence-algorithms-0.7",
+      "snapshot_version": 34,
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://104.21.57.117:443",
+        "device_id": "node-arm-offline-001"
+      },
+      "window": null,
+      "status": "missing",
+      "eligibility": "ineligible",
+      "quality": "partial",
+      "measurements": {
+        "sample_count": 0
+      },
+      "parameters": {},
+      "source_ids": null,
+      "reason_code": "insufficient_samples",
+      "limitations": [
+        "no independent communication observations; packet count is not contact count"
+      ]
+    },
+    {
+      "feature_claim": "30天窗≥2自然日独立事件；允许有来源的partial阳性；F不按审核状态计分，C01按一期联合策略计分",
+      "security_interpretation": "同 IOC→同资产跨日复发；仅作为已核验输入范围内的特征线索",
+      "cannot_prove": "历史复发不证明恶意；不重复审核IOC；F不执行旧版审核加减分",
+      "required_correlations": [
+        "同资产设备与IOC真实关系",
+        "C01一期确定性联合策略；partial仅允许有来源的阳性"
+      ],
+      "ioc_type": "ip",
+      "ioc_value": "104.21.57.117",
+      "fact_id": "F_HIST_ASSET_IOC_RECURRENCE",
+      "rule_version": "evidence-algorithms-0.7",
+      "snapshot_version": 34,
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://104.21.57.117:443",
+        "device_id": "node-arm-offline-001"
+      },
+      "window": {
+        "start": "2026-10-13T04:34:18.047295Z",
+        "end": "2026-10-13T04:34:19.591365001Z",
+        "convention": "analysis_half_open"
+      },
+      "status": "observed",
+      "eligibility": "eligible",
+      "quality": "complete",
+      "measurements": {
+        "sample_count": 14,
+        "values": {
+          "days_active": 22,
+          "dns_records": 0,
+          "false_positive_adjudications": 0,
+          "independent_events": 85,
+          "malicious_adjudications": 0,
+          "transport_contact_records": 85,
+          "unreviewed_events": 85
+        },
+        "labels": [
+          "历史复发主体=104.21.57.117",
+          "仅统计相同资产与该IOC的已检索历史事件",
+          "DNS记录与传输通联分开统计；包含IOC的DNS回答不证明与该IP建立连接；日期口径=北京时间"
+        ]
+      },
+      "parameters": {},
+      "source_ids": [
+        "hit-242c2985c67e9d8a3585868ec1c594ee6e067f723ef0584b188865779a74dc9c",
+        "hit-46531be5a2ddca50bf242298c7a1ddb6ddb192c97e25b80da56719a00065e999",
+        "hit-4de5ebd1a835c09766416e60d1ac5979d9541d551011ebacdf1a1f570561a1c2",
+        "hit-731c3bb4bb45511e61d6ee7ebb6c16ae47293458c22b16b2a1896a0628a6c59a",
+        "hit-7e1642e74b5870ddfdcdf4b0a352a35566d04948201897d8ce98d640350e1202",
+        "hit-88ba7aaaef2d5307bbc51fe3854b4aefff8bd4001cec2a5cd4f8c9a27d4953a0",
+        "hit-978e6ffb3cdb5ca5d7eec718c4dfa75150fdf7deade6813bead6299c531b19ae",
+        "hit-9a4720fd8a24ec0482d0c0aa5352d7d9f274d26cacc517110dcfb442a4f627db",
+        "hit-9bb026d836de3760497dd9105d00418f354983c9ac148e2842338a2bb0527188",
+        "hit-a7ec5639957e4ccfec59e89b4b75f42f7ad75454cff82fee0819b8afc3eb6229",
+        "hit-c0b7556642144f4082eb0762b67919768d0d7bdf5d8bcde0c268c45ea7847847",
+        "hit-c6ed2e2286168f53854e8a350439e5b41b3b4186f365c04bc8a40b6d3e8a38c2",
+        "hit-ecf3f6eaca158a8ecfa3d978c7ac22e129031f1df223420f0df0b2841aded895",
+        "hit-fb78c55dcfe33f0b827ecc8cef9affb6546c61c62c5521b2aa074bc2a9e490e0",
+        "ly-00a6479b-6921-4d6b-a0ba-98490419768e",
+        "ly-0170a3e7-0315-4073-8319-9d9e1d6a5a1c",
+        "ly-019d3f0f-5324-4544-9e94-b87fb4751a56",
+        "ly-037253e7-e861-4864-b5ad-62b6fb4f297e",
+        "ly-10ab8359-42db-4394-a2bf-bd9cb0a6c3b5",
+        "ly-110ffe21-a1dd-43c2-97c0-2dc6edf487d7",
+        "ly-121bed57-bc7b-4834-b91d-3b3463cc657a",
+        "ly-1b602674-c6b9-4caf-a3da-745b849384fb",
+        "ly-22ecddc5-2178-442c-ad92-b3e75b4b7753",
+        "ly-23bfc15d-9c33-4477-9d4e-e7af0b30a72a",
+        "ly-23d7c3e3-2c7e-43ec-bb6b-6b5c5cd1245b",
+        "ly-28cb8e52-0beb-46b6-a65c-85bc9608a988",
+        "ly-29b1671a-2474-4bc2-964d-306e1a72f79d",
+        "ly-2fc5abc0-5f7b-4219-9482-a0266a7b3d94",
+        "ly-3099d12d-4baa-4a3e-9a07-80d0ca3d0be0",
+        "ly-315f1e85-73f0-4ffa-926f-6abae91969f7",
+        "ly-3a49ec31-addd-4a0d-a31e-46ed105cdb0a",
+        "ly-3f4449dc-5e44-4e57-97e9-339992342c73",
+        "ly-427298d7-a439-49e5-b84c-108ad0665be7",
+        "ly-4ca8244b-3145-4485-933e-75329e5eb47d",
+        "ly-4d7f6c52-056e-45ea-9b91-ca3bdb57e720",
+        "ly-4ee2b24d-4c9b-457b-9b76-b35d2de7bbac",
+        "ly-50e5702d-3767-481c-9163-eb4624c7f47f",
+        "ly-57018d61-fad1-488f-9cde-0de494a1627b",
+        "ly-5ca1b2d1-4ada-42ea-a46d-44d6ab24a4a3",
+        "ly-6409137a-82d7-4bd9-a71f-82cfbd4ceb7c",
+        "ly-6543d954-4c60-4317-a591-d44f514cec79",
+        "ly-66e08f9a-e167-4829-8b44-186feb2095b4",
+        "ly-686e854e-0997-419e-85b1-7eb422f3c4f9",
+        "ly-68f8dbec-42aa-4fe9-9a7a-af2c2b546f6c",
+        "ly-69a6fcab-f4ff-40b9-9c38-256c69c50ae9",
+        "ly-69f223e0-e9d6-4b27-919e-0b1b67e97e3d",
+        "ly-6b7a5334-66ec-4d7b-a25c-8e90d0b3c7ed",
+        "ly-6c9250eb-5425-48bb-a0a1-1d847beb398e",
+        "ly-717b4bd1-e76b-4cf5-a213-2fa8e95dbd4f",
+        "ly-7285da40-9d7a-47a5-839d-edc40e783de5",
+        "ly-73bfe634-cffe-4dfa-bb0e-df128b666a69",
+        "ly-796b0587-350f-4da3-ab63-36e24535bff9",
+        "ly-7afccacd-f30f-46e7-ba05-e333f910b222",
+        "ly-7e9e7bed-56d6-49fb-b3d5-cc0e7f23c6e7",
+        "ly-7fcbc0d5-edca-41a3-9bcf-c2e19abb989b",
+        "ly-80395ae1-4dfa-4108-93b8-a5c8534a180e",
+        "ly-807f37aa-cafd-4d2b-8802-5866d667e19f",
+        "ly-84ef6f78-d2e7-4129-adb8-82f12d53ad14",
+        "ly-8566d361-1fc6-43c3-b738-1221bb3b3ea6",
+        "ly-856c6055-eb0d-447b-b722-1aed9244be83",
+        "ly-920abbe2-6d5c-4013-a42a-d79fae93cde7",
+        "ly-9785b9f1-91a9-48b1-8e7a-782a35b0b3c5",
+        "ly-99a3d482-fea0-4a3d-870a-097309122af4",
+        "ly-a39bfbd2-5afe-47cd-a290-95063ea92707",
+        "ly-a3a33e04-b7ef-4e7a-abed-4827861aea39",
+        "ly-a48a5c43-bfdd-4011-aef8-782ced721260",
+        "ly-a564337d-716e-41ac-b870-e2b02a3b8002",
+        "ly-a8575bfc-503a-4a38-a311-de75b31aa5e2",
+        "ly-aa6e84d1-7f7b-4bfc-9c68-4e4850b1b5f7",
+        "ly-acca296b-1e30-41b0-9d5a-48e38bb169a9",
+        "ly-b2d8257f-4829-49aa-8a69-c7ebd3a4fdbb",
+        "ly-b6af0e19-7e30-4453-851d-3cdb38939212",
+        "ly-b8e153c9-60c3-4ac3-9c51-717915f12e2c",
+        "ly-ba065091-d870-4934-8291-d5f43f916b9e",
+        "ly-bd1a1fe6-b78c-41bd-9556-b16e66572bec",
+        "ly-beff0ce4-e3cd-4e60-a7e2-0fe1e075a768",
+        "ly-c2d4c4a6-ea34-4beb-95cb-6eadf7baa266",
+        "ly-c402225c-baf3-4280-a5a4-0839df92a06c",
+        "ly-c7655d09-7c4c-4985-9766-dd5a4738b14f",
+        "ly-c9b95c68-3bcb-4217-b044-23e9126a0555",
+        "ly-cad0cd39-b814-4d35-8235-732e8f19c3d5",
+        "ly-ce258aef-573d-42c7-81c7-ae3981ef3220",
+        "ly-ce608b06-6841-417e-a3c6-648d6881cc7d",
+        "ly-cf9eb9ac-78d8-4d26-a7af-712b2053ec2f",
+        "ly-d264c2ed-217f-40a9-adc8-9dffab8398c3",
+        "ly-d2f4672d-caf8-422e-8c52-11c4c93c0ecf",
+        "ly-d92f9c7b-40b1-41e9-aa4a-ea8ad1e981e9",
+        "ly-da3f36ea-1039-496f-b8d3-6bd4a04c4e43",
+        "ly-de9d0b6b-651e-45eb-9380-b83beb840eba",
+        "ly-decf99e0-5026-4e06-ad67-b99a8061c845",
+        "ly-e0c4882c-00fd-465d-b521-7be46dfa6d1b",
+        "ly-e3e7c5a5-c4af-4240-9bc4-13121638cd7b",
+        "ly-ee3a5018-3144-4702-bb17-21b6299a0f5d",
+        "ly-f0862334-9bdc-4a84-bbb8-12915c56ec8d",
+        "ly-f0baa54f-142e-4f10-b202-4b31f75910de",
+        "ly-f3610a93-412e-445d-9a0c-2a4ea71929c3",
+        "ly-f60e95b0-986e-4006-926d-9f1af2497d12",
+        "ly-f815889f-e5aa-4492-9ff3-97ac0dd2822d",
+        "ly-fa833303-906c-48f6-a2af-60b68f83a90f"
+      ],
+      "reason_code": "conditions_met",
+      "limitations": [
+        "仅描述已核验输入范围，不等于攻击成立；输入缺失不作为阴性证据",
+        "复发反映已保存历史活动；不执行旧版加减分"
+      ],
+      "dependencies": [
+        {
+          "kind": "history",
+          "version": "platform-history-0.5:cf0bc5f2bfd72c905fe6f5a46d6a74d70f5f6d04b4aba86a84ea2e2c504b7fdf",
+          "source_ids": [
+            "ly-5ca1b2d1-4ada-42ea-a46d-44d6ab24a4a3",
+            "ly-decf99e0-5026-4e06-ad67-b99a8061c845",
+            "ly-8566d361-1fc6-43c3-b738-1221bb3b3ea6",
+            "ly-c9b95c68-3bcb-4217-b044-23e9126a0555",
+            "ly-00a6479b-6921-4d6b-a0ba-98490419768e",
+            "ly-b2d8257f-4829-49aa-8a69-c7ebd3a4fdbb",
+            "ly-037253e7-e861-4864-b5ad-62b6fb4f297e",
+            "ly-aa6e84d1-7f7b-4bfc-9c68-4e4850b1b5f7",
+            "ly-f815889f-e5aa-4492-9ff3-97ac0dd2822d",
+            "ly-807f37aa-cafd-4d2b-8802-5866d667e19f",
+            "ly-686e854e-0997-419e-85b1-7eb422f3c4f9",
+            "ly-de9d0b6b-651e-45eb-9380-b83beb840eba",
+            "ly-427298d7-a439-49e5-b84c-108ad0665be7",
+            "ly-a39bfbd2-5afe-47cd-a290-95063ea92707",
+            "ly-856c6055-eb0d-447b-b722-1aed9244be83",
+            "ly-fa833303-906c-48f6-a2af-60b68f83a90f",
+            "ly-3f4449dc-5e44-4e57-97e9-339992342c73",
+            "ly-a564337d-716e-41ac-b870-e2b02a3b8002",
+            "ly-110ffe21-a1dd-43c2-97c0-2dc6edf487d7",
+            "ly-6b7a5334-66ec-4d7b-a25c-8e90d0b3c7ed",
+            "ly-ba065091-d870-4934-8291-d5f43f916b9e",
+            "ly-f0862334-9bdc-4a84-bbb8-12915c56ec8d",
+            "ly-69a6fcab-f4ff-40b9-9c38-256c69c50ae9",
+            "ly-717b4bd1-e76b-4cf5-a213-2fa8e95dbd4f",
+            "ly-7e9e7bed-56d6-49fb-b3d5-cc0e7f23c6e7",
+            "ly-6409137a-82d7-4bd9-a71f-82cfbd4ceb7c",
+            "ly-a3a33e04-b7ef-4e7a-abed-4827861aea39",
+            "ly-10ab8359-42db-4394-a2bf-bd9cb0a6c3b5",
+            "ly-e0c4882c-00fd-465d-b521-7be46dfa6d1b",
+            "ly-4ee2b24d-4c9b-457b-9b76-b35d2de7bbac",
+            "ly-796b0587-350f-4da3-ab63-36e24535bff9",
+            "ly-50e5702d-3767-481c-9163-eb4624c7f47f",
+            "ly-9785b9f1-91a9-48b1-8e7a-782a35b0b3c5",
+            "ly-bd1a1fe6-b78c-41bd-9556-b16e66572bec",
+            "ly-3099d12d-4baa-4a3e-9a07-80d0ca3d0be0",
+            "ly-d264c2ed-217f-40a9-adc8-9dffab8398c3",
+            "ly-ce608b06-6841-417e-a3c6-648d6881cc7d",
+            "ly-a8575bfc-503a-4a38-a311-de75b31aa5e2",
+            "ly-beff0ce4-e3cd-4e60-a7e2-0fe1e075a768",
+            "ly-29b1671a-2474-4bc2-964d-306e1a72f79d",
+            "ly-d2f4672d-caf8-422e-8c52-11c4c93c0ecf",
+            "ly-0170a3e7-0315-4073-8319-9d9e1d6a5a1c",
+            "ly-84ef6f78-d2e7-4129-adb8-82f12d53ad14",
+            "ly-ee3a5018-3144-4702-bb17-21b6299a0f5d",
+            "ly-2fc5abc0-5f7b-4219-9482-a0266a7b3d94",
+            "ly-cf9eb9ac-78d8-4d26-a7af-712b2053ec2f",
+            "ly-68f8dbec-42aa-4fe9-9a7a-af2c2b546f6c",
+            "ly-99a3d482-fea0-4a3d-870a-097309122af4",
+            "ly-23bfc15d-9c33-4477-9d4e-e7af0b30a72a",
+            "ly-019d3f0f-5324-4544-9e94-b87fb4751a56",
+            "ly-da3f36ea-1039-496f-b8d3-6bd4a04c4e43",
+            "ly-b8e153c9-60c3-4ac3-9c51-717915f12e2c",
+            "ly-1b602674-c6b9-4caf-a3da-745b849384fb",
+            "ly-acca296b-1e30-41b0-9d5a-48e38bb169a9",
+            "ly-7afccacd-f30f-46e7-ba05-e333f910b222",
+            "ly-57018d61-fad1-488f-9cde-0de494a1627b",
+            "ly-f0baa54f-142e-4f10-b202-4b31f75910de",
+            "ly-a48a5c43-bfdd-4011-aef8-782ced721260",
+            "ly-f60e95b0-986e-4006-926d-9f1af2497d12",
+            "ly-69f223e0-e9d6-4b27-919e-0b1b67e97e3d",
+            "ly-b6af0e19-7e30-4453-851d-3cdb38939212",
+            "ly-66e08f9a-e167-4829-8b44-186feb2095b4",
+            "ly-4ca8244b-3145-4485-933e-75329e5eb47d",
+            "ly-6543d954-4c60-4317-a591-d44f514cec79",
+            "ly-4d7f6c52-056e-45ea-9b91-ca3bdb57e720",
+            "ly-c7655d09-7c4c-4985-9766-dd5a4738b14f",
+            "ly-6c9250eb-5425-48bb-a0a1-1d847beb398e",
+            "ly-920abbe2-6d5c-4013-a42a-d79fae93cde7",
+            "ly-28cb8e52-0beb-46b6-a65c-85bc9608a988",
+            "ly-22ecddc5-2178-442c-ad92-b3e75b4b7753",
+            "ly-cad0cd39-b814-4d35-8235-732e8f19c3d5",
+            "ly-121bed57-bc7b-4834-b91d-3b3463cc657a",
+            "ly-ce258aef-573d-42c7-81c7-ae3981ef3220",
+            "ly-e3e7c5a5-c4af-4240-9bc4-13121638cd7b",
+            "ly-7fcbc0d5-edca-41a3-9bcf-c2e19abb989b",
+            "ly-d92f9c7b-40b1-41e9-aa4a-ea8ad1e981e9",
+            "ly-f3610a93-412e-445d-9a0c-2a4ea71929c3",
+            "ly-c402225c-baf3-4280-a5a4-0839df92a06c",
+            "ly-23d7c3e3-2c7e-43ec-bb6b-6b5c5cd1245b",
+            "ly-3a49ec31-addd-4a0d-a31e-46ed105cdb0a",
+            "ly-7285da40-9d7a-47a5-839d-edc40e783de5",
+            "ly-315f1e85-73f0-4ffa-926f-6abae91969f7",
+            "ly-80395ae1-4dfa-4108-93b8-a5c8534a180e",
+            "ly-73bfe634-cffe-4dfa-bb0e-df128b666a69",
+            "ly-c2d4c4a6-ea34-4beb-95cb-6eadf7baa266"
+          ]
+        }
+      ]
+    },
+    {
+      "feature_claim": "主机＋规范端点分组：重复 ≥6 次且间隔低抖动（CV≤0.3）；POST 本身不加分",
+      "security_interpretation": "端点重复回连；仅作为已核验输入范围内的特征线索",
+      "cannot_prove": "周期或重复请求不证明C2；累计FLOW包数不能替代逐次独立联系",
+      "required_correlations": [
+        "同资产、端点与IOC的原始字段绑定",
+        "完整独立联系或HTTP事务观测",
+        "适用的C02/C04前提；F_BEACON_PERIODIC不属于一期C"
+      ],
+      "ioc_type": "ip",
+      "ioc_value": "104.21.57.117",
+      "fact_id": "F_HTTP_ENDPOINT_REPEAT",
+      "rule_version": "evidence-algorithms-0.7",
+      "snapshot_version": 34,
+      "scope": {
+        "asset_id": "asset-0f4ef4d8ee0aa302",
+        "endpoint_id": "tcp://104.21.57.117:443",
+        "device_id": "node-arm-offline-001"
+      },
+      "window": {
+        "start": "2026-10-13T04:34:18.047295Z",
+        "end": "2026-10-13T04:34:19.591365001Z",
+        "convention": "analysis_half_open"
+      },
+      "status": "missing",
+      "eligibility": "ineligible",
+      "quality": "complete",
+      "measurements": {
+        "sample_count": 14
+      },
+      "parameters": {},
+      "source_ids": [
+        "hit-242c2985c67e9d8a3585868ec1c594ee6e067f723ef0584b188865779a74dc9c",
+        "hit-46531be5a2ddca50bf242298c7a1ddb6ddb192c97e25b80da56719a00065e999",
+        "hit-4de5ebd1a835c09766416e60d1ac5979d9541d551011ebacdf1a1f570561a1c2",
+        "hit-731c3bb4bb45511e61d6ee7ebb6c16ae47293458c22b16b2a1896a0628a6c59a",
+        "hit-7e1642e74b5870ddfdcdf4b0a352a35566d04948201897d8ce98d640350e1202",
+        "hit-88ba7aaaef2d5307bbc51fe3854b4aefff8bd4001cec2a5cd4f8c9a27d4953a0",
+        "hit-978e6ffb3cdb5ca5d7eec718c4dfa75150fdf7deade6813bead6299c531b19ae",
+        "hit-9a4720fd8a24ec0482d0c0aa5352d7d9f274d26cacc517110dcfb442a4f627db",
+        "hit-9bb026d836de3760497dd9105d00418f354983c9ac148e2842338a2bb0527188",
+        "hit-a7ec5639957e4ccfec59e89b4b75f42f7ad75454cff82fee0819b8afc3eb6229",
+        "hit-c0b7556642144f4082eb0762b67919768d0d7bdf5d8bcde0c268c45ea7847847",
+        "hit-c6ed2e2286168f53854e8a350439e5b41b3b4186f365c04bc8a40b6d3e8a38c2",
+        "hit-ecf3f6eaca158a8ecfa3d978c7ac22e129031f1df223420f0df0b2841aded895",
+        "hit-fb78c55dcfe33f0b827ecc8cef9affb6546c61c62c5521b2aa074bc2a9e490e0"
+      ],
+      "reason_code": "missing_input",
+      "limitations": [
+        "仅描述已核验输入范围，不等于攻击成立；输入缺失不作为阴性证据"
+      ]
+    }
+  ],
+  "result": {
+    "version": "evidence-phase1-v1.1",
+    "event_id": "ly-e0eeedcf-1be2-4469-9482-1306573557a3",
+    "snapshot_version": 34,
+    "policy": {
+      "version": "phase1-score-v1",
+      "points": {
+        "C01": 10,
+        "C02": 15,
+        "C03": 10,
+        "C04": 15,
+        "C05": 20,
+        "C06": 20,
+        "C07": 20
+      },
+      "max_score": 100
+    },
+    "score": 10,
+    "score_meaning": "policy_evidence_points_not_probability",
+    "units": [
+      {
+        "ioc_type": "ip",
+        "ioc_value": "104.21.57.117",
+        "id": "C01",
+        "scope": {
+          "asset_id": "asset-0f4ef4d8ee0aa302",
+          "endpoint_id": "tcp://104.21.57.117:443",
+          "device_id": "node-arm-offline-001"
+        },
+        "status": "observed",
+        "reason": "joint_conditions_met",
+        "fact": {
+          "feature_claim": "30天窗≥2自然日独立事件；允许有来源的partial阳性；F不按审核状态计分，C01按一期联合策略计分",
+          "security_interpretation": "同 IOC→同资产跨日复发；仅作为已核验输入范围内的特征线索",
+          "cannot_prove": "历史复发不证明恶意；不重复审核IOC；F不执行旧版审核加减分",
+          "required_correlations": [
+            "同资产设备与IOC真实关系",
+            "C01一期确定性联合策略；partial仅允许有来源的阳性"
+          ],
+          "ioc_type": "ip",
+          "ioc_value": "104.21.57.117",
+          "fact_id": "F_HIST_ASSET_IOC_RECURRENCE",
+          "rule_version": "evidence-algorithms-0.7",
+          "snapshot_version": 34,
+          "scope": {
+            "asset_id": "asset-0f4ef4d8ee0aa302",
+            "endpoint_id": "tcp://104.21.57.117:443",
+            "device_id": "node-arm-offline-001"
+          },
+          "window": {
+            "start": "2026-10-13T04:34:18.047295Z",
+            "end": "2026-10-13T04:34:19.591365001Z",
+            "convention": "analysis_half_open"
+          },
+          "status": "observed",
+          "eligibility": "eligible",
+          "quality": "complete",
+          "measurements": {
+            "sample_count": 14,
+            "values": {
+              "days_active": 22,
+              "dns_records": 0,
+              "false_positive_adjudications": 0,
+              "independent_events": 85,
+              "malicious_adjudications": 0,
+              "transport_contact_records": 85,
+              "unreviewed_events": 85
+            },
+            "labels": [
+              "历史复发主体=104.21.57.117",
+              "仅统计相同资产与该IOC的已检索历史事件",
+              "DNS记录与传输通联分开统计；包含IOC的DNS回答不证明与该IP建立连接；日期口径=北京时间"
+            ]
+          },
+          "parameters": {},
+          "source_ids": [
+            "hit-242c2985c67e9d8a3585868ec1c594ee6e067f723ef0584b188865779a74dc9c",
+            "hit-46531be5a2ddca50bf242298c7a1ddb6ddb192c97e25b80da56719a00065e999",
+            "hit-4de5ebd1a835c09766416e60d1ac5979d9541d551011ebacdf1a1f570561a1c2",
+            "hit-731c3bb4bb45511e61d6ee7ebb6c16ae47293458c22b16b2a1896a0628a6c59a",
+            "hit-7e1642e74b5870ddfdcdf4b0a352a35566d04948201897d8ce98d640350e1202",
+            "hit-88ba7aaaef2d5307bbc51fe3854b4aefff8bd4001cec2a5cd4f8c9a27d4953a0",
+            "hit-978e6ffb3cdb5ca5d7eec718c4dfa75150fdf7deade6813bead6299c531b19ae",
+            "hit-9a4720fd8a24ec0482d0c0aa5352d7d9f274d26cacc517110dcfb442a4f627db",
+            "hit-9bb026d836de3760497dd9105d00418f354983c9ac148e2842338a2bb0527188",
+            "hit-a7ec5639957e4ccfec59e89b4b75f42f7ad75454cff82fee0819b8afc3eb6229",
+            "hit-c0b7556642144f4082eb0762b67919768d0d7bdf5d8bcde0c268c45ea7847847",
+            "hit-c6ed2e2286168f53854e8a350439e5b41b3b4186f365c04bc8a40b6d3e8a38c2",
+            "hit-ecf3f6eaca158a8ecfa3d978c7ac22e129031f1df223420f0df0b2841aded895",
+            "hit-fb78c55dcfe33f0b827ecc8cef9affb6546c61c62c5521b2aa074bc2a9e490e0",
+            "ly-00a6479b-6921-4d6b-a0ba-98490419768e",
+            "ly-0170a3e7-0315-4073-8319-9d9e1d6a5a1c",
+            "ly-019d3f0f-5324-4544-9e94-b87fb4751a56",
+            "ly-037253e7-e861-4864-b5ad-62b6fb4f297e",
+            "ly-10ab8359-42db-4394-a2bf-bd9cb0a6c3b5",
+            "ly-110ffe21-a1dd-43c2-97c0-2dc6edf487d7",
+            "ly-121bed57-bc7b-4834-b91d-3b3463cc657a",
+            "ly-1b602674-c6b9-4caf-a3da-745b849384fb",
+            "ly-22ecddc5-2178-442c-ad92-b3e75b4b7753",
+            "ly-23bfc15d-9c33-4477-9d4e-e7af0b30a72a",
+            "ly-23d7c3e3-2c7e-43ec-bb6b-6b5c5cd1245b",
+            "ly-28cb8e52-0beb-46b6-a65c-85bc9608a988",
+            "ly-29b1671a-2474-4bc2-964d-306e1a72f79d",
+            "ly-2fc5abc0-5f7b-4219-9482-a0266a7b3d94",
+            "ly-3099d12d-4baa-4a3e-9a07-80d0ca3d0be0",
+            "ly-315f1e85-73f0-4ffa-926f-6abae91969f7",
+            "ly-3a49ec31-addd-4a0d-a31e-46ed105cdb0a",
+            "ly-3f4449dc-5e44-4e57-97e9-339992342c73",
+            "ly-427298d7-a439-49e5-b84c-108ad0665be7",
+            "ly-4ca8244b-3145-4485-933e-75329e5eb47d",
+            "ly-4d7f6c52-056e-45ea-9b91-ca3bdb57e720",
+            "ly-4ee2b24d-4c9b-457b-9b76-b35d2de7bbac",
+            "ly-50e5702d-3767-481c-9163-eb4624c7f47f",
+            "ly-57018d61-fad1-488f-9cde-0de494a1627b",
+            "ly-5ca1b2d1-4ada-42ea-a46d-44d6ab24a4a3",
+            "ly-6409137a-82d7-4bd9-a71f-82cfbd4ceb7c",
+            "ly-6543d954-4c60-4317-a591-d44f514cec79",
+            "ly-66e08f9a-e167-4829-8b44-186feb2095b4",
+            "ly-686e854e-0997-419e-85b1-7eb422f3c4f9",
+            "ly-68f8dbec-42aa-4fe9-9a7a-af2c2b546f6c",
+            "ly-69a6fcab-f4ff-40b9-9c38-256c69c50ae9",
+            "ly-69f223e0-e9d6-4b27-919e-0b1b67e97e3d",
+            "ly-6b7a5334-66ec-4d7b-a25c-8e90d0b3c7ed",
+            "ly-6c9250eb-5425-48bb-a0a1-1d847beb398e",
+            "ly-717b4bd1-e76b-4cf5-a213-2fa8e95dbd4f",
+            "ly-7285da40-9d7a-47a5-839d-edc40e783de5",
+            "ly-73bfe634-cffe-4dfa-bb0e-df128b666a69",
+            "ly-796b0587-350f-4da3-ab63-36e24535bff9",
+            "ly-7afccacd-f30f-46e7-ba05-e333f910b222",
+            "ly-7e9e7bed-56d6-49fb-b3d5-cc0e7f23c6e7",
+            "ly-7fcbc0d5-edca-41a3-9bcf-c2e19abb989b",
+            "ly-80395ae1-4dfa-4108-93b8-a5c8534a180e",
+            "ly-807f37aa-cafd-4d2b-8802-5866d667e19f",
+            "ly-84ef6f78-d2e7-4129-adb8-82f12d53ad14",
+            "ly-8566d361-1fc6-43c3-b738-1221bb3b3ea6",
+            "ly-856c6055-eb0d-447b-b722-1aed9244be83",
+            "ly-920abbe2-6d5c-4013-a42a-d79fae93cde7",
+            "ly-9785b9f1-91a9-48b1-8e7a-782a35b0b3c5",
+            "ly-99a3d482-fea0-4a3d-870a-097309122af4",
+            "ly-a39bfbd2-5afe-47cd-a290-95063ea92707",
+            "ly-a3a33e04-b7ef-4e7a-abed-4827861aea39",
+            "ly-a48a5c43-bfdd-4011-aef8-782ced721260",
+            "ly-a564337d-716e-41ac-b870-e2b02a3b8002",
+            "ly-a8575bfc-503a-4a38-a311-de75b31aa5e2",
+            "ly-aa6e84d1-7f7b-4bfc-9c68-4e4850b1b5f7",
+            "ly-acca296b-1e30-41b0-9d5a-48e38bb169a9",
+            "ly-b2d8257f-4829-49aa-8a69-c7ebd3a4fdbb",
+            "ly-b6af0e19-7e30-4453-851d-3cdb38939212",
+            "ly-b8e153c9-60c3-4ac3-9c51-717915f12e2c",
+            "ly-ba065091-d870-4934-8291-d5f43f916b9e",
+            "ly-bd1a1fe6-b78c-41bd-9556-b16e66572bec",
+            "ly-beff0ce4-e3cd-4e60-a7e2-0fe1e075a768",
+            "ly-c2d4c4a6-ea34-4beb-95cb-6eadf7baa266",
+            "ly-c402225c-baf3-4280-a5a4-0839df92a06c",
+            "ly-c7655d09-7c4c-4985-9766-dd5a4738b14f",
+            "ly-c9b95c68-3bcb-4217-b044-23e9126a0555",
+            "ly-cad0cd39-b814-4d35-8235-732e8f19c3d5",
+            "ly-ce258aef-573d-42c7-81c7-ae3981ef3220",
+            "ly-ce608b06-6841-417e-a3c6-648d6881cc7d",
+            "ly-cf9eb9ac-78d8-4d26-a7af-712b2053ec2f",
+            "ly-d264c2ed-217f-40a9-adc8-9dffab8398c3",
+            "ly-d2f4672d-caf8-422e-8c52-11c4c93c0ecf",
+            "ly-d92f9c7b-40b1-41e9-aa4a-ea8ad1e981e9",
+            "ly-da3f36ea-1039-496f-b8d3-6bd4a04c4e43",
+            "ly-de9d0b6b-651e-45eb-9380-b83beb840eba",
+            "ly-decf99e0-5026-4e06-ad67-b99a8061c845",
+            "ly-e0c4882c-00fd-465d-b521-7be46dfa6d1b",
+            "ly-e3e7c5a5-c4af-4240-9bc4-13121638cd7b",
+            "ly-ee3a5018-3144-4702-bb17-21b6299a0f5d",
+            "ly-f0862334-9bdc-4a84-bbb8-12915c56ec8d",
+            "ly-f0baa54f-142e-4f10-b202-4b31f75910de",
+            "ly-f3610a93-412e-445d-9a0c-2a4ea71929c3",
+            "ly-f60e95b0-986e-4006-926d-9f1af2497d12",
+            "ly-f815889f-e5aa-4492-9ff3-97ac0dd2822d",
+            "ly-fa833303-906c-48f6-a2af-60b68f83a90f"
+          ],
+          "reason_code": "conditions_met",
+          "limitations": [
+            "仅描述已核验输入范围，不等于攻击成立；输入缺失不作为阴性证据",
+            "复发反映已保存历史活动；不执行旧版加减分"
+          ],
+          "dependencies": [
+            {
+              "kind": "history",
+              "version": "platform-history-0.5:cf0bc5f2bfd72c905fe6f5a46d6a74d70f5f6d04b4aba86a84ea2e2c504b7fdf",
+              "source_ids": [
+                "ly-5ca1b2d1-4ada-42ea-a46d-44d6ab24a4a3",
+                "ly-decf99e0-5026-4e06-ad67-b99a8061c845",
+                "ly-8566d361-1fc6-43c3-b738-1221bb3b3ea6",
+                "ly-c9b95c68-3bcb-4217-b044-23e9126a0555",
+                "ly-00a6479b-6921-4d6b-a0ba-98490419768e",
+                "ly-b2d8257f-4829-49aa-8a69-c7ebd3a4fdbb",
+                "ly-037253e7-e861-4864-b5ad-62b6fb4f297e",
+                "ly-aa6e84d1-7f7b-4bfc-9c68-4e4850b1b5f7",
+                "ly-f815889f-e5aa-4492-9ff3-97ac0dd2822d",
+                "ly-807f37aa-cafd-4d2b-8802-5866d667e19f",
+                "ly-686e854e-0997-419e-85b1-7eb422f3c4f9",
+                "ly-de9d0b6b-651e-45eb-9380-b83beb840eba",
+                "ly-427298d7-a439-49e5-b84c-108ad0665be7",
+                "ly-a39bfbd2-5afe-47cd-a290-95063ea92707",
+                "ly-856c6055-eb0d-447b-b722-1aed9244be83",
+                "ly-fa833303-906c-48f6-a2af-60b68f83a90f",
+                "ly-3f4449dc-5e44-4e57-97e9-339992342c73",
+                "ly-a564337d-716e-41ac-b870-e2b02a3b8002",
+                "ly-110ffe21-a1dd-43c2-97c0-2dc6edf487d7",
+                "ly-6b7a5334-66ec-4d7b-a25c-8e90d0b3c7ed",
+                "ly-ba065091-d870-4934-8291-d5f43f916b9e",
+                "ly-f0862334-9bdc-4a84-bbb8-12915c56ec8d",
+                "ly-69a6fcab-f4ff-40b9-9c38-256c69c50ae9",
+                "ly-717b4bd1-e76b-4cf5-a213-2fa8e95dbd4f",
+                "ly-7e9e7bed-56d6-49fb-b3d5-cc0e7f23c6e7",
+                "ly-6409137a-82d7-4bd9-a71f-82cfbd4ceb7c",
+                "ly-a3a33e04-b7ef-4e7a-abed-4827861aea39",
+                "ly-10ab8359-42db-4394-a2bf-bd9cb0a6c3b5",
+                "ly-e0c4882c-00fd-465d-b521-7be46dfa6d1b",
+                "ly-4ee2b24d-4c9b-457b-9b76-b35d2de7bbac",
+                "ly-796b0587-350f-4da3-ab63-36e24535bff9",
+                "ly-50e5702d-3767-481c-9163-eb4624c7f47f",
+                "ly-9785b9f1-91a9-48b1-8e7a-782a35b0b3c5",
+                "ly-bd1a1fe6-b78c-41bd-9556-b16e66572bec",
+                "ly-3099d12d-4baa-4a3e-9a07-80d0ca3d0be0",
+                "ly-d264c2ed-217f-40a9-adc8-9dffab8398c3",
+                "ly-ce608b06-6841-417e-a3c6-648d6881cc7d",
+                "ly-a8575bfc-503a-4a38-a311-de75b31aa5e2",
+                "ly-beff0ce4-e3cd-4e60-a7e2-0fe1e075a768",
+                "ly-29b1671a-2474-4bc2-964d-306e1a72f79d",
+                "ly-d2f4672d-caf8-422e-8c52-11c4c93c0ecf",
+                "ly-0170a3e7-0315-4073-8319-9d9e1d6a5a1c",
+                "ly-84ef6f78-d2e7-4129-adb8-82f12d53ad14",
+                "ly-ee3a5018-3144-4702-bb17-21b6299a0f5d",
+                "ly-2fc5abc0-5f7b-4219-9482-a0266a7b3d94",
+                "ly-cf9eb9ac-78d8-4d26-a7af-712b2053ec2f",
+                "ly-68f8dbec-42aa-4fe9-9a7a-af2c2b546f6c",
+                "ly-99a3d482-fea0-4a3d-870a-097309122af4",
+                "ly-23bfc15d-9c33-4477-9d4e-e7af0b30a72a",
+                "ly-019d3f0f-5324-4544-9e94-b87fb4751a56",
+                "ly-da3f36ea-1039-496f-b8d3-6bd4a04c4e43",
+                "ly-b8e153c9-60c3-4ac3-9c51-717915f12e2c",
+                "ly-1b602674-c6b9-4caf-a3da-745b849384fb",
+                "ly-acca296b-1e30-41b0-9d5a-48e38bb169a9",
+                "ly-7afccacd-f30f-46e7-ba05-e333f910b222",
+                "ly-57018d61-fad1-488f-9cde-0de494a1627b",
+                "ly-f0baa54f-142e-4f10-b202-4b31f75910de",
+                "ly-a48a5c43-bfdd-4011-aef8-782ced721260",
+                "ly-f60e95b0-986e-4006-926d-9f1af2497d12",
+                "ly-69f223e0-e9d6-4b27-919e-0b1b67e97e3d",
+                "ly-b6af0e19-7e30-4453-851d-3cdb38939212",
+                "ly-66e08f9a-e167-4829-8b44-186feb2095b4",
+                "ly-4ca8244b-3145-4485-933e-75329e5eb47d",
+                "ly-6543d954-4c60-4317-a591-d44f514cec79",
+                "ly-4d7f6c52-056e-45ea-9b91-ca3bdb57e720",
+                "ly-c7655d09-7c4c-4985-9766-dd5a4738b14f",
+                "ly-6c9250eb-5425-48bb-a0a1-1d847beb398e",
+                "ly-920abbe2-6d5c-4013-a42a-d79fae93cde7",
+                "ly-28cb8e52-0beb-46b6-a65c-85bc9608a988",
+                "ly-22ecddc5-2178-442c-ad92-b3e75b4b7753",
+                "ly-cad0cd39-b814-4d35-8235-732e8f19c3d5",
+                "ly-121bed57-bc7b-4834-b91d-3b3463cc657a",
+                "ly-ce258aef-573d-42c7-81c7-ae3981ef3220",
+                "ly-e3e7c5a5-c4af-4240-9bc4-13121638cd7b",
+                "ly-7fcbc0d5-edca-41a3-9bcf-c2e19abb989b",
+                "ly-d92f9c7b-40b1-41e9-aa4a-ea8ad1e981e9",
+                "ly-f3610a93-412e-445d-9a0c-2a4ea71929c3",
+                "ly-c402225c-baf3-4280-a5a4-0839df92a06c",
+                "ly-23d7c3e3-2c7e-43ec-bb6b-6b5c5cd1245b",
+                "ly-3a49ec31-addd-4a0d-a31e-46ed105cdb0a",
+                "ly-7285da40-9d7a-47a5-839d-edc40e783de5",
+                "ly-315f1e85-73f0-4ffa-926f-6abae91969f7",
+                "ly-80395ae1-4dfa-4108-93b8-a5c8534a180e",
+                "ly-73bfe634-cffe-4dfa-bb0e-df128b666a69",
+                "ly-c2d4c4a6-ea34-4beb-95cb-6eadf7baa266"
+              ]
+            }
+          ]
+        },
+        "source_ids": [
+          "hit-242c2985c67e9d8a3585868ec1c594ee6e067f723ef0584b188865779a74dc9c",
+          "hit-46531be5a2ddca50bf242298c7a1ddb6ddb192c97e25b80da56719a00065e999",
+          "hit-4de5ebd1a835c09766416e60d1ac5979d9541d551011ebacdf1a1f570561a1c2",
+          "hit-731c3bb4bb45511e61d6ee7ebb6c16ae47293458c22b16b2a1896a0628a6c59a",
+          "hit-7e1642e74b5870ddfdcdf4b0a352a35566d04948201897d8ce98d640350e1202",
+          "hit-88ba7aaaef2d5307bbc51fe3854b4aefff8bd4001cec2a5cd4f8c9a27d4953a0",
+          "hit-978e6ffb3cdb5ca5d7eec718c4dfa75150fdf7deade6813bead6299c531b19ae",
+          "hit-9a4720fd8a24ec0482d0c0aa5352d7d9f274d26cacc517110dcfb442a4f627db",
+          "hit-9bb026d836de3760497dd9105d00418f354983c9ac148e2842338a2bb0527188",
+          "hit-a7ec5639957e4ccfec59e89b4b75f42f7ad75454cff82fee0819b8afc3eb6229",
+          "hit-c0b7556642144f4082eb0762b67919768d0d7bdf5d8bcde0c268c45ea7847847",
+          "hit-c6ed2e2286168f53854e8a350439e5b41b3b4186f365c04bc8a40b6d3e8a38c2",
+          "hit-ecf3f6eaca158a8ecfa3d978c7ac22e129031f1df223420f0df0b2841aded895",
+          "hit-fb78c55dcfe33f0b827ecc8cef9affb6546c61c62c5521b2aa074bc2a9e490e0",
+          "ly-00a6479b-6921-4d6b-a0ba-98490419768e",
+          "ly-0170a3e7-0315-4073-8319-9d9e1d6a5a1c",
+          "ly-019d3f0f-5324-4544-9e94-b87fb4751a56",
+          "ly-037253e7-e861-4864-b5ad-62b6fb4f297e",
+          "ly-10ab8359-42db-4394-a2bf-bd9cb0a6c3b5",
+          "ly-110ffe21-a1dd-43c2-97c0-2dc6edf487d7",
+          "ly-121bed57-bc7b-4834-b91d-3b3463cc657a",
+          "ly-1b602674-c6b9-4caf-a3da-745b849384fb",
+          "ly-22ecddc5-2178-442c-ad92-b3e75b4b7753",
+          "ly-23bfc15d-9c33-4477-9d4e-e7af0b30a72a",
+          "ly-23d7c3e3-2c7e-43ec-bb6b-6b5c5cd1245b",
+          "ly-28cb8e52-0beb-46b6-a65c-85bc9608a988",
+          "ly-29b1671a-2474-4bc2-964d-306e1a72f79d",
+          "ly-2fc5abc0-5f7b-4219-9482-a0266a7b3d94",
+          "ly-3099d12d-4baa-4a3e-9a07-80d0ca3d0be0",
+          "ly-315f1e85-73f0-4ffa-926f-6abae91969f7",
+          "ly-3a49ec31-addd-4a0d-a31e-46ed105cdb0a",
+          "ly-3f4449dc-5e44-4e57-97e9-339992342c73",
+          "ly-427298d7-a439-49e5-b84c-108ad0665be7",
+          "ly-4ca8244b-3145-4485-933e-75329e5eb47d",
+          "ly-4d7f6c52-056e-45ea-9b91-ca3bdb57e720",
+          "ly-4ee2b24d-4c9b-457b-9b76-b35d2de7bbac",
+          "ly-50e5702d-3767-481c-9163-eb4624c7f47f",
+          "ly-57018d61-fad1-488f-9cde-0de494a1627b",
+          "ly-5ca1b2d1-4ada-42ea-a46d-44d6ab24a4a3",
+          "ly-6409137a-82d7-4bd9-a71f-82cfbd4ceb7c",
+          "ly-6543d954-4c60-4317-a591-d44f514cec79",
+          "ly-66e08f9a-e167-4829-8b44-186feb2095b4",
+          "ly-686e854e-0997-419e-85b1-7eb422f3c4f9",
+          "ly-68f8dbec-42aa-4fe9-9a7a-af2c2b546f6c",
+          "ly-69a6fcab-f4ff-40b9-9c38-256c69c50ae9",
+          "ly-69f223e0-e9d6-4b27-919e-0b1b67e97e3d",
+          "ly-6b7a5334-66ec-4d7b-a25c-8e90d0b3c7ed",
+          "ly-6c9250eb-5425-48bb-a0a1-1d847beb398e",
+          "ly-717b4bd1-e76b-4cf5-a213-2fa8e95dbd4f",
+          "ly-7285da40-9d7a-47a5-839d-edc40e783de5",
+          "ly-73bfe634-cffe-4dfa-bb0e-df128b666a69",
+          "ly-796b0587-350f-4da3-ab63-36e24535bff9",
+          "ly-7afccacd-f30f-46e7-ba05-e333f910b222",
+          "ly-7e9e7bed-56d6-49fb-b3d5-cc0e7f23c6e7",
+          "ly-7fcbc0d5-edca-41a3-9bcf-c2e19abb989b",
+          "ly-80395ae1-4dfa-4108-93b8-a5c8534a180e",
+          "ly-807f37aa-cafd-4d2b-8802-5866d667e19f",
+          "ly-84ef6f78-d2e7-4129-adb8-82f12d53ad14",
+          "ly-8566d361-1fc6-43c3-b738-1221bb3b3ea6",
+          "ly-856c6055-eb0d-447b-b722-1aed9244be83",
+          "ly-920abbe2-6d5c-4013-a42a-d79fae93cde7",
+          "ly-9785b9f1-91a9-48b1-8e7a-782a35b0b3c5",
+          "ly-99a3d482-fea0-4a3d-870a-097309122af4",
+          "ly-a39bfbd2-5afe-47cd-a290-95063ea92707",
+          "ly-a3a33e04-b7ef-4e7a-abed-4827861aea39",
+          "ly-a48a5c43-bfdd-4011-aef8-782ced721260",
+          "ly-a564337d-716e-41ac-b870-e2b02a3b8002",
+          "ly-a8575bfc-503a-4a38-a311-de75b31aa5e2",
+          "ly-aa6e84d1-7f7b-4bfc-9c68-4e4850b1b5f7",
+          "ly-acca296b-1e30-41b0-9d5a-48e38bb169a9",
+          "ly-b2d8257f-4829-49aa-8a69-c7ebd3a4fdbb",
+          "ly-b6af0e19-7e30-4453-851d-3cdb38939212",
+          "ly-b8e153c9-60c3-4ac3-9c51-717915f12e2c",
+          "ly-ba065091-d870-4934-8291-d5f43f916b9e",
+          "ly-bd1a1fe6-b78c-41bd-9556-b16e66572bec",
+          "ly-beff0ce4-e3cd-4e60-a7e2-0fe1e075a768",
+          "ly-c2d4c4a6-ea34-4beb-95cb-6eadf7baa266",
+          "ly-c402225c-baf3-4280-a5a4-0839df92a06c",
+          "ly-c7655d09-7c4c-4985-9766-dd5a4738b14f",
+          "ly-c9b95c68-3bcb-4217-b044-23e9126a0555",
+          "ly-cad0cd39-b814-4d35-8235-732e8f19c3d5",
+          "ly-ce258aef-573d-42c7-81c7-ae3981ef3220",
+          "ly-ce608b06-6841-417e-a3c6-648d6881cc7d",
+          "ly-cf9eb9ac-78d8-4d26-a7af-712b2053ec2f",
+          "ly-d264c2ed-217f-40a9-adc8-9dffab8398c3",
+          "ly-d2f4672d-caf8-422e-8c52-11c4c93c0ecf",
+          "ly-d92f9c7b-40b1-41e9-aa4a-ea8ad1e981e9",
+          "ly-da3f36ea-1039-496f-b8d3-6bd4a04c4e43",
+          "ly-de9d0b6b-651e-45eb-9380-b83beb840eba",
+          "ly-decf99e0-5026-4e06-ad67-b99a8061c845",
+          "ly-e0c4882c-00fd-465d-b521-7be46dfa6d1b",
+          "ly-e3e7c5a5-c4af-4240-9bc4-13121638cd7b",
+          "ly-ee3a5018-3144-4702-bb17-21b6299a0f5d",
+          "ly-f0862334-9bdc-4a84-bbb8-12915c56ec8d",
+          "ly-f0baa54f-142e-4f10-b202-4b31f75910de",
+          "ly-f3610a93-412e-445d-9a0c-2a4ea71929c3",
+          "ly-f60e95b0-986e-4006-926d-9f1af2497d12",
+          "ly-f815889f-e5aa-4492-9ff3-97ac0dd2822d",
+          "ly-fa833303-906c-48f6-a2af-60b68f83a90f"
+        ],
+        "ioc_bindings": [
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-fb78c55dcfe33f0b827ecc8cef9affb6546c61c62c5521b2aa074bc2a9e490e0",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-7e1642e74b5870ddfdcdf4b0a352a35566d04948201897d8ce98d640350e1202",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-731c3bb4bb45511e61d6ee7ebb6c16ae47293458c22b16b2a1896a0628a6c59a",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-242c2985c67e9d8a3585868ec1c594ee6e067f723ef0584b188865779a74dc9c",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-9a4720fd8a24ec0482d0c0aa5352d7d9f274d26cacc517110dcfb442a4f627db",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-978e6ffb3cdb5ca5d7eec718c4dfa75150fdf7deade6813bead6299c531b19ae",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-4de5ebd1a835c09766416e60d1ac5979d9541d551011ebacdf1a1f570561a1c2",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-ecf3f6eaca158a8ecfa3d978c7ac22e129031f1df223420f0df0b2841aded895",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-a7ec5639957e4ccfec59e89b4b75f42f7ad75454cff82fee0819b8afc3eb6229",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-c6ed2e2286168f53854e8a350439e5b41b3b4186f365c04bc8a40b6d3e8a38c2",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-46531be5a2ddca50bf242298c7a1ddb6ddb192c97e25b80da56719a00065e999",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-c0b7556642144f4082eb0762b67919768d0d7bdf5d8bcde0c268c45ea7847847",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-88ba7aaaef2d5307bbc51fe3854b4aefff8bd4001cec2a5cd4f8c9a27d4953a0",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-9bb026d836de3760497dd9105d00418f354983c9ac148e2842338a2bb0527188",
+            "verified": true
+          }
+        ],
+        "score": 10,
+        "family": "history"
+      },
+      {
+        "ioc_type": "ip",
+        "ioc_value": "104.21.57.117",
+        "id": "C02",
+        "scope": {
+          "asset_id": "asset-0f4ef4d8ee0aa302",
+          "endpoint_id": "tcp://104.21.57.117:443",
+          "device_id": "node-arm-offline-001"
+        },
+        "status": "missing",
+        "reason": "insufficient_samples",
+        "fact": {
+          "feature_claim": "",
+          "security_interpretation": "",
+          "cannot_prove": "",
+          "required_correlations": null,
+          "ioc_type": "ip",
+          "ioc_value": "104.21.57.117",
+          "fact_id": "F_BEACON_JITTER",
+          "rule_version": "evidence-algorithms-0.7",
+          "snapshot_version": 34,
+          "scope": {
+            "asset_id": "asset-0f4ef4d8ee0aa302",
+            "endpoint_id": "tcp://104.21.57.117:443",
+            "device_id": "node-arm-offline-001"
+          },
+          "window": null,
+          "status": "missing",
+          "eligibility": "ineligible",
+          "quality": "partial",
+          "measurements": {
+            "sample_count": 0
+          },
+          "parameters": {},
+          "source_ids": null,
+          "reason_code": "insufficient_samples",
+          "limitations": [
+            "no independent communication observations; packet count is not contact count"
+          ]
+        },
+        "source_ids": [],
+        "ioc_bindings": [
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-fb78c55dcfe33f0b827ecc8cef9affb6546c61c62c5521b2aa074bc2a9e490e0",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-7e1642e74b5870ddfdcdf4b0a352a35566d04948201897d8ce98d640350e1202",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-731c3bb4bb45511e61d6ee7ebb6c16ae47293458c22b16b2a1896a0628a6c59a",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-242c2985c67e9d8a3585868ec1c594ee6e067f723ef0584b188865779a74dc9c",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-9a4720fd8a24ec0482d0c0aa5352d7d9f274d26cacc517110dcfb442a4f627db",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-978e6ffb3cdb5ca5d7eec718c4dfa75150fdf7deade6813bead6299c531b19ae",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-4de5ebd1a835c09766416e60d1ac5979d9541d551011ebacdf1a1f570561a1c2",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-ecf3f6eaca158a8ecfa3d978c7ac22e129031f1df223420f0df0b2841aded895",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-a7ec5639957e4ccfec59e89b4b75f42f7ad75454cff82fee0819b8afc3eb6229",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-c6ed2e2286168f53854e8a350439e5b41b3b4186f365c04bc8a40b6d3e8a38c2",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-46531be5a2ddca50bf242298c7a1ddb6ddb192c97e25b80da56719a00065e999",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-c0b7556642144f4082eb0762b67919768d0d7bdf5d8bcde0c268c45ea7847847",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-88ba7aaaef2d5307bbc51fe3854b4aefff8bd4001cec2a5cd4f8c9a27d4953a0",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-9bb026d836de3760497dd9105d00418f354983c9ac148e2842338a2bb0527188",
+            "verified": true
+          }
+        ],
+        "score": 0,
+        "family": "time"
+      },
+      {
+        "ioc_type": "ip",
+        "ioc_value": "104.21.57.117",
+        "id": "C03",
+        "scope": {
+          "asset_id": "asset-0f4ef4d8ee0aa302",
+          "endpoint_id": "tcp://104.21.57.117:443",
+          "device_id": "node-arm-offline-001"
+        },
+        "status": "missing",
+        "reason": "insufficient_samples",
+        "fact": {
+          "feature_claim": "",
+          "security_interpretation": "",
+          "cannot_prove": "",
+          "required_correlations": null,
+          "ioc_type": "ip",
+          "ioc_value": "104.21.57.117",
+          "fact_id": "F_FIXED_DAILY_WINDOW",
+          "rule_version": "evidence-algorithms-0.7",
+          "snapshot_version": 34,
+          "scope": {
+            "asset_id": "asset-0f4ef4d8ee0aa302",
+            "endpoint_id": "tcp://104.21.57.117:443",
+            "device_id": "node-arm-offline-001"
+          },
+          "window": null,
+          "status": "missing",
+          "eligibility": "ineligible",
+          "quality": "partial",
+          "measurements": {
+            "sample_count": 0
+          },
+          "parameters": {},
+          "source_ids": null,
+          "reason_code": "insufficient_samples",
+          "limitations": [
+            "no independent communication observations; packet count is not contact count"
+          ]
+        },
+        "source_ids": [],
+        "ioc_bindings": [
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-fb78c55dcfe33f0b827ecc8cef9affb6546c61c62c5521b2aa074bc2a9e490e0",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-7e1642e74b5870ddfdcdf4b0a352a35566d04948201897d8ce98d640350e1202",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-731c3bb4bb45511e61d6ee7ebb6c16ae47293458c22b16b2a1896a0628a6c59a",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-242c2985c67e9d8a3585868ec1c594ee6e067f723ef0584b188865779a74dc9c",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-9a4720fd8a24ec0482d0c0aa5352d7d9f274d26cacc517110dcfb442a4f627db",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-978e6ffb3cdb5ca5d7eec718c4dfa75150fdf7deade6813bead6299c531b19ae",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-4de5ebd1a835c09766416e60d1ac5979d9541d551011ebacdf1a1f570561a1c2",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-ecf3f6eaca158a8ecfa3d978c7ac22e129031f1df223420f0df0b2841aded895",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-a7ec5639957e4ccfec59e89b4b75f42f7ad75454cff82fee0819b8afc3eb6229",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-c6ed2e2286168f53854e8a350439e5b41b3b4186f365c04bc8a40b6d3e8a38c2",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-46531be5a2ddca50bf242298c7a1ddb6ddb192c97e25b80da56719a00065e999",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-c0b7556642144f4082eb0762b67919768d0d7bdf5d8bcde0c268c45ea7847847",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-88ba7aaaef2d5307bbc51fe3854b4aefff8bd4001cec2a5cd4f8c9a27d4953a0",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-9bb026d836de3760497dd9105d00418f354983c9ac148e2842338a2bb0527188",
+            "verified": true
+          }
+        ],
+        "score": 0,
+        "family": "time"
+      },
+      {
+        "ioc_type": "ip",
+        "ioc_value": "104.21.57.117",
+        "id": "C04",
+        "scope": {
+          "asset_id": "asset-0f4ef4d8ee0aa302",
+          "endpoint_id": "tcp://104.21.57.117:443",
+          "device_id": "node-arm-offline-001"
+        },
+        "status": "missing",
+        "reason": "missing_input",
+        "fact": {
+          "feature_claim": "主机＋规范端点分组：重复 ≥6 次且间隔低抖动（CV≤0.3）；POST 本身不加分",
+          "security_interpretation": "端点重复回连；仅作为已核验输入范围内的特征线索",
+          "cannot_prove": "周期或重复请求不证明C2；累计FLOW包数不能替代逐次独立联系",
+          "required_correlations": [
+            "同资产、端点与IOC的原始字段绑定",
+            "完整独立联系或HTTP事务观测",
+            "适用的C02/C04前提；F_BEACON_PERIODIC不属于一期C"
+          ],
+          "ioc_type": "ip",
+          "ioc_value": "104.21.57.117",
+          "fact_id": "F_HTTP_ENDPOINT_REPEAT",
+          "rule_version": "evidence-algorithms-0.7",
+          "snapshot_version": 34,
+          "scope": {
+            "asset_id": "asset-0f4ef4d8ee0aa302",
+            "endpoint_id": "tcp://104.21.57.117:443",
+            "device_id": "node-arm-offline-001"
+          },
+          "window": {
+            "start": "2026-10-13T04:34:18.047295Z",
+            "end": "2026-10-13T04:34:19.591365001Z",
+            "convention": "analysis_half_open"
+          },
+          "status": "missing",
+          "eligibility": "ineligible",
+          "quality": "complete",
+          "measurements": {
+            "sample_count": 14
+          },
+          "parameters": {},
+          "source_ids": [
+            "hit-242c2985c67e9d8a3585868ec1c594ee6e067f723ef0584b188865779a74dc9c",
+            "hit-46531be5a2ddca50bf242298c7a1ddb6ddb192c97e25b80da56719a00065e999",
+            "hit-4de5ebd1a835c09766416e60d1ac5979d9541d551011ebacdf1a1f570561a1c2",
+            "hit-731c3bb4bb45511e61d6ee7ebb6c16ae47293458c22b16b2a1896a0628a6c59a",
+            "hit-7e1642e74b5870ddfdcdf4b0a352a35566d04948201897d8ce98d640350e1202",
+            "hit-88ba7aaaef2d5307bbc51fe3854b4aefff8bd4001cec2a5cd4f8c9a27d4953a0",
+            "hit-978e6ffb3cdb5ca5d7eec718c4dfa75150fdf7deade6813bead6299c531b19ae",
+            "hit-9a4720fd8a24ec0482d0c0aa5352d7d9f274d26cacc517110dcfb442a4f627db",
+            "hit-9bb026d836de3760497dd9105d00418f354983c9ac148e2842338a2bb0527188",
+            "hit-a7ec5639957e4ccfec59e89b4b75f42f7ad75454cff82fee0819b8afc3eb6229",
+            "hit-c0b7556642144f4082eb0762b67919768d0d7bdf5d8bcde0c268c45ea7847847",
+            "hit-c6ed2e2286168f53854e8a350439e5b41b3b4186f365c04bc8a40b6d3e8a38c2",
+            "hit-ecf3f6eaca158a8ecfa3d978c7ac22e129031f1df223420f0df0b2841aded895",
+            "hit-fb78c55dcfe33f0b827ecc8cef9affb6546c61c62c5521b2aa074bc2a9e490e0"
+          ],
+          "reason_code": "missing_input",
+          "limitations": [
+            "仅描述已核验输入范围，不等于攻击成立；输入缺失不作为阴性证据"
+          ]
+        },
+        "source_ids": [
+          "hit-242c2985c67e9d8a3585868ec1c594ee6e067f723ef0584b188865779a74dc9c",
+          "hit-46531be5a2ddca50bf242298c7a1ddb6ddb192c97e25b80da56719a00065e999",
+          "hit-4de5ebd1a835c09766416e60d1ac5979d9541d551011ebacdf1a1f570561a1c2",
+          "hit-731c3bb4bb45511e61d6ee7ebb6c16ae47293458c22b16b2a1896a0628a6c59a",
+          "hit-7e1642e74b5870ddfdcdf4b0a352a35566d04948201897d8ce98d640350e1202",
+          "hit-88ba7aaaef2d5307bbc51fe3854b4aefff8bd4001cec2a5cd4f8c9a27d4953a0",
+          "hit-978e6ffb3cdb5ca5d7eec718c4dfa75150fdf7deade6813bead6299c531b19ae",
+          "hit-9a4720fd8a24ec0482d0c0aa5352d7d9f274d26cacc517110dcfb442a4f627db",
+          "hit-9bb026d836de3760497dd9105d00418f354983c9ac148e2842338a2bb0527188",
+          "hit-a7ec5639957e4ccfec59e89b4b75f42f7ad75454cff82fee0819b8afc3eb6229",
+          "hit-c0b7556642144f4082eb0762b67919768d0d7bdf5d8bcde0c268c45ea7847847",
+          "hit-c6ed2e2286168f53854e8a350439e5b41b3b4186f365c04bc8a40b6d3e8a38c2",
+          "hit-ecf3f6eaca158a8ecfa3d978c7ac22e129031f1df223420f0df0b2841aded895",
+          "hit-fb78c55dcfe33f0b827ecc8cef9affb6546c61c62c5521b2aa074bc2a9e490e0"
+        ],
+        "ioc_bindings": [
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-fb78c55dcfe33f0b827ecc8cef9affb6546c61c62c5521b2aa074bc2a9e490e0",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-7e1642e74b5870ddfdcdf4b0a352a35566d04948201897d8ce98d640350e1202",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-731c3bb4bb45511e61d6ee7ebb6c16ae47293458c22b16b2a1896a0628a6c59a",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-242c2985c67e9d8a3585868ec1c594ee6e067f723ef0584b188865779a74dc9c",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-9a4720fd8a24ec0482d0c0aa5352d7d9f274d26cacc517110dcfb442a4f627db",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-978e6ffb3cdb5ca5d7eec718c4dfa75150fdf7deade6813bead6299c531b19ae",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-4de5ebd1a835c09766416e60d1ac5979d9541d551011ebacdf1a1f570561a1c2",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-ecf3f6eaca158a8ecfa3d978c7ac22e129031f1df223420f0df0b2841aded895",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-a7ec5639957e4ccfec59e89b4b75f42f7ad75454cff82fee0819b8afc3eb6229",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-c6ed2e2286168f53854e8a350439e5b41b3b4186f365c04bc8a40b6d3e8a38c2",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-46531be5a2ddca50bf242298c7a1ddb6ddb192c97e25b80da56719a00065e999",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-c0b7556642144f4082eb0762b67919768d0d7bdf5d8bcde0c268c45ea7847847",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-88ba7aaaef2d5307bbc51fe3854b4aefff8bd4001cec2a5cd4f8c9a27d4953a0",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-9bb026d836de3760497dd9105d00418f354983c9ac148e2842338a2bb0527188",
+            "verified": true
+          }
+        ],
+        "score": 0,
+        "family": "http_repeat"
+      },
+      {
+        "id": "C05",
+        "scope": {
+          "asset_id": "asset-0f4ef4d8ee0aa302",
+          "endpoint_id": "tcp://104.21.57.117:443",
+          "device_id": "node-arm-offline-001"
+        },
+        "status": "missing",
+        "reason": "accepted_phase_one_semantics_missing",
+        "source_ids": [],
+        "ioc_bindings": [
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-fb78c55dcfe33f0b827ecc8cef9affb6546c61c62c5521b2aa074bc2a9e490e0",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-7e1642e74b5870ddfdcdf4b0a352a35566d04948201897d8ce98d640350e1202",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-731c3bb4bb45511e61d6ee7ebb6c16ae47293458c22b16b2a1896a0628a6c59a",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-242c2985c67e9d8a3585868ec1c594ee6e067f723ef0584b188865779a74dc9c",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-9a4720fd8a24ec0482d0c0aa5352d7d9f274d26cacc517110dcfb442a4f627db",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-978e6ffb3cdb5ca5d7eec718c4dfa75150fdf7deade6813bead6299c531b19ae",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-4de5ebd1a835c09766416e60d1ac5979d9541d551011ebacdf1a1f570561a1c2",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-ecf3f6eaca158a8ecfa3d978c7ac22e129031f1df223420f0df0b2841aded895",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-a7ec5639957e4ccfec59e89b4b75f42f7ad75454cff82fee0819b8afc3eb6229",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-c6ed2e2286168f53854e8a350439e5b41b3b4186f365c04bc8a40b6d3e8a38c2",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-46531be5a2ddca50bf242298c7a1ddb6ddb192c97e25b80da56719a00065e999",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-c0b7556642144f4082eb0762b67919768d0d7bdf5d8bcde0c268c45ea7847847",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-88ba7aaaef2d5307bbc51fe3854b4aefff8bd4001cec2a5cd4f8c9a27d4953a0",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-9bb026d836de3760497dd9105d00418f354983c9ac148e2842338a2bb0527188",
+            "verified": true
+          }
+        ],
+        "score": 0,
+        "family": "payload"
+      },
+      {
+        "id": "C06",
+        "scope": {
+          "asset_id": "asset-0f4ef4d8ee0aa302",
+          "endpoint_id": "tcp://104.21.57.117:443",
+          "device_id": "node-arm-offline-001"
+        },
+        "status": "missing",
+        "reason": "accepted_phase_one_semantics_missing",
+        "source_ids": [],
+        "ioc_bindings": [
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-fb78c55dcfe33f0b827ecc8cef9affb6546c61c62c5521b2aa074bc2a9e490e0",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-7e1642e74b5870ddfdcdf4b0a352a35566d04948201897d8ce98d640350e1202",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-731c3bb4bb45511e61d6ee7ebb6c16ae47293458c22b16b2a1896a0628a6c59a",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-242c2985c67e9d8a3585868ec1c594ee6e067f723ef0584b188865779a74dc9c",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-9a4720fd8a24ec0482d0c0aa5352d7d9f274d26cacc517110dcfb442a4f627db",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-978e6ffb3cdb5ca5d7eec718c4dfa75150fdf7deade6813bead6299c531b19ae",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-4de5ebd1a835c09766416e60d1ac5979d9541d551011ebacdf1a1f570561a1c2",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-ecf3f6eaca158a8ecfa3d978c7ac22e129031f1df223420f0df0b2841aded895",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-a7ec5639957e4ccfec59e89b4b75f42f7ad75454cff82fee0819b8afc3eb6229",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-c6ed2e2286168f53854e8a350439e5b41b3b4186f365c04bc8a40b6d3e8a38c2",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-46531be5a2ddca50bf242298c7a1ddb6ddb192c97e25b80da56719a00065e999",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-c0b7556642144f4082eb0762b67919768d0d7bdf5d8bcde0c268c45ea7847847",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-88ba7aaaef2d5307bbc51fe3854b4aefff8bd4001cec2a5cd4f8c9a27d4953a0",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-9bb026d836de3760497dd9105d00418f354983c9ac148e2842338a2bb0527188",
+            "verified": true
+          }
+        ],
+        "score": 0,
+        "family": "payload"
+      },
+      {
+        "id": "C07",
+        "scope": {
+          "asset_id": "asset-0f4ef4d8ee0aa302",
+          "endpoint_id": "tcp://104.21.57.117:443",
+          "device_id": "node-arm-offline-001"
+        },
+        "status": "missing",
+        "reason": "required_material_unavailable",
+        "source_ids": [],
+        "ioc_bindings": [
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-fb78c55dcfe33f0b827ecc8cef9affb6546c61c62c5521b2aa074bc2a9e490e0",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-7e1642e74b5870ddfdcdf4b0a352a35566d04948201897d8ce98d640350e1202",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-731c3bb4bb45511e61d6ee7ebb6c16ae47293458c22b16b2a1896a0628a6c59a",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-242c2985c67e9d8a3585868ec1c594ee6e067f723ef0584b188865779a74dc9c",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-9a4720fd8a24ec0482d0c0aa5352d7d9f274d26cacc517110dcfb442a4f627db",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-978e6ffb3cdb5ca5d7eec718c4dfa75150fdf7deade6813bead6299c531b19ae",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-4de5ebd1a835c09766416e60d1ac5979d9541d551011ebacdf1a1f570561a1c2",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-ecf3f6eaca158a8ecfa3d978c7ac22e129031f1df223420f0df0b2841aded895",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-a7ec5639957e4ccfec59e89b4b75f42f7ad75454cff82fee0819b8afc3eb6229",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-c6ed2e2286168f53854e8a350439e5b41b3b4186f365c04bc8a40b6d3e8a38c2",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-46531be5a2ddca50bf242298c7a1ddb6ddb192c97e25b80da56719a00065e999",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-c0b7556642144f4082eb0762b67919768d0d7bdf5d8bcde0c268c45ea7847847",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.src_ip",
+            "source_id": "hit-88ba7aaaef2d5307bbc51fe3854b4aefff8bd4001cec2a5cd4f8c9a27d4953a0",
+            "verified": true
+          },
+          {
+            "scope": {
+              "asset_id": "asset-0f4ef4d8ee0aa302",
+              "endpoint_id": "tcp://104.21.57.117:443",
+              "device_id": "node-arm-offline-001"
+            },
+            "ioc_type": "ip",
+            "ioc_value": "104.21.57.117",
+            "field": "ipv4_or_ipv6.dst_ip",
+            "source_id": "hit-9bb026d836de3760497dd9105d00418f354983c9ac148e2842338a2bb0527188",
+            "verified": true
+          }
+        ],
+        "score": 0,
+        "family": "payload"
+      }
+    ],
+    "diagnostics": [
+      "read_only_no_semantic_execution_no_cache_write"
+    ]
+  },
+  "materials": {
+    "current_complete": true,
+    "expanded": true,
+    "records": [
+      {
+        "hit": {
+          "hit_id": "hit-fb78c55dcfe33f0b827ecc8cef9affb6546c61c62c5521b2aa074bc2a9e490e0",
+          "occurred_at": "2026-10-13T04:34:18.047295Z",
+          "packets": null,
+          "scope": {
+            "asset_id": "asset-0f4ef4d8ee0aa302",
+            "endpoint_id": "tcp://104.21.57.117:443",
+            "device_id": "node-arm-offline-001"
+          }
+        },
+        "ioc_type": "ip",
+        "ioc_value": "104.21.57.117",
+        "http_candidate": false
+      },
+      {
+        "hit": {
+          "hit_id": "hit-7e1642e74b5870ddfdcdf4b0a352a35566d04948201897d8ce98d640350e1202",
+          "occurred_at": "2026-10-13T04:34:18.047319Z",
+          "packets": null,
+          "scope": {
+            "asset_id": "asset-0f4ef4d8ee0aa302",
+            "endpoint_id": "tcp://104.21.57.117:443",
+            "device_id": "node-arm-offline-001"
+          }
+        },
+        "ioc_type": "ip",
+        "ioc_value": "104.21.57.117",
+        "http_candidate": false
+      },
+      {
+        "hit": {
+          "hit_id": "hit-731c3bb4bb45511e61d6ee7ebb6c16ae47293458c22b16b2a1896a0628a6c59a",
+          "occurred_at": "2026-10-13T04:34:18.047888Z",
+          "packets": null,
+          "scope": {
+            "asset_id": "asset-0f4ef4d8ee0aa302",
+            "endpoint_id": "tcp://104.21.57.117:443",
+            "device_id": "node-arm-offline-001"
+          }
+        },
+        "ioc_type": "ip",
+        "ioc_value": "104.21.57.117",
+        "http_candidate": false
+      },
+      {
+        "hit": {
+          "hit_id": "hit-242c2985c67e9d8a3585868ec1c594ee6e067f723ef0584b188865779a74dc9c",
+          "occurred_at": "2026-10-13T04:34:19.54298Z",
+          "packets": null,
+          "scope": {
+            "asset_id": "asset-0f4ef4d8ee0aa302",
+            "endpoint_id": "tcp://104.21.57.117:443",
+            "device_id": "node-arm-offline-001"
+          }
+        },
+        "ioc_type": "ip",
+        "ioc_value": "104.21.57.117",
+        "http_candidate": false
+      },
+      {
+        "hit": {
+          "hit_id": "hit-9a4720fd8a24ec0482d0c0aa5352d7d9f274d26cacc517110dcfb442a4f627db",
+          "occurred_at": "2026-10-13T04:34:19.543128Z",
+          "packets": null,
+          "scope": {
+            "asset_id": "asset-0f4ef4d8ee0aa302",
+            "endpoint_id": "tcp://104.21.57.117:443",
+            "device_id": "node-arm-offline-001"
+          }
+        },
+        "ioc_type": "ip",
+        "ioc_value": "104.21.57.117",
+        "http_candidate": false
+      },
+      {
+        "hit": {
+          "hit_id": "hit-978e6ffb3cdb5ca5d7eec718c4dfa75150fdf7deade6813bead6299c531b19ae",
+          "occurred_at": "2026-10-13T04:34:19.543131Z",
+          "packets": null,
+          "scope": {
+            "asset_id": "asset-0f4ef4d8ee0aa302",
+            "endpoint_id": "tcp://104.21.57.117:443",
+            "device_id": "node-arm-offline-001"
+          }
+        },
+        "ioc_type": "ip",
+        "ioc_value": "104.21.57.117",
+        "http_candidate": false
+      },
+      {
+        "hit": {
+          "hit_id": "hit-4de5ebd1a835c09766416e60d1ac5979d9541d551011ebacdf1a1f570561a1c2",
+          "occurred_at": "2026-10-13T04:34:19.543329Z",
+          "packets": null,
+          "scope": {
+            "asset_id": "asset-0f4ef4d8ee0aa302",
+            "endpoint_id": "tcp://104.21.57.117:443",
+            "device_id": "node-arm-offline-001"
+          }
+        },
+        "ioc_type": "ip",
+        "ioc_value": "104.21.57.117",
+        "http_candidate": false
+      },
+      {
+        "hit": {
+          "hit_id": "hit-ecf3f6eaca158a8ecfa3d978c7ac22e129031f1df223420f0df0b2841aded895",
+          "occurred_at": "2026-10-13T04:34:19.543354Z",
+          "packets": null,
+          "scope": {
+            "asset_id": "asset-0f4ef4d8ee0aa302",
+            "endpoint_id": "tcp://104.21.57.117:443",
+            "device_id": "node-arm-offline-001"
+          }
+        },
+        "ioc_type": "ip",
+        "ioc_value": "104.21.57.117",
+        "http_candidate": false
+      },
+      {
+        "hit": {
+          "hit_id": "hit-a7ec5639957e4ccfec59e89b4b75f42f7ad75454cff82fee0819b8afc3eb6229",
+          "occurred_at": "2026-10-13T04:34:19.543533Z",
+          "packets": null,
+          "scope": {
+            "asset_id": "asset-0f4ef4d8ee0aa302",
+            "endpoint_id": "tcp://104.21.57.117:443",
+            "device_id": "node-arm-offline-001"
+          }
+        },
+        "ioc_type": "ip",
+        "ioc_value": "104.21.57.117",
+        "http_candidate": false
+      },
+      {
+        "hit": {
+          "hit_id": "hit-c6ed2e2286168f53854e8a350439e5b41b3b4186f365c04bc8a40b6d3e8a38c2",
+          "occurred_at": "2026-10-13T04:34:19.543751Z",
+          "packets": null,
+          "scope": {
+            "asset_id": "asset-0f4ef4d8ee0aa302",
+            "endpoint_id": "tcp://104.21.57.117:443",
+            "device_id": "node-arm-offline-001"
+          }
+        },
+        "ioc_type": "ip",
+        "ioc_value": "104.21.57.117",
+        "http_candidate": false
+      },
+      {
+        "hit": {
+          "hit_id": "hit-46531be5a2ddca50bf242298c7a1ddb6ddb192c97e25b80da56719a00065e999",
+          "occurred_at": "2026-10-13T04:34:19.54376Z",
+          "packets": null,
+          "scope": {
+            "asset_id": "asset-0f4ef4d8ee0aa302",
+            "endpoint_id": "tcp://104.21.57.117:443",
+            "device_id": "node-arm-offline-001"
+          }
+        },
+        "ioc_type": "ip",
+        "ioc_value": "104.21.57.117",
+        "http_candidate": false
+      },
+      {
+        "hit": {
+          "hit_id": "hit-c0b7556642144f4082eb0762b67919768d0d7bdf5d8bcde0c268c45ea7847847",
+          "occurred_at": "2026-10-13T04:34:19.543804Z",
+          "packets": null,
+          "scope": {
+            "asset_id": "asset-0f4ef4d8ee0aa302",
+            "endpoint_id": "tcp://104.21.57.117:443",
+            "device_id": "node-arm-offline-001"
+          }
+        },
+        "ioc_type": "ip",
+        "ioc_value": "104.21.57.117",
+        "http_candidate": false
+      },
+      {
+        "hit": {
+          "hit_id": "hit-88ba7aaaef2d5307bbc51fe3854b4aefff8bd4001cec2a5cd4f8c9a27d4953a0",
+          "occurred_at": "2026-10-13T04:34:19.544234Z",
+          "packets": null,
+          "scope": {
+            "asset_id": "asset-0f4ef4d8ee0aa302",
+            "endpoint_id": "tcp://104.21.57.117:443",
+            "device_id": "node-arm-offline-001"
+          }
+        },
+        "ioc_type": "ip",
+        "ioc_value": "104.21.57.117",
+        "http_candidate": false
+      },
+      {
+        "hit": {
+          "hit_id": "hit-9bb026d836de3760497dd9105d00418f354983c9ac148e2842338a2bb0527188",
+          "occurred_at": "2026-10-13T04:34:19.591365Z",
+          "packets": null,
+          "scope": {
+            "asset_id": "asset-0f4ef4d8ee0aa302",
+            "endpoint_id": "tcp://104.21.57.117:443",
+            "device_id": "node-arm-offline-001"
+          }
+        },
+        "ioc_type": "ip",
+        "ioc_value": "104.21.57.117",
+        "http_candidate": false
+      }
+    ],
+    "bindings": [
+      {
+        "scope": {
+          "asset_id": "asset-0f4ef4d8ee0aa302",
+          "endpoint_id": "tcp://104.21.57.117:443",
+          "device_id": "node-arm-offline-001"
+        },
+        "ioc_type": "ip",
+        "ioc_value": "104.21.57.117",
+        "field": "ipv4_or_ipv6.src_ip",
+        "source_id": "hit-fb78c55dcfe33f0b827ecc8cef9affb6546c61c62c5521b2aa074bc2a9e490e0",
+        "verified": true
+      },
+      {
+        "scope": {
+          "asset_id": "asset-0f4ef4d8ee0aa302",
+          "endpoint_id": "tcp://104.21.57.117:443",
+          "device_id": "node-arm-offline-001"
+        },
+        "ioc_type": "ip",
+        "ioc_value": "104.21.57.117",
+        "field": "ipv4_or_ipv6.dst_ip",
+        "source_id": "hit-7e1642e74b5870ddfdcdf4b0a352a35566d04948201897d8ce98d640350e1202",
+        "verified": true
+      },
+      {
+        "scope": {
+          "asset_id": "asset-0f4ef4d8ee0aa302",
+          "endpoint_id": "tcp://104.21.57.117:443",
+          "device_id": "node-arm-offline-001"
+        },
+        "ioc_type": "ip",
+        "ioc_value": "104.21.57.117",
+        "field": "ipv4_or_ipv6.dst_ip",
+        "source_id": "hit-731c3bb4bb45511e61d6ee7ebb6c16ae47293458c22b16b2a1896a0628a6c59a",
+        "verified": true
+      },
+      {
+        "scope": {
+          "asset_id": "asset-0f4ef4d8ee0aa302",
+          "endpoint_id": "tcp://104.21.57.117:443",
+          "device_id": "node-arm-offline-001"
+        },
+        "ioc_type": "ip",
+        "ioc_value": "104.21.57.117",
+        "field": "ipv4_or_ipv6.src_ip",
+        "source_id": "hit-242c2985c67e9d8a3585868ec1c594ee6e067f723ef0584b188865779a74dc9c",
+        "verified": true
+      },
+      {
+        "scope": {
+          "asset_id": "asset-0f4ef4d8ee0aa302",
+          "endpoint_id": "tcp://104.21.57.117:443",
+          "device_id": "node-arm-offline-001"
+        },
+        "ioc_type": "ip",
+        "ioc_value": "104.21.57.117",
+        "field": "ipv4_or_ipv6.src_ip",
+        "source_id": "hit-9a4720fd8a24ec0482d0c0aa5352d7d9f274d26cacc517110dcfb442a4f627db",
+        "verified": true
+      },
+      {
+        "scope": {
+          "asset_id": "asset-0f4ef4d8ee0aa302",
+          "endpoint_id": "tcp://104.21.57.117:443",
+          "device_id": "node-arm-offline-001"
+        },
+        "ioc_type": "ip",
+        "ioc_value": "104.21.57.117",
+        "field": "ipv4_or_ipv6.dst_ip",
+        "source_id": "hit-978e6ffb3cdb5ca5d7eec718c4dfa75150fdf7deade6813bead6299c531b19ae",
+        "verified": true
+      },
+      {
+        "scope": {
+          "asset_id": "asset-0f4ef4d8ee0aa302",
+          "endpoint_id": "tcp://104.21.57.117:443",
+          "device_id": "node-arm-offline-001"
+        },
+        "ioc_type": "ip",
+        "ioc_value": "104.21.57.117",
+        "field": "ipv4_or_ipv6.src_ip",
+        "source_id": "hit-4de5ebd1a835c09766416e60d1ac5979d9541d551011ebacdf1a1f570561a1c2",
+        "verified": true
+      },
+      {
+        "scope": {
+          "asset_id": "asset-0f4ef4d8ee0aa302",
+          "endpoint_id": "tcp://104.21.57.117:443",
+          "device_id": "node-arm-offline-001"
+        },
+        "ioc_type": "ip",
+        "ioc_value": "104.21.57.117",
+        "field": "ipv4_or_ipv6.dst_ip",
+        "source_id": "hit-ecf3f6eaca158a8ecfa3d978c7ac22e129031f1df223420f0df0b2841aded895",
+        "verified": true
+      },
+      {
+        "scope": {
+          "asset_id": "asset-0f4ef4d8ee0aa302",
+          "endpoint_id": "tcp://104.21.57.117:443",
+          "device_id": "node-arm-offline-001"
+        },
+        "ioc_type": "ip",
+        "ioc_value": "104.21.57.117",
+        "field": "ipv4_or_ipv6.src_ip",
+        "source_id": "hit-a7ec5639957e4ccfec59e89b4b75f42f7ad75454cff82fee0819b8afc3eb6229",
+        "verified": true
+      },
+      {
+        "scope": {
+          "asset_id": "asset-0f4ef4d8ee0aa302",
+          "endpoint_id": "tcp://104.21.57.117:443",
+          "device_id": "node-arm-offline-001"
+        },
+        "ioc_type": "ip",
+        "ioc_value": "104.21.57.117",
+        "field": "ipv4_or_ipv6.src_ip",
+        "source_id": "hit-c6ed2e2286168f53854e8a350439e5b41b3b4186f365c04bc8a40b6d3e8a38c2",
+        "verified": true
+      },
+      {
+        "scope": {
+          "asset_id": "asset-0f4ef4d8ee0aa302",
+          "endpoint_id": "tcp://104.21.57.117:443",
+          "device_id": "node-arm-offline-001"
+        },
+        "ioc_type": "ip",
+        "ioc_value": "104.21.57.117",
+        "field": "ipv4_or_ipv6.dst_ip",
+        "source_id": "hit-46531be5a2ddca50bf242298c7a1ddb6ddb192c97e25b80da56719a00065e999",
+        "verified": true
+      },
+      {
+        "scope": {
+          "asset_id": "asset-0f4ef4d8ee0aa302",
+          "endpoint_id": "tcp://104.21.57.117:443",
+          "device_id": "node-arm-offline-001"
+        },
+        "ioc_type": "ip",
+        "ioc_value": "104.21.57.117",
+        "field": "ipv4_or_ipv6.dst_ip",
+        "source_id": "hit-c0b7556642144f4082eb0762b67919768d0d7bdf5d8bcde0c268c45ea7847847",
+        "verified": true
+      },
+      {
+        "scope": {
+          "asset_id": "asset-0f4ef4d8ee0aa302",
+          "endpoint_id": "tcp://104.21.57.117:443",
+          "device_id": "node-arm-offline-001"
+        },
+        "ioc_type": "ip",
+        "ioc_value": "104.21.57.117",
+        "field": "ipv4_or_ipv6.src_ip",
+        "source_id": "hit-88ba7aaaef2d5307bbc51fe3854b4aefff8bd4001cec2a5cd4f8c9a27d4953a0",
+        "verified": true
+      },
+      {
+        "scope": {
+          "asset_id": "asset-0f4ef4d8ee0aa302",
+          "endpoint_id": "tcp://104.21.57.117:443",
+          "device_id": "node-arm-offline-001"
+        },
+        "ioc_type": "ip",
+        "ioc_value": "104.21.57.117",
+        "field": "ipv4_or_ipv6.dst_ip",
+        "source_id": "hit-9bb026d836de3760497dd9105d00418f354983c9ac148e2842338a2bb0527188",
+        "verified": true
+      }
+    ],
+    "contacts": [],
+    "sources": [
+      {
+        "event_id": "ly-e0eeedcf-1be2-4469-9482-1306573557a3",
+        "version": 34,
+        "watermark": 66209,
+        "revision_watermark": 126313,
+        "loaded_hits": 0,
+        "complete": false
+      }
+    ],
+    "diagnostics": [
+      "ly-5ca1b2d1-4ada-42ea-a46d-44d6ab24a4a3:historical_snapshot_unavailable",
+      "ly-decf99e0-5026-4e06-ad67-b99a8061c845:historical_snapshot_unavailable",
+      "ly-8566d361-1fc6-43c3-b738-1221bb3b3ea6:historical_snapshot_unavailable",
+      "ly-c9b95c68-3bcb-4217-b044-23e9126a0555:historical_snapshot_unavailable",
+      "ly-00a6479b-6921-4d6b-a0ba-98490419768e:historical_snapshot_unavailable",
+      "ly-b2d8257f-4829-49aa-8a69-c7ebd3a4fdbb:historical_snapshot_unavailable",
+      "ly-037253e7-e861-4864-b5ad-62b6fb4f297e:historical_snapshot_unavailable",
+      "ly-aa6e84d1-7f7b-4bfc-9c68-4e4850b1b5f7:historical_snapshot_unavailable",
+      "ly-f815889f-e5aa-4492-9ff3-97ac0dd2822d:historical_snapshot_unavailable",
+      "ly-807f37aa-cafd-4d2b-8802-5866d667e19f:historical_snapshot_unavailable",
+      "ly-686e854e-0997-419e-85b1-7eb422f3c4f9:historical_snapshot_unavailable",
+      "ly-de9d0b6b-651e-45eb-9380-b83beb840eba:historical_snapshot_unavailable",
+      "ly-427298d7-a439-49e5-b84c-108ad0665be7:historical_snapshot_unavailable",
+      "ly-a39bfbd2-5afe-47cd-a290-95063ea92707:historical_snapshot_unavailable",
+      "ly-856c6055-eb0d-447b-b722-1aed9244be83:historical_snapshot_unavailable",
+      "ly-fa833303-906c-48f6-a2af-60b68f83a90f:historical_snapshot_unavailable",
+      "ly-3f4449dc-5e44-4e57-97e9-339992342c73:historical_snapshot_unavailable",
+      "ly-a564337d-716e-41ac-b870-e2b02a3b8002:historical_snapshot_unavailable",
+      "ly-110ffe21-a1dd-43c2-97c0-2dc6edf487d7:historical_snapshot_unavailable",
+      "ly-6b7a5334-66ec-4d7b-a25c-8e90d0b3c7ed:historical_snapshot_unavailable",
+      "ly-ba065091-d870-4934-8291-d5f43f916b9e:historical_snapshot_unavailable",
+      "ly-f0862334-9bdc-4a84-bbb8-12915c56ec8d:historical_snapshot_unavailable",
+      "ly-69a6fcab-f4ff-40b9-9c38-256c69c50ae9:historical_snapshot_unavailable",
+      "ly-717b4bd1-e76b-4cf5-a213-2fa8e95dbd4f:historical_snapshot_unavailable",
+      "ly-7e9e7bed-56d6-49fb-b3d5-cc0e7f23c6e7:historical_snapshot_unavailable",
+      "ly-6409137a-82d7-4bd9-a71f-82cfbd4ceb7c:historical_snapshot_unavailable",
+      "ly-a3a33e04-b7ef-4e7a-abed-4827861aea39:historical_snapshot_unavailable",
+      "ly-10ab8359-42db-4394-a2bf-bd9cb0a6c3b5:historical_snapshot_unavailable",
+      "ly-e0c4882c-00fd-465d-b521-7be46dfa6d1b:historical_snapshot_unavailable",
+      "ly-4ee2b24d-4c9b-457b-9b76-b35d2de7bbac:historical_snapshot_unavailable",
+      "ly-796b0587-350f-4da3-ab63-36e24535bff9:historical_snapshot_unavailable",
+      "ly-50e5702d-3767-481c-9163-eb4624c7f47f:historical_snapshot_unavailable",
+      "ly-9785b9f1-91a9-48b1-8e7a-782a35b0b3c5:historical_snapshot_unavailable",
+      "ly-bd1a1fe6-b78c-41bd-9556-b16e66572bec:historical_snapshot_unavailable",
+      "ly-3099d12d-4baa-4a3e-9a07-80d0ca3d0be0:historical_snapshot_unavailable",
+      "ly-d264c2ed-217f-40a9-adc8-9dffab8398c3:historical_snapshot_unavailable",
+      "ly-ce608b06-6841-417e-a3c6-648d6881cc7d:historical_snapshot_unavailable",
+      "ly-a8575bfc-503a-4a38-a311-de75b31aa5e2:historical_snapshot_unavailable",
+      "ly-beff0ce4-e3cd-4e60-a7e2-0fe1e075a768:historical_snapshot_unavailable",
+      "ly-29b1671a-2474-4bc2-964d-306e1a72f79d:historical_snapshot_unavailable",
+      "ly-d2f4672d-caf8-422e-8c52-11c4c93c0ecf:historical_snapshot_unavailable",
+      "ly-0170a3e7-0315-4073-8319-9d9e1d6a5a1c:historical_snapshot_unavailable",
+      "ly-84ef6f78-d2e7-4129-adb8-82f12d53ad14:historical_snapshot_unavailable",
+      "ly-ee3a5018-3144-4702-bb17-21b6299a0f5d:historical_snapshot_unavailable",
+      "ly-2fc5abc0-5f7b-4219-9482-a0266a7b3d94:historical_snapshot_unavailable",
+      "ly-cf9eb9ac-78d8-4d26-a7af-712b2053ec2f:historical_snapshot_unavailable",
+      "ly-68f8dbec-42aa-4fe9-9a7a-af2c2b546f6c:historical_snapshot_unavailable",
+      "ly-99a3d482-fea0-4a3d-870a-097309122af4:historical_snapshot_unavailable",
+      "ly-23bfc15d-9c33-4477-9d4e-e7af0b30a72a:historical_snapshot_unavailable",
+      "ly-019d3f0f-5324-4544-9e94-b87fb4751a56:historical_snapshot_unavailable",
+      "ly-da3f36ea-1039-496f-b8d3-6bd4a04c4e43:historical_snapshot_unavailable",
+      "ly-b8e153c9-60c3-4ac3-9c51-717915f12e2c:historical_snapshot_unavailable",
+      "ly-1b602674-c6b9-4caf-a3da-745b849384fb:historical_snapshot_unavailable",
+      "ly-acca296b-1e30-41b0-9d5a-48e38bb169a9:historical_snapshot_unavailable",
+      "ly-7afccacd-f30f-46e7-ba05-e333f910b222:historical_snapshot_unavailable",
+      "ly-57018d61-fad1-488f-9cde-0de494a1627b:historical_snapshot_unavailable",
+      "ly-f0baa54f-142e-4f10-b202-4b31f75910de:historical_snapshot_unavailable",
+      "ly-a48a5c43-bfdd-4011-aef8-782ced721260:historical_snapshot_unavailable",
+      "ly-f60e95b0-986e-4006-926d-9f1af2497d12:historical_snapshot_unavailable",
+      "ly-69f223e0-e9d6-4b27-919e-0b1b67e97e3d:historical_snapshot_unavailable",
+      "ly-b6af0e19-7e30-4453-851d-3cdb38939212:historical_snapshot_unavailable",
+      "ly-66e08f9a-e167-4829-8b44-186feb2095b4:historical_snapshot_unavailable",
+      "ly-4ca8244b-3145-4485-933e-75329e5eb47d:historical_snapshot_unavailable",
+      "ly-6543d954-4c60-4317-a591-d44f514cec79:historical_snapshot_unavailable",
+      "ly-4d7f6c52-056e-45ea-9b91-ca3bdb57e720:historical_snapshot_unavailable",
+      "ly-c7655d09-7c4c-4985-9766-dd5a4738b14f:historical_snapshot_unavailable",
+      "ly-6c9250eb-5425-48bb-a0a1-1d847beb398e:historical_snapshot_unavailable",
+      "ly-920abbe2-6d5c-4013-a42a-d79fae93cde7:historical_snapshot_unavailable",
+      "ly-28cb8e52-0beb-46b6-a65c-85bc9608a988:historical_snapshot_unavailable",
+      "ly-22ecddc5-2178-442c-ad92-b3e75b4b7753:historical_snapshot_unavailable",
+      "ly-cad0cd39-b814-4d35-8235-732e8f19c3d5:historical_snapshot_unavailable",
+      "ly-121bed57-bc7b-4834-b91d-3b3463cc657a:historical_snapshot_unavailable",
+      "ly-ce258aef-573d-42c7-81c7-ae3981ef3220:historical_snapshot_unavailable",
+      "ly-e3e7c5a5-c4af-4240-9bc4-13121638cd7b:historical_snapshot_unavailable",
+      "ly-7fcbc0d5-edca-41a3-9bcf-c2e19abb989b:historical_snapshot_unavailable",
+      "ly-d92f9c7b-40b1-41e9-aa4a-ea8ad1e981e9:historical_snapshot_unavailable",
+      "ly-f3610a93-412e-445d-9a0c-2a4ea71929c3:historical_snapshot_unavailable",
+      "ly-c402225c-baf3-4280-a5a4-0839df92a06c:historical_snapshot_unavailable",
+      "ly-23d7c3e3-2c7e-43ec-bb6b-6b5c5cd1245b:historical_snapshot_unavailable",
+      "ly-3a49ec31-addd-4a0d-a31e-46ed105cdb0a:historical_snapshot_unavailable",
+      "ly-7285da40-9d7a-47a5-839d-edc40e783de5:historical_snapshot_unavailable",
+      "ly-315f1e85-73f0-4ffa-926f-6abae91969f7:historical_snapshot_unavailable",
+      "ly-80395ae1-4dfa-4108-93b8-a5c8534a180e:historical_snapshot_unavailable",
+      "ly-73bfe634-cffe-4dfa-bb0e-df128b666a69:historical_snapshot_unavailable",
+      "ly-c2d4c4a6-ea34-4beb-95cb-6eadf7baa266:historical_snapshot_unavailable"
+    ],
+    "complete": false,
+    "raw_hits": 14,
+    "duplicate_contacts": 0
+  },
+  "cache_key": "caf05fe2fecd2016a0c0b5195cfb7ae10a3ac788d2549d58bdc25dbbac7c2026",
+  "cache_hit": false,
+  "persisted": false
+}

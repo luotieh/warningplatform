@@ -443,12 +443,49 @@ func TestPhaseOneCoverageFrozenReportReplay(t *testing.T) {
 					}
 				}
 			}
+			finalPrompt, finalPromptErr := evidenceReportPrompt(event, p, p.Evidence, "")
+			if finalPromptErr != nil {
+				var sections map[string]json.RawMessage
+				_ = json.Unmarshal([]byte(finalPrompt), &sections)
+				for key, value := range sections {
+					t.Logf("model section %s bytes=%d", key, len(value))
+				}
+				t.Fatal("final model projection budget", finalPromptErr)
+			}
 			doc := ReportDocument{EventID: id, LayoutVersion: reportFivePartLayout, Evidence: p.Evidence, Assessment: ReportAssessment{Verdict: "insufficient", ProbabilityReason: "本文件验证确定性 F→C→报告渲染链路；未调用模型，未进行事件性质研判。"}}
 			if p.Evidence.PhaseOne != nil {
 				risk := p.Evidence.PhaseOne.Result
 				doc.Assessment.EvidenceRisk = &risk
 			}
 			doc.Markdown = renderFivePartReport(doc)
+			compact := compactPipelineReport(doc)
+			compact.SchemaVersion = reportEvidenceVersion
+			compact.TechnicalAppendix = renderReportTechnicalAppendix(compact)
+			compactBytes, compactErr := json.Marshal(compact)
+			if compactErr != nil || len(compactBytes) > 16<<20 || renderFivePartReport(compact) != doc.Markdown {
+				t.Fatal("formal report projection invalid", compactErr, len(compactBytes))
+			}
+			if id == "ly-75e2c9ed-4a1b-4d20-b676-5c81c9725aa8" {
+				audit := *p.Evidence.Pipeline
+				audit.Persisted = true
+				if err := svc.persistPipelineJournal(ctx, audit.Key, id, pipelineJournal{Audit: audit, Evidence: p.Evidence}); err != nil {
+					t.Fatal("large real audit persistence", err)
+				}
+				page, err := svc.ReportEvidenceDetails(ctx, compact, 0, 10)
+				if err != nil || len(page.Items) != 10 {
+					t.Fatal("large real audit read", err)
+				}
+			}
+			if export := os.Getenv("PIPELINE_V2_AUDIT_EXPORT"); export != "" && id == "ly-fd1496c4-14e6-40ae-bb29-57d162a9d94f" {
+				full := map[string]any{"pipeline": p.Evidence.Pipeline, "manifest": p.Evaluation.Manifest, "evidence": p.Evidence, "semantics": p.Semantics, "report": compact, "final_model_status": "skipped_quota_exhausted", "assessment_is_render_fixture": true, "production_writes": 0}
+				raw, err := json.MarshalIndent(full, "", "  ")
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err = os.WriteFile(export, raw, 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
 			if p.Evidence.PhaseOne != nil && !strings.Contains(doc.Markdown, "C04") {
 				t.Fatal("C results absent from formal report renderer")
 			}
@@ -488,6 +525,14 @@ func TestPhaseOneCoverageFrozenReportReplay(t *testing.T) {
 				phase.Materials.Records = nil
 			}
 			row := map[string]any{"event_id": id, "snapshot_version": snap.Version, "watermark": snap.Watermark, "revision_watermark": snap.RevisionWatermark, "declared_hits": snap.Count, "loaded_hits": p.Evaluation.Manifest.LoadedHits, "raw_bytes": p.Evaluation.Manifest.RawBytes, "coverage": p.Evaluation.Manifest.Coverage, "status": p.Evaluation.Status, "reason": p.Evaluation.Reason, "issues": p.Evaluation.Manifest.Issues, "phase_one": phase, "history": p.Evidence.History, "report_path": out, "report_rendered": true, "model_called": false, "production_writes": 0}
+			row["pipeline"] = p.Evidence.Pipeline
+			row["final_model_input_bytes"] = len(finalPrompt)
+			row["final_model_token_estimate"] = estimateTokens(finalPrompt)
+			row["compact_report_document_bytes"] = len(compactBytes)
+			row["normalized_evidence"] = p.Evidence.Normalized
+			if data, err := json.Marshal(doc); err == nil {
+				row["report_document_bytes"] = len(data)
+			}
 			row["protocol_inputs"] = protocols
 			row["stream_budgets"] = map[string]any{"version": p.Evaluation.Manifest.StreamVersion, "page_bytes": p.Evaluation.Manifest.PageByteBudget, "total_bytes": p.Evaluation.Manifest.SnapshotByteBudget, "feature_bytes": p.Evaluation.Manifest.FeatureByteBudget, "retained_feature_bytes": p.Evaluation.Manifest.RetainedFeatureBytes, "excluded_hits": p.Evaluation.Manifest.PhaseOneExcludedHits}
 			row["semantics"] = p.Semantics

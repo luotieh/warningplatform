@@ -1,0 +1,2356 @@
+{
+  "count": 82,
+  "note": "Core fields and explicitly conditional typed fields; algorithms retain authoritative exact gates. No family-wide blanket completeness claim.",
+  "rules": [
+    {
+      "id": "F_BEACON_PERIODIC",
+      "input_families": [
+        "time_series",
+        "capture_quality"
+      ],
+      "required_or_conditional_fields": {
+        "time_series": [
+          "Request.Hits[].ID",
+          "Request.Hits[].OccurredAt",
+          "Request.Hits[].Scope",
+          "PhaseOneContact.ID/Kind/IOCType/IOCValue/Snapshot for independent rules"
+        ],
+        "capture_quality": [
+          "Request.Quality.Coverage",
+          "Request.Quality.SavedTimelineComplete",
+          "Request.Quality.CaptureTruncated"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "n≥8；5s≤Δt≤24h；CV(Δt)≤0.15；每次≤5 包（DetectHeartbeat）",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_BEACON_JITTER",
+      "input_families": [
+        "time_series",
+        "capture_quality"
+      ],
+      "required_or_conditional_fields": {
+        "time_series": [
+          "Request.Hits[].ID",
+          "Request.Hits[].OccurredAt",
+          "Request.Hits[].Scope",
+          "PhaseOneContact.ID/Kind/IOCType/IOCValue/Snapshot for independent rules"
+        ],
+        "capture_quality": [
+          "Request.Quality.Coverage",
+          "Request.Quality.SavedTimelineComplete",
+          "Request.Quality.CaptureTruncated"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "n≥16；median(Δt) 稳定且 0.15<CV≤0.40；Ljung-Box p<0.05 且 ACF 峰值>0.3",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_FIXED_DAILY_WINDOW",
+      "input_families": [
+        "time_series",
+        "capture_quality"
+      ],
+      "required_or_conditional_fields": {
+        "time_series": [
+          "Request.Hits[].ID",
+          "Request.Hits[].OccurredAt",
+          "Request.Hits[].Scope",
+          "PhaseOneContact.ID/Kind/IOCType/IOCValue/Snapshot for independent rules"
+        ],
+        "capture_quality": [
+          "Request.Quality.Coverage",
+          "Request.Quality.SavedTimelineComplete",
+          "Request.Quality.CaptureTruncated"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "≥3 自然日且 ≥80% 命中落在同一 ≤2h 窗口",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_MULTI_DAY_PERSIST",
+      "input_families": [
+        "time_series",
+        "capture_quality"
+      ],
+      "required_or_conditional_fields": {
+        "time_series": [
+          "Request.Hits[].ID",
+          "Request.Hits[].OccurredAt",
+          "Request.Hits[].Scope",
+          "PhaseOneContact.ID/Kind/IOCType/IOCValue/Snapshot for independent rules"
+        ],
+        "capture_quality": [
+          "Request.Quality.Coverage",
+          "Request.Quality.SavedTimelineComplete",
+          "Request.Quality.CaptureTruncated"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "锁定窗口内逐日桶活跃 ≥2 天为 days2 / ≥3 天为 days3（不用首末两点推持续；固定资产/端点，需跨段时联合快照）",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_RATE_BURST",
+      "input_families": [
+        "time_series",
+        "capture_quality",
+        "baselines"
+      ],
+      "required_or_conditional_fields": {
+        "time_series": [
+          "Request.Hits[].ID",
+          "Request.Hits[].OccurredAt",
+          "Request.Hits[].Scope",
+          "PhaseOneContact.ID/Kind/IOCType/IOCValue/Snapshot for independent rules"
+        ],
+        "capture_quality": [
+          "Request.Quality.Coverage",
+          "Request.Quality.SavedTimelineComplete",
+          "Request.Quality.CaptureTruncated"
+        ],
+        "baselines": [
+          "Input.Baselines[].FactID/Metrics/Frequencies",
+          "matching provenance, scope, valid window and required metric keys"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "peak_window(5m)/长期窗口均值 >p99 基线",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_RATE_RAMP",
+      "input_families": [
+        "time_series",
+        "capture_quality"
+      ],
+      "required_or_conditional_fields": {
+        "time_series": [
+          "Request.Hits[].ID",
+          "Request.Hits[].OccurredAt",
+          "Request.Hits[].Scope",
+          "PhaseOneContact.ID/Kind/IOCType/IOCValue/Snapshot for independent rules"
+        ],
+        "capture_quality": [
+          "Request.Quality.Coverage",
+          "Request.Quality.SavedTimelineComplete",
+          "Request.Quality.CaptureTruncated"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "至少5个固定等长窗口；无并列值时精确双侧Mann-Kendall p<0.05；并列/缺窗标ineligible，禁止静默切渐近检验",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_DNS_HIGH_ENTROPY",
+      "input_families": [
+        "dns_records",
+        "baselines"
+      ],
+      "required_or_conditional_fields": {
+        "dns_records": [
+          "Input.DNS.Records[].SourceID/Time/Domain",
+          "conditional: RCode/RCodeKnown/Answers/BigramLogProbabilities"
+        ],
+        "baselines": [
+          "Input.Baselines[].FactID/Metrics/Frequencies",
+          "matching provenance, scope, valid window and required metric keys"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "PSL 归一后：独特子域比 >p95 且 标签长 p90 >p95 且 查询速率 >p95（同域基线）；单机高熵不支持 Botnet",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_DNS_ENCODED_LABEL",
+      "input_families": [
+        "dns_records"
+      ],
+      "required_or_conditional_fields": {
+        "dns_records": [
+          "Input.DNS.Records[].SourceID/Time/Domain",
+          "conditional: RCode/RCodeKnown/Answers/BigramLogProbabilities"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "base32/hex 模式匹配且代码可验证解码链",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_DGA_LEXICAL",
+      "input_families": [
+        "dns_records",
+        "baselines",
+        "dns_lexical_corpus"
+      ],
+      "required_or_conditional_fields": {
+        "dns_records": [
+          "Input.DNS.Records[].SourceID/Time/Domain",
+          "conditional: RCode/RCodeKnown/Answers/BigramLogProbabilities"
+        ],
+        "baselines": [
+          "Input.Baselines[].FactID/Metrics/Frequencies",
+          "matching provenance, scope, valid window and required metric keys"
+        ],
+        "dns_lexical_corpus": [
+          "original rule input family; see evidence/inputs.go and runtime missing reason"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "bigram 对数概率 <语料 p05；元音比/长度分布异常；单机随机域名不支持 Botnet",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_NXDOMAIN_CLUSTER",
+      "input_families": [
+        "dns_records",
+        "baselines"
+      ],
+      "required_or_conditional_fields": {
+        "dns_records": [
+          "Input.DNS.Records[].SourceID/Time/Domain",
+          "conditional: RCode/RCodeKnown/Answers/BigramLogProbabilities"
+        ],
+        "baselines": [
+          "Input.Baselines[].FactID/Metrics/Frequencies",
+          "matching provenance, scope, valid window and required metric keys"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "单资产完整查询窗口内 NXDOMAIN 查询比例 > nxdomain_rate_p99，且失败的不同 eTLD+1 ≥2；基线单位为查询比例",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_GROUP_NXDOMAIN_CLUSTER",
+      "input_families": [
+        "group_membership",
+        "group_observations",
+        "baselines"
+      ],
+      "required_or_conditional_fields": {
+        "group_membership": [
+          "Request.Group / GroupInput.Members",
+          "verified asset membership and provenance"
+        ],
+        "group_observations": [
+          "GroupInput observations",
+          "per-member identity, scope and source-bound times/relations"
+        ],
+        "baselines": [
+          "Input.Baselines[].FactID/Metrics/Frequencies",
+          "matching provenance, scope, valid window and required metric keys"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "≥3 资产同窗口对同词形簇域名的失败解析率 >群体基线 p99；需 rcode＋未命中分母；与单资产版为不同 fact",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_FAILED_TO_ACTIVE",
+      "input_families": [
+        "dns_records",
+        "network_records",
+        "bound_connection_hits"
+      ],
+      "required_or_conditional_fields": {
+        "dns_records": [
+          "Input.DNS.Records[].SourceID/Time/Domain",
+          "conditional: RCode/RCodeKnown/Answers/BigramLogProbabilities"
+        ],
+        "network_records": [
+          "Input.Network.Connections",
+          "conditional: per-connection time, actual state/direction/bytes/packet fields required by original rule"
+        ],
+        "bound_connection_hits": [
+          "original rule input family; see evidence/inputs.go and runtime missing reason"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "同一规范DNS问题名至少min_failures次先前NXDOMAIN，随后NOERROR回答IP且同资产≤5min连接该IP；不要求连续失败",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_SHARED_DOMAIN_CLUSTER",
+      "input_families": [
+        "group_membership",
+        "group_observations",
+        "baselines"
+      ],
+      "required_or_conditional_fields": {
+        "group_membership": [
+          "Request.Group / GroupInput.Members",
+          "verified asset membership and provenance"
+        ],
+        "group_observations": [
+          "GroupInput observations",
+          "per-member identity, scope and source-bound times/relations"
+        ],
+        "baselines": [
+          "Input.Baselines[].FactID/Metrics/Frequencies",
+          "matching provenance, scope, valid window and required metric keys"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "≥3 资产共同查询一簇非常规域名（同注册域/同命名模式）",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_HTTP_ENDPOINT_REPEAT",
+      "input_families": [
+        "http_records"
+      ],
+      "required_or_conditional_fields": {
+        "http_records": [
+          "Input.HTTP.Records[].SourceID/Time/Method/URL",
+          "conditional: RequestID/TransactionID/SessionID/RawRequest/ParsedBody/Truncated/Fields/UserAgent/ResponseVerified",
+          "Input.HTTP.RequestCandidates/NonRequestPackets/UnknownRequestIDs"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "主机＋规范端点分组：重复 ≥6 次且间隔低抖动（CV≤0.3）；POST 本身不加分",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_HTTP_FIELD_ENCODING",
+      "input_families": [
+        "http_records",
+        "baselines"
+      ],
+      "required_or_conditional_fields": {
+        "http_records": [
+          "Input.HTTP.Records[].SourceID/Time/Method/URL",
+          "conditional: RequestID/TransactionID/SessionID/RawRequest/ParsedBody/Truncated/Fields/UserAgent/ResponseVerified",
+          "Input.HTTP.RequestCandidates/NonRequestPackets/UnknownRequestIDs"
+        ],
+        "baselines": [
+          "Input.Baselines[].FactID/Metrics/Frequencies",
+          "matching provenance, scope, valid window and required metric keys"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "编码链验证后异常长度/编码占比 >同服务基线 p95；排除 JWT/OAuth",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_HTTP_UA_RARITY",
+      "input_families": [
+        "http_records",
+        "baselines"
+      ],
+      "required_or_conditional_fields": {
+        "http_records": [
+          "Input.HTTP.Records[].SourceID/Time/Method/URL",
+          "conditional: RequestID/TransactionID/SessionID/RawRequest/ParsedBody/Truncated/Fields/UserAgent/ResponseVerified",
+          "Input.HTTP.RequestCandidates/NonRequestPackets/UnknownRequestIDs"
+        ],
+        "baselines": [
+          "Input.Baselines[].FactID/Metrics/Frequencies",
+          "matching provenance, scope, valid window and required metric keys"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "同资产 UA 一致且全平台稀有度 <p01；弱证据，与 S03 同事实取其一",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_HTTP_SIZE_STABILITY",
+      "input_families": [
+        "http_records",
+        "baselines"
+      ],
+      "required_or_conditional_fields": {
+        "http_records": [
+          "Input.HTTP.Records[].SourceID/Time/Method/URL",
+          "conditional: RequestID/TransactionID/SessionID/RawRequest/ParsedBody/Truncated/Fields/UserAgent/ResponseVerified",
+          "Input.HTTP.RequestCandidates/NonRequestPackets/UnknownRequestIDs"
+        ],
+        "baselines": [
+          "Input.Baselines[].FactID/Metrics/Frequencies",
+          "matching provenance, scope, valid window and required metric keys"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "n≥12；仅请求BodyLength：CV< size_cv_p05 且 unique_size_ratio<unique_size_ratio_p05；不计算响应或z分数",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_LONG_LOW_SESSION",
+      "input_families": [
+        "verified_sessions",
+        "time_series",
+        "capture_quality"
+      ],
+      "required_or_conditional_fields": {
+        "verified_sessions": [
+          "Input.Network.Sessions",
+          "conditional: verified session start/end and bidirectional counters"
+        ],
+        "time_series": [
+          "Request.Hits[].ID",
+          "Request.Hits[].OccurredAt",
+          "Request.Hits[].Scope",
+          "PhaseOneContact.ID/Kind/IOCType/IOCValue/Snapshot for independent rules"
+        ],
+        "capture_quality": [
+          "Request.Quality.Coverage",
+          "Request.Quality.SavedTimelineComplete",
+          "Request.Quality.CaptureTruncated"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "会话 >30min 且双向 <10KB 且含周期小包（体量须 Q02 verified）",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_URL_ODD_AUTHORITY",
+      "input_families": [
+        "http_records"
+      ],
+      "required_or_conditional_fields": {
+        "http_records": [
+          "Input.HTTP.Records[].SourceID/Time/Method/URL",
+          "conditional: RequestID/TransactionID/SessionID/RawRequest/ParsedBody/Truncated/Fields/UserAgent/ResponseVerified",
+          "Input.HTTP.RequestCandidates/NonRequestPackets/UnknownRequestIDs"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "userinfo `@` / IP·数字·十六进制主机；deception_strength: weak，不满足 Phishing 欺骗门槛",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_URL_HOMOGLYPH",
+      "input_families": [
+        "http_records",
+        "brand_registry"
+      ],
+      "required_or_conditional_fields": {
+        "http_records": [
+          "Input.HTTP.Records[].SourceID/Time/Method/URL",
+          "conditional: RequestID/TransactionID/SessionID/RawRequest/ParsedBody/Truncated/Fields/UserAgent/ResponseVerified",
+          "Input.HTTP.RequestCandidates/NonRequestPackets/UnknownRequestIDs"
+        ],
+        "brand_registry": [
+          "original rule input family; see evidence/inputs.go and runtime missing reason"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "有限字符映射后与核验品牌域近似；不覆盖完整Unicode视觉混淆检测",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_URL_BRAND_SUBDOMAIN_TRICK",
+      "input_families": [
+        "http_records",
+        "brand_registry"
+      ],
+      "required_or_conditional_fields": {
+        "http_records": [
+          "Input.HTTP.Records[].SourceID/Time/Method/URL",
+          "conditional: RequestID/TransactionID/SessionID/RawRequest/ParsedBody/Truncated/Fields/UserAgent/ResponseVerified",
+          "Input.HTTP.RequestCandidates/NonRequestPackets/UnknownRequestIDs"
+        ],
+        "brand_registry": [
+          "original rule input family; see evidence/inputs.go and runtime missing reason"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "品牌词在子域而注册域无关（PSL 提取），如 `brand.com.evil.tld`",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_BRAND_IMPOSTOR",
+      "input_families": [
+        "http_records",
+        "brand_registry"
+      ],
+      "required_or_conditional_fields": {
+        "http_records": [
+          "Input.HTTP.Records[].SourceID/Time/Method/URL",
+          "conditional: RequestID/TransactionID/SessionID/RawRequest/ParsedBody/Truncated/Fields/UserAgent/ResponseVerified",
+          "Input.HTTP.RequestCandidates/NonRequestPackets/UnknownRequestIDs"
+        ],
+        "brand_registry": [
+          "original rule input family; see evidence/inputs.go and runtime missing reason"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "与审核品牌清单编辑距离/邻键比对，或授权域核验失败；需品牌清单",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_CRED_POST_STRUCTURE",
+      "input_families": [
+        "http_records"
+      ],
+      "required_or_conditional_fields": {
+        "http_records": [
+          "Input.HTTP.Records[].SourceID/Time/Method/URL",
+          "conditional: RequestID/TransactionID/SessionID/RawRequest/ParsedBody/Truncated/Fields/UserAgent/ResponseVerified",
+          "Input.HTTP.RequestCandidates/NonRequestPackets/UnknownRequestIDs"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "同请求 POST＋脱敏凭据字段名；正文截断标 insufficient",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_FORM_CROSSSITE",
+      "input_families": [
+        "http_records"
+      ],
+      "required_or_conditional_fields": {
+        "http_records": [
+          "Input.HTTP.Records[].SourceID/Time/Method/URL",
+          "conditional: RequestID/TransactionID/SessionID/RawRequest/ParsedBody/Truncated/Fields/UserAgent/ResponseVerified",
+          "Input.HTTP.RequestCandidates/NonRequestPackets/UnknownRequestIDs"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "action 与页面来源不同可注册域",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_REDIRECT_CHAIN",
+      "input_families": [
+        "http_records"
+      ],
+      "required_or_conditional_fields": {
+        "http_records": [
+          "Input.HTTP.Records[].SourceID/Time/Method/URL",
+          "conditional: RequestID/TransactionID/SessionID/RawRequest/ParsedBody/Truncated/Fields/UserAgent/ResponseVerified",
+          "Input.HTTP.RequestCandidates/NonRequestPackets/UnknownRequestIDs"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "事务 ID 关联的跨注册域跳转提交链；两条无关联命中不得拼接",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_MULTI_REDIRECT_CHAIN",
+      "input_families": [
+        "http_records"
+      ],
+      "required_or_conditional_fields": {
+        "http_records": [
+          "Input.HTTP.Records[].SourceID/Time/Method/URL",
+          "conditional: RequestID/TransactionID/SessionID/RawRequest/ParsedBody/Truncated/Fields/UserAgent/ResponseVerified",
+          "Input.HTTP.RequestCandidates/NonRequestPackets/UnknownRequestIDs"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "同一已关联会话内≥2条经RedirectVerified验证的事务跳转边；核验响应状态及Location，不识别短链服务",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_PROTOCOL_PORT_MISMATCH",
+      "input_families": [
+        "network_records",
+        "service_registry"
+      ],
+      "required_or_conditional_fields": {
+        "network_records": [
+          "Input.Network.Connections",
+          "conditional: per-connection time, actual state/direction/bytes/packet fields required by original rule"
+        ],
+        "service_registry": [
+          "original rule input family; see evidence/inputs.go and runtime missing reason"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "dst_port vs 可解析 app_proto 指纹＋服务清单不符（端口推断的 protocol 不算）",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_RARE_PORT",
+      "input_families": [
+        "network_records",
+        "baselines"
+      ],
+      "required_or_conditional_fields": {
+        "network_records": [
+          "Input.Network.Connections",
+          "conditional: per-connection time, actual state/direction/bytes/packet fields required by original rule"
+        ],
+        "baselines": [
+          "Input.Baselines[].FactID/Metrics/Frequencies",
+          "matching provenance, scope, valid window and required metric keys"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "目的端口在同角色资产群体中频率 <p01",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_DST_NOVELTY",
+      "input_families": [
+        "history"
+      ],
+      "required_or_conditional_fields": {
+        "history": [
+          "Input.History or Input.PlatformHistory",
+          "HistoryData.Provenance",
+          "HistoryEvent asset, IOC and verified relation",
+          "conditional: current pattern / history window / historical source snapshot versions"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "资产历史覆盖窗口内首现（只称\"首次告警\"）",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_INFRA_RARITY",
+      "input_families": [
+        "network_records",
+        "baselines",
+        "infrastructure_registry"
+      ],
+      "required_or_conditional_fields": {
+        "network_records": [
+          "Input.Network.Connections",
+          "conditional: per-connection time, actual state/direction/bytes/packet fields required by original rule"
+        ],
+        "baselines": [
+          "Input.Baselines[].FactID/Metrics/Frequencies",
+          "matching provenance, scope, valid window and required metric keys"
+        ],
+        "infrastructure_registry": [
+          "original rule input family; see evidence/inputs.go and runtime missing reason"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "目的 IP 的 ASN/地理/信誉稀有（外部清单，二期）",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_FANOUT_SINGLE_SRC",
+      "input_families": [
+        "network_records",
+        "baselines"
+      ],
+      "required_or_conditional_fields": {
+        "network_records": [
+          "Input.Network.Connections",
+          "conditional: per-connection time, actual state/direction/bytes/packet fields required by original rule"
+        ],
+        "baselines": [
+          "Input.Baselines[].FactID/Metrics/Frequencies",
+          "matching provenance, scope, valid window and required metric keys"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "跨事件按源去重 unique(dst,port)/小时 >角色基线 p99",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_PORT_SEQUENCE",
+      "input_families": [
+        "network_records"
+      ],
+      "required_or_conditional_fields": {
+        "network_records": [
+          "Input.Network.Connections",
+          "conditional: per-connection time, actual state/direction/bytes/packet fields required by original rule"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "目的端口序列呈顺序/逆序/伪随机（≥8 去重端口）",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_SMALL_PACKET",
+      "input_families": [
+        "network_records"
+      ],
+      "required_or_conditional_fields": {
+        "network_records": [
+          "Input.Network.Connections",
+          "conditional: per-connection time, actual state/direction/bytes/packet fields required by original rule"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "≥80%独立连接观测的应用载荷字节数≤small_payload_bytes；另记录零载荷比例，不等同零载荷",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_CONN_FAIL_RATE",
+      "input_families": [
+        "network_records",
+        "baselines",
+        "verified_connection_outcomes"
+      ],
+      "required_or_conditional_fields": {
+        "network_records": [
+          "Input.Network.Connections",
+          "conditional: per-connection time, actual state/direction/bytes/packet fields required by original rule"
+        ],
+        "baselines": [
+          "Input.Baselines[].FactID/Metrics/Frequencies",
+          "matching provenance, scope, valid window and required metric keys"
+        ],
+        "verified_connection_outcomes": [
+          "original rule input family; see evidence/inputs.go and runtime missing reason"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "完整窗口确认失败/(确认失败+确认成功)>connection_failure_rate_p95；须OutcomeVerified；尝试中或未知结局返回missing，SYN_SENT不计失败",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_INDEPENDENT_RULE_CORROB",
+      "input_families": [
+        "independent_rule_and_intel_metadata"
+      ],
+      "required_or_conditional_fields": {
+        "independent_rule_and_intel_metadata": [
+          "Input.Corroboration",
+          "independent provider/rule/source lineage; upstream IOC reputation is not re-audited"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "by_rule＋规则库元数据判独立性；同 IOC 派生多 rule_id 只记一组",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_INDEPENDENT_INTEL_CORROB",
+      "input_families": [
+        "independent_rule_and_intel_metadata"
+      ],
+      "required_or_conditional_fields": {
+        "independent_rule_and_intel_metadata": [
+          "Input.Corroboration",
+          "independent provider/rule/source lineage; upstream IOC reputation is not re-audited"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "多情报源/引擎独立标记同一目的；须验证情报源独立性（同源转引不算）",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_IOC_TYPE_CORROB",
+      "input_families": [
+        "independent_rule_and_intel_metadata"
+      ],
+      "required_or_conditional_fields": {
+        "independent_rule_and_intel_metadata": [
+          "Input.Corroboration",
+          "independent provider/rule/source lineage; upstream IOC reputation is not re-audited"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "IOC 情报类型与成立硬行为事实类型一致（evaluation_stage=post_hard_type；抑制与 modifier 后的 hard_type_scores 满足 top1≥15、份额≥0.60、margin≥10 且情报标签与 top1 一致时成立）；不回填类型分",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_TLS_SNI_MISMATCH",
+      "input_families": [
+        "tls_records",
+        "tls_trust_and_fingerprint_registry"
+      ],
+      "required_or_conditional_fields": {
+        "tls_records": [
+          "Input.TLS.Records",
+          "conditional: actual SNI, certificate or JA metadata required by original rule"
+        ],
+        "tls_trust_and_fingerprint_registry": [
+          "verified reference registry needed by the specific TLS comparison"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "已核验TLS握手SNI与证书名称匹配失败；需已核验CDN例外清单；不比较目的服务身份",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_TLS_CERT_ANOMALY",
+      "input_families": [
+        "tls_records",
+        "tls_trust_and_fingerprint_registry"
+      ],
+      "required_or_conditional_fields": {
+        "tls_records": [
+          "Input.TLS.Records",
+          "conditional: actual SNI, certificate or JA metadata required by original rule"
+        ],
+        "tls_trust_and_fingerprint_registry": [
+          "verified reference registry needed by the specific TLS comparison"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "证书链/有效期/颁发者异常",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_TLS_JA_MISMATCH",
+      "input_families": [
+        "tls_records",
+        "tls_trust_and_fingerprint_registry"
+      ],
+      "required_or_conditional_fields": {
+        "tls_records": [
+          "Input.TLS.Records",
+          "conditional: actual SNI, certificate or JA metadata required by original rule"
+        ],
+        "tls_trust_and_fingerprint_registry": [
+          "verified reference registry needed by the specific TLS comparison"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "指纹库比对；浏览器声称 vs TLS 指纹",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_MULTI_ASSET_IOC",
+      "input_families": [
+        "group_membership",
+        "group_observations"
+      ],
+      "required_or_conditional_fields": {
+        "group_membership": [
+          "Request.Group / GroupInput.Members",
+          "verified asset membership and provenance"
+        ],
+        "group_observations": [
+          "GroupInput observations",
+          "per-member identity, scope and source-bound times/relations"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "≥3 独立资产（NAT/代理/解析器归属去重）同 IOC 且时间聚集",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_MULTI_ASSET_DIST",
+      "input_families": [
+        "group_membership",
+        "group_observations"
+      ],
+      "required_or_conditional_fields": {
+        "group_membership": [
+          "Request.Group / GroupInput.Members",
+          "verified asset membership and provenance"
+        ],
+        "group_observations": [
+          "GroupInput observations",
+          "per-member identity, scope and source-bound times/relations"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "核验成员的子网熵及角色分布达到配置门槛；不推断随机感染或真实感染面",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_TIME_COORDINATION",
+      "input_families": [
+        "group_membership",
+        "group_observations"
+      ],
+      "required_or_conditional_fields": {
+        "group_membership": [
+          "Request.Group / GroupInput.Members",
+          "verified asset membership and provenance"
+        ],
+        "group_observations": [
+          "GroupInput observations",
+          "per-member identity, scope and source-bound times/relations"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "≥3资产到同一协议/IP/端口的有界时间桶序列；最小两两互相关>0.7；Endpoint缺失不执行",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_COORD_FANOUT",
+      "input_families": [
+        "group_membership",
+        "group_observations"
+      ],
+      "required_or_conditional_fields": {
+        "group_membership": [
+          "Request.Group / GroupInput.Members",
+          "verified asset membership and provenance"
+        ],
+        "group_observations": [
+          "GroupInput observations",
+          "per-member identity, scope and source-bound times/relations"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "多源目标集合重叠 >70%，或不同资产分工覆盖目标段且时间衔接",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_INFECTION_CHAIN",
+      "input_families": [
+        "group_membership",
+        "group_observations"
+      ],
+      "required_or_conditional_fields": {
+        "group_membership": [
+          "Request.Group / GroupInput.Members",
+          "verified asset membership and provenance"
+        ],
+        "group_observations": [
+          "GroupInput observations",
+          "per-member identity, scope and source-bound times/relations"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "A外联同一协议/IP/端口→A访问另一成员B的核验地址→B随后外联该端点；至少一条时序路径，不证明感染或利用成功",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_SHARED_ENDPOINT",
+      "input_families": [
+        "group_membership",
+        "group_observations",
+        "baselines"
+      ],
+      "required_or_conditional_fields": {
+        "group_membership": [
+          "Request.Group / GroupInput.Members",
+          "verified asset membership and provenance"
+        ],
+        "group_observations": [
+          "GroupInput observations",
+          "per-member identity, scope and source-bound times/relations"
+        ],
+        "baselines": [
+          "Input.Baselines[].FactID/Metrics/Frequencies",
+          "matching provenance, scope, valid window and required metric keys"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "≥3核验资产连接同一协议/IP/端口，且endpoint_frequency<endpoint_frequency_p01；DNS查询不充当连接",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_FIRST_VISIT_CLUSTER",
+      "input_families": [
+        "group_membership",
+        "group_observations",
+        "history"
+      ],
+      "required_or_conditional_fields": {
+        "group_membership": [
+          "Request.Group / GroupInput.Members",
+          "verified asset membership and provenance"
+        ],
+        "group_observations": [
+          "GroupInput observations",
+          "per-member identity, scope and source-bound times/relations"
+        ],
+        "history": [
+          "Input.History or Input.PlatformHistory",
+          "HistoryData.Provenance",
+          "HistoryEvent asset, IOC and verified relation",
+          "conditional: current pattern / history window / historical source snapshot versions"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "完整历史窗口内无先前记录的同端点访问，≥3资产集中≤1h；不证明网络真实首访或点击",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_COORD_PATTERN_RECURRENCE",
+      "input_families": [
+        "group_membership",
+        "group_observations"
+      ],
+      "required_or_conditional_fields": {
+        "group_membership": [
+          "Request.Group / GroupInput.Members",
+          "verified asset membership and provenance"
+        ],
+        "group_observations": [
+          "GroupInput observations",
+          "per-member identity, scope and source-bound times/relations"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "同一资产组的协同模式（相位/突发窗口）在 ≥2 个自然日重现",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_HIST_ASSET_IOC_RECURRENCE",
+      "input_families": [
+        "history"
+      ],
+      "required_or_conditional_fields": {
+        "history": [
+          "Input.History or Input.PlatformHistory",
+          "HistoryData.Provenance",
+          "HistoryEvent asset, IOC and verified relation",
+          "conditional: current pattern / history window / historical source snapshot versions"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "30天窗≥2自然日独立事件；允许有来源的partial阳性；F不按审核状态计分，C01按一期联合策略计分",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_HIST_GROUP_RECURRENCE",
+      "input_families": [
+        "history"
+      ],
+      "required_or_conditional_fields": {
+        "history": [
+          "Input.History or Input.PlatformHistory",
+          "HistoryData.Provenance",
+          "HistoryEvent asset, IOC and verified relation",
+          "conditional: current pattern / history window / historical source snapshot versions"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "同已核验群体及基础设施跨周重现；仅输出历史事实，不执行旧版审核加减分",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_HIST_INFRA_PERSISTENCE",
+      "input_families": [
+        "history"
+      ],
+      "required_or_conditional_fields": {
+        "history": [
+          "Input.History or Input.PlatformHistory",
+          "HistoryData.Provenance",
+          "HistoryEvent asset, IOC and verified relation",
+          "conditional: current pattern / history window / historical source snapshot versions"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "同IOC连续自然日由多个资产产生已保存历史记录；只输出关联事实，不证明服务存活、钓鱼或直接加分",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_HIST_SCHEDULE_MATCH",
+      "input_families": [
+        "history"
+      ],
+      "required_or_conditional_fields": {
+        "history": [
+          "Input.History or Input.PlatformHistory",
+          "HistoryData.Provenance",
+          "HistoryEvent asset, IOC and verified relation",
+          "conditional: current pattern / history window / historical source snapshot versions"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "历史事件与当前命中时刻分布一致（KL 散度 <阈值）",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_HIST_MULTI_IOC_SIEGE",
+      "input_families": [
+        "history",
+        "baselines"
+      ],
+      "required_or_conditional_fields": {
+        "history": [
+          "Input.History or Input.PlatformHistory",
+          "HistoryData.Provenance",
+          "HistoryEvent asset, IOC and verified relation",
+          "conditional: current pattern / history window / historical source snapshot versions"
+        ],
+        "baselines": [
+          "Input.Baselines[].FactID/Metrics/Frequencies",
+          "matching provenance, scope, valid window and required metric keys"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "窗口内同资产被 ≥3 不同 IOC/规则族命中；按角色基线",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_HIST_STAGE_PROGRESSION",
+      "input_families": [
+        "history",
+        "campaign_and_stage_proofs"
+      ],
+      "required_or_conditional_fields": {
+        "history": [
+          "Input.History or Input.PlatformHistory",
+          "HistoryData.Provenance",
+          "HistoryEvent asset, IOC and verified relation",
+          "conditional: current pattern / history window / historical source snapshot versions"
+        ],
+        "campaign_and_stage_proofs": [
+          "original rule input family; see evidence/inputs.go and runtime missing reason"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "同资产、同IOC或独立核验战役内，已定谳恶意历史与有来源证明的CurrentStage构成scan/exploit→c2→exfil推进；当前阶段须高于最近历史阶段，历史不得回退；不证明因果攻击链",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_HIST_COORD_PARAM_MATCH",
+      "input_families": [
+        "history",
+        "campaign_and_stage_proofs"
+      ],
+      "required_or_conditional_fields": {
+        "history": [
+          "Input.History or Input.PlatformHistory",
+          "HistoryData.Provenance",
+          "HistoryEvent asset, IOC and verified relation",
+          "conditional: current pattern / history window / historical source snapshot versions"
+        ],
+        "campaign_and_stage_proofs": [
+          "original rule input family; see evidence/inputs.go and runtime missing reason"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "同实际基础设施、独立核验战役及资产/完整群体范围内，核验的当前协同参数与已定谳历史按配置容限比较；群体ID及完整核验成员集合须一致；只说明受约束的参数相似",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_HIST_EXERCISE",
+      "input_families": [
+        "authorization_records"
+      ],
+      "required_or_conditional_fields": {
+        "authorization_records": [
+          "Input.Authorizations.Records",
+          "verified scope, allowed action and effective window"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "资产/域名属登记钓鱼演练或测试平台（留验证记录）；classification_effect: type=PH, effective_score_cap=34, status=candidate",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_IOC_NOVELTY",
+      "input_families": [
+        "history"
+      ],
+      "required_or_conditional_fields": {
+        "history": [
+          "Input.History or Input.PlatformHistory",
+          "HistoryData.Provenance",
+          "HistoryEvent asset, IOC and verified relation",
+          "conditional: current pattern / history window / historical source snapshot versions"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "历史库无记录；与 F_HIST_ASSET_IOC_RECURRENCE 互斥",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_EXCL_SCAN_TASK",
+      "input_families": [
+        "authorization_records"
+      ],
+      "required_or_conditional_fields": {
+        "authorization_records": [
+          "Input.Authorizations.Records",
+          "verified scope, allowed action and effective window"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "核验登记角色/任务与当前活动匹配，不由模型推断",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "F_EXCL_INFRA_ROLE",
+      "input_families": [
+        "authorization_records"
+      ],
+      "required_or_conditional_fields": {
+        "authorization_records": [
+          "Input.Authorizations.Records",
+          "verified scope, allowed action and effective window"
+        ]
+      },
+      "scope_fields": [
+        "Scope.AssetID",
+        "Scope.NodeID",
+        "Scope.EndpointID"
+      ],
+      "source_fields": [
+        "Provenance.Verified",
+        "Provenance.Version",
+        "Provenance.SourceIDs"
+      ],
+      "window_fields": [
+        "Input.Window.Start/End or Request.Hits[].OccurredAt"
+      ],
+      "coverage_condition": "Per-rule gate in existing evaluator; not_observed requires its complete supplied population. C01 may be observed with supported partial coverage. Unrelated missing families are not synthetic empty observations.",
+      "algorithm_preconditions": "核验登记角色/任务与当前活动匹配，不由模型推断",
+      "authority": "evidence/input_contract.go FactInputs plus existing evaluateFact and typed family rule; no duplicated thresholds"
+    },
+    {
+      "id": "S01/c2.command_intent/",
+      "required_material_kinds": [
+        "protocol_request",
+        "direction"
+      ],
+      "required_fields": [
+        "SemanticSubject.ID/Scope/Window",
+        "SemanticMaterial.ID/Kind/Text/FieldPath/Scope/SnapshotVersion/Window",
+        "SemanticMaterial.Provenance.Version/SourceIDs/Verified/Complete",
+        "conditional: RelatedIDs/DecodeSteps and exact originating F object"
+      ],
+      "all_facts": [],
+      "any_facts": [],
+      "coverage_condition": "可读协议、可信方向；strong须同事务双向语义对应；不证明执行成功",
+      "authority": "evidence.SemanticInputContracts / prerequisites / validator; runtime report-practical overrides remain authoritative"
+    },
+    {
+      "id": "S02/c2.command_exchange/",
+      "required_material_kinds": [
+        "protocol_request",
+        "protocol_response",
+        "pair"
+      ],
+      "required_fields": [
+        "SemanticSubject.ID/Scope/Window",
+        "SemanticMaterial.ID/Kind/Text/FieldPath/Scope/SnapshotVersion/Window",
+        "SemanticMaterial.Provenance.Version/SourceIDs/Verified/Complete",
+        "conditional: RelatedIDs/DecodeSteps and exact originating F object"
+      ],
+      "all_facts": [],
+      "any_facts": [],
+      "coverage_condition": "同事务真实请求应答；排除文档与日志回显",
+      "authority": "evidence.SemanticInputContracts / prerequisites / validator; runtime report-practical overrides remain authoritative"
+    },
+    {
+      "id": "S03/c2.ua_behavior_conflict/",
+      "required_material_kinds": [
+        "ua",
+        "protocol_request"
+      ],
+      "required_fields": [
+        "SemanticSubject.ID/Scope/Window",
+        "SemanticMaterial.ID/Kind/Text/FieldPath/Scope/SnapshotVersion/Window",
+        "SemanticMaterial.Provenance.Version/SourceIDs/Verified/Complete",
+        "conditional: RelatedIDs/DecodeSteps and exact originating F object"
+      ],
+      "all_facts": [
+        "F_HTTP_ENDPOINT_REPEAT"
+      ],
+      "any_facts": [],
+      "coverage_condition": "重复端点事实及实际UA；浏览器声明不足",
+      "authority": "evidence.SemanticInputContracts / prerequisites / validator; runtime report-practical overrides remain authoritative"
+    },
+    {
+      "id": "S04/c2.dns_encoded_intent/",
+      "required_material_kinds": [
+        "domain",
+        "decode",
+        "decoded_payload"
+      ],
+      "required_fields": [
+        "SemanticSubject.ID/Scope/Window",
+        "SemanticMaterial.ID/Kind/Text/FieldPath/Scope/SnapshotVersion/Window",
+        "SemanticMaterial.Provenance.Version/SourceIDs/Verified/Complete",
+        "conditional: RelatedIDs/DecodeSteps and exact originating F object"
+      ],
+      "all_facts": [
+        "F_DNS_ENCODED_LABEL"
+      ],
+      "any_facts": [],
+      "coverage_condition": "编码标签事实及代码验证解码链；考虑追踪token",
+      "authority": "evidence.SemanticInputContracts / prerequisites / validator; runtime report-practical overrides remain authoritative"
+    },
+    {
+      "id": "S05/phishing.deception/",
+      "required_material_kinds": [
+        "page",
+        "host",
+        "brand_authorization"
+      ],
+      "required_fields": [
+        "SemanticSubject.ID/Scope/Window",
+        "SemanticMaterial.ID/Kind/Text/FieldPath/Scope/SnapshotVersion/Window",
+        "SemanticMaterial.Provenance.Version/SourceIDs/Verified/Complete",
+        "conditional: RelatedIDs/DecodeSteps and exact originating F object"
+      ],
+      "all_facts": [],
+      "any_facts": [],
+      "coverage_condition": "页面正文、Host、核验品牌授权域；strong须明确仿冒依据",
+      "authority": "evidence.SemanticInputContracts / prerequisites / validator; runtime report-practical overrides remain authoritative"
+    },
+    {
+      "id": "S06/phishing.credential_action/",
+      "required_material_kinds": [
+        "credential_fields",
+        "protocol_request"
+      ],
+      "required_fields": [
+        "SemanticSubject.ID/Scope/Window",
+        "SemanticMaterial.ID/Kind/Text/FieldPath/Scope/SnapshotVersion/Window",
+        "SemanticMaterial.Provenance.Version/SourceIDs/Verified/Complete",
+        "conditional: RelatedIDs/DecodeSteps and exact originating F object"
+      ],
+      "all_facts": [],
+      "any_facts": [
+        "F_CRED_POST_STRUCTURE",
+        "F_FORM_CROSSSITE",
+        "F_REDIRECT_CHAIN"
+      ],
+      "coverage_condition": "同请求字段名、方法、目的及行动事实；只解释收集意图",
+      "authority": "evidence.SemanticInputContracts / prerequisites / validator; runtime report-practical overrides remain authoritative"
+    },
+    {
+      "id": "S07/exfil.sensitive_upload/",
+      "required_material_kinds": [
+        "protocol_request",
+        "direction",
+        "volume",
+        "content_classification"
+      ],
+      "required_fields": [
+        "SemanticSubject.ID/Scope/Window",
+        "SemanticMaterial.ID/Kind/Text/FieldPath/Scope/SnapshotVersion/Window",
+        "SemanticMaterial.Provenance.Version/SourceIDs/Verified/Complete",
+        "conditional: RelatedIDs/DecodeSteps and exact originating F object"
+      ],
+      "all_facts": [],
+      "any_facts": [],
+      "coverage_condition": "完整请求、可信方向与体量、内容分类依据；不证明送达",
+      "authority": "evidence.SemanticInputContracts / prerequisites / validator; runtime report-practical overrides remain authoritative"
+    },
+    {
+      "id": "S08/exfil.chunk_sequence/",
+      "required_material_kinds": [
+        "chunk",
+        "volume",
+        "transfer_join"
+      ],
+      "required_fields": [
+        "SemanticSubject.ID/Scope/Window",
+        "SemanticMaterial.ID/Kind/Text/FieldPath/Scope/SnapshotVersion/Window",
+        "SemanticMaterial.Provenance.Version/SourceIDs/Verified/Complete",
+        "conditional: RelatedIDs/DecodeSteps and exact originating F object"
+      ],
+      "all_facts": [],
+      "any_facts": [],
+      "coverage_condition": "至少两个可靠关联事务、块序号及可信体量；禁止拼接无关命中",
+      "authority": "evidence.SemanticInputContracts / prerequisites / validator; runtime report-practical overrides remain authoritative"
+    },
+    {
+      "id": "S09/exploit.payload_intent/",
+      "required_material_kinds": [
+        "protocol_request",
+        "parsed_payload",
+        "direction"
+      ],
+      "required_fields": [
+        "SemanticSubject.ID/Scope/Window",
+        "SemanticMaterial.ID/Kind/Text/FieldPath/Scope/SnapshotVersion/Window",
+        "SemanticMaterial.Provenance.Version/SourceIDs/Verified/Complete",
+        "conditional: RelatedIDs/DecodeSteps and exact originating F object"
+      ],
+      "all_facts": [],
+      "any_facts": [],
+      "coverage_condition": "已解析请求载荷、方法、目标协议及可信方向；不证明利用成功",
+      "authority": "evidence.SemanticInputContracts / prerequisites / validator; runtime report-practical overrides remain authoritative"
+    },
+    {
+      "id": "S10/protocol.response_meaning/",
+      "required_material_kinds": [
+        "protocol_request",
+        "protocol_response",
+        "pair"
+      ],
+      "required_fields": [
+        "SemanticSubject.ID/Scope/Window",
+        "SemanticMaterial.ID/Kind/Text/FieldPath/Scope/SnapshotVersion/Window",
+        "SemanticMaterial.Provenance.Version/SourceIDs/Verified/Complete",
+        "conditional: RelatedIDs/DecodeSteps and exact originating F object"
+      ],
+      "all_facts": [],
+      "any_facts": [],
+      "coverage_condition": "同事务真实双向应答；HTTP200不证明执行",
+      "authority": "evidence.SemanticInputContracts / prerequisites / validator; runtime report-practical overrides remain authoritative"
+    },
+    {
+      "id": "S11/mining.protocol_intent/",
+      "required_material_kinds": [
+        "stratum_request",
+        "stratum_response",
+        "pair"
+      ],
+      "required_fields": [
+        "SemanticSubject.ID/Scope/Window",
+        "SemanticMaterial.ID/Kind/Text/FieldPath/Scope/SnapshotVersion/Window",
+        "SemanticMaterial.Provenance.Version/SourceIDs/Verified/Complete",
+        "conditional: RelatedIDs/DecodeSteps and exact originating F object"
+      ],
+      "all_facts": [],
+      "any_facts": [],
+      "coverage_condition": "实际Stratum方法、参数和应答；不重复协议事实",
+      "authority": "evidence.SemanticInputContracts / prerequisites / validator; runtime report-practical overrides remain authoritative"
+    },
+    {
+      "id": "S12/c2.domain_lexical/dga_lexical",
+      "required_material_kinds": [
+        "domain",
+        "lexical_context"
+      ],
+      "required_fields": [
+        "SemanticSubject.ID/Scope/Window",
+        "SemanticMaterial.ID/Kind/Text/FieldPath/Scope/SnapshotVersion/Window",
+        "SemanticMaterial.Provenance.Version/SourceIDs/Verified/Complete",
+        "conditional: RelatedIDs/DecodeSteps and exact originating F object"
+      ],
+      "all_facts": [],
+      "any_facts": [],
+      "coverage_condition": "原始域名及词形上下文；随机串不自动等于DGA",
+      "authority": "evidence.SemanticInputContracts / prerequisites / validator; runtime report-practical overrides remain authoritative"
+    },
+    {
+      "id": "S12/phishing.deception/brand_semantic_impostor",
+      "required_material_kinds": [
+        "brand",
+        "host",
+        "brand_authorization"
+      ],
+      "required_fields": [
+        "SemanticSubject.ID/Scope/Window",
+        "SemanticMaterial.ID/Kind/Text/FieldPath/Scope/SnapshotVersion/Window",
+        "SemanticMaterial.Provenance.Version/SourceIDs/Verified/Complete",
+        "conditional: RelatedIDs/DecodeSteps and exact originating F object"
+      ],
+      "all_facts": [],
+      "any_facts": [],
+      "coverage_condition": "品牌、实际授权域与仿冒关系；仅品牌词最多weak",
+      "authority": "evidence.SemanticInputContracts / prerequisites / validator; runtime report-practical overrides remain authoritative"
+    },
+    {
+      "id": "S13/payload.decoded_intent/command",
+      "required_material_kinds": [
+        "decode",
+        "decoded_payload",
+        "protocol_request",
+        "direction"
+      ],
+      "required_fields": [
+        "SemanticSubject.ID/Scope/Window",
+        "SemanticMaterial.ID/Kind/Text/FieldPath/Scope/SnapshotVersion/Window",
+        "SemanticMaterial.Provenance.Version/SourceIDs/Verified/Complete",
+        "conditional: RelatedIDs/DecodeSteps and exact originating F object"
+      ],
+      "all_facts": [],
+      "any_facts": [],
+      "coverage_condition": "代码验证解码链及实际命令上下文；strong遵循S01",
+      "authority": "evidence.SemanticInputContracts / prerequisites / validator; runtime report-practical overrides remain authoritative"
+    },
+    {
+      "id": "S13/payload.decoded_intent/other",
+      "required_material_kinds": [
+        "decode",
+        "decoded_payload",
+        "operation_context"
+      ],
+      "required_fields": [
+        "SemanticSubject.ID/Scope/Window",
+        "SemanticMaterial.ID/Kind/Text/FieldPath/Scope/SnapshotVersion/Window",
+        "SemanticMaterial.Provenance.Version/SourceIDs/Verified/Complete",
+        "conditional: RelatedIDs/DecodeSteps and exact originating F object"
+      ],
+      "all_facts": [],
+      "any_facts": [],
+      "coverage_condition": "代码验证解码链及独立操作上下文；解码成功不等于恶意",
+      "authority": "evidence.SemanticInputContracts / prerequisites / validator; runtime report-practical overrides remain authoritative"
+    },
+    {
+      "id": "S14/review.benign_alternative/",
+      "required_material_kinds": [
+        "protocol_request",
+        "asset_role",
+        "task_context"
+      ],
+      "required_fields": [
+        "SemanticSubject.ID/Scope/Window",
+        "SemanticMaterial.ID/Kind/Text/FieldPath/Scope/SnapshotVersion/Window",
+        "SemanticMaterial.Provenance.Version/SourceIDs/Verified/Complete",
+        "conditional: RelatedIDs/DecodeSteps and exact originating F object"
+      ],
+      "all_facts": [],
+      "any_facts": [],
+      "coverage_condition": "实际流量、事实规则、资产角色及任务上下文；仅记录异议",
+      "authority": "evidence.SemanticInputContracts / prerequisites / validator; runtime report-practical overrides remain authoritative"
+    },
+    {
+      "id": "S15/review.stage_and_gaps/",
+      "required_material_kinds": [
+        "visibility",
+        "gaps"
+      ],
+      "required_fields": [
+        "SemanticSubject.ID/Scope/Window",
+        "SemanticMaterial.ID/Kind/Text/FieldPath/Scope/SnapshotVersion/Window",
+        "SemanticMaterial.Provenance.Version/SourceIDs/Verified/Complete",
+        "conditional: RelatedIDs/DecodeSteps and exact originating F object"
+      ],
+      "all_facts": [],
+      "any_facts": [],
+      "coverage_condition": "接受的事实、可见范围及缺项；成功性须独立证据",
+      "authority": "evidence.SemanticInputContracts / prerequisites / validator; runtime report-practical overrides remain authoritative"
+    },
+    {
+      "id": "BT-S01/botnet.coordination/",
+      "required_material_kinds": [
+        "group_member"
+      ],
+      "required_fields": [
+        "SemanticSubject.ID/Scope/Window",
+        "SemanticMaterial.ID/Kind/Text/FieldPath/Scope/SnapshotVersion/Window",
+        "SemanticMaterial.Provenance.Version/SourceIDs/Verified/Complete",
+        "conditional: RelatedIDs/DecodeSteps and exact originating F object"
+      ],
+      "all_facts": [],
+      "any_facts": [
+        "F_TIME_COORDINATION",
+        "F_COORD_PATTERN_RECURRENCE",
+        "F_COORD_FANOUT",
+        "F_INFECTION_CHAIN"
+      ],
+      "coverage_condition": "核验群体及协同硬事实；最多5资产；不替代硬门槛",
+      "authority": "evidence.SemanticInputContracts / prerequisites / validator; runtime report-practical overrides remain authoritative"
+    },
+    {
+      "id": "SC01/c2.role_schedule_conflict/",
+      "required_material_kinds": [
+        "asset_role",
+        "business_schedule",
+        "time_distribution"
+      ],
+      "required_fields": [
+        "SemanticSubject.ID/Scope/Window",
+        "SemanticMaterial.ID/Kind/Text/FieldPath/Scope/SnapshotVersion/Window",
+        "SemanticMaterial.Provenance.Version/SourceIDs/Verified/Complete",
+        "conditional: RelatedIDs/DecodeSteps and exact originating F object"
+      ],
+      "all_facts": [],
+      "any_facts": [],
+      "coverage_condition": "核验角色、业务作息及实际时间分布；夜间服务器运行不自动异常",
+      "authority": "evidence.SemanticInputContracts / prerequisites / validator; runtime report-practical overrides remain authoritative"
+    },
+    {
+      "id": "SC02/botnet.group_alternative/",
+      "required_material_kinds": [
+        "group_member"
+      ],
+      "required_fields": [
+        "SemanticSubject.ID/Scope/Window",
+        "SemanticMaterial.ID/Kind/Text/FieldPath/Scope/SnapshotVersion/Window",
+        "SemanticMaterial.Provenance.Version/SourceIDs/Verified/Complete",
+        "conditional: RelatedIDs/DecodeSteps and exact originating F object"
+      ],
+      "all_facts": [],
+      "any_facts": [],
+      "coverage_condition": "核验群体角色与实际行为摘要；供人工解释",
+      "authority": "evidence.SemanticInputContracts / prerequisites / validator; runtime report-practical overrides remain authoritative"
+    },
+    {
+      "id": "SC03/phishing.brand_field_conflict/",
+      "required_material_kinds": [
+        "brand",
+        "credential_fields",
+        "brand_authorization"
+      ],
+      "required_fields": [
+        "SemanticSubject.ID/Scope/Window",
+        "SemanticMaterial.ID/Kind/Text/FieldPath/Scope/SnapshotVersion/Window",
+        "SemanticMaterial.Provenance.Version/SourceIDs/Verified/Complete",
+        "conditional: RelatedIDs/DecodeSteps and exact originating F object"
+      ],
+      "all_facts": [],
+      "any_facts": [],
+      "coverage_condition": "实际品牌、字段级引用及核验授权背景；不替代欺骗或行动门槛",
+      "authority": "evidence.SemanticInputContracts / prerequisites / validator; runtime report-practical overrides remain authoritative"
+    },
+    {
+      "id": "R06/history.activity_association/",
+      "required_material_kinds": [
+        "history",
+        "current_pattern"
+      ],
+      "required_fields": [
+        "SemanticSubject.ID/Scope/Window",
+        "SemanticMaterial.ID/Kind/Text/FieldPath/Scope/SnapshotVersion/Window",
+        "SemanticMaterial.Provenance.Version/SourceIDs/Verified/Complete",
+        "conditional: RelatedIDs/DecodeSteps and exact originating F object"
+      ],
+      "all_facts": [],
+      "any_facts": [],
+      "coverage_condition": "引用历史活动与当前模式，解释同IOC/资产关联；相似不自动等于同战役",
+      "authority": "evidence.SemanticInputContracts / prerequisites / validator; runtime report-practical overrides remain authoritative"
+    },
+    {
+      "id": "R07/history.alternative_explanation/",
+      "required_material_kinds": [
+        "history",
+        "current_pattern"
+      ],
+      "required_fields": [
+        "SemanticSubject.ID/Scope/Window",
+        "SemanticMaterial.ID/Kind/Text/FieldPath/Scope/SnapshotVersion/Window",
+        "SemanticMaterial.Provenance.Version/SourceIDs/Verified/Complete",
+        "conditional: RelatedIDs/DecodeSteps and exact originating F object"
+      ],
+      "all_facts": [],
+      "any_facts": [],
+      "coverage_condition": "使用全部关联历史比较业务解释与异常解释，不按审核状态筛选，不以相似认定误报",
+      "authority": "evidence.SemanticInputContracts / prerequisites / validator; runtime report-practical overrides remain authoritative"
+    }
+  ]
+}

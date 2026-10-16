@@ -9,7 +9,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"golang.org/x/net/dns/dnsmessage"
 	"io"
 	"net/http"
 	"net/url"
@@ -83,7 +82,6 @@ func collectSnapshotSemanticObservation(out *SnapshotEvidenceInput, input *evide
 		return
 	}
 	if o.DNS != nil {
-		var message dnsmessage.Message
 		data := payload
 		if strings.EqualFold(asString(m["protocol"]), "tcp") {
 			if len(data) <= 2 || int(binary.BigEndian.Uint16(data[:2])) != len(data)-2 {
@@ -92,26 +90,25 @@ func collectSnapshotSemanticObservation(out *SnapshotEvidenceInput, input *evide
 				data = data[2:]
 			}
 		}
-		o.Complete = full && message.Unpack(data) == nil && !message.Truncated && len(message.Questions) == 1 && strings.EqualFold(strings.TrimSuffix(message.Questions[0].Name.String(), "."), o.DNS.Domain)
+		message, dnsErr := snapshotDecodeDNS(m, data)
+		o.Complete = full && dnsErr == nil && !message.Truncated && len(message.Questions) == 1 && strings.EqualFold(strings.TrimSuffix(message.Questions[0].Name.String(), "."), o.DNS.Domain)
 	}
 	if o.HTTP != nil && len(payload) > 0 && utf8.Valid(payload) {
 		o.Payload = string(payload)
 		o.Complete = full && !o.HTTP.Truncated
-		// Parsed body belongs to the same actual request, not app sample fields.
-		req, err := http.ReadRequest(bufio.NewReader(bytes.NewReader(payload)))
-		if err != nil {
+		// The shared protocol parser already validated this exact request.
+		// Reuse its bytes/body rather than parsing HTTP a second time.
+		if o.HTTP.RawRequest == string(payload) && !o.HTTP.Truncated {
+			o.DNS = nil
+			if len(o.HTTP.ParsedBody) <= maxSemanticMessageBytes && utf8.ValidString(o.HTTP.ParsedBody) {
+				o.Body = o.HTTP.ParsedBody
+			}
+		} else {
 			o.HTTP = nil
 			o.Payload = ""
 			o.Complete = false
 		}
-		if err == nil {
-			o.DNS = nil // actual HTTP bytes must not inherit a conflicting DNS label
-			body, readErr := io.ReadAll(io.LimitReader(req.Body, maxSemanticMessageBytes+1))
-			req.Body.Close()
-			if readErr == nil && utf8.Valid(body) && len(body) <= maxSemanticMessageBytes {
-				o.Body = string(body)
-			}
-		}
+
 		if o.HTTP != nil && o.HTTP.ResponseVerified {
 			raw, complete, why := snapshotPayload(nestedMap(nestedMap(m, "raw_packet"), "response"))
 			if complete && why == "" && utf8.Valid(raw) {
@@ -158,6 +155,9 @@ func collectSnapshotSemanticObservation(out *SnapshotEvidenceInput, input *evide
 }
 
 func buildSnapshotSemanticRequest(snap EvidenceSnapshot, input SnapshotEvidenceInput, result *evidence.Result, mode evidence.SemanticInputMode) evidence.SemanticRequest {
+	if input.PreparedSemantics != nil {
+		return bindPreparedSemanticFacts(input, result, mode)
+	}
 	r := evidence.SemanticRequest{EventID: snap.EventID, SnapshotVersion: snap.Version, InputMode: mode, Subjects: []evidence.SemanticSubject{}, Slots: prioritizedSemanticSlots()}
 	if result == nil {
 		return r
@@ -223,12 +223,22 @@ func buildSnapshotSemanticRequest(snap EvidenceSnapshot, input SnapshotEvidenceI
 			// aggregate from another domain at the same recursive resolver.
 			s.Facts = nil
 			if o.Complete {
-				fs, _ := phaseOneDNSFact(context.Background(), snap, PhaseOneRecord{Hit: evidence.Hit{ID: o.HitID, OccurredAt: o.DNS.Time, Scope: o.Scope}, DNS: o.DNS})
-				s.Facts = fs
+				if result != nil {
+					for _, f := range result.Findings {
+						if f.FactID == "F_DNS_ENCODED_LABEL" && f.Scope == o.Scope && len(f.SourceIDs) == 1 && f.SourceIDs[0] == o.HitID {
+							s.Facts = append(s.Facts, f)
+						}
+					}
+				}
+				if len(s.Facts) == 0 && !input.Manifest.PhaseOneFactsPrepared {
+					// Explicit legacy callers have not run per-question F yet.
+					s.Facts, _ = phaseOneDNSFact(context.Background(), snap, PhaseOneRecord{Hit: evidence.Hit{ID: o.HitID, OccurredAt: o.DNS.Time, Scope: o.Scope}, DNS: o.DNS})
+				}
 				for n := range s.Facts {
 					s.Facts[n].Window = &evidence.Window{Start: s.Window.Start, End: s.Window.End, Convention: "analysis_half_open"}
 				}
 			}
+
 			d := material(&s, "domain", o.DNS.Domain, "dns.domain", p, o.Complete)
 			lexText := "已保存域名字段；词形相似仅供解释，不证明DGA或恶意归属"
 			if !o.Complete {
@@ -417,6 +427,65 @@ func buildSnapshotSemanticRequest(snap EvidenceSnapshot, input SnapshotEvidenceI
 	return r
 }
 
+// Binding after F is deterministic; no packet parsing, payload decoding or
+// source retrieval is performed by this part of L3.
+func bindPreparedSemanticFacts(input SnapshotEvidenceInput, result *evidence.Result, mode evidence.SemanticInputMode) evidence.SemanticRequest {
+	r := *input.PreparedSemantics
+	r.InputMode = mode
+	r.Subjects = append([]evidence.SemanticSubject(nil), r.Subjects...)
+	dns := map[string]SnapshotSemanticObservation{}
+	for _, o := range input.SemanticObservations {
+		if o.DNS != nil {
+			dns["operation:"+o.HitID] = o
+		}
+	}
+	for i := range r.Subjects {
+		s := &r.Subjects[i]
+		s.Materials = append([]evidence.SemanticMaterial(nil), s.Materials...)
+		s.Facts = nil
+		if result != nil {
+			for _, f := range result.Findings {
+				if f.Scope != s.Scope {
+					continue
+				}
+				if o, ok := dns[s.ID]; ok {
+					if !o.Complete || f.FactID != "F_DNS_ENCODED_LABEL" || len(f.SourceIDs) != 1 || f.SourceIDs[0] != o.HitID {
+						continue
+					}
+					f.Window = &evidence.Window{Start: s.Window.Start, End: s.Window.End, Convention: "analysis_half_open"}
+				} else if f.Window == nil || !f.Window.Start.Equal(s.Window.Start) || !f.Window.End.Equal(s.Window.End) {
+					continue
+				}
+				s.Facts = append(s.Facts, f)
+			}
+		}
+		for n := range s.Materials {
+			m := &s.Materials[n]
+			if m.Kind == "gaps" {
+				gaps := []string{}
+				for _, f := range s.Facts {
+					if f.Status == evidence.Missing {
+						gaps = append(gaps, string(f.FactID)+":"+string(f.ReasonCode))
+					}
+				}
+				if len(gaps) > 0 {
+					m.Text = strings.Join(gaps, ";")
+				}
+			}
+			if m.Kind == "current_pattern" {
+				m.Text = strings.Replace(m.Text, "当前已核验事实数=0", fmt.Sprintf("当前已核验事实数=%d", len(s.Facts)), 1)
+				for _, f := range s.Facts {
+					if f.Status == evidence.Observed {
+						raw, _ := json.Marshal(f.Measurements)
+						m.Text += "；" + string(f.FactID) + "=" + string(raw)
+					}
+				}
+			}
+		}
+	}
+	return r
+}
+
 type semanticMaterialFactory func(*evidence.SemanticSubject, string, string, string, evidence.Provenance, bool) evidence.SemanticMaterial
 
 func addSemanticSupplementalMaterials(s *evidence.SemanticSubject, i evidence.Input, currentEventID string, makeMaterial semanticMaterialFactory) {
@@ -592,8 +661,9 @@ func prioritizedSemanticSlots() []evidence.SlotKey {
 	// Action and paired-message explanations precede lexical/visibility tasks.
 	order := []string{"S06", "S09", "S10", "S02", "S01", "S11", "R06", "R07", "S13", "S04", "S05", "SC03", "BT-S01", "S03", "S12", "S07", "S08", "SC01", "S14", "SC02", "S15"}
 	out := []evidence.SlotKey{}
+	definitions := evidence.SemanticDefinitions()
 	for _, id := range order {
-		for _, d := range evidence.SemanticDefinitions() {
+		for _, d := range definitions {
 			if d.Key.ID == id {
 				out = append(out, d.Key)
 			}

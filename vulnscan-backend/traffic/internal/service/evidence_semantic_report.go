@@ -33,6 +33,8 @@ func DefaultReportSemanticOptions() ReportSemanticOptions {
 }
 
 type ReportSemanticEvaluation struct {
+	ModelVersion    string                     `json:"model_version,omitempty"`
+	InputDigest     string                     `json:"input_digest,omitempty"`
 	Status          string                     `json:"status"`
 	Reason          string                     `json:"reason,omitempty"`
 	InputMode       evidence.SemanticInputMode `json:"input_mode"`
@@ -68,7 +70,8 @@ type ReportSemanticDiagnostics struct {
 	Summary         map[string]any               `json:"summary"`
 }
 
-func (s Services) prepareReportSemantics(ctx context.Context, snap EvidenceSnapshot, facts SnapshotFactEvaluation, factKey string, input *SnapshotEvidenceInput, persist bool, cacheAllowed bool, load func() (SnapshotEvidenceInput, error)) (out ReportSemanticEvaluation, err error) {
+func (s Services) prepareReportSemantics(ctx context.Context, snap EvidenceSnapshot, facts SnapshotFactEvaluation, factKey string, input *SnapshotEvidenceInput, persist bool, cacheAllowed bool, load func() (SnapshotEvidenceInput, error), executeModel bool) (out ReportSemanticEvaluation, err error) {
+	defer pipelineMeasure(ctx, "semantic_plan_execute_validate")()
 	start := time.Now()
 	opts := DefaultReportSemanticOptions()
 	if s.ReportSemantics != nil {
@@ -79,6 +82,13 @@ func (s Services) prepareReportSemantics(ctx context.Context, snap EvidenceSnaps
 	opts.Config.ReportPractical = true
 	opts.Config.CompactProvenance = true
 	out = ReportSemanticEvaluation{InputMode: opts.InputMode, AdapterVersion: semanticAdapterVersion, Status: "unavailable"}
+	out.ModelVersion = opts.ModelVersion
+	if out.ModelVersion == "" && s.LLM != nil {
+		out.ModelVersion = s.LLM.Model
+	}
+	if out.ModelVersion == "" && s.SemanticModel != nil {
+		out.ModelVersion = "injected_model_unspecified"
+	}
 	if opts.InputMode == "" {
 		opts.InputMode = evidence.SemanticRedacted
 		out.InputMode = opts.InputMode
@@ -122,7 +132,7 @@ func (s Services) prepareReportSemantics(ctx context.Context, snap EvidenceSnaps
 	}
 	// CountTokens is executable code, never JSON/cache identity. Actual budget
 	// values and the plan's actual prompt hash distinguish tokenizer results.
-	budget := []any{opts.Config.MaxTasks, opts.Config.MaxInputBytes, opts.Config.MaxMaterialBytes, opts.Config.MaxOutputBytes, opts.Config.MaxOutputTokens, opts.Config.MaxInputTokens, opts.Config.Timeout.Milliseconds()}
+	budget := []any{opts.Config.MaxTasks, opts.Config.ReportBatchSize, opts.Config.MaxConcurrentBatches, opts.Config.MaxInputBytes, opts.Config.MaxMaterialBytes, opts.Config.MaxOutputBytes, opts.Config.MaxOutputTokens, opts.Config.MaxInputTokens, opts.Config.Timeout.Milliseconds()}
 	materialKey := digest([]any{factKey, semanticAdapterVersion, opts.InputMode})
 	var request evidence.SemanticRequest
 	materialCached := false
@@ -150,10 +160,9 @@ func (s Services) prepareReportSemantics(ctx context.Context, snap EvidenceSnaps
 			}
 			input = &loaded
 		}
-		request = buildSnapshotSemanticRequest(snap, *input, facts.Result, opts.InputMode)
-		if !s.LegacyReportEvidence {
-			request.Slots = evidence.PhaseOneSlots()
-		}
+		preparedInput := *input
+		preparedInput.Manifest = facts.Manifest
+		request = buildSnapshotSemanticRequest(snap, preparedInput, facts.Result, opts.InputMode)
 		// Facts are already stored under factKey; avoid duplicating potentially
 		// enormous fact provenance once per operation in the materials journal.
 		if persist && cacheAllowed {
@@ -182,7 +191,9 @@ func (s Services) prepareReportSemantics(ctx context.Context, snap EvidenceSnaps
 			}
 		}
 	}
+	planTiming := pipelineMeasure(ctx, "semantic_plan")
 	plan, err := engine.Plan(ctx, request)
+	planTiming()
 	if err != nil && materialCached && ctx.Err() == nil {
 		out.Issues = append(out.Issues, "semantic_materials_binding_invalid_rebuilt")
 		if input == nil {
@@ -193,11 +204,12 @@ func (s Services) prepareReportSemantics(ctx context.Context, snap EvidenceSnaps
 			}
 			input = &loaded
 		}
-		request = buildSnapshotSemanticRequest(snap, *input, facts.Result, opts.InputMode)
-		if !s.LegacyReportEvidence {
-			request.Slots = evidence.PhaseOneSlots()
-		}
+		preparedInput := *input
+		preparedInput.Manifest = facts.Manifest
+		request = buildSnapshotSemanticRequest(snap, preparedInput, facts.Result, opts.InputMode)
+		planTiming = pipelineMeasure(ctx, "semantic_plan")
 		plan, err = engine.Plan(ctx, request)
+		planTiming()
 		if err == nil && persist && cacheAllowed {
 			cached := request
 			cached.Subjects = append([]evidence.SemanticSubject(nil), request.Subjects...)
@@ -218,6 +230,7 @@ func (s Services) prepareReportSemantics(ctx context.Context, snap EvidenceSnaps
 		return out, nil
 	}
 	out.ResultKey = digest([]any{materialKey, evidence.SemanticVersion, budget, plan.ContextSHA256, plan.InputTokens, semanticModelIdentity(s), opts.ModelVersion, request.Slots})
+	out.InputDigest = plan.ContextSHA256
 	if persist && cacheAllowed {
 		record, exists, readErr := s.Store.AggregateRecord(ctx, "semantic_result", out.ResultKey)
 		if readErr == nil && exists && len(record.Value) <= 8<<20 {
@@ -236,7 +249,7 @@ func (s Services) prepareReportSemantics(ctx context.Context, snap EvidenceSnaps
 		}
 	}
 	var model evidence.SemanticModel
-	if persist {
+	if executeModel {
 		model = s.SemanticModel
 		if model == nil && s.LLM != nil {
 			semanticClient := *s.LLM
@@ -245,19 +258,21 @@ func (s Services) prepareReportSemantics(ctx context.Context, snap EvidenceSnaps
 			}
 			model = client.EvidenceSemanticModel{Client: semanticClient}
 		}
-		if model != nil {
+		if model != nil && persist {
 			model = reportSemanticAuditModel{Model: model, Save: func(ctx context.Context, call evidence.SemanticCall) error {
 				return putRecord(ctx, s.Store, "semantic_model_input", digest([]any{snap.EventID, snap.Version, call.System, call.Prompt, ReportBuildRevision}), snap.EventID, map[string]any{"snapshot_version": snap.Version, "system": call.System, "user": call.Prompt, "max_output_tokens": call.MaxOutputTokens, "input_hash": digest(call.Prompt), "system_hash": digest(call.System), "build_revision": ReportBuildRevision, "capacity_verified": false})
 			}}
 		}
 	}
 	var result evidence.SemanticResult
-	if !persist {
+	if !executeModel {
 		result = evidence.SemanticResult{Plan: plan, Findings: []evidence.SemanticFinding{}}
 		out.Status = "planned"
 		out.Reason = "read_only_no_model_call"
 	} else {
+		modelTiming := pipelineMeasure(ctx, "semantic_execute_validate")
 		result, err = engine.Evaluate(ctx, request, model)
+		modelTiming()
 		if err != nil {
 			if ctx.Err() != nil {
 				return out, ctx.Err()

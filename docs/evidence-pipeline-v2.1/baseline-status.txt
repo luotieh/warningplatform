@@ -1,0 +1,121 @@
+ M vulnscan-backend/evidence/engine.go
+ M vulnscan-backend/evidence/history_rules.go
+ M vulnscan-backend/evidence/normalization.go
+ M vulnscan-backend/evidence/normalization_test.go
+ M vulnscan-backend/evidence/phase_one.go
+ M vulnscan-backend/evidence/report_quality_test.go
+ M vulnscan-backend/evidence/semantic_engine.go
+ M vulnscan-backend/evidence/semantic_prerequisites.go
+ M vulnscan-backend/evidence/semantic_report_practical_test.go
+ M vulnscan-backend/evidence/semantic_types.go
+ M vulnscan-backend/traffic/internal/httpapi/report_document.go
+ M vulnscan-backend/traffic/internal/httpapi/report_document_test.go
+ M vulnscan-backend/traffic/internal/httpapi/server.go
+ M vulnscan-backend/traffic/internal/service/agents.go
+ M vulnscan-backend/traffic/internal/service/aggregation_freshness_test.go
+ M vulnscan-backend/traffic/internal/service/aggregation_repair.go
+ M vulnscan-backend/traffic/internal/service/aggregation_snapshot.go
+ M vulnscan-backend/traffic/internal/service/analysis_lifecycle.go
+ M vulnscan-backend/traffic/internal/service/analysis_scheduler_test.go
+ M vulnscan-backend/traffic/internal/service/evidence_merge.go
+ M vulnscan-backend/traffic/internal/service/evidence_merge_test.go
+ M vulnscan-backend/traffic/internal/service/evidence_protocol_input.go
+ M vulnscan-backend/traffic/internal/service/evidence_report_input.go
+ M vulnscan-backend/traffic/internal/service/evidence_semantic_input.go
+ M vulnscan-backend/traffic/internal/service/evidence_semantic_report.go
+ M vulnscan-backend/traffic/internal/service/evidence_snapshot_adapter.go
+ M vulnscan-backend/traffic/internal/service/evidence_sources_test.go
+ M vulnscan-backend/traffic/internal/service/evidence_stream.go
+ M vulnscan-backend/traffic/internal/service/evidence_stream_test.go
+ M vulnscan-backend/traffic/internal/service/phase_one.go
+ M vulnscan-backend/traffic/internal/service/phase_one_coverage_audit_test.go
+ M vulnscan-backend/traffic/internal/service/phase_one_materials.go
+ M vulnscan-backend/traffic/internal/service/phase_one_test.go
+ M vulnscan-backend/traffic/internal/service/prompt_budget_test.go
+ M vulnscan-backend/traffic/internal/service/prompts.go
+ M vulnscan-backend/traffic/internal/service/quant_stats_test.go
+ M vulnscan-backend/traffic/internal/service/report_assessment.go
+ M vulnscan-backend/traffic/internal/service/report_assessment_test.go
+ M vulnscan-backend/traffic/internal/service/report_boundaries.go
+ M vulnscan-backend/traffic/internal/service/report_chat_request_test.go
+ M vulnscan-backend/traffic/internal/service/report_document.go
+ M vulnscan-backend/traffic/internal/service/report_essence.go
+ M vulnscan-backend/traffic/internal/service/report_essence_replay_test.go
+ M vulnscan-backend/traffic/internal/service/report_essence_test.go
+ M vulnscan-backend/traffic/internal/service/report_evidence.go
+ M vulnscan-backend/traffic/internal/service/report_failure_chat.go
+ M vulnscan-backend/traffic/internal/service/report_failure_chat_test.go
+ M vulnscan-backend/traffic/internal/service/report_history.go
+ M vulnscan-backend/traffic/internal/service/report_history_raw.go
+ M vulnscan-backend/traffic/internal/service/report_history_test.go
+ M vulnscan-backend/traffic/internal/service/report_layout.go
+ M vulnscan-backend/traffic/internal/service/report_legacy_checker_test.go
+ D vulnscan-backend/traffic/internal/service/report_legacy_numbers_test.go
+ M vulnscan-backend/traffic/internal/service/report_legacy_render.go
+ M vulnscan-backend/traffic/internal/service/report_log.go
+ M vulnscan-backend/traffic/internal/service/report_log_replay_test.go
+ M vulnscan-backend/traffic/internal/service/report_material.go
+ M vulnscan-backend/traffic/internal/service/report_material_test.go
+ M vulnscan-backend/traffic/internal/service/report_narrative.go
+ M vulnscan-backend/traffic/internal/service/report_narrative_test.go
+ M vulnscan-backend/traffic/internal/service/report_numbers_practical_test.go
+ M vulnscan-backend/traffic/internal/service/report_observability_test.go
+ M vulnscan-backend/traffic/internal/service/report_practical.go
+ M vulnscan-backend/traffic/internal/service/report_practical_semantics.go
+ M vulnscan-backend/traffic/internal/service/report_practical_test.go
+ M vulnscan-backend/traffic/internal/service/report_publication.go
+ M vulnscan-backend/traffic/internal/service/report_review_regression_test.go
+ M vulnscan-backend/traffic/internal/service/report_schedule.go
+ M vulnscan-backend/traffic/internal/service/report_schedule_test.go
+ M vulnscan-backend/traffic/internal/service/report_semantic_audit.go
+ M vulnscan-backend/traffic/internal/service/report_v131_render.go
+ M vulnscan-backend/traffic/internal/service/report_v132_render.go
+ M vulnscan-backend/traffic/internal/service/report_v13_render.go
+ M vulnscan-backend/traffic/internal/service/report_weights.go
+ M vulnscan-backend/traffic/internal/service/services.go
+?? .local/
+?? "docs/180\345\215\225\344\272\213\344\273\266\344\270\200\346\234\237\350\276\223\345\205\245\346\235\220\346\226\231-2026-10-15.json"
+?? "docs/180\345\215\225\344\272\213\344\273\266\344\270\200\346\234\237\350\276\223\345\205\245\346\235\220\346\226\231-2026-10-15.md"
+?? docs/2026-10-10-evidence-input-supply.csv
+?? docs/evidence-input-standard-v1/
+?? docs/evidence-pipeline-v2.1/
+?? docs/evidence-pipeline-v2/
+?? docs/llm-assessment-credibility-proposal.md
+?? docs/phase1-round2-2026-10-16-ioc-bindings.csv
+?? docs/phase1-round2-2026-10-16-reports/
+?? docs/phase1-round2-2026-10-16-units.csv
+?? docs/phase1-v1-code-2026-10-15.patch
+?? docs/phase1-v1-delivery-2026-10-15.json
+?? docs/real-sample-coverage-audit-2026-10-15-candidates.csv
+?? docs/real-sample-coverage-audit-2026-10-15-ioc-bindings.csv
+?? docs/real-sample-coverage-audit-2026-10-15-reports/
+?? docs/real-sample-coverage-audit-2026-10-15.json
+?? docs/real-sample-coverage-audit-2026-10-15.md
+?? docs/silverfox-iocs-2026-10-16/
+?? docs/threat-probability-evidence-pyramid.md
+?? docs/threat-probability-evidence-vector.md
+?? "docs/\344\270\200\346\234\237\350\257\201\346\215\256\350\276\223\345\205\245\346\235\220\346\226\231\344\270\216180\346\240\270\351\252\214-2026-10-15.json"
+?? "docs/\344\270\200\346\234\237\350\257\201\346\215\256\350\276\223\345\205\245\346\235\220\346\226\231\344\270\216180\346\240\270\351\252\214-2026-10-15.md"
+?? "docs/\347\254\254\344\270\200\350\275\256\351\252\214\346\224\266-180-\345\277\253\347\205\24734-2026-10-15.json"
+?? "docs/\347\254\254\344\270\200\350\275\256\351\252\214\346\224\266-180-\345\277\253\347\205\24734-2026-10-15.md"
+?? "docs/\347\254\254\344\270\200\350\275\256\351\252\214\346\224\266-\345\217\252\350\257\273\345\256\241\350\256\241-2026-10-15.json"
+?? "docs/\350\257\201\346\215\256\345\272\223\346\225\260\346\215\256\351\227\255\347\216\257\344\270\216\347\240\224\345\210\244\346\212\245\345\221\212\346\224\271\351\200\240\344\273\273\345\212\241\344\271\246-2026-10-11.md"
+?? "docs/\350\257\201\346\215\256\347\262\276\345\215\216\345\275\222\344\270\200\344\270\216\347\240\224\345\210\244\346\212\245\345\221\212\350\276\223\345\205\245\346\224\271\351\200\240\344\273\273\345\212\241\344\271\246-2026-10-13.md"
+?? vulnscan-backend/evidence/semantic_pipeline_test.go
+?? vulnscan-backend/traffic/cmd/evidence-replay/
+?? vulnscan-backend/traffic/internal/service/evidence_pipeline.go
+?? vulnscan-backend/traffic/internal/service/evidence_pipeline_journal.go
+?? vulnscan-backend/traffic/internal/service/evidence_pipeline_limits.go
+?? vulnscan-backend/traffic/internal/service/evidence_pipeline_metrics.go
+?? vulnscan-backend/traffic/internal/service/evidence_pipeline_performance_test.go
+?? vulnscan-backend/traffic/internal/service/evidence_pipeline_projection.go
+?? vulnscan-backend/traffic/internal/service/evidence_pipeline_snapshot.go
+?? vulnscan-backend/traffic/internal/service/evidence_pipeline_test.go
+?? vulnscan-backend/traffic/internal/service/evidence_pipeline_time.go
+?? vulnscan-backend/traffic/internal/service/evidence_prepared.go
+?? vulnscan-backend/traffic/internal/service/evidence_prepared_test.go
+?? vulnscan-backend/traffic/internal/service/evidence_preprocess_cache.go
+?? vulnscan-backend/traffic/internal/service/evidence_preprocess_wire.go
+?? vulnscan-backend/traffic/internal/service/report_evidence_numbers.go
+?? vulnscan-backend/traffic/internal/service/report_pipeline_validation.go
+?? vulnscan-backend/traffic/internal/service/testdata/prepared-controlled-http.json

@@ -195,6 +195,15 @@ func renderNarrativeReportMarkdown(doc ReportDocument) string {
 }
 
 func renderReportTechnicalAppendix(doc ReportDocument) string {
+	if doc.Evidence.Pipeline != nil && len(doc.Evidence.Normalized.Items) == 0 {
+		a := doc.Evidence.Pipeline
+		var w strings.Builder
+		fmt.Fprintf(&w, "## 附录：完整证据审计索引\n\n快照：%d；命中水位：%d；修订水位：%d。\n\n审计键：%s。完整字段来源、限制及逐实例结果可由报告证据明细接口分页读取。\n\n", a.SnapshotVersion, a.Watermark, a.RevisionWatermark, a.Key)
+		for _, check := range a.Checks {
+			fmt.Fprintf(&w, "- %s：%s\n", check.ID, check.Status)
+		}
+		return w.String()
+	}
 	var w bytes.Buffer
 	fmt.Fprint(&w, "## 附录：完整证据与研判依据\n\n")
 	legacy := renderV132ReportMarkdown(doc)

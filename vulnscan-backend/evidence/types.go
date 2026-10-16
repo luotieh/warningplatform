@@ -106,6 +106,7 @@ type HTTPRepeatGroup struct {
 }
 
 type Finding struct {
+	ObservationKind string `json:"observation_kind,omitempty"`
 	EvidenceContract
 	IOCType         string       `json:"ioc_type,omitempty"`
 	IOCValue        string       `json:"ioc_value,omitempty"`

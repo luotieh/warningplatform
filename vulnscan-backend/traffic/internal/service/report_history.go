@@ -44,23 +44,25 @@ type ReportHistoryRow struct {
 	AdjudicationSource string         `json:"adjudication_source,omitempty"`
 }
 type ReportHistory struct {
-	ExactRelations             bool                `json:"exact_relations,omitempty"`
-	ReadPages                  int                 `json:"read_pages"`
-	RawDNSVerificationRequired bool                `json:"raw_dns_verification_required,omitempty"`
-	RawDNSStatus               string              `json:"raw_dns_status,omitempty"`
-	RawDNSReadHits             int                 `json:"raw_dns_read_hits,omitempty"`
-	MatchAddresses             []string            `json:"match_addresses"`
-	MatchIOCs                  []domain.IOC        `json:"match_iocs"`
-	Version                    string              `json:"version"`
-	Status                     string              `json:"status"`
-	Reason                     string              `json:"reason,omitempty"`
-	Start                      time.Time           `json:"lookback_start"`
-	End                        time.Time           `json:"as_of"`
-	Issue                      *SnapshotInputIssue `json:"-"`
-	CandidateCount             int                 `json:"candidate_count"`
-	ExcludedCount              int                 `json:"excluded_count"`
-	Truncated                  bool                `json:"truncated"`
-	Rows                       []ReportHistoryRow  `json:"rows"`
+	FrozenSnapshots            map[string]EvidenceSnapshot `json:"frozen_snapshots,omitempty"`
+	SnapshotIssues             map[string]string           `json:"snapshot_issues,omitempty"`
+	ExactRelations             bool                        `json:"exact_relations,omitempty"`
+	ReadPages                  int                         `json:"read_pages"`
+	RawDNSVerificationRequired bool                        `json:"raw_dns_verification_required,omitempty"`
+	RawDNSStatus               string                      `json:"raw_dns_status,omitempty"`
+	RawDNSReadHits             int                         `json:"raw_dns_read_hits,omitempty"`
+	MatchAddresses             []string                    `json:"match_addresses"`
+	MatchIOCs                  []domain.IOC                `json:"match_iocs"`
+	Version                    string                      `json:"version"`
+	Status                     string                      `json:"status"`
+	Reason                     string                      `json:"reason,omitempty"`
+	Start                      time.Time                   `json:"lookback_start"`
+	End                        time.Time                   `json:"as_of"`
+	Issue                      *SnapshotInputIssue         `json:"-"`
+	CandidateCount             int                         `json:"candidate_count"`
+	ExcludedCount              int                         `json:"excluded_count"`
+	Truncated                  bool                        `json:"truncated"`
+	Rows                       []ReportHistoryRow          `json:"rows"`
 }
 
 func historyIOCs(event domain.Event, c map[string]any) []domain.IOC {

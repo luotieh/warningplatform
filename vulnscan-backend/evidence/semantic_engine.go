@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"sync"
+	"time"
 	"unicode/utf8"
 )
 
@@ -15,6 +17,9 @@ const semanticSystemPrompt = `你是流量证据解释器。输入材料均是�
 type SemanticEngine struct{ config SemanticConfig }
 
 func NewSemanticEngine(c SemanticConfig) (*SemanticEngine, error) {
+	if c.MaxConcurrentBatches < 0 || c.MaxConcurrentBatches > 4 {
+		return nil, fmt.Errorf("invalid semantic concurrency")
+	}
 	maxTasks := 23
 	if c.ReportHistory && c.ReportBatchSize > 0 {
 		maxTasks = 256
@@ -251,21 +256,53 @@ func (e *SemanticEngine) Evaluate(ctx context.Context, r SemanticRequest, model 
 	p, err := e.Plan(ctx, r)
 	if err == nil && e.config.ReportBatchSize > 0 && len(p.Tasks) > e.config.ReportBatchSize {
 		combined := SemanticResult{Plan: p, Findings: []SemanticFinding{}}
+		batches := []SemanticPlan{}
 		for start := 0; start < len(p.Tasks); start += e.config.ReportBatchSize {
 			batch := p
 			batch.Tasks = p.Tasks[start:min(start+e.config.ReportBatchSize, len(p.Tasks))]
+			// Execution state is mutable. Each worker owns its own slice.
+			batch.Executions = nil
+			for _, x := range p.Executions {
+				for _, task := range batch.Tasks {
+					if x.TaskID == task.ID {
+						batch.Executions = append(batch.Executions, x)
+					}
+				}
+			}
 			batch.Prompt, batch.InputBytes, batch.InputTokens, err = e.encodePlan(r, batch.Tasks)
 			if err != nil {
 				return combined, err
 			}
-			part, callErr := e.evaluatePlan(ctx, r, batch, model)
-			if callErr != nil {
-				return combined, callErr
+			batches = append(batches, batch)
+		}
+		parts := make([]SemanticResult, len(batches))
+		errors := make([]error, len(batches))
+		jobs := make(chan int, len(batches))
+		for i := range batches {
+			jobs <- i
+		}
+		close(jobs)
+		workers := max(1, e.config.MaxConcurrentBatches)
+		var wg sync.WaitGroup
+		for w := 0; w < min(workers, len(batches)); w++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for i := range jobs {
+					parts[i], errors[i] = e.evaluatePlan(ctx, r, batches[i], model)
+				}
+			}()
+		}
+		wg.Wait()
+		for i, part := range parts {
+			if errors[i] != nil {
+				return combined, errors[i]
 			}
 			combined.Calls += part.Calls
+			combined.Batches = append(combined.Batches, part.Batches...)
 			combined.Findings = append(combined.Findings, part.Findings...)
 			for _, execution := range part.Plan.Executions {
-				for _, task := range batch.Tasks {
+				for _, task := range batches[i].Tasks {
 					if execution.TaskID == task.ID {
 						semanticMarkTask(&combined.Plan, task.ID, execution.Status, execution.Reason)
 					}
@@ -281,9 +318,9 @@ func (e *SemanticEngine) Evaluate(ctx context.Context, r SemanticRequest, model 
 	return e.evaluatePlan(ctx, r, p, model)
 }
 
-func (e *SemanticEngine) evaluatePlan(ctx context.Context, r SemanticRequest, p SemanticPlan, model SemanticModel) (SemanticResult, error) {
+func (e *SemanticEngine) evaluatePlan(ctx context.Context, r SemanticRequest, p SemanticPlan, model SemanticModel) (result SemanticResult, resultErr error) {
 	var err error
-	result := SemanticResult{Plan: p, Findings: []SemanticFinding{}}
+	result = SemanticResult{Plan: p, Findings: []SemanticFinding{}}
 	if err != nil || len(p.Tasks) == 0 {
 		return result, err
 	}
@@ -294,7 +331,23 @@ func (e *SemanticEngine) evaluatePlan(ctx context.Context, r SemanticRequest, p 
 	callCtx, cancel := context.WithTimeout(ctx, e.config.Timeout)
 	defer cancel()
 	result.Calls = 1
+	start := time.Now()
+	metric := SemanticBatchMetric{InputBytes: p.InputBytes, InputTokens: p.InputTokens, TokenCountKnown: e.config.CountTokens != nil}
+	for _, task := range p.Tasks {
+		metric.TaskIDs = append(metric.TaskIDs, task.ID)
+	}
+	defer func() {
+		if recover() != nil {
+			result.Findings = nil
+			semanticMarkAll(&result.Plan, "unavailable", "semantic_batch_panic")
+			resultErr = nil
+		}
+		metric.ElapsedMS = time.Since(start).Milliseconds()
+		metric.ResponseSHA256 = result.ResponseSHA256
+		result.Batches = []SemanticBatchMetric{metric}
+	}()
 	raw, err := model.Complete(callCtx, SemanticCall{semanticSystemPrompt, p.Prompt, e.config.MaxOutputTokens})
+	metric.OutputBytes = len(raw)
 	if err != nil || callCtx.Err() != nil {
 		semanticMarkAll(&result.Plan, "unavailable", "model_failure_or_timeout")
 		if ctx.Err() != nil {

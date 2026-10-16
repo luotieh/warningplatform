@@ -1,0 +1,17 @@
+{
+  "schema_tests": [
+    {
+      "schema": "prepared-evidence.schema.json",
+      "example": "prepared-evidence.example.json",
+      "passed": true
+    },
+    {
+      "schema": "normalized-evidence.schema.json",
+      "example": "mock-execution-result.json",
+      "passed": true
+    }
+  ],
+  "mapped_rules": 82,
+  "resolved_paths": 4493,
+  "claim": "wire shape and real Go field resolution; not supplier completeness or model accuracy"
+}

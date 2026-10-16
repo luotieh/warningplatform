@@ -1,0 +1,1082 @@
+{
+  "schema_version": "evidence-input-1.0.0",
+  "bundle_id": "example-http",
+  "producer": {
+    "name": "controlled-example",
+    "version": "1"
+  },
+  "created_at": "2026-10-16T00:00:00Z",
+  "event": {
+    "event_id": "event-1",
+    "occurred_at": "2026-10-15T01:00:00Z",
+    "indicator_refs": [
+      "ioc-1"
+    ]
+  },
+  "snapshots": [
+    {
+      "id": "snap-1",
+      "event_id": "event-1",
+      "version": 1,
+      "watermark": 2,
+      "revision_watermark": 0,
+      "as_of": "2026-10-16T00:00:00Z"
+    }
+  ],
+  "sources": [
+    {
+      "id": "src-1",
+      "kind": "http_log",
+      "snapshot_ref": "snap-1",
+      "origin": "controlled-offline-fixture",
+      "record_key": "fixture-transactions",
+      "version": "1",
+      "sha256": null
+    }
+  ],
+  "windows": [
+    {
+      "id": "window-1",
+      "start": "2026-10-15T00:00:00Z",
+      "end": "2026-10-16T00:00:00Z",
+      "timezone": "Asia/Shanghai",
+      "boundary": "[start,end)"
+    }
+  ],
+  "scopes": [
+    {
+      "id": "scope-1",
+      "kind": "asset_endpoint",
+      "asset_id": "asset-1",
+      "device_id": "device-1",
+      "endpoint": {
+        "transport": "tcp",
+        "ip": "192.0.2.80",
+        "port": 80
+      },
+      "group_id": null,
+      "identity_source_ids": [
+        "src-1"
+      ]
+    }
+  ],
+  "indicators": [
+    {
+      "id": "ioc-1",
+      "type": "domain",
+      "value": "c2.example.test",
+      "upstream_labels": [
+        "controlled"
+      ],
+      "source_ids": [
+        "src-1"
+      ]
+    }
+  ],
+  "coverage": [
+    {
+      "id": "cov-alert_matches",
+      "family": "alert_matches",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "saved_alert_matches",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "available",
+      "population_completeness": "complete",
+      "content_completeness": "complete",
+      "expected_records": 1,
+      "loaded_records": 1,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [],
+      "denominator_description": "All explicitly enumerated controlled fixture records; no real-world coverage claim."
+    },
+    {
+      "id": "cov-ioc_bindings",
+      "family": "ioc_bindings",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "supplied_materials",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "available",
+      "population_completeness": "complete",
+      "content_completeness": "complete",
+      "expected_records": 1,
+      "loaded_records": 1,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [],
+      "denominator_description": "All explicitly enumerated controlled fixture records; no real-world coverage claim."
+    },
+    {
+      "id": "cov-contacts",
+      "family": "contacts",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "independent_contacts",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "available",
+      "population_completeness": "complete",
+      "content_completeness": "complete",
+      "expected_records": 1,
+      "loaded_records": 1,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [],
+      "denominator_description": "All explicitly enumerated controlled fixture records; no real-world coverage claim."
+    },
+    {
+      "id": "cov-dns_transactions",
+      "family": "dns_transactions",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "dns_transactions",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    },
+    {
+      "id": "cov-http_transactions",
+      "family": "http_transactions",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "http_transactions",
+      "selection": "All controlled fixture HTTP requests; response population is not supplied or claimed.",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "available",
+      "population_completeness": "complete",
+      "content_completeness": "complete",
+      "expected_records": 1,
+      "loaded_records": 1,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [],
+      "denominator_description": "All explicitly enumerated controlled fixture records; no real-world coverage claim."
+    },
+    {
+      "id": "cov-connections",
+      "family": "connections",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "connection_attempts",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    },
+    {
+      "id": "cov-sessions",
+      "family": "sessions",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "sessions",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    },
+    {
+      "id": "cov-tls_handshakes",
+      "family": "tls_handshakes",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "supplied_materials",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    },
+    {
+      "id": "cov-history_events",
+      "family": "history_events",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "historical_events",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    },
+    {
+      "id": "cov-group_memberships",
+      "family": "group_memberships",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "supplied_materials",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    },
+    {
+      "id": "cov-authorizations",
+      "family": "authorizations",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "supplied_materials",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    },
+    {
+      "id": "cov-baselines",
+      "family": "baselines",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "supplied_materials",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    },
+    {
+      "id": "cov-brand_references",
+      "family": "brand_references",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "supplied_materials",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    },
+    {
+      "id": "cov-service_references",
+      "family": "service_references",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "supplied_materials",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    },
+    {
+      "id": "cov-infrastructure_references",
+      "family": "infrastructure_references",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "supplied_materials",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    },
+    {
+      "id": "cov-tls_references",
+      "family": "tls_references",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "supplied_materials",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    },
+    {
+      "id": "cov-lexical_references",
+      "family": "lexical_references",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "supplied_materials",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    },
+    {
+      "id": "cov-domain_patterns",
+      "family": "domain_patterns",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "supplied_materials",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    },
+    {
+      "id": "cov-rule_origins",
+      "family": "rule_origins",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "supplied_materials",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    },
+    {
+      "id": "cov-intel_origins",
+      "family": "intel_origins",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "supplied_materials",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    },
+    {
+      "id": "cov-decode_chains",
+      "family": "decode_chains",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "supplied_materials",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    },
+    {
+      "id": "cov-semantic_materials",
+      "family": "semantic_materials",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "supplied_materials",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    },
+    {
+      "id": "cov-content_classifications",
+      "family": "content_classifications",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "supplied_materials",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    },
+    {
+      "id": "cov-transfer_chunks",
+      "family": "transfer_chunks",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "supplied_materials",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    },
+    {
+      "id": "cov-transfer_links",
+      "family": "transfer_links",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "supplied_materials",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    },
+    {
+      "id": "cov-business_schedules",
+      "family": "business_schedules",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "supplied_materials",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    },
+    {
+      "id": "cov-stage_campaign_proofs",
+      "family": "stage_campaign_proofs",
+      "scope_ref": "scope-1",
+      "window_ref": "window-1",
+      "indicator_ref": "ioc-1",
+      "population": "supplied_materials",
+      "selection": "controlled fixture: this family, scope-1 and window-1 only",
+      "source_snapshot_refs": [
+        "snap-1"
+      ],
+      "availability": "unavailable",
+      "population_completeness": "unknown",
+      "content_completeness": "unknown",
+      "expected_records": null,
+      "loaded_records": 0,
+      "excluded_records": 0,
+      "duplicate_records": 0,
+      "missing_fields": [],
+      "reason_codes": [
+        "not_supplied_in_example"
+      ],
+      "denominator_description": null
+    }
+  ],
+  "artifacts": [
+    {
+      "id": "raw-http-1",
+      "source_ids": [
+        "src-1"
+      ],
+      "source_field": "request.raw",
+      "media_type": "text/plain",
+      "visibility": "plaintext",
+      "encoding": "utf8",
+      "content": "POST /upload HTTP/1.1\r\nHost: c2.example.test\r\nContent-Length: 0\r\n\r\n",
+      "byte_length": 67,
+      "sha256": "e731f8b77bc66b826ca3ec71dbcfcab97b370a7477a3974b72ce5c2b2ed6918e",
+      "complete": true,
+      "redacted": false
+    },
+    {
+      "id": "body-http-1",
+      "source_ids": [
+        "src-1"
+      ],
+      "source_field": "request.body",
+      "media_type": "text/plain",
+      "visibility": "plaintext",
+      "encoding": "utf8",
+      "content": "",
+      "byte_length": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "complete": true,
+      "redacted": false
+    }
+  ],
+  "relations": [],
+  "datasets": {
+    "alert_matches": [
+      {
+        "meta": {
+          "id": "alert-1",
+          "scope_ref": "scope-1",
+          "window_ref": "window-1",
+          "indicator_refs": [
+            "ioc-1"
+          ],
+          "coverage_ref": "cov-alert_matches",
+          "source_ids": [
+            "src-1"
+          ],
+          "producer": {
+            "name": "controlled-example",
+            "version": "1"
+          },
+          "verification": "verified",
+          "verification_checks": [
+            "controlled_fixture_identity"
+          ],
+          "missing_fields": [],
+          "field_sources": [
+            {
+              "field": "hit_id",
+              "source_id": "src-1",
+              "source_field": "alert_matches/alert-1/hit_id"
+            },
+            {
+              "field": "occurred_at",
+              "source_id": "src-1",
+              "source_field": "alert_matches/alert-1/occurred_at"
+            },
+            {
+              "field": "rule_id",
+              "source_id": "src-1",
+              "source_field": "alert_matches/alert-1/rule_id"
+            },
+            {
+              "field": "observation_ref",
+              "source_id": "src-1",
+              "source_field": "alert_matches/alert-1/observation_ref"
+            }
+          ]
+        },
+        "data": {
+          "hit_id": "hit-1",
+          "occurred_at": "2026-10-15T01:00:00Z",
+          "rule_id": "upstream-rule-1",
+          "rule_family": null,
+          "observation_ref": "http-1"
+        }
+      }
+    ],
+    "ioc_bindings": [
+      {
+        "meta": {
+          "id": "binding-1",
+          "scope_ref": "scope-1",
+          "window_ref": "window-1",
+          "indicator_refs": [
+            "ioc-1"
+          ],
+          "coverage_ref": "cov-ioc_bindings",
+          "source_ids": [
+            "src-1"
+          ],
+          "producer": {
+            "name": "controlled-example",
+            "version": "1"
+          },
+          "verification": "verified",
+          "verification_checks": [
+            "controlled_fixture_identity"
+          ],
+          "missing_fields": [],
+          "field_sources": [
+            {
+              "field": "indicator_ref",
+              "source_id": "src-1",
+              "source_field": "ioc_bindings/binding-1/indicator_ref"
+            },
+            {
+              "field": "observation_ref",
+              "source_id": "src-1",
+              "source_field": "ioc_bindings/binding-1/observation_ref"
+            },
+            {
+              "field": "field_path",
+              "source_id": "src-1",
+              "source_field": "ioc_bindings/binding-1/field_path"
+            },
+            {
+              "field": "observed_type",
+              "source_id": "src-1",
+              "source_field": "ioc_bindings/binding-1/observed_type"
+            },
+            {
+              "field": "observed_value",
+              "source_id": "src-1",
+              "source_field": "ioc_bindings/binding-1/observed_value"
+            },
+            {
+              "field": "asset_id",
+              "source_id": "src-1",
+              "source_field": "ioc_bindings/binding-1/asset_id"
+            },
+            {
+              "field": "device_id",
+              "source_id": "src-1",
+              "source_field": "ioc_bindings/binding-1/device_id"
+            },
+            {
+              "field": "remote_endpoint",
+              "source_id": "src-1",
+              "source_field": "ioc_bindings/binding-1/remote_endpoint"
+            },
+            {
+              "field": "direction",
+              "source_id": "src-1",
+              "source_field": "ioc_bindings/binding-1/direction"
+            }
+          ]
+        },
+        "data": {
+          "indicator_ref": "ioc-1",
+          "observation_ref": "http-1",
+          "field_path": "request.host_ascii",
+          "observed_type": "domain",
+          "observed_value": "c2.example.test",
+          "asset_id": "asset-1",
+          "device_id": "device-1",
+          "remote_endpoint": {
+            "transport": "tcp",
+            "ip": "192.0.2.80",
+            "port": 80
+          },
+          "direction": "outbound"
+        }
+      }
+    ],
+    "contacts": [
+      {
+        "meta": {
+          "id": "contact-1",
+          "scope_ref": "scope-1",
+          "window_ref": "window-1",
+          "indicator_refs": [
+            "ioc-1"
+          ],
+          "coverage_ref": "cov-contacts",
+          "source_ids": [
+            "src-1"
+          ],
+          "producer": {
+            "name": "controlled-example",
+            "version": "1"
+          },
+          "verification": "verified",
+          "verification_checks": [
+            "controlled_fixture_identity"
+          ],
+          "missing_fields": [],
+          "field_sources": [
+            {
+              "field": "contact_id",
+              "source_id": "src-1",
+              "source_field": "contacts/contact-1/contact_id"
+            },
+            {
+              "field": "occurred_at",
+              "source_id": "src-1",
+              "source_field": "contacts/contact-1/occurred_at"
+            },
+            {
+              "field": "kind",
+              "source_id": "src-1",
+              "source_field": "contacts/contact-1/kind"
+            },
+            {
+              "field": "observation_ref",
+              "source_id": "src-1",
+              "source_field": "contacts/contact-1/observation_ref"
+            },
+            {
+              "field": "dedup_key",
+              "source_id": "src-1",
+              "source_field": "contacts/contact-1/dedup_key"
+            },
+            {
+              "field": "duplicate_source_ids",
+              "source_id": "src-1",
+              "source_field": "contacts/contact-1/duplicate_source_ids"
+            },
+            {
+              "field": "application_payload_bytes",
+              "source_id": "src-1",
+              "source_field": "contacts/contact-1/application_payload_bytes"
+            }
+          ]
+        },
+        "data": {
+          "contact_id": "independent-tx-1",
+          "occurred_at": "2026-10-15T01:01:00Z",
+          "kind": "http_transaction",
+          "observation_ref": "http-1",
+          "dedup_key": "HTTP request stream fixture/1",
+          "duplicate_source_ids": [],
+          "packets_per_contact": null,
+          "application_payload_bytes": 0
+        }
+      }
+    ],
+    "dns_transactions": [],
+    "http_transactions": [
+      {
+        "meta": {
+          "id": "http-1",
+          "scope_ref": "scope-1",
+          "window_ref": "window-1",
+          "indicator_refs": [
+            "ioc-1"
+          ],
+          "coverage_ref": "cov-http_transactions",
+          "source_ids": [
+            "src-1"
+          ],
+          "producer": {
+            "name": "controlled-example",
+            "version": "1"
+          },
+          "verification": "verified",
+          "verification_checks": [
+            "controlled_fixture_identity"
+          ],
+          "missing_fields": [],
+          "field_sources": [
+            {
+              "field": "transaction_id",
+              "source_id": "src-1",
+              "source_field": "http_transactions/http-1/transaction_id"
+            },
+            {
+              "field": "request_at",
+              "source_id": "src-1",
+              "source_field": "http_transactions/http-1/request_at"
+            },
+            {
+              "field": "direction",
+              "source_id": "src-1",
+              "source_field": "http_transactions/http-1/direction"
+            },
+            {
+              "field": "request",
+              "source_id": "src-1",
+              "source_field": "http_transactions/http-1/request"
+            },
+            {
+              "field": "redirect_link_refs",
+              "source_id": "src-1",
+              "source_field": "http_transactions/http-1/redirect_link_refs"
+            }
+          ]
+        },
+        "data": {
+          "transaction_id": "tx-1",
+          "session_ref": null,
+          "connection_ref": null,
+          "request_at": "2026-10-15T01:01:00Z",
+          "response_at": null,
+          "direction": "outbound",
+          "request": {
+            "method": "POST",
+            "url_raw": "http://c2.example.test/upload",
+            "scheme": "http",
+            "host_ascii": "c2.example.test",
+            "authority": "c2.example.test",
+            "path_escaped": "/upload",
+            "query_raw": "",
+            "user_agent": null,
+            "headers": [
+              {
+                "name": "Host",
+                "value": "c2.example.test"
+              },
+              {
+                "name": "Content-Length",
+                "value": "0"
+              }
+            ],
+            "fields": [],
+            "body_bytes": 0,
+            "raw_artifact_ref": "raw-http-1",
+            "body_artifact_ref": "body-http-1",
+            "completeness": "complete",
+            "assembly": "complete_message",
+            "encoding_summary": null
+          },
+          "response": null,
+          "response_pair_ref": null,
+          "redirect_link_refs": [],
+          "form_action": null,
+          "declared_brand": null
+        }
+      }
+    ],
+    "connections": [],
+    "sessions": [],
+    "tls_handshakes": [],
+    "history_events": [],
+    "group_memberships": [],
+    "authorizations": [],
+    "baselines": [],
+    "brand_references": [],
+    "service_references": [],
+    "infrastructure_references": [],
+    "tls_references": [],
+    "lexical_references": [],
+    "domain_patterns": [],
+    "rule_origins": [],
+    "intel_origins": [],
+    "decode_chains": [],
+    "semantic_materials": [],
+    "content_classifications": [],
+    "transfer_chunks": [],
+    "transfer_links": [],
+    "business_schedules": [],
+    "stage_campaign_proofs": []
+  },
+  "diagnostics": []
+}

@@ -1,0 +1,134 @@
+{
+  "controlled_prerequisite_facts": true,
+  "real_model": false,
+  "request": {
+    "event_id": "event",
+    "snapshot_version": 1,
+    "subjects": [
+      {
+        "id": "subject",
+        "proposition_id": "operation",
+        "scope": {
+          "asset_id": "asset",
+          "endpoint_id": "endpoint",
+          "device_id": "device"
+        },
+        "window": {
+          "start": "2026-10-08T00:00:00Z",
+          "end": "2026-10-09T00:00:00Z"
+        },
+        "facts": [
+          {
+            "feature_claim": "",
+            "security_interpretation": "",
+            "cannot_prove": "",
+            "required_correlations": null,
+            "fact_id": "F_HTTP_ENDPOINT_REPEAT",
+            "rule_version": "evidence-algorithms-0.7",
+            "snapshot_version": 1,
+            "scope": {
+              "asset_id": "asset",
+              "endpoint_id": "endpoint",
+              "device_id": "device"
+            },
+            "window": {
+              "start": "2026-10-08T00:00:00Z",
+              "end": "2026-10-09T00:00:00Z",
+              "convention": ""
+            },
+            "status": "observed",
+            "eligibility": "eligible",
+            "quality": "",
+            "measurements": {
+              "sample_count": 0
+            },
+            "parameters": {},
+            "source_ids": [
+              "fact-source"
+            ],
+            "reason_code": "",
+            "limitations": null
+          }
+        ],
+        "materials": [
+          {
+            "id": "ua",
+            "kind": "ua",
+            "scope": {
+              "asset_id": "asset",
+              "endpoint_id": "endpoint",
+              "device_id": "device"
+            },
+            "snapshot_version": 1,
+            "window": {
+              "start": "2026-10-08T00:00:00Z",
+              "end": "2026-10-09T00:00:00Z"
+            },
+            "provenance": {
+              "verified": true,
+              "complete": true,
+              "version": "parsed-1",
+              "source_ids": [
+                "source-ua"
+              ]
+            },
+            "text": "真实材料：ua",
+            "field_path": "parsed.ua",
+            "redacted": true,
+            "truncated": false,
+            "transaction_id": "txn",
+            "direction": "outbound",
+            "method": "POST",
+            "protocol": "http",
+            "destination": "https://example.test/submit",
+            "field_names": [
+              "username"
+            ],
+            "role": "workstation"
+          },
+          {
+            "id": "protocol_request",
+            "kind": "protocol_request",
+            "scope": {
+              "asset_id": "asset",
+              "endpoint_id": "endpoint",
+              "device_id": "device"
+            },
+            "snapshot_version": 1,
+            "window": {
+              "start": "2026-10-08T00:00:00Z",
+              "end": "2026-10-09T00:00:00Z"
+            },
+            "provenance": {
+              "verified": true,
+              "complete": true,
+              "version": "parsed-1",
+              "source_ids": [
+                "source-protocol_request"
+              ]
+            },
+            "text": "真实材料：protocol_request",
+            "field_path": "parsed.protocol_request",
+            "redacted": true,
+            "truncated": false,
+            "transaction_id": "txn",
+            "direction": "outbound",
+            "method": "POST",
+            "protocol": "http",
+            "destination": "https://example.test/submit",
+            "field_names": [
+              "username"
+            ],
+            "role": "workstation"
+          }
+        ]
+      }
+    ],
+    "slots": [
+      {
+        "id": "S03",
+        "target": "c2.ua_behavior_conflict"
+      }
+    ]
+  }
+}

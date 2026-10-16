@@ -1,0 +1,7 @@
+{
+  "git_apply_check": "passed",
+  "git_apply": "passed",
+  "reconstructed_files_match": 26,
+  "line_endings": "LF-normalized frozen baseline",
+  "baseline": "dirty local v2 workspace; baseline-files.json"
+}

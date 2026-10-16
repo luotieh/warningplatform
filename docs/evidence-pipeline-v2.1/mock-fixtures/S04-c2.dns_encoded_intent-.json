@@ -1,0 +1,214 @@
+{
+  "controlled_prerequisite_facts": true,
+  "real_model": false,
+  "request": {
+    "event_id": "event",
+    "snapshot_version": 1,
+    "subjects": [
+      {
+        "id": "subject",
+        "proposition_id": "operation",
+        "scope": {
+          "asset_id": "asset",
+          "endpoint_id": "endpoint",
+          "device_id": "device"
+        },
+        "window": {
+          "start": "2026-10-08T00:00:00Z",
+          "end": "2026-10-09T00:00:00Z"
+        },
+        "facts": [
+          {
+            "feature_claim": "",
+            "security_interpretation": "",
+            "cannot_prove": "",
+            "required_correlations": null,
+            "fact_id": "F_DNS_ENCODED_LABEL",
+            "rule_version": "evidence-algorithms-0.7",
+            "snapshot_version": 1,
+            "scope": {
+              "asset_id": "asset",
+              "endpoint_id": "endpoint",
+              "device_id": "device"
+            },
+            "window": {
+              "start": "2026-10-08T00:00:00Z",
+              "end": "2026-10-09T00:00:00Z",
+              "convention": ""
+            },
+            "status": "observed",
+            "eligibility": "eligible",
+            "quality": "",
+            "measurements": {
+              "sample_count": 0
+            },
+            "parameters": {},
+            "source_ids": [
+              "fact-source"
+            ],
+            "reason_code": "",
+            "limitations": null
+          }
+        ],
+        "materials": [
+          {
+            "id": "domain",
+            "kind": "domain",
+            "scope": {
+              "asset_id": "asset",
+              "endpoint_id": "endpoint",
+              "device_id": "device"
+            },
+            "snapshot_version": 1,
+            "window": {
+              "start": "2026-10-08T00:00:00Z",
+              "end": "2026-10-09T00:00:00Z"
+            },
+            "provenance": {
+              "verified": true,
+              "complete": true,
+              "version": "parsed-1",
+              "source_ids": [
+                "source-domain"
+              ]
+            },
+            "text": "真实材料：domain",
+            "field_path": "parsed.domain",
+            "redacted": true,
+            "truncated": false,
+            "transaction_id": "txn",
+            "direction": "outbound",
+            "related_ids": [
+              "encoded_payload"
+            ],
+            "method": "POST",
+            "protocol": "http",
+            "destination": "https://example.test/submit",
+            "field_names": [
+              "username"
+            ],
+            "role": "workstation"
+          },
+          {
+            "id": "decode",
+            "kind": "decode",
+            "scope": {
+              "asset_id": "asset",
+              "endpoint_id": "endpoint",
+              "device_id": "device"
+            },
+            "snapshot_version": 1,
+            "window": {
+              "start": "2026-10-08T00:00:00Z",
+              "end": "2026-10-09T00:00:00Z"
+            },
+            "provenance": {
+              "verified": true,
+              "complete": true,
+              "version": "parsed-1",
+              "source_ids": [
+                "source-decode"
+              ]
+            },
+            "text": "真实材料：decode",
+            "field_path": "parsed.decode",
+            "redacted": true,
+            "truncated": false,
+            "transaction_id": "txn",
+            "direction": "outbound",
+            "method": "POST",
+            "protocol": "http",
+            "destination": "https://example.test/submit",
+            "field_names": [
+              "username"
+            ],
+            "role": "workstation",
+            "decode_steps": [
+              {
+                "encoding": "base64",
+                "input_id": "encoded_payload",
+                "output_id": "decoded_payload"
+              }
+            ]
+          },
+          {
+            "id": "decoded_payload",
+            "kind": "decoded_payload",
+            "scope": {
+              "asset_id": "asset",
+              "endpoint_id": "endpoint",
+              "device_id": "device"
+            },
+            "snapshot_version": 1,
+            "window": {
+              "start": "2026-10-08T00:00:00Z",
+              "end": "2026-10-09T00:00:00Z"
+            },
+            "provenance": {
+              "verified": true,
+              "complete": true,
+              "version": "parsed-1",
+              "source_ids": [
+                "source-decoded_payload"
+              ]
+            },
+            "text": "run_status",
+            "field_path": "parsed.decoded_payload",
+            "redacted": true,
+            "truncated": false,
+            "transaction_id": "txn",
+            "direction": "outbound",
+            "method": "POST",
+            "protocol": "http",
+            "destination": "https://example.test/submit",
+            "field_names": [
+              "username"
+            ],
+            "role": "workstation"
+          },
+          {
+            "id": "encoded_payload",
+            "kind": "encoded_payload",
+            "scope": {
+              "asset_id": "asset",
+              "endpoint_id": "endpoint",
+              "device_id": "device"
+            },
+            "snapshot_version": 1,
+            "window": {
+              "start": "2026-10-08T00:00:00Z",
+              "end": "2026-10-09T00:00:00Z"
+            },
+            "provenance": {
+              "verified": true,
+              "complete": true,
+              "version": "parsed-1",
+              "source_ids": [
+                "source-encoded_payload"
+              ]
+            },
+            "text": "cnVuX3N0YXR1cw==",
+            "field_path": "parsed.encoded_payload",
+            "redacted": true,
+            "truncated": false,
+            "transaction_id": "txn",
+            "direction": "outbound",
+            "method": "POST",
+            "protocol": "http",
+            "destination": "https://example.test/submit",
+            "field_names": [
+              "username"
+            ],
+            "role": "workstation"
+          }
+        ]
+      }
+    ],
+    "slots": [
+      {
+        "id": "S04",
+        "target": "c2.dns_encoded_intent"
+      }
+    ]
+  }
+}
