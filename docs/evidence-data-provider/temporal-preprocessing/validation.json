@@ -1,0 +1,115 @@
+{
+  "read_only": true,
+  "production_access": false,
+  "model_called": false,
+  "controlled_test": {
+    "current_saved_hits": 21,
+    "current_independent_contacts": 20,
+    "historical_contacts": 3,
+    "total_contacts": 23,
+    "natural_days": 4,
+    "duplicate_contacts": 1,
+    "multi_day": "observed",
+    "jitter_and_daily": "unverified_coverage"
+  },
+  "real_archive": [
+    {
+      "event_id": "ly-fd1496c4-14e6-40ae-bb29-57d162a9d94f",
+      "loaded_hits": 6,
+      "contacts": 3,
+      "observations": 0,
+      "wire_decodes": 6,
+      "history_rows": 1,
+      "valid": true,
+      "archive_scope": "two archived events only; no claim of complete platform history",
+      "findings": [
+        {
+          "rule_id": "F_BEACON_JITTER",
+          "status": "missing",
+          "reason": "unverified_coverage",
+          "scope_count": 2
+        },
+        {
+          "rule_id": "F_FIXED_DAILY_WINDOW",
+          "status": "missing",
+          "reason": "unverified_coverage",
+          "scope_count": 2
+        },
+        {
+          "rule_id": "F_MULTI_DAY_PERSIST",
+          "status": "observed",
+          "reason": "conditions_met",
+          "scope_count": 1
+        },
+        {
+          "rule_id": "F_MULTI_DAY_PERSIST",
+          "status": "missing",
+          "reason": "incomplete_coverage_cannot_refute",
+          "scope_count": 1
+        }
+      ]
+    },
+    {
+      "event_id": "ly-14725b4b-84f0-4233-b6f3-98d6444ce2e6",
+      "loaded_hits": 874,
+      "contacts": 169,
+      "observations": 128,
+      "wire_decodes": 874,
+      "history_rows": 0,
+      "valid": true,
+      "archive_scope": "two archived events only; no claim of complete platform history",
+      "findings": [
+        {
+          "rule_id": "F_BEACON_JITTER",
+          "status": "missing",
+          "reason": "unverified_coverage",
+          "scope_count": 2
+        },
+        {
+          "rule_id": "F_FIXED_DAILY_WINDOW",
+          "status": "missing",
+          "reason": "unverified_coverage",
+          "scope_count": 2
+        },
+        {
+          "rule_id": "F_MULTI_DAY_PERSIST",
+          "status": "missing",
+          "reason": "incomplete_coverage_cannot_refute",
+          "scope_count": 2
+        }
+      ]
+    }
+  ],
+  "summary_fixture_regression": [
+    {
+      "scenario": "c2",
+      "same_rule_results": true,
+      "catalog": 82,
+      "scope": "all normalized rule fields except changed input digest; identical execution configuration"
+    },
+    {
+      "scenario": "botnet",
+      "same_rule_results": true,
+      "catalog": 82,
+      "scope": "all normalized rule fields except changed input digest; identical execution configuration"
+    },
+    {
+      "scenario": "phishing",
+      "same_rule_results": true,
+      "catalog": 82,
+      "scope": "all normalized rule fields except changed input digest; identical execution configuration"
+    },
+    {
+      "scenario": "network-activity",
+      "same_rule_results": true,
+      "catalog": 82,
+      "scope": "all normalized rule fields except changed input digest; identical execution configuration"
+    }
+  ],
+  "checks": {
+    "backend_tests": "go test ./... -count=1 passed",
+    "targeted_tests": "temporal, provider, collection and prepared contract tests passed",
+    "vet": "go vet ./... passed",
+    "build": "go build ./... passed"
+  }
+}

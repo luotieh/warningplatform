@@ -1,0 +1,2183 @@
+{
+  "baseline-botnet-group": {
+    "data": {
+      "cohort": "separate synthetic normal cohort, September 2026",
+      "endpoint_frequency": 0.001,
+      "endpoint_frequency_p01": 0.01,
+      "group_nxdomain_rate_p99": 0.1
+    },
+    "synthetic_fixture": true
+  },
+  "registry-bot-1": {
+    "data": {
+      "asset_id": "bot-1",
+      "device_id": "sensor-bot-1",
+      "ip": "192.0.2.11",
+      "role": "workstation"
+    },
+    "synthetic_fixture": true
+  },
+  "registry-bot-2": {
+    "data": {
+      "asset_id": "bot-2",
+      "device_id": "sensor-bot-2",
+      "ip": "192.0.2.12",
+      "role": "workstation"
+    },
+    "synthetic_fixture": true
+  },
+  "registry-bot-3": {
+    "data": {
+      "asset_id": "bot-3",
+      "device_id": "sensor-bot-3",
+      "ip": "192.0.2.13",
+      "role": "workstation"
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet": {
+    "data": {
+      "id": 0,
+      "event_id": "synthetic-botnet",
+      "event_name": "Synthetic Fixture: botnet",
+      "title": "Botnet多资产协同",
+      "message": "三个不同员工终端在一小时观测窗内同步访问同一合成更新服务，每分钟一次、相差1至2秒；各自DNS成功和NXDOMAIN独立保存。公共端点和同步不证明感染；没有传播路径或已定谳战役历史。",
+      "source": "synthetic-fixture-offline",
+      "severity": "unknown",
+      "event_status": "new",
+      "current_round": 0,
+      "created_at": "2026-10-15T01:00:00Z",
+      "updated_at": "2026-10-15T01:19:03Z",
+      "review_status": "pending",
+      "analysis_version": 0,
+      "aggregation_closed": false,
+      "last_seen_at": "2026-10-15T01:19:03Z"
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0001-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0001-tcp",
+        "time": "2026-10-15T01:00:01Z",
+        "asset_id": "bot-1",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0001-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0001-tcp",
+        "occurred_at": "2026-10-15T01:00:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-1",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-1"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0002-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0002-tcp",
+        "time": "2026-10-15T01:01:01Z",
+        "asset_id": "bot-1",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0002-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0002-tcp",
+        "occurred_at": "2026-10-15T01:01:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-1",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-1"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0003-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0003-tcp",
+        "time": "2026-10-15T01:02:01Z",
+        "asset_id": "bot-1",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0003-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0003-tcp",
+        "occurred_at": "2026-10-15T01:02:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-1",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-1"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0004-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0004-tcp",
+        "time": "2026-10-15T01:03:01Z",
+        "asset_id": "bot-1",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0004-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0004-tcp",
+        "occurred_at": "2026-10-15T01:03:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-1",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-1"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0005-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0005-tcp",
+        "time": "2026-10-15T01:04:01Z",
+        "asset_id": "bot-1",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0005-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0005-tcp",
+        "occurred_at": "2026-10-15T01:04:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-1",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-1"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0006-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0006-tcp",
+        "time": "2026-10-15T01:05:01Z",
+        "asset_id": "bot-1",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0006-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0006-tcp",
+        "occurred_at": "2026-10-15T01:05:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-1",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-1"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0007-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0007-tcp",
+        "time": "2026-10-15T01:06:01Z",
+        "asset_id": "bot-1",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0007-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0007-tcp",
+        "occurred_at": "2026-10-15T01:06:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-1",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-1"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0008-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0008-tcp",
+        "time": "2026-10-15T01:07:01Z",
+        "asset_id": "bot-1",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0008-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0008-tcp",
+        "occurred_at": "2026-10-15T01:07:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-1",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-1"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0009-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0009-tcp",
+        "time": "2026-10-15T01:08:01Z",
+        "asset_id": "bot-1",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0009-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0009-tcp",
+        "occurred_at": "2026-10-15T01:08:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-1",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-1"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0010-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0010-tcp",
+        "time": "2026-10-15T01:09:01Z",
+        "asset_id": "bot-1",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0010-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0010-tcp",
+        "occurred_at": "2026-10-15T01:09:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-1",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-1"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0011-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0011-tcp",
+        "time": "2026-10-15T01:10:01Z",
+        "asset_id": "bot-1",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0011-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0011-tcp",
+        "occurred_at": "2026-10-15T01:10:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-1",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-1"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0012-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0012-tcp",
+        "time": "2026-10-15T01:11:01Z",
+        "asset_id": "bot-1",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0012-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0012-tcp",
+        "occurred_at": "2026-10-15T01:11:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-1",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-1"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0013-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0013-tcp",
+        "time": "2026-10-15T01:12:01Z",
+        "asset_id": "bot-1",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0013-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0013-tcp",
+        "occurred_at": "2026-10-15T01:12:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-1",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-1"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0014-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0014-tcp",
+        "time": "2026-10-15T01:13:01Z",
+        "asset_id": "bot-1",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0014-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0014-tcp",
+        "occurred_at": "2026-10-15T01:13:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-1",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-1"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0015-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0015-tcp",
+        "time": "2026-10-15T01:14:01Z",
+        "asset_id": "bot-1",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0015-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0015-tcp",
+        "occurred_at": "2026-10-15T01:14:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-1",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-1"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0016-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0016-tcp",
+        "time": "2026-10-15T01:15:01Z",
+        "asset_id": "bot-1",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0016-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0016-tcp",
+        "occurred_at": "2026-10-15T01:15:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-1",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-1"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0017-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0017-tcp",
+        "time": "2026-10-15T01:16:01Z",
+        "asset_id": "bot-1",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0017-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0017-tcp",
+        "occurred_at": "2026-10-15T01:16:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-1",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-1"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0018-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0018-tcp",
+        "time": "2026-10-15T01:17:01Z",
+        "asset_id": "bot-1",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0018-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0018-tcp",
+        "occurred_at": "2026-10-15T01:17:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-1",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-1"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0019-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0019-tcp",
+        "time": "2026-10-15T01:18:01Z",
+        "asset_id": "bot-1",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0019-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0019-tcp",
+        "occurred_at": "2026-10-15T01:18:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-1",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-1"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0020-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0020-tcp",
+        "time": "2026-10-15T01:19:01Z",
+        "asset_id": "bot-1",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0020-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0020-tcp",
+        "occurred_at": "2026-10-15T01:19:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-1",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-1"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0021-dns": {
+    "data": {
+      "dns": {
+        "source_id": "synthetic-botnet-0021-dns",
+        "time": "2026-10-15T01:00:00Z",
+        "domain": "pool-fixture.test",
+        "rcode": 0,
+        "r_code_known": true,
+        "answers": [
+          "198.51.100.30"
+        ]
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0021-dns",
+        "occurred_at": "2026-10-15T01:00:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-1",
+          "endpoint_id": "udp://192.0.2.53:53",
+          "device_id": "sensor-bot-1"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0022-dns": {
+    "data": {
+      "dns": {
+        "source_id": "synthetic-botnet-0022-dns",
+        "time": "2026-10-15T01:00:01Z",
+        "domain": "update-1.unavailable-fixture.test",
+        "rcode": 3,
+        "r_code_known": true,
+        "answers": null
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0022-dns",
+        "occurred_at": "2026-10-15T01:00:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-1",
+          "endpoint_id": "udp://192.0.2.53:53",
+          "device_id": "sensor-bot-1"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0023-dns": {
+    "data": {
+      "dns": {
+        "source_id": "synthetic-botnet-0023-dns",
+        "time": "2026-10-15T01:00:02Z",
+        "domain": "update-2.unavailable-fixture.test",
+        "rcode": 3,
+        "r_code_known": true,
+        "answers": null
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0023-dns",
+        "occurred_at": "2026-10-15T01:00:02Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-1",
+          "endpoint_id": "udp://192.0.2.53:53",
+          "device_id": "sensor-bot-1"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0024-dns": {
+    "data": {
+      "dns": {
+        "source_id": "synthetic-botnet-0024-dns",
+        "time": "2026-10-15T01:00:03Z",
+        "domain": "update-3.unavailable-fixture.test",
+        "rcode": 3,
+        "r_code_known": true,
+        "answers": null
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0024-dns",
+        "occurred_at": "2026-10-15T01:00:03Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-1",
+          "endpoint_id": "udp://192.0.2.53:53",
+          "device_id": "sensor-bot-1"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0025-dns": {
+    "data": {
+      "dns": {
+        "source_id": "synthetic-botnet-0025-dns",
+        "time": "2026-10-15T01:00:04Z",
+        "domain": "update-4.unavailable-fixture.test",
+        "rcode": 3,
+        "r_code_known": true,
+        "answers": null
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0025-dns",
+        "occurred_at": "2026-10-15T01:00:04Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-1",
+          "endpoint_id": "udp://192.0.2.53:53",
+          "device_id": "sensor-bot-1"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0026-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0026-tcp",
+        "time": "2026-10-15T01:00:02Z",
+        "asset_id": "bot-2",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0026-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0026-tcp",
+        "occurred_at": "2026-10-15T01:00:02Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-2",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0027-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0027-tcp",
+        "time": "2026-10-15T01:01:02Z",
+        "asset_id": "bot-2",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0027-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0027-tcp",
+        "occurred_at": "2026-10-15T01:01:02Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-2",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0028-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0028-tcp",
+        "time": "2026-10-15T01:02:02Z",
+        "asset_id": "bot-2",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0028-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0028-tcp",
+        "occurred_at": "2026-10-15T01:02:02Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-2",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0029-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0029-tcp",
+        "time": "2026-10-15T01:03:02Z",
+        "asset_id": "bot-2",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0029-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0029-tcp",
+        "occurred_at": "2026-10-15T01:03:02Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-2",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0030-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0030-tcp",
+        "time": "2026-10-15T01:04:02Z",
+        "asset_id": "bot-2",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0030-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0030-tcp",
+        "occurred_at": "2026-10-15T01:04:02Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-2",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0031-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0031-tcp",
+        "time": "2026-10-15T01:05:02Z",
+        "asset_id": "bot-2",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0031-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0031-tcp",
+        "occurred_at": "2026-10-15T01:05:02Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-2",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0032-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0032-tcp",
+        "time": "2026-10-15T01:06:02Z",
+        "asset_id": "bot-2",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0032-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0032-tcp",
+        "occurred_at": "2026-10-15T01:06:02Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-2",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0033-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0033-tcp",
+        "time": "2026-10-15T01:07:02Z",
+        "asset_id": "bot-2",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0033-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0033-tcp",
+        "occurred_at": "2026-10-15T01:07:02Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-2",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0034-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0034-tcp",
+        "time": "2026-10-15T01:08:02Z",
+        "asset_id": "bot-2",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0034-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0034-tcp",
+        "occurred_at": "2026-10-15T01:08:02Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-2",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0035-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0035-tcp",
+        "time": "2026-10-15T01:09:02Z",
+        "asset_id": "bot-2",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0035-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0035-tcp",
+        "occurred_at": "2026-10-15T01:09:02Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-2",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0036-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0036-tcp",
+        "time": "2026-10-15T01:10:02Z",
+        "asset_id": "bot-2",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0036-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0036-tcp",
+        "occurred_at": "2026-10-15T01:10:02Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-2",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0037-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0037-tcp",
+        "time": "2026-10-15T01:11:02Z",
+        "asset_id": "bot-2",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0037-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0037-tcp",
+        "occurred_at": "2026-10-15T01:11:02Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-2",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0038-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0038-tcp",
+        "time": "2026-10-15T01:12:02Z",
+        "asset_id": "bot-2",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0038-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0038-tcp",
+        "occurred_at": "2026-10-15T01:12:02Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-2",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0039-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0039-tcp",
+        "time": "2026-10-15T01:13:02Z",
+        "asset_id": "bot-2",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0039-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0039-tcp",
+        "occurred_at": "2026-10-15T01:13:02Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-2",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0040-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0040-tcp",
+        "time": "2026-10-15T01:14:02Z",
+        "asset_id": "bot-2",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0040-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0040-tcp",
+        "occurred_at": "2026-10-15T01:14:02Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-2",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0041-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0041-tcp",
+        "time": "2026-10-15T01:15:02Z",
+        "asset_id": "bot-2",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0041-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0041-tcp",
+        "occurred_at": "2026-10-15T01:15:02Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-2",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0042-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0042-tcp",
+        "time": "2026-10-15T01:16:02Z",
+        "asset_id": "bot-2",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0042-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0042-tcp",
+        "occurred_at": "2026-10-15T01:16:02Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-2",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0043-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0043-tcp",
+        "time": "2026-10-15T01:17:02Z",
+        "asset_id": "bot-2",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0043-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0043-tcp",
+        "occurred_at": "2026-10-15T01:17:02Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-2",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0044-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0044-tcp",
+        "time": "2026-10-15T01:18:02Z",
+        "asset_id": "bot-2",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0044-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0044-tcp",
+        "occurred_at": "2026-10-15T01:18:02Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-2",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0045-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0045-tcp",
+        "time": "2026-10-15T01:19:02Z",
+        "asset_id": "bot-2",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0045-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0045-tcp",
+        "occurred_at": "2026-10-15T01:19:02Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-2",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0046-dns": {
+    "data": {
+      "dns": {
+        "source_id": "synthetic-botnet-0046-dns",
+        "time": "2026-10-15T01:00:00Z",
+        "domain": "pool-fixture.test",
+        "rcode": 0,
+        "r_code_known": true,
+        "answers": [
+          "198.51.100.30"
+        ]
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0046-dns",
+        "occurred_at": "2026-10-15T01:00:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-2",
+          "endpoint_id": "udp://192.0.2.53:53",
+          "device_id": "sensor-bot-2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0047-dns": {
+    "data": {
+      "dns": {
+        "source_id": "synthetic-botnet-0047-dns",
+        "time": "2026-10-15T01:00:01Z",
+        "domain": "update-1.unavailable-fixture.test",
+        "rcode": 3,
+        "r_code_known": true,
+        "answers": null
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0047-dns",
+        "occurred_at": "2026-10-15T01:00:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-2",
+          "endpoint_id": "udp://192.0.2.53:53",
+          "device_id": "sensor-bot-2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0048-dns": {
+    "data": {
+      "dns": {
+        "source_id": "synthetic-botnet-0048-dns",
+        "time": "2026-10-15T01:00:02Z",
+        "domain": "update-2.unavailable-fixture.test",
+        "rcode": 3,
+        "r_code_known": true,
+        "answers": null
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0048-dns",
+        "occurred_at": "2026-10-15T01:00:02Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-2",
+          "endpoint_id": "udp://192.0.2.53:53",
+          "device_id": "sensor-bot-2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0049-dns": {
+    "data": {
+      "dns": {
+        "source_id": "synthetic-botnet-0049-dns",
+        "time": "2026-10-15T01:00:03Z",
+        "domain": "update-3.unavailable-fixture.test",
+        "rcode": 3,
+        "r_code_known": true,
+        "answers": null
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0049-dns",
+        "occurred_at": "2026-10-15T01:00:03Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-2",
+          "endpoint_id": "udp://192.0.2.53:53",
+          "device_id": "sensor-bot-2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0050-dns": {
+    "data": {
+      "dns": {
+        "source_id": "synthetic-botnet-0050-dns",
+        "time": "2026-10-15T01:00:04Z",
+        "domain": "update-4.unavailable-fixture.test",
+        "rcode": 3,
+        "r_code_known": true,
+        "answers": null
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0050-dns",
+        "occurred_at": "2026-10-15T01:00:04Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-2",
+          "endpoint_id": "udp://192.0.2.53:53",
+          "device_id": "sensor-bot-2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0051-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0051-tcp",
+        "time": "2026-10-15T01:00:03Z",
+        "asset_id": "bot-3",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0051-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0051-tcp",
+        "occurred_at": "2026-10-15T01:00:03Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-3",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-3"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0052-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0052-tcp",
+        "time": "2026-10-15T01:01:03Z",
+        "asset_id": "bot-3",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0052-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0052-tcp",
+        "occurred_at": "2026-10-15T01:01:03Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-3",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-3"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0053-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0053-tcp",
+        "time": "2026-10-15T01:02:03Z",
+        "asset_id": "bot-3",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0053-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0053-tcp",
+        "occurred_at": "2026-10-15T01:02:03Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-3",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-3"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0054-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0054-tcp",
+        "time": "2026-10-15T01:03:03Z",
+        "asset_id": "bot-3",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0054-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0054-tcp",
+        "occurred_at": "2026-10-15T01:03:03Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-3",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-3"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0055-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0055-tcp",
+        "time": "2026-10-15T01:04:03Z",
+        "asset_id": "bot-3",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0055-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0055-tcp",
+        "occurred_at": "2026-10-15T01:04:03Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-3",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-3"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0056-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0056-tcp",
+        "time": "2026-10-15T01:05:03Z",
+        "asset_id": "bot-3",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0056-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0056-tcp",
+        "occurred_at": "2026-10-15T01:05:03Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-3",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-3"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0057-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0057-tcp",
+        "time": "2026-10-15T01:06:03Z",
+        "asset_id": "bot-3",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0057-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0057-tcp",
+        "occurred_at": "2026-10-15T01:06:03Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-3",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-3"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0058-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0058-tcp",
+        "time": "2026-10-15T01:07:03Z",
+        "asset_id": "bot-3",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0058-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0058-tcp",
+        "occurred_at": "2026-10-15T01:07:03Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-3",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-3"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0059-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0059-tcp",
+        "time": "2026-10-15T01:08:03Z",
+        "asset_id": "bot-3",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0059-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0059-tcp",
+        "occurred_at": "2026-10-15T01:08:03Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-3",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-3"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0060-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0060-tcp",
+        "time": "2026-10-15T01:09:03Z",
+        "asset_id": "bot-3",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0060-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0060-tcp",
+        "occurred_at": "2026-10-15T01:09:03Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-3",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-3"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0061-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0061-tcp",
+        "time": "2026-10-15T01:10:03Z",
+        "asset_id": "bot-3",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0061-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0061-tcp",
+        "occurred_at": "2026-10-15T01:10:03Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-3",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-3"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0062-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0062-tcp",
+        "time": "2026-10-15T01:11:03Z",
+        "asset_id": "bot-3",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0062-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0062-tcp",
+        "occurred_at": "2026-10-15T01:11:03Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-3",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-3"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0063-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0063-tcp",
+        "time": "2026-10-15T01:12:03Z",
+        "asset_id": "bot-3",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0063-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0063-tcp",
+        "occurred_at": "2026-10-15T01:12:03Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-3",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-3"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0064-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0064-tcp",
+        "time": "2026-10-15T01:13:03Z",
+        "asset_id": "bot-3",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0064-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0064-tcp",
+        "occurred_at": "2026-10-15T01:13:03Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-3",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-3"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0065-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0065-tcp",
+        "time": "2026-10-15T01:14:03Z",
+        "asset_id": "bot-3",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0065-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0065-tcp",
+        "occurred_at": "2026-10-15T01:14:03Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-3",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-3"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0066-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0066-tcp",
+        "time": "2026-10-15T01:15:03Z",
+        "asset_id": "bot-3",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0066-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0066-tcp",
+        "occurred_at": "2026-10-15T01:15:03Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-3",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-3"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0067-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0067-tcp",
+        "time": "2026-10-15T01:16:03Z",
+        "asset_id": "bot-3",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0067-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0067-tcp",
+        "occurred_at": "2026-10-15T01:16:03Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-3",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-3"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0068-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0068-tcp",
+        "time": "2026-10-15T01:17:03Z",
+        "asset_id": "bot-3",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0068-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0068-tcp",
+        "occurred_at": "2026-10-15T01:17:03Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-3",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-3"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0069-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0069-tcp",
+        "time": "2026-10-15T01:18:03Z",
+        "asset_id": "bot-3",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0069-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0069-tcp",
+        "occurred_at": "2026-10-15T01:18:03Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-3",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-3"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0070-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-botnet-0070-tcp",
+        "time": "2026-10-15T01:19:03Z",
+        "asset_id": "bot-3",
+        "destination": "198.51.100.30",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 32,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-botnet-0070-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0070-tcp",
+        "occurred_at": "2026-10-15T01:19:03Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-3",
+          "endpoint_id": "tcp://198.51.100.30:8080",
+          "device_id": "sensor-bot-3"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0071-dns": {
+    "data": {
+      "dns": {
+        "source_id": "synthetic-botnet-0071-dns",
+        "time": "2026-10-15T01:00:00Z",
+        "domain": "pool-fixture.test",
+        "rcode": 0,
+        "r_code_known": true,
+        "answers": [
+          "198.51.100.30"
+        ]
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0071-dns",
+        "occurred_at": "2026-10-15T01:00:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-3",
+          "endpoint_id": "udp://192.0.2.53:53",
+          "device_id": "sensor-bot-3"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0072-dns": {
+    "data": {
+      "dns": {
+        "source_id": "synthetic-botnet-0072-dns",
+        "time": "2026-10-15T01:00:01Z",
+        "domain": "update-1.unavailable-fixture.test",
+        "rcode": 3,
+        "r_code_known": true,
+        "answers": null
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0072-dns",
+        "occurred_at": "2026-10-15T01:00:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-3",
+          "endpoint_id": "udp://192.0.2.53:53",
+          "device_id": "sensor-bot-3"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0073-dns": {
+    "data": {
+      "dns": {
+        "source_id": "synthetic-botnet-0073-dns",
+        "time": "2026-10-15T01:00:02Z",
+        "domain": "update-2.unavailable-fixture.test",
+        "rcode": 3,
+        "r_code_known": true,
+        "answers": null
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0073-dns",
+        "occurred_at": "2026-10-15T01:00:02Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-3",
+          "endpoint_id": "udp://192.0.2.53:53",
+          "device_id": "sensor-bot-3"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0074-dns": {
+    "data": {
+      "dns": {
+        "source_id": "synthetic-botnet-0074-dns",
+        "time": "2026-10-15T01:00:03Z",
+        "domain": "update-3.unavailable-fixture.test",
+        "rcode": 3,
+        "r_code_known": true,
+        "answers": null
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0074-dns",
+        "occurred_at": "2026-10-15T01:00:03Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-3",
+          "endpoint_id": "udp://192.0.2.53:53",
+          "device_id": "sensor-bot-3"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet-0075-dns": {
+    "data": {
+      "dns": {
+        "source_id": "synthetic-botnet-0075-dns",
+        "time": "2026-10-15T01:00:04Z",
+        "domain": "update-4.unavailable-fixture.test",
+        "rcode": 3,
+        "r_code_known": true,
+        "answers": null
+      },
+      "hit": {
+        "hit_id": "synthetic-botnet-0075-dns",
+        "occurred_at": "2026-10-15T01:00:04Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "bot-3",
+          "endpoint_id": "udp://192.0.2.53:53",
+          "device_id": "sensor-bot-3"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-botnet:1": {
+    "data": {
+      "event_id": "synthetic-botnet",
+      "snapshot_version": 1,
+      "source_events": [
+        "synthetic-botnet"
+      ],
+      "watermark": 1,
+      "revision_watermark": 1,
+      "count": 75,
+      "context": {
+        "event_background": "三个不同员工终端在一小时观测窗内同步访问同一合成更新服务，每分钟一次、相差1至2秒；各自DNS成功和NXDOMAIN独立保存。公共端点和同步不证明感染；没有传播路径或已定谳战役历史。",
+        "first_time": "2026-10-15T01:00:00Z",
+        "last_time": "2026-10-15T01:19:03Z",
+        "occurrence_count": 75,
+        "scenario_id": "botnet",
+        "synthetic_fixture": true
+      },
+      "evidence": null,
+      "input_manifest": {}
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-group-registry": {
+    "data": {
+      "basis": "synthetic asset registry observation cohort; not infected membership",
+      "members": [
+        "bot-1",
+        "bot-2",
+        "bot-3"
+      ]
+    },
+    "synthetic_fixture": true
+  }
+}

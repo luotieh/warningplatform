@@ -48,6 +48,11 @@ func schemaForGo(t reflect.Type) map[string]any {
 		}
 	}
 	node = func(t reflect.Type) map[string]any {
+		// RawMessage marshals as embedded JSON, unlike an ordinary []byte's
+		// base64 string. Real report observations include application objects.
+		if t == reflect.TypeOf(json.RawMessage{}) {
+			return map[string]any{}
+		}
 		if t == reflect.TypeOf(time.Time{}) {
 			return map[string]any{"type": "string", "format": "date-time"}
 		}

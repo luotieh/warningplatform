@@ -139,10 +139,16 @@ func computePhaseOneFacts(ctx context.Context, snap EvidenceSnapshot, materials,
 		}
 		for _, factID := range []evidence.FactID{"F_BEACON_JITTER", "F_FIXED_DAILY_WINDOW"} {
 			selected := contacts
-			complete := merged.Complete && len(merged.ScopeIncomplete[groupKey]) == 0
+			windowComplete, currentWindowComplete := merged.Complete, merged.CurrentComplete
+			assumed := merged.TemporalWindowCoverage != nil && merged.TemporalWindowCoverage.Basis == assumedTemporalWindowCoverage
+			if assumed {
+				windowComplete = merged.TemporalWindowCoverage.Complete
+				currentWindowComplete = merged.TemporalWindowCoverage.CurrentComplete
+			}
+			complete := windowComplete && len(merged.ScopeIncomplete[groupKey]) == 0
 			if factID == "F_BEACON_JITTER" && len(currentContacts) >= 16 {
 				selected = currentContacts
-				complete = merged.CurrentComplete && len(merged.CurrentIncomplete[groupKey]) == 0
+				complete = currentWindowComplete && len(merged.CurrentIncomplete[groupKey]) == 0
 			}
 			req := evidence.Request{EventID: snap.EventID, SnapshotVersion: snap.Version, Facts: []evidence.FactID{"F_BEACON_JITTER", "F_FIXED_DAILY_WINDOW"}, Quality: evidence.Quality{Coverage: evidence.CoverageComplete}}
 			req.Facts = []evidence.FactID{factID}
@@ -163,6 +169,9 @@ func computePhaseOneFacts(ctx context.Context, snap EvidenceSnapshot, materials,
 				return nil, e
 			}
 			for _, f := range computed.Findings {
+				if assumed && complete {
+					f.Limitations = append(f.Limitations, "observation_window_assumed_complete:default_assumption; not independently verified")
+				}
 				f.IOCType, f.IOCValue = contacts[0].IOCType, contacts[0].IOCValue
 				f.ObservationKind = contacts[0].Kind
 				findings = append(findings, f)

@@ -1,0 +1,70 @@
+{
+  "passed": true,
+  "comparisons": [
+    {
+      "scenario": "c2",
+      "artifact": "prepared-bundle.json",
+      "equal": true
+    },
+    {
+      "scenario": "c2",
+      "artifact": "normalized-result.json",
+      "equal": true
+    },
+    {
+      "scenario": "c2",
+      "artifact": "coverage-proof-matrix.json",
+      "equal": true
+    },
+    {
+      "scenario": "botnet",
+      "artifact": "prepared-bundle.json",
+      "equal": true
+    },
+    {
+      "scenario": "botnet",
+      "artifact": "normalized-result.json",
+      "equal": true
+    },
+    {
+      "scenario": "botnet",
+      "artifact": "coverage-proof-matrix.json",
+      "equal": true
+    },
+    {
+      "scenario": "phishing",
+      "artifact": "prepared-bundle.json",
+      "equal": true
+    },
+    {
+      "scenario": "phishing",
+      "artifact": "normalized-result.json",
+      "equal": true
+    },
+    {
+      "scenario": "phishing",
+      "artifact": "coverage-proof-matrix.json",
+      "equal": true
+    },
+    {
+      "scenario": "network-activity",
+      "artifact": "prepared-bundle.json",
+      "equal": true
+    },
+    {
+      "scenario": "network-activity",
+      "artifact": "normalized-result.json",
+      "equal": true
+    },
+    {
+      "scenario": "network-activity",
+      "artifact": "coverage-proof-matrix.json",
+      "equal": true
+    }
+  ],
+  "excluded": [
+    "CLI-created event/asset timestamps and resulting bundle digest",
+    "pipeline stage durations, semantic batch durations and cache keys"
+  ],
+  "retained": "All Bundle inputs, findings, reasons, source relations, semantic results, scores and coverage proofs"
+}

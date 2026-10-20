@@ -1,0 +1,4240 @@
+{
+  "baseline-c2-workstation-c2-tcp://198.51.100.20:8080-F_HTTP_SIZE_STABILITY": {
+    "data": {
+      "cohort": "synthetic normal business cohort; stipulated reference distribution",
+      "frequencies": null,
+      "metrics": {
+        "size_cv_p05": 0.05,
+        "unique_size_ratio_p05": 0.1
+      },
+      "reference_window": "2026-09-01/2026-09-30, excludes incident",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "baseline-c2-workstation-c2-tcp://198.51.100.20:8080-F_HTTP_UA_RARITY": {
+    "data": {
+      "cohort": "synthetic normal business cohort; stipulated reference distribution",
+      "frequencies": null,
+      "metrics": {
+        "ua_frequency": 0.1,
+        "ua_frequency_p01": 0.005
+      },
+      "reference_window": "2026-09-01/2026-09-30, excludes incident",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "registry-workstation-c2": {
+    "data": {
+      "asset_id": "workstation-c2",
+      "device_id": "sensor-workstation-c2",
+      "ip": "192.0.2.10",
+      "role": "workstation"
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2": {
+    "data": {
+      "id": 0,
+      "event_id": "synthetic-c2",
+      "event_name": "Synthetic Fixture: c2",
+      "title": "C2周期通信",
+      "message": "员工终端连续五个自然日在北京时间09:00访问更新端点；当前日24个独立TCP联系与24次HTTP事务，报文中含无害命令测试标记。周期可能来自合法更新程序，未提供授权或主机执行证据。",
+      "source": "synthetic-fixture-offline",
+      "severity": "unknown",
+      "event_status": "new",
+      "current_round": 0,
+      "created_at": "2026-10-15T00:59:50Z",
+      "updated_at": "2026-10-15T01:23:01Z",
+      "review_status": "pending",
+      "analysis_version": 0,
+      "aggregation_closed": false,
+      "last_seen_at": "2026-10-15T01:23:01Z"
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0001-dns": {
+    "data": {
+      "dns": {
+        "source_id": "synthetic-c2-0001-dns",
+        "time": "2026-10-15T00:59:50Z",
+        "domain": "updates-fixture.test",
+        "rcode": 0,
+        "r_code_known": true,
+        "answers": [
+          "198.51.100.20"
+        ]
+      },
+      "hit": {
+        "hit_id": "synthetic-c2-0001-dns",
+        "occurred_at": "2026-10-15T00:59:50Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "udp://192.0.2.53:53",
+          "device_id": "sensor-workstation-c2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0002-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-c2-0002-tcp",
+        "time": "2026-10-15T01:00:00Z",
+        "asset_id": "workstation-c2",
+        "destination": "198.51.100.20",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 96,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-c2-0002-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-c2-0002-tcp",
+        "occurred_at": "2026-10-15T01:00:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0003-http": {
+    "data": {
+      "hit": {
+        "hit_id": "synthetic-c2-0003-http",
+        "occurred_at": "2026-10-15T01:00:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      },
+      "http": {
+        "request_id": "synthetic-c2-tx-0003:request",
+        "source_id": "synthetic-c2-0003-http",
+        "transaction_id": "synthetic-c2-tx-0003",
+        "session_id": "synthetic-c2-tx-0003:session",
+        "time": "2026-10-15T01:00:01Z",
+        "url": "http://updates-fixture.test:8080/poll",
+        "method": "POST",
+        "user_agent": "FixtureAgent/1.0",
+        "fields": {
+          "cmd": "TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw=="
+        },
+        "body_length": 64,
+        "truncated": false,
+        "response_url": "http://updates-fixture.test:8080/poll",
+        "response_status": 200,
+        "response_location": "",
+        "response_verified": true,
+        "form_action": "",
+        "redirect_to_transaction_id": "",
+        "redirect_verified": false,
+        "declared_brand": "",
+        "brand_claim_verified": false
+      },
+      "raw_request": "POST /poll HTTP/1.1\r\nHost: updates-fixture.test:8080\r\nUser-Agent: FixtureAgent/1.0\r\nContent-Type: application/x-www-form-urlencoded\r\nReferer: http://portal.test/\r\nContent-Length: 64\r\n\r\ncmd=TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw%3D%3D",
+      "response": "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nMOCK_COMMAND_REQUEST accepted for simulation; no command executed"
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0004-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-c2-0004-tcp",
+        "time": "2026-10-15T01:01:00Z",
+        "asset_id": "workstation-c2",
+        "destination": "198.51.100.20",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 96,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-c2-0004-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-c2-0004-tcp",
+        "occurred_at": "2026-10-15T01:01:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0005-http": {
+    "data": {
+      "hit": {
+        "hit_id": "synthetic-c2-0005-http",
+        "occurred_at": "2026-10-15T01:01:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      },
+      "http": {
+        "request_id": "synthetic-c2-tx-0005:request",
+        "source_id": "synthetic-c2-0005-http",
+        "transaction_id": "synthetic-c2-tx-0005",
+        "session_id": "synthetic-c2-tx-0005:session",
+        "time": "2026-10-15T01:01:01Z",
+        "url": "http://updates-fixture.test:8080/poll",
+        "method": "POST",
+        "user_agent": "FixtureAgent/1.0",
+        "fields": {
+          "cmd": "TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw=="
+        },
+        "body_length": 64,
+        "truncated": false,
+        "response_url": "http://updates-fixture.test:8080/poll",
+        "response_status": 200,
+        "response_location": "",
+        "response_verified": true,
+        "form_action": "",
+        "redirect_to_transaction_id": "",
+        "redirect_verified": false,
+        "declared_brand": "",
+        "brand_claim_verified": false
+      },
+      "raw_request": "POST /poll HTTP/1.1\r\nHost: updates-fixture.test:8080\r\nUser-Agent: FixtureAgent/1.0\r\nContent-Type: application/x-www-form-urlencoded\r\nReferer: http://portal.test/\r\nContent-Length: 64\r\n\r\ncmd=TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw%3D%3D",
+      "response": "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nMOCK_COMMAND_REQUEST accepted for simulation; no command executed"
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0006-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-c2-0006-tcp",
+        "time": "2026-10-15T01:02:00Z",
+        "asset_id": "workstation-c2",
+        "destination": "198.51.100.20",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 96,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-c2-0006-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-c2-0006-tcp",
+        "occurred_at": "2026-10-15T01:02:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0007-http": {
+    "data": {
+      "hit": {
+        "hit_id": "synthetic-c2-0007-http",
+        "occurred_at": "2026-10-15T01:02:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      },
+      "http": {
+        "request_id": "synthetic-c2-tx-0007:request",
+        "source_id": "synthetic-c2-0007-http",
+        "transaction_id": "synthetic-c2-tx-0007",
+        "session_id": "synthetic-c2-tx-0007:session",
+        "time": "2026-10-15T01:02:01Z",
+        "url": "http://updates-fixture.test:8080/poll",
+        "method": "POST",
+        "user_agent": "FixtureAgent/1.0",
+        "fields": {
+          "cmd": "TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw=="
+        },
+        "body_length": 64,
+        "truncated": false,
+        "response_url": "http://updates-fixture.test:8080/poll",
+        "response_status": 200,
+        "response_location": "",
+        "response_verified": true,
+        "form_action": "",
+        "redirect_to_transaction_id": "",
+        "redirect_verified": false,
+        "declared_brand": "",
+        "brand_claim_verified": false
+      },
+      "raw_request": "POST /poll HTTP/1.1\r\nHost: updates-fixture.test:8080\r\nUser-Agent: FixtureAgent/1.0\r\nContent-Type: application/x-www-form-urlencoded\r\nReferer: http://portal.test/\r\nContent-Length: 64\r\n\r\ncmd=TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw%3D%3D",
+      "response": "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nMOCK_COMMAND_REQUEST accepted for simulation; no command executed"
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0008-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-c2-0008-tcp",
+        "time": "2026-10-15T01:03:00Z",
+        "asset_id": "workstation-c2",
+        "destination": "198.51.100.20",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 96,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-c2-0008-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-c2-0008-tcp",
+        "occurred_at": "2026-10-15T01:03:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0009-http": {
+    "data": {
+      "hit": {
+        "hit_id": "synthetic-c2-0009-http",
+        "occurred_at": "2026-10-15T01:03:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      },
+      "http": {
+        "request_id": "synthetic-c2-tx-0009:request",
+        "source_id": "synthetic-c2-0009-http",
+        "transaction_id": "synthetic-c2-tx-0009",
+        "session_id": "synthetic-c2-tx-0009:session",
+        "time": "2026-10-15T01:03:01Z",
+        "url": "http://updates-fixture.test:8080/poll",
+        "method": "POST",
+        "user_agent": "FixtureAgent/1.0",
+        "fields": {
+          "cmd": "TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw=="
+        },
+        "body_length": 64,
+        "truncated": false,
+        "response_url": "http://updates-fixture.test:8080/poll",
+        "response_status": 200,
+        "response_location": "",
+        "response_verified": true,
+        "form_action": "",
+        "redirect_to_transaction_id": "",
+        "redirect_verified": false,
+        "declared_brand": "",
+        "brand_claim_verified": false
+      },
+      "raw_request": "POST /poll HTTP/1.1\r\nHost: updates-fixture.test:8080\r\nUser-Agent: FixtureAgent/1.0\r\nContent-Type: application/x-www-form-urlencoded\r\nReferer: http://portal.test/\r\nContent-Length: 64\r\n\r\ncmd=TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw%3D%3D",
+      "response": "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nMOCK_COMMAND_REQUEST accepted for simulation; no command executed"
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0010-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-c2-0010-tcp",
+        "time": "2026-10-15T01:04:00Z",
+        "asset_id": "workstation-c2",
+        "destination": "198.51.100.20",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 96,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-c2-0010-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-c2-0010-tcp",
+        "occurred_at": "2026-10-15T01:04:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0011-http": {
+    "data": {
+      "hit": {
+        "hit_id": "synthetic-c2-0011-http",
+        "occurred_at": "2026-10-15T01:04:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      },
+      "http": {
+        "request_id": "synthetic-c2-tx-0011:request",
+        "source_id": "synthetic-c2-0011-http",
+        "transaction_id": "synthetic-c2-tx-0011",
+        "session_id": "synthetic-c2-tx-0011:session",
+        "time": "2026-10-15T01:04:01Z",
+        "url": "http://updates-fixture.test:8080/poll",
+        "method": "POST",
+        "user_agent": "FixtureAgent/1.0",
+        "fields": {
+          "cmd": "TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw=="
+        },
+        "body_length": 64,
+        "truncated": false,
+        "response_url": "http://updates-fixture.test:8080/poll",
+        "response_status": 200,
+        "response_location": "",
+        "response_verified": true,
+        "form_action": "",
+        "redirect_to_transaction_id": "",
+        "redirect_verified": false,
+        "declared_brand": "",
+        "brand_claim_verified": false
+      },
+      "raw_request": "POST /poll HTTP/1.1\r\nHost: updates-fixture.test:8080\r\nUser-Agent: FixtureAgent/1.0\r\nContent-Type: application/x-www-form-urlencoded\r\nReferer: http://portal.test/\r\nContent-Length: 64\r\n\r\ncmd=TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw%3D%3D",
+      "response": "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nMOCK_COMMAND_REQUEST accepted for simulation; no command executed"
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0012-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-c2-0012-tcp",
+        "time": "2026-10-15T01:05:00Z",
+        "asset_id": "workstation-c2",
+        "destination": "198.51.100.20",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 96,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-c2-0012-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-c2-0012-tcp",
+        "occurred_at": "2026-10-15T01:05:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0013-http": {
+    "data": {
+      "hit": {
+        "hit_id": "synthetic-c2-0013-http",
+        "occurred_at": "2026-10-15T01:05:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      },
+      "http": {
+        "request_id": "synthetic-c2-tx-0013:request",
+        "source_id": "synthetic-c2-0013-http",
+        "transaction_id": "synthetic-c2-tx-0013",
+        "session_id": "synthetic-c2-tx-0013:session",
+        "time": "2026-10-15T01:05:01Z",
+        "url": "http://updates-fixture.test:8080/poll",
+        "method": "POST",
+        "user_agent": "FixtureAgent/1.0",
+        "fields": {
+          "cmd": "TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw=="
+        },
+        "body_length": 64,
+        "truncated": false,
+        "response_url": "http://updates-fixture.test:8080/poll",
+        "response_status": 200,
+        "response_location": "",
+        "response_verified": true,
+        "form_action": "",
+        "redirect_to_transaction_id": "",
+        "redirect_verified": false,
+        "declared_brand": "",
+        "brand_claim_verified": false
+      },
+      "raw_request": "POST /poll HTTP/1.1\r\nHost: updates-fixture.test:8080\r\nUser-Agent: FixtureAgent/1.0\r\nContent-Type: application/x-www-form-urlencoded\r\nReferer: http://portal.test/\r\nContent-Length: 64\r\n\r\ncmd=TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw%3D%3D",
+      "response": "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nMOCK_COMMAND_REQUEST accepted for simulation; no command executed"
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0014-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-c2-0014-tcp",
+        "time": "2026-10-15T01:06:00Z",
+        "asset_id": "workstation-c2",
+        "destination": "198.51.100.20",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 96,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-c2-0014-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-c2-0014-tcp",
+        "occurred_at": "2026-10-15T01:06:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0015-http": {
+    "data": {
+      "hit": {
+        "hit_id": "synthetic-c2-0015-http",
+        "occurred_at": "2026-10-15T01:06:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      },
+      "http": {
+        "request_id": "synthetic-c2-tx-0015:request",
+        "source_id": "synthetic-c2-0015-http",
+        "transaction_id": "synthetic-c2-tx-0015",
+        "session_id": "synthetic-c2-tx-0015:session",
+        "time": "2026-10-15T01:06:01Z",
+        "url": "http://updates-fixture.test:8080/poll",
+        "method": "POST",
+        "user_agent": "FixtureAgent/1.0",
+        "fields": {
+          "cmd": "TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw=="
+        },
+        "body_length": 64,
+        "truncated": false,
+        "response_url": "http://updates-fixture.test:8080/poll",
+        "response_status": 200,
+        "response_location": "",
+        "response_verified": true,
+        "form_action": "",
+        "redirect_to_transaction_id": "",
+        "redirect_verified": false,
+        "declared_brand": "",
+        "brand_claim_verified": false
+      },
+      "raw_request": "POST /poll HTTP/1.1\r\nHost: updates-fixture.test:8080\r\nUser-Agent: FixtureAgent/1.0\r\nContent-Type: application/x-www-form-urlencoded\r\nReferer: http://portal.test/\r\nContent-Length: 64\r\n\r\ncmd=TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw%3D%3D",
+      "response": "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nMOCK_COMMAND_REQUEST accepted for simulation; no command executed"
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0016-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-c2-0016-tcp",
+        "time": "2026-10-15T01:07:00Z",
+        "asset_id": "workstation-c2",
+        "destination": "198.51.100.20",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 96,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-c2-0016-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-c2-0016-tcp",
+        "occurred_at": "2026-10-15T01:07:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0017-http": {
+    "data": {
+      "hit": {
+        "hit_id": "synthetic-c2-0017-http",
+        "occurred_at": "2026-10-15T01:07:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      },
+      "http": {
+        "request_id": "synthetic-c2-tx-0017:request",
+        "source_id": "synthetic-c2-0017-http",
+        "transaction_id": "synthetic-c2-tx-0017",
+        "session_id": "synthetic-c2-tx-0017:session",
+        "time": "2026-10-15T01:07:01Z",
+        "url": "http://updates-fixture.test:8080/poll",
+        "method": "POST",
+        "user_agent": "FixtureAgent/1.0",
+        "fields": {
+          "cmd": "TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw=="
+        },
+        "body_length": 64,
+        "truncated": false,
+        "response_url": "http://updates-fixture.test:8080/poll",
+        "response_status": 200,
+        "response_location": "",
+        "response_verified": true,
+        "form_action": "",
+        "redirect_to_transaction_id": "",
+        "redirect_verified": false,
+        "declared_brand": "",
+        "brand_claim_verified": false
+      },
+      "raw_request": "POST /poll HTTP/1.1\r\nHost: updates-fixture.test:8080\r\nUser-Agent: FixtureAgent/1.0\r\nContent-Type: application/x-www-form-urlencoded\r\nReferer: http://portal.test/\r\nContent-Length: 64\r\n\r\ncmd=TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw%3D%3D",
+      "response": "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nMOCK_COMMAND_REQUEST accepted for simulation; no command executed"
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0018-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-c2-0018-tcp",
+        "time": "2026-10-15T01:08:00Z",
+        "asset_id": "workstation-c2",
+        "destination": "198.51.100.20",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 96,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-c2-0018-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-c2-0018-tcp",
+        "occurred_at": "2026-10-15T01:08:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0019-http": {
+    "data": {
+      "hit": {
+        "hit_id": "synthetic-c2-0019-http",
+        "occurred_at": "2026-10-15T01:08:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      },
+      "http": {
+        "request_id": "synthetic-c2-tx-0019:request",
+        "source_id": "synthetic-c2-0019-http",
+        "transaction_id": "synthetic-c2-tx-0019",
+        "session_id": "synthetic-c2-tx-0019:session",
+        "time": "2026-10-15T01:08:01Z",
+        "url": "http://updates-fixture.test:8080/poll",
+        "method": "POST",
+        "user_agent": "FixtureAgent/1.0",
+        "fields": {
+          "cmd": "TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw=="
+        },
+        "body_length": 64,
+        "truncated": false,
+        "response_url": "http://updates-fixture.test:8080/poll",
+        "response_status": 200,
+        "response_location": "",
+        "response_verified": true,
+        "form_action": "",
+        "redirect_to_transaction_id": "",
+        "redirect_verified": false,
+        "declared_brand": "",
+        "brand_claim_verified": false
+      },
+      "raw_request": "POST /poll HTTP/1.1\r\nHost: updates-fixture.test:8080\r\nUser-Agent: FixtureAgent/1.0\r\nContent-Type: application/x-www-form-urlencoded\r\nReferer: http://portal.test/\r\nContent-Length: 64\r\n\r\ncmd=TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw%3D%3D",
+      "response": "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nMOCK_COMMAND_REQUEST accepted for simulation; no command executed"
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0020-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-c2-0020-tcp",
+        "time": "2026-10-15T01:09:00Z",
+        "asset_id": "workstation-c2",
+        "destination": "198.51.100.20",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 96,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-c2-0020-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-c2-0020-tcp",
+        "occurred_at": "2026-10-15T01:09:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0021-http": {
+    "data": {
+      "hit": {
+        "hit_id": "synthetic-c2-0021-http",
+        "occurred_at": "2026-10-15T01:09:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      },
+      "http": {
+        "request_id": "synthetic-c2-tx-0021:request",
+        "source_id": "synthetic-c2-0021-http",
+        "transaction_id": "synthetic-c2-tx-0021",
+        "session_id": "synthetic-c2-tx-0021:session",
+        "time": "2026-10-15T01:09:01Z",
+        "url": "http://updates-fixture.test:8080/poll",
+        "method": "POST",
+        "user_agent": "FixtureAgent/1.0",
+        "fields": {
+          "cmd": "TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw=="
+        },
+        "body_length": 64,
+        "truncated": false,
+        "response_url": "http://updates-fixture.test:8080/poll",
+        "response_status": 200,
+        "response_location": "",
+        "response_verified": true,
+        "form_action": "",
+        "redirect_to_transaction_id": "",
+        "redirect_verified": false,
+        "declared_brand": "",
+        "brand_claim_verified": false
+      },
+      "raw_request": "POST /poll HTTP/1.1\r\nHost: updates-fixture.test:8080\r\nUser-Agent: FixtureAgent/1.0\r\nContent-Type: application/x-www-form-urlencoded\r\nReferer: http://portal.test/\r\nContent-Length: 64\r\n\r\ncmd=TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw%3D%3D",
+      "response": "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nMOCK_COMMAND_REQUEST accepted for simulation; no command executed"
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0022-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-c2-0022-tcp",
+        "time": "2026-10-15T01:10:00Z",
+        "asset_id": "workstation-c2",
+        "destination": "198.51.100.20",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 96,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-c2-0022-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-c2-0022-tcp",
+        "occurred_at": "2026-10-15T01:10:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0023-http": {
+    "data": {
+      "hit": {
+        "hit_id": "synthetic-c2-0023-http",
+        "occurred_at": "2026-10-15T01:10:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      },
+      "http": {
+        "request_id": "synthetic-c2-tx-0023:request",
+        "source_id": "synthetic-c2-0023-http",
+        "transaction_id": "synthetic-c2-tx-0023",
+        "session_id": "synthetic-c2-tx-0023:session",
+        "time": "2026-10-15T01:10:01Z",
+        "url": "http://updates-fixture.test:8080/poll",
+        "method": "POST",
+        "user_agent": "FixtureAgent/1.0",
+        "fields": {
+          "cmd": "TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw=="
+        },
+        "body_length": 64,
+        "truncated": false,
+        "response_url": "http://updates-fixture.test:8080/poll",
+        "response_status": 200,
+        "response_location": "",
+        "response_verified": true,
+        "form_action": "",
+        "redirect_to_transaction_id": "",
+        "redirect_verified": false,
+        "declared_brand": "",
+        "brand_claim_verified": false
+      },
+      "raw_request": "POST /poll HTTP/1.1\r\nHost: updates-fixture.test:8080\r\nUser-Agent: FixtureAgent/1.0\r\nContent-Type: application/x-www-form-urlencoded\r\nReferer: http://portal.test/\r\nContent-Length: 64\r\n\r\ncmd=TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw%3D%3D",
+      "response": "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nMOCK_COMMAND_REQUEST accepted for simulation; no command executed"
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0024-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-c2-0024-tcp",
+        "time": "2026-10-15T01:11:00Z",
+        "asset_id": "workstation-c2",
+        "destination": "198.51.100.20",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 96,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-c2-0024-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-c2-0024-tcp",
+        "occurred_at": "2026-10-15T01:11:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0025-http": {
+    "data": {
+      "hit": {
+        "hit_id": "synthetic-c2-0025-http",
+        "occurred_at": "2026-10-15T01:11:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      },
+      "http": {
+        "request_id": "synthetic-c2-tx-0025:request",
+        "source_id": "synthetic-c2-0025-http",
+        "transaction_id": "synthetic-c2-tx-0025",
+        "session_id": "synthetic-c2-tx-0025:session",
+        "time": "2026-10-15T01:11:01Z",
+        "url": "http://updates-fixture.test:8080/poll",
+        "method": "POST",
+        "user_agent": "FixtureAgent/1.0",
+        "fields": {
+          "cmd": "TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw=="
+        },
+        "body_length": 64,
+        "truncated": false,
+        "response_url": "http://updates-fixture.test:8080/poll",
+        "response_status": 200,
+        "response_location": "",
+        "response_verified": true,
+        "form_action": "",
+        "redirect_to_transaction_id": "",
+        "redirect_verified": false,
+        "declared_brand": "",
+        "brand_claim_verified": false
+      },
+      "raw_request": "POST /poll HTTP/1.1\r\nHost: updates-fixture.test:8080\r\nUser-Agent: FixtureAgent/1.0\r\nContent-Type: application/x-www-form-urlencoded\r\nReferer: http://portal.test/\r\nContent-Length: 64\r\n\r\ncmd=TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw%3D%3D",
+      "response": "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nMOCK_COMMAND_REQUEST accepted for simulation; no command executed"
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0026-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-c2-0026-tcp",
+        "time": "2026-10-15T01:12:00Z",
+        "asset_id": "workstation-c2",
+        "destination": "198.51.100.20",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 96,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-c2-0026-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-c2-0026-tcp",
+        "occurred_at": "2026-10-15T01:12:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0027-http": {
+    "data": {
+      "hit": {
+        "hit_id": "synthetic-c2-0027-http",
+        "occurred_at": "2026-10-15T01:12:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      },
+      "http": {
+        "request_id": "synthetic-c2-tx-0027:request",
+        "source_id": "synthetic-c2-0027-http",
+        "transaction_id": "synthetic-c2-tx-0027",
+        "session_id": "synthetic-c2-tx-0027:session",
+        "time": "2026-10-15T01:12:01Z",
+        "url": "http://updates-fixture.test:8080/poll",
+        "method": "POST",
+        "user_agent": "FixtureAgent/1.0",
+        "fields": {
+          "cmd": "TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw=="
+        },
+        "body_length": 64,
+        "truncated": false,
+        "response_url": "http://updates-fixture.test:8080/poll",
+        "response_status": 200,
+        "response_location": "",
+        "response_verified": true,
+        "form_action": "",
+        "redirect_to_transaction_id": "",
+        "redirect_verified": false,
+        "declared_brand": "",
+        "brand_claim_verified": false
+      },
+      "raw_request": "POST /poll HTTP/1.1\r\nHost: updates-fixture.test:8080\r\nUser-Agent: FixtureAgent/1.0\r\nContent-Type: application/x-www-form-urlencoded\r\nReferer: http://portal.test/\r\nContent-Length: 64\r\n\r\ncmd=TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw%3D%3D",
+      "response": "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nMOCK_COMMAND_REQUEST accepted for simulation; no command executed"
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0028-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-c2-0028-tcp",
+        "time": "2026-10-15T01:13:00Z",
+        "asset_id": "workstation-c2",
+        "destination": "198.51.100.20",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 96,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-c2-0028-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-c2-0028-tcp",
+        "occurred_at": "2026-10-15T01:13:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0029-http": {
+    "data": {
+      "hit": {
+        "hit_id": "synthetic-c2-0029-http",
+        "occurred_at": "2026-10-15T01:13:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      },
+      "http": {
+        "request_id": "synthetic-c2-tx-0029:request",
+        "source_id": "synthetic-c2-0029-http",
+        "transaction_id": "synthetic-c2-tx-0029",
+        "session_id": "synthetic-c2-tx-0029:session",
+        "time": "2026-10-15T01:13:01Z",
+        "url": "http://updates-fixture.test:8080/poll",
+        "method": "POST",
+        "user_agent": "FixtureAgent/1.0",
+        "fields": {
+          "cmd": "TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw=="
+        },
+        "body_length": 64,
+        "truncated": false,
+        "response_url": "http://updates-fixture.test:8080/poll",
+        "response_status": 200,
+        "response_location": "",
+        "response_verified": true,
+        "form_action": "",
+        "redirect_to_transaction_id": "",
+        "redirect_verified": false,
+        "declared_brand": "",
+        "brand_claim_verified": false
+      },
+      "raw_request": "POST /poll HTTP/1.1\r\nHost: updates-fixture.test:8080\r\nUser-Agent: FixtureAgent/1.0\r\nContent-Type: application/x-www-form-urlencoded\r\nReferer: http://portal.test/\r\nContent-Length: 64\r\n\r\ncmd=TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw%3D%3D",
+      "response": "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nMOCK_COMMAND_REQUEST accepted for simulation; no command executed"
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0030-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-c2-0030-tcp",
+        "time": "2026-10-15T01:14:00Z",
+        "asset_id": "workstation-c2",
+        "destination": "198.51.100.20",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 96,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-c2-0030-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-c2-0030-tcp",
+        "occurred_at": "2026-10-15T01:14:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0031-http": {
+    "data": {
+      "hit": {
+        "hit_id": "synthetic-c2-0031-http",
+        "occurred_at": "2026-10-15T01:14:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      },
+      "http": {
+        "request_id": "synthetic-c2-tx-0031:request",
+        "source_id": "synthetic-c2-0031-http",
+        "transaction_id": "synthetic-c2-tx-0031",
+        "session_id": "synthetic-c2-tx-0031:session",
+        "time": "2026-10-15T01:14:01Z",
+        "url": "http://updates-fixture.test:8080/poll",
+        "method": "POST",
+        "user_agent": "FixtureAgent/1.0",
+        "fields": {
+          "cmd": "TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw=="
+        },
+        "body_length": 64,
+        "truncated": false,
+        "response_url": "http://updates-fixture.test:8080/poll",
+        "response_status": 200,
+        "response_location": "",
+        "response_verified": true,
+        "form_action": "",
+        "redirect_to_transaction_id": "",
+        "redirect_verified": false,
+        "declared_brand": "",
+        "brand_claim_verified": false
+      },
+      "raw_request": "POST /poll HTTP/1.1\r\nHost: updates-fixture.test:8080\r\nUser-Agent: FixtureAgent/1.0\r\nContent-Type: application/x-www-form-urlencoded\r\nReferer: http://portal.test/\r\nContent-Length: 64\r\n\r\ncmd=TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw%3D%3D",
+      "response": "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nMOCK_COMMAND_REQUEST accepted for simulation; no command executed"
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0032-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-c2-0032-tcp",
+        "time": "2026-10-15T01:15:00Z",
+        "asset_id": "workstation-c2",
+        "destination": "198.51.100.20",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 96,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-c2-0032-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-c2-0032-tcp",
+        "occurred_at": "2026-10-15T01:15:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0033-http": {
+    "data": {
+      "hit": {
+        "hit_id": "synthetic-c2-0033-http",
+        "occurred_at": "2026-10-15T01:15:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      },
+      "http": {
+        "request_id": "synthetic-c2-tx-0033:request",
+        "source_id": "synthetic-c2-0033-http",
+        "transaction_id": "synthetic-c2-tx-0033",
+        "session_id": "synthetic-c2-tx-0033:session",
+        "time": "2026-10-15T01:15:01Z",
+        "url": "http://updates-fixture.test:8080/poll",
+        "method": "POST",
+        "user_agent": "FixtureAgent/1.0",
+        "fields": {
+          "cmd": "TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw=="
+        },
+        "body_length": 64,
+        "truncated": false,
+        "response_url": "http://updates-fixture.test:8080/poll",
+        "response_status": 200,
+        "response_location": "",
+        "response_verified": true,
+        "form_action": "",
+        "redirect_to_transaction_id": "",
+        "redirect_verified": false,
+        "declared_brand": "",
+        "brand_claim_verified": false
+      },
+      "raw_request": "POST /poll HTTP/1.1\r\nHost: updates-fixture.test:8080\r\nUser-Agent: FixtureAgent/1.0\r\nContent-Type: application/x-www-form-urlencoded\r\nReferer: http://portal.test/\r\nContent-Length: 64\r\n\r\ncmd=TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw%3D%3D",
+      "response": "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nMOCK_COMMAND_REQUEST accepted for simulation; no command executed"
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0034-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-c2-0034-tcp",
+        "time": "2026-10-15T01:16:00Z",
+        "asset_id": "workstation-c2",
+        "destination": "198.51.100.20",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 96,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-c2-0034-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-c2-0034-tcp",
+        "occurred_at": "2026-10-15T01:16:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0035-http": {
+    "data": {
+      "hit": {
+        "hit_id": "synthetic-c2-0035-http",
+        "occurred_at": "2026-10-15T01:16:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      },
+      "http": {
+        "request_id": "synthetic-c2-tx-0035:request",
+        "source_id": "synthetic-c2-0035-http",
+        "transaction_id": "synthetic-c2-tx-0035",
+        "session_id": "synthetic-c2-tx-0035:session",
+        "time": "2026-10-15T01:16:01Z",
+        "url": "http://updates-fixture.test:8080/poll",
+        "method": "POST",
+        "user_agent": "FixtureAgent/1.0",
+        "fields": {
+          "cmd": "TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw=="
+        },
+        "body_length": 64,
+        "truncated": false,
+        "response_url": "http://updates-fixture.test:8080/poll",
+        "response_status": 200,
+        "response_location": "",
+        "response_verified": true,
+        "form_action": "",
+        "redirect_to_transaction_id": "",
+        "redirect_verified": false,
+        "declared_brand": "",
+        "brand_claim_verified": false
+      },
+      "raw_request": "POST /poll HTTP/1.1\r\nHost: updates-fixture.test:8080\r\nUser-Agent: FixtureAgent/1.0\r\nContent-Type: application/x-www-form-urlencoded\r\nReferer: http://portal.test/\r\nContent-Length: 64\r\n\r\ncmd=TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw%3D%3D",
+      "response": "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nMOCK_COMMAND_REQUEST accepted for simulation; no command executed"
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0036-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-c2-0036-tcp",
+        "time": "2026-10-15T01:17:00Z",
+        "asset_id": "workstation-c2",
+        "destination": "198.51.100.20",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 96,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-c2-0036-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-c2-0036-tcp",
+        "occurred_at": "2026-10-15T01:17:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0037-http": {
+    "data": {
+      "hit": {
+        "hit_id": "synthetic-c2-0037-http",
+        "occurred_at": "2026-10-15T01:17:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      },
+      "http": {
+        "request_id": "synthetic-c2-tx-0037:request",
+        "source_id": "synthetic-c2-0037-http",
+        "transaction_id": "synthetic-c2-tx-0037",
+        "session_id": "synthetic-c2-tx-0037:session",
+        "time": "2026-10-15T01:17:01Z",
+        "url": "http://updates-fixture.test:8080/poll",
+        "method": "POST",
+        "user_agent": "FixtureAgent/1.0",
+        "fields": {
+          "cmd": "TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw=="
+        },
+        "body_length": 64,
+        "truncated": false,
+        "response_url": "http://updates-fixture.test:8080/poll",
+        "response_status": 200,
+        "response_location": "",
+        "response_verified": true,
+        "form_action": "",
+        "redirect_to_transaction_id": "",
+        "redirect_verified": false,
+        "declared_brand": "",
+        "brand_claim_verified": false
+      },
+      "raw_request": "POST /poll HTTP/1.1\r\nHost: updates-fixture.test:8080\r\nUser-Agent: FixtureAgent/1.0\r\nContent-Type: application/x-www-form-urlencoded\r\nReferer: http://portal.test/\r\nContent-Length: 64\r\n\r\ncmd=TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw%3D%3D",
+      "response": "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nMOCK_COMMAND_REQUEST accepted for simulation; no command executed"
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0038-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-c2-0038-tcp",
+        "time": "2026-10-15T01:18:00Z",
+        "asset_id": "workstation-c2",
+        "destination": "198.51.100.20",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 96,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-c2-0038-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-c2-0038-tcp",
+        "occurred_at": "2026-10-15T01:18:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0039-http": {
+    "data": {
+      "hit": {
+        "hit_id": "synthetic-c2-0039-http",
+        "occurred_at": "2026-10-15T01:18:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      },
+      "http": {
+        "request_id": "synthetic-c2-tx-0039:request",
+        "source_id": "synthetic-c2-0039-http",
+        "transaction_id": "synthetic-c2-tx-0039",
+        "session_id": "synthetic-c2-tx-0039:session",
+        "time": "2026-10-15T01:18:01Z",
+        "url": "http://updates-fixture.test:8080/poll",
+        "method": "POST",
+        "user_agent": "FixtureAgent/1.0",
+        "fields": {
+          "cmd": "TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw=="
+        },
+        "body_length": 64,
+        "truncated": false,
+        "response_url": "http://updates-fixture.test:8080/poll",
+        "response_status": 200,
+        "response_location": "",
+        "response_verified": true,
+        "form_action": "",
+        "redirect_to_transaction_id": "",
+        "redirect_verified": false,
+        "declared_brand": "",
+        "brand_claim_verified": false
+      },
+      "raw_request": "POST /poll HTTP/1.1\r\nHost: updates-fixture.test:8080\r\nUser-Agent: FixtureAgent/1.0\r\nContent-Type: application/x-www-form-urlencoded\r\nReferer: http://portal.test/\r\nContent-Length: 64\r\n\r\ncmd=TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw%3D%3D",
+      "response": "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nMOCK_COMMAND_REQUEST accepted for simulation; no command executed"
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0040-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-c2-0040-tcp",
+        "time": "2026-10-15T01:19:00Z",
+        "asset_id": "workstation-c2",
+        "destination": "198.51.100.20",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 96,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-c2-0040-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-c2-0040-tcp",
+        "occurred_at": "2026-10-15T01:19:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0041-http": {
+    "data": {
+      "hit": {
+        "hit_id": "synthetic-c2-0041-http",
+        "occurred_at": "2026-10-15T01:19:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      },
+      "http": {
+        "request_id": "synthetic-c2-tx-0041:request",
+        "source_id": "synthetic-c2-0041-http",
+        "transaction_id": "synthetic-c2-tx-0041",
+        "session_id": "synthetic-c2-tx-0041:session",
+        "time": "2026-10-15T01:19:01Z",
+        "url": "http://updates-fixture.test:8080/poll",
+        "method": "POST",
+        "user_agent": "FixtureAgent/1.0",
+        "fields": {
+          "cmd": "TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw=="
+        },
+        "body_length": 64,
+        "truncated": false,
+        "response_url": "http://updates-fixture.test:8080/poll",
+        "response_status": 200,
+        "response_location": "",
+        "response_verified": true,
+        "form_action": "",
+        "redirect_to_transaction_id": "",
+        "redirect_verified": false,
+        "declared_brand": "",
+        "brand_claim_verified": false
+      },
+      "raw_request": "POST /poll HTTP/1.1\r\nHost: updates-fixture.test:8080\r\nUser-Agent: FixtureAgent/1.0\r\nContent-Type: application/x-www-form-urlencoded\r\nReferer: http://portal.test/\r\nContent-Length: 64\r\n\r\ncmd=TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw%3D%3D",
+      "response": "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nMOCK_COMMAND_REQUEST accepted for simulation; no command executed"
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0042-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-c2-0042-tcp",
+        "time": "2026-10-15T01:20:00Z",
+        "asset_id": "workstation-c2",
+        "destination": "198.51.100.20",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 96,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-c2-0042-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-c2-0042-tcp",
+        "occurred_at": "2026-10-15T01:20:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0043-http": {
+    "data": {
+      "hit": {
+        "hit_id": "synthetic-c2-0043-http",
+        "occurred_at": "2026-10-15T01:20:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      },
+      "http": {
+        "request_id": "synthetic-c2-tx-0043:request",
+        "source_id": "synthetic-c2-0043-http",
+        "transaction_id": "synthetic-c2-tx-0043",
+        "session_id": "synthetic-c2-tx-0043:session",
+        "time": "2026-10-15T01:20:01Z",
+        "url": "http://updates-fixture.test:8080/poll",
+        "method": "POST",
+        "user_agent": "FixtureAgent/1.0",
+        "fields": {
+          "cmd": "TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw=="
+        },
+        "body_length": 64,
+        "truncated": false,
+        "response_url": "http://updates-fixture.test:8080/poll",
+        "response_status": 200,
+        "response_location": "",
+        "response_verified": true,
+        "form_action": "",
+        "redirect_to_transaction_id": "",
+        "redirect_verified": false,
+        "declared_brand": "",
+        "brand_claim_verified": false
+      },
+      "raw_request": "POST /poll HTTP/1.1\r\nHost: updates-fixture.test:8080\r\nUser-Agent: FixtureAgent/1.0\r\nContent-Type: application/x-www-form-urlencoded\r\nReferer: http://portal.test/\r\nContent-Length: 64\r\n\r\ncmd=TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw%3D%3D",
+      "response": "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nMOCK_COMMAND_REQUEST accepted for simulation; no command executed"
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0044-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-c2-0044-tcp",
+        "time": "2026-10-15T01:21:00Z",
+        "asset_id": "workstation-c2",
+        "destination": "198.51.100.20",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 96,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-c2-0044-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-c2-0044-tcp",
+        "occurred_at": "2026-10-15T01:21:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0045-http": {
+    "data": {
+      "hit": {
+        "hit_id": "synthetic-c2-0045-http",
+        "occurred_at": "2026-10-15T01:21:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      },
+      "http": {
+        "request_id": "synthetic-c2-tx-0045:request",
+        "source_id": "synthetic-c2-0045-http",
+        "transaction_id": "synthetic-c2-tx-0045",
+        "session_id": "synthetic-c2-tx-0045:session",
+        "time": "2026-10-15T01:21:01Z",
+        "url": "http://updates-fixture.test:8080/poll",
+        "method": "POST",
+        "user_agent": "FixtureAgent/1.0",
+        "fields": {
+          "cmd": "TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw=="
+        },
+        "body_length": 64,
+        "truncated": false,
+        "response_url": "http://updates-fixture.test:8080/poll",
+        "response_status": 200,
+        "response_location": "",
+        "response_verified": true,
+        "form_action": "",
+        "redirect_to_transaction_id": "",
+        "redirect_verified": false,
+        "declared_brand": "",
+        "brand_claim_verified": false
+      },
+      "raw_request": "POST /poll HTTP/1.1\r\nHost: updates-fixture.test:8080\r\nUser-Agent: FixtureAgent/1.0\r\nContent-Type: application/x-www-form-urlencoded\r\nReferer: http://portal.test/\r\nContent-Length: 64\r\n\r\ncmd=TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw%3D%3D",
+      "response": "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nMOCK_COMMAND_REQUEST accepted for simulation; no command executed"
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0046-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-c2-0046-tcp",
+        "time": "2026-10-15T01:22:00Z",
+        "asset_id": "workstation-c2",
+        "destination": "198.51.100.20",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 96,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-c2-0046-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-c2-0046-tcp",
+        "occurred_at": "2026-10-15T01:22:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0047-http": {
+    "data": {
+      "hit": {
+        "hit_id": "synthetic-c2-0047-http",
+        "occurred_at": "2026-10-15T01:22:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      },
+      "http": {
+        "request_id": "synthetic-c2-tx-0047:request",
+        "source_id": "synthetic-c2-0047-http",
+        "transaction_id": "synthetic-c2-tx-0047",
+        "session_id": "synthetic-c2-tx-0047:session",
+        "time": "2026-10-15T01:22:01Z",
+        "url": "http://updates-fixture.test:8080/poll",
+        "method": "POST",
+        "user_agent": "FixtureAgent/1.0",
+        "fields": {
+          "cmd": "TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw=="
+        },
+        "body_length": 64,
+        "truncated": false,
+        "response_url": "http://updates-fixture.test:8080/poll",
+        "response_status": 200,
+        "response_location": "",
+        "response_verified": true,
+        "form_action": "",
+        "redirect_to_transaction_id": "",
+        "redirect_verified": false,
+        "declared_brand": "",
+        "brand_claim_verified": false
+      },
+      "raw_request": "POST /poll HTTP/1.1\r\nHost: updates-fixture.test:8080\r\nUser-Agent: FixtureAgent/1.0\r\nContent-Type: application/x-www-form-urlencoded\r\nReferer: http://portal.test/\r\nContent-Length: 64\r\n\r\ncmd=TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw%3D%3D",
+      "response": "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nMOCK_COMMAND_REQUEST accepted for simulation; no command executed"
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0048-tcp": {
+    "data": {
+      "connection": {
+        "transport": "tcp",
+        "outcome_verified": true,
+        "source_id": "synthetic-c2-0048-tcp",
+        "time": "2026-10-15T01:23:00Z",
+        "asset_id": "workstation-c2",
+        "destination": "198.51.100.20",
+        "port": 8080,
+        "app_protocol": "http",
+        "protocol_parsed": true,
+        "payload_bytes": 96,
+        "tcp_state": "ESTABLISHED",
+        "session_id": "synthetic-c2-0048-tcp:session"
+      },
+      "hit": {
+        "hit_id": "synthetic-c2-0048-tcp",
+        "occurred_at": "2026-10-15T01:23:00Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-0049-http": {
+    "data": {
+      "hit": {
+        "hit_id": "synthetic-c2-0049-http",
+        "occurred_at": "2026-10-15T01:23:01Z",
+        "packets": null,
+        "scope": {
+          "asset_id": "workstation-c2",
+          "endpoint_id": "tcp://198.51.100.20:8080",
+          "device_id": "sensor-workstation-c2"
+        }
+      },
+      "http": {
+        "request_id": "synthetic-c2-tx-0049:request",
+        "source_id": "synthetic-c2-0049-http",
+        "transaction_id": "synthetic-c2-tx-0049",
+        "session_id": "synthetic-c2-tx-0049:session",
+        "time": "2026-10-15T01:23:01Z",
+        "url": "http://updates-fixture.test:8080/poll",
+        "method": "POST",
+        "user_agent": "FixtureAgent/1.0",
+        "fields": {
+          "cmd": "TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw=="
+        },
+        "body_length": 64,
+        "truncated": false,
+        "response_url": "http://updates-fixture.test:8080/poll",
+        "response_status": 200,
+        "response_location": "",
+        "response_verified": true,
+        "form_action": "",
+        "redirect_to_transaction_id": "",
+        "redirect_verified": false,
+        "declared_brand": "",
+        "brand_claim_verified": false
+      },
+      "raw_request": "POST /poll HTTP/1.1\r\nHost: updates-fixture.test:8080\r\nUser-Agent: FixtureAgent/1.0\r\nContent-Type: application/x-www-form-urlencoded\r\nReferer: http://portal.test/\r\nContent-Length: 64\r\n\r\ncmd=TU9DS19DT01NQU5EX1JFUVVFU1QgY29sbGVjdF9kZW1vX3N0YXR1cw%3D%3D",
+      "response": "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nMOCK_COMMAND_REQUEST accepted for simulation; no command executed"
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-1": {
+    "data": {
+      "destination_address": "198.51.100.20",
+      "device_id": "sensor-workstation-c2",
+      "activity_type": "http",
+      "event_id": "synthetic-c2-history-day-1",
+      "asset_ids": [
+        "workstation-c2"
+      ],
+      "all_asset_ids": [
+        "workstation-c2"
+      ],
+      "activity_iocs": [
+        {
+          "type": "domain",
+          "value": "updates-fixture.test"
+        }
+      ],
+      "iocs": [
+        {
+          "type": "domain",
+          "value": "updates-fixture.test"
+        }
+      ],
+      "relation": "same_asset_ioc",
+      "first_time": "2026-10-14T01:00:00Z",
+      "last_time": "2026-10-14T01:23:00Z",
+      "review_status": "",
+      "adjudication": ""
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-1-http-00": {
+    "data": {
+      "id": "synthetic-c2-history-day-1-http-00",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-1-http-00",
+      "time": "2026-10-14T01:00:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-1",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-1-http-01": {
+    "data": {
+      "id": "synthetic-c2-history-day-1-http-01",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-1-http-01",
+      "time": "2026-10-14T01:01:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-1",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-1-http-02": {
+    "data": {
+      "id": "synthetic-c2-history-day-1-http-02",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-1-http-02",
+      "time": "2026-10-14T01:02:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-1",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-1-http-03": {
+    "data": {
+      "id": "synthetic-c2-history-day-1-http-03",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-1-http-03",
+      "time": "2026-10-14T01:03:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-1",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-1-http-04": {
+    "data": {
+      "id": "synthetic-c2-history-day-1-http-04",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-1-http-04",
+      "time": "2026-10-14T01:04:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-1",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-1-http-05": {
+    "data": {
+      "id": "synthetic-c2-history-day-1-http-05",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-1-http-05",
+      "time": "2026-10-14T01:05:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-1",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-1-http-06": {
+    "data": {
+      "id": "synthetic-c2-history-day-1-http-06",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-1-http-06",
+      "time": "2026-10-14T01:06:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-1",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-1-http-07": {
+    "data": {
+      "id": "synthetic-c2-history-day-1-http-07",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-1-http-07",
+      "time": "2026-10-14T01:07:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-1",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-1-http-08": {
+    "data": {
+      "id": "synthetic-c2-history-day-1-http-08",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-1-http-08",
+      "time": "2026-10-14T01:08:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-1",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-1-http-09": {
+    "data": {
+      "id": "synthetic-c2-history-day-1-http-09",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-1-http-09",
+      "time": "2026-10-14T01:09:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-1",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-1-http-10": {
+    "data": {
+      "id": "synthetic-c2-history-day-1-http-10",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-1-http-10",
+      "time": "2026-10-14T01:10:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-1",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-1-http-11": {
+    "data": {
+      "id": "synthetic-c2-history-day-1-http-11",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-1-http-11",
+      "time": "2026-10-14T01:11:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-1",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-1-http-12": {
+    "data": {
+      "id": "synthetic-c2-history-day-1-http-12",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-1-http-12",
+      "time": "2026-10-14T01:12:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-1",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-1-http-13": {
+    "data": {
+      "id": "synthetic-c2-history-day-1-http-13",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-1-http-13",
+      "time": "2026-10-14T01:13:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-1",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-1-http-14": {
+    "data": {
+      "id": "synthetic-c2-history-day-1-http-14",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-1-http-14",
+      "time": "2026-10-14T01:14:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-1",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-1-http-15": {
+    "data": {
+      "id": "synthetic-c2-history-day-1-http-15",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-1-http-15",
+      "time": "2026-10-14T01:15:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-1",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-1-http-16": {
+    "data": {
+      "id": "synthetic-c2-history-day-1-http-16",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-1-http-16",
+      "time": "2026-10-14T01:16:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-1",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-1-http-17": {
+    "data": {
+      "id": "synthetic-c2-history-day-1-http-17",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-1-http-17",
+      "time": "2026-10-14T01:17:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-1",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-1-http-18": {
+    "data": {
+      "id": "synthetic-c2-history-day-1-http-18",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-1-http-18",
+      "time": "2026-10-14T01:18:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-1",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-1-http-19": {
+    "data": {
+      "id": "synthetic-c2-history-day-1-http-19",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-1-http-19",
+      "time": "2026-10-14T01:19:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-1",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-1-http-20": {
+    "data": {
+      "id": "synthetic-c2-history-day-1-http-20",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-1-http-20",
+      "time": "2026-10-14T01:20:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-1",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-1-http-21": {
+    "data": {
+      "id": "synthetic-c2-history-day-1-http-21",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-1-http-21",
+      "time": "2026-10-14T01:21:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-1",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-1-http-22": {
+    "data": {
+      "id": "synthetic-c2-history-day-1-http-22",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-1-http-22",
+      "time": "2026-10-14T01:22:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-1",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-1-http-23": {
+    "data": {
+      "id": "synthetic-c2-history-day-1-http-23",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-1-http-23",
+      "time": "2026-10-14T01:23:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-1",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-2": {
+    "data": {
+      "destination_address": "198.51.100.20",
+      "device_id": "sensor-workstation-c2",
+      "activity_type": "http",
+      "event_id": "synthetic-c2-history-day-2",
+      "asset_ids": [
+        "workstation-c2"
+      ],
+      "all_asset_ids": [
+        "workstation-c2"
+      ],
+      "activity_iocs": [
+        {
+          "type": "domain",
+          "value": "updates-fixture.test"
+        }
+      ],
+      "iocs": [
+        {
+          "type": "domain",
+          "value": "updates-fixture.test"
+        }
+      ],
+      "relation": "same_asset_ioc",
+      "first_time": "2026-10-13T01:00:00Z",
+      "last_time": "2026-10-13T01:23:00Z",
+      "review_status": "",
+      "adjudication": ""
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-2-http-00": {
+    "data": {
+      "id": "synthetic-c2-history-day-2-http-00",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-2-http-00",
+      "time": "2026-10-13T01:00:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-2",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-2-http-01": {
+    "data": {
+      "id": "synthetic-c2-history-day-2-http-01",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-2-http-01",
+      "time": "2026-10-13T01:01:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-2",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-2-http-02": {
+    "data": {
+      "id": "synthetic-c2-history-day-2-http-02",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-2-http-02",
+      "time": "2026-10-13T01:02:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-2",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-2-http-03": {
+    "data": {
+      "id": "synthetic-c2-history-day-2-http-03",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-2-http-03",
+      "time": "2026-10-13T01:03:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-2",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-2-http-04": {
+    "data": {
+      "id": "synthetic-c2-history-day-2-http-04",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-2-http-04",
+      "time": "2026-10-13T01:04:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-2",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-2-http-05": {
+    "data": {
+      "id": "synthetic-c2-history-day-2-http-05",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-2-http-05",
+      "time": "2026-10-13T01:05:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-2",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-2-http-06": {
+    "data": {
+      "id": "synthetic-c2-history-day-2-http-06",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-2-http-06",
+      "time": "2026-10-13T01:06:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-2",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-2-http-07": {
+    "data": {
+      "id": "synthetic-c2-history-day-2-http-07",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-2-http-07",
+      "time": "2026-10-13T01:07:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-2",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-2-http-08": {
+    "data": {
+      "id": "synthetic-c2-history-day-2-http-08",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-2-http-08",
+      "time": "2026-10-13T01:08:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-2",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-2-http-09": {
+    "data": {
+      "id": "synthetic-c2-history-day-2-http-09",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-2-http-09",
+      "time": "2026-10-13T01:09:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-2",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-2-http-10": {
+    "data": {
+      "id": "synthetic-c2-history-day-2-http-10",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-2-http-10",
+      "time": "2026-10-13T01:10:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-2",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-2-http-11": {
+    "data": {
+      "id": "synthetic-c2-history-day-2-http-11",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-2-http-11",
+      "time": "2026-10-13T01:11:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-2",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-2-http-12": {
+    "data": {
+      "id": "synthetic-c2-history-day-2-http-12",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-2-http-12",
+      "time": "2026-10-13T01:12:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-2",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-2-http-13": {
+    "data": {
+      "id": "synthetic-c2-history-day-2-http-13",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-2-http-13",
+      "time": "2026-10-13T01:13:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-2",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-2-http-14": {
+    "data": {
+      "id": "synthetic-c2-history-day-2-http-14",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-2-http-14",
+      "time": "2026-10-13T01:14:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-2",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-2-http-15": {
+    "data": {
+      "id": "synthetic-c2-history-day-2-http-15",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-2-http-15",
+      "time": "2026-10-13T01:15:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-2",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-2-http-16": {
+    "data": {
+      "id": "synthetic-c2-history-day-2-http-16",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-2-http-16",
+      "time": "2026-10-13T01:16:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-2",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-2-http-17": {
+    "data": {
+      "id": "synthetic-c2-history-day-2-http-17",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-2-http-17",
+      "time": "2026-10-13T01:17:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-2",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-2-http-18": {
+    "data": {
+      "id": "synthetic-c2-history-day-2-http-18",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-2-http-18",
+      "time": "2026-10-13T01:18:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-2",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-2-http-19": {
+    "data": {
+      "id": "synthetic-c2-history-day-2-http-19",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-2-http-19",
+      "time": "2026-10-13T01:19:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-2",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-2-http-20": {
+    "data": {
+      "id": "synthetic-c2-history-day-2-http-20",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-2-http-20",
+      "time": "2026-10-13T01:20:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-2",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-2-http-21": {
+    "data": {
+      "id": "synthetic-c2-history-day-2-http-21",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-2-http-21",
+      "time": "2026-10-13T01:21:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-2",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-2-http-22": {
+    "data": {
+      "id": "synthetic-c2-history-day-2-http-22",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-2-http-22",
+      "time": "2026-10-13T01:22:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-2",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-2-http-23": {
+    "data": {
+      "id": "synthetic-c2-history-day-2-http-23",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-2-http-23",
+      "time": "2026-10-13T01:23:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-2",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-3": {
+    "data": {
+      "destination_address": "198.51.100.20",
+      "device_id": "sensor-workstation-c2",
+      "activity_type": "http",
+      "event_id": "synthetic-c2-history-day-3",
+      "asset_ids": [
+        "workstation-c2"
+      ],
+      "all_asset_ids": [
+        "workstation-c2"
+      ],
+      "activity_iocs": [
+        {
+          "type": "domain",
+          "value": "updates-fixture.test"
+        }
+      ],
+      "iocs": [
+        {
+          "type": "domain",
+          "value": "updates-fixture.test"
+        }
+      ],
+      "relation": "same_asset_ioc",
+      "first_time": "2026-10-12T01:00:00Z",
+      "last_time": "2026-10-12T01:23:00Z",
+      "review_status": "",
+      "adjudication": ""
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-3-http-00": {
+    "data": {
+      "id": "synthetic-c2-history-day-3-http-00",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-3-http-00",
+      "time": "2026-10-12T01:00:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-3",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-3-http-01": {
+    "data": {
+      "id": "synthetic-c2-history-day-3-http-01",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-3-http-01",
+      "time": "2026-10-12T01:01:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-3",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-3-http-02": {
+    "data": {
+      "id": "synthetic-c2-history-day-3-http-02",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-3-http-02",
+      "time": "2026-10-12T01:02:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-3",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-3-http-03": {
+    "data": {
+      "id": "synthetic-c2-history-day-3-http-03",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-3-http-03",
+      "time": "2026-10-12T01:03:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-3",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-3-http-04": {
+    "data": {
+      "id": "synthetic-c2-history-day-3-http-04",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-3-http-04",
+      "time": "2026-10-12T01:04:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-3",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-3-http-05": {
+    "data": {
+      "id": "synthetic-c2-history-day-3-http-05",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-3-http-05",
+      "time": "2026-10-12T01:05:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-3",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-3-http-06": {
+    "data": {
+      "id": "synthetic-c2-history-day-3-http-06",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-3-http-06",
+      "time": "2026-10-12T01:06:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-3",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-3-http-07": {
+    "data": {
+      "id": "synthetic-c2-history-day-3-http-07",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-3-http-07",
+      "time": "2026-10-12T01:07:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-3",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-3-http-08": {
+    "data": {
+      "id": "synthetic-c2-history-day-3-http-08",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-3-http-08",
+      "time": "2026-10-12T01:08:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-3",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-3-http-09": {
+    "data": {
+      "id": "synthetic-c2-history-day-3-http-09",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-3-http-09",
+      "time": "2026-10-12T01:09:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-3",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-3-http-10": {
+    "data": {
+      "id": "synthetic-c2-history-day-3-http-10",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-3-http-10",
+      "time": "2026-10-12T01:10:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-3",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-3-http-11": {
+    "data": {
+      "id": "synthetic-c2-history-day-3-http-11",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-3-http-11",
+      "time": "2026-10-12T01:11:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-3",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-3-http-12": {
+    "data": {
+      "id": "synthetic-c2-history-day-3-http-12",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-3-http-12",
+      "time": "2026-10-12T01:12:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-3",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-3-http-13": {
+    "data": {
+      "id": "synthetic-c2-history-day-3-http-13",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-3-http-13",
+      "time": "2026-10-12T01:13:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-3",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-3-http-14": {
+    "data": {
+      "id": "synthetic-c2-history-day-3-http-14",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-3-http-14",
+      "time": "2026-10-12T01:14:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-3",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-3-http-15": {
+    "data": {
+      "id": "synthetic-c2-history-day-3-http-15",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-3-http-15",
+      "time": "2026-10-12T01:15:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-3",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-3-http-16": {
+    "data": {
+      "id": "synthetic-c2-history-day-3-http-16",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-3-http-16",
+      "time": "2026-10-12T01:16:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-3",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-3-http-17": {
+    "data": {
+      "id": "synthetic-c2-history-day-3-http-17",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-3-http-17",
+      "time": "2026-10-12T01:17:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-3",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-3-http-18": {
+    "data": {
+      "id": "synthetic-c2-history-day-3-http-18",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-3-http-18",
+      "time": "2026-10-12T01:18:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-3",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-3-http-19": {
+    "data": {
+      "id": "synthetic-c2-history-day-3-http-19",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-3-http-19",
+      "time": "2026-10-12T01:19:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-3",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-3-http-20": {
+    "data": {
+      "id": "synthetic-c2-history-day-3-http-20",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-3-http-20",
+      "time": "2026-10-12T01:20:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-3",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-3-http-21": {
+    "data": {
+      "id": "synthetic-c2-history-day-3-http-21",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-3-http-21",
+      "time": "2026-10-12T01:21:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-3",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-3-http-22": {
+    "data": {
+      "id": "synthetic-c2-history-day-3-http-22",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-3-http-22",
+      "time": "2026-10-12T01:22:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-3",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-3-http-23": {
+    "data": {
+      "id": "synthetic-c2-history-day-3-http-23",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-3-http-23",
+      "time": "2026-10-12T01:23:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-3",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-4": {
+    "data": {
+      "destination_address": "198.51.100.20",
+      "device_id": "sensor-workstation-c2",
+      "activity_type": "http",
+      "event_id": "synthetic-c2-history-day-4",
+      "asset_ids": [
+        "workstation-c2"
+      ],
+      "all_asset_ids": [
+        "workstation-c2"
+      ],
+      "activity_iocs": [
+        {
+          "type": "domain",
+          "value": "updates-fixture.test"
+        }
+      ],
+      "iocs": [
+        {
+          "type": "domain",
+          "value": "updates-fixture.test"
+        }
+      ],
+      "relation": "same_asset_ioc",
+      "first_time": "2026-10-11T01:00:00Z",
+      "last_time": "2026-10-11T01:23:00Z",
+      "review_status": "",
+      "adjudication": ""
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-4-http-00": {
+    "data": {
+      "id": "synthetic-c2-history-day-4-http-00",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-4-http-00",
+      "time": "2026-10-11T01:00:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-4",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-4-http-01": {
+    "data": {
+      "id": "synthetic-c2-history-day-4-http-01",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-4-http-01",
+      "time": "2026-10-11T01:01:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-4",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-4-http-02": {
+    "data": {
+      "id": "synthetic-c2-history-day-4-http-02",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-4-http-02",
+      "time": "2026-10-11T01:02:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-4",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-4-http-03": {
+    "data": {
+      "id": "synthetic-c2-history-day-4-http-03",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-4-http-03",
+      "time": "2026-10-11T01:03:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-4",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-4-http-04": {
+    "data": {
+      "id": "synthetic-c2-history-day-4-http-04",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-4-http-04",
+      "time": "2026-10-11T01:04:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-4",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-4-http-05": {
+    "data": {
+      "id": "synthetic-c2-history-day-4-http-05",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-4-http-05",
+      "time": "2026-10-11T01:05:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-4",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-4-http-06": {
+    "data": {
+      "id": "synthetic-c2-history-day-4-http-06",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-4-http-06",
+      "time": "2026-10-11T01:06:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-4",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-4-http-07": {
+    "data": {
+      "id": "synthetic-c2-history-day-4-http-07",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-4-http-07",
+      "time": "2026-10-11T01:07:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-4",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-4-http-08": {
+    "data": {
+      "id": "synthetic-c2-history-day-4-http-08",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-4-http-08",
+      "time": "2026-10-11T01:08:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-4",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-4-http-09": {
+    "data": {
+      "id": "synthetic-c2-history-day-4-http-09",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-4-http-09",
+      "time": "2026-10-11T01:09:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-4",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-4-http-10": {
+    "data": {
+      "id": "synthetic-c2-history-day-4-http-10",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-4-http-10",
+      "time": "2026-10-11T01:10:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-4",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-4-http-11": {
+    "data": {
+      "id": "synthetic-c2-history-day-4-http-11",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-4-http-11",
+      "time": "2026-10-11T01:11:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-4",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-4-http-12": {
+    "data": {
+      "id": "synthetic-c2-history-day-4-http-12",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-4-http-12",
+      "time": "2026-10-11T01:12:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-4",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-4-http-13": {
+    "data": {
+      "id": "synthetic-c2-history-day-4-http-13",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-4-http-13",
+      "time": "2026-10-11T01:13:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-4",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-4-http-14": {
+    "data": {
+      "id": "synthetic-c2-history-day-4-http-14",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-4-http-14",
+      "time": "2026-10-11T01:14:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-4",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-4-http-15": {
+    "data": {
+      "id": "synthetic-c2-history-day-4-http-15",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-4-http-15",
+      "time": "2026-10-11T01:15:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-4",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-4-http-16": {
+    "data": {
+      "id": "synthetic-c2-history-day-4-http-16",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-4-http-16",
+      "time": "2026-10-11T01:16:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-4",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-4-http-17": {
+    "data": {
+      "id": "synthetic-c2-history-day-4-http-17",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-4-http-17",
+      "time": "2026-10-11T01:17:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-4",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-4-http-18": {
+    "data": {
+      "id": "synthetic-c2-history-day-4-http-18",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-4-http-18",
+      "time": "2026-10-11T01:18:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-4",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-4-http-19": {
+    "data": {
+      "id": "synthetic-c2-history-day-4-http-19",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-4-http-19",
+      "time": "2026-10-11T01:19:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-4",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-4-http-20": {
+    "data": {
+      "id": "synthetic-c2-history-day-4-http-20",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-4-http-20",
+      "time": "2026-10-11T01:20:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-4",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-4-http-21": {
+    "data": {
+      "id": "synthetic-c2-history-day-4-http-21",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-4-http-21",
+      "time": "2026-10-11T01:21:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-4",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-4-http-22": {
+    "data": {
+      "id": "synthetic-c2-history-day-4-http-22",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-4-http-22",
+      "time": "2026-10-11T01:22:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-4",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2-history-day-4-http-23": {
+    "data": {
+      "id": "synthetic-c2-history-day-4-http-23",
+      "kind": "complete_http_request",
+      "hit_id": "synthetic-c2-history-day-4-http-23",
+      "time": "2026-10-11T01:23:00Z",
+      "scope": {
+        "asset_id": "workstation-c2",
+        "endpoint_id": "tcp://198.51.100.20:8080",
+        "device_id": "sensor-workstation-c2"
+      },
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "snapshot": {
+        "event_id": "synthetic-c2-history-day-4",
+        "version": 1,
+        "watermark": 24,
+        "revision_watermark": 1,
+        "loaded_hits": 24,
+        "complete": true
+      }
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-c2:1": {
+    "data": {
+      "event_id": "synthetic-c2",
+      "snapshot_version": 1,
+      "source_events": [
+        "synthetic-c2"
+      ],
+      "watermark": 1,
+      "revision_watermark": 1,
+      "count": 49,
+      "context": {
+        "event_background": "员工终端连续五个自然日在北京时间09:00访问更新端点；当前日24个独立TCP联系与24次HTTP事务，报文中含无害命令测试标记。周期可能来自合法更新程序，未提供授权或主机执行证据。",
+        "first_time": "2026-10-15T00:59:50Z",
+        "ioc": {
+          "ioc_type": "domain",
+          "ioc_value": "updates-fixture.test",
+          "label": "mock suspicious only",
+          "source": "synthetic-intel-c2"
+        },
+        "last_time": "2026-10-15T01:23:01Z",
+        "occurrence_count": 49,
+        "scenario_id": "c2",
+        "synthetic_fixture": true
+      },
+      "evidence": null,
+      "input_manifest": {}
+    },
+    "synthetic_fixture": true
+  },
+  "synthetic-intel-c2": {
+    "data": {
+      "ioc_type": "domain",
+      "ioc_value": "updates-fixture.test",
+      "label": "mock suspicious only",
+      "source": "synthetic-intel-c2"
+    },
+    "synthetic_fixture": true
+  }
+}

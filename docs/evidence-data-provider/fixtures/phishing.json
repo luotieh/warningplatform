@@ -1,0 +1,306 @@
+{
+  "synthetic_fixture": true,
+  "events": [
+    {
+      "aggregation_closed": false,
+      "analysis_version": 0,
+      "created_at": "2026-10-15T00:59:50Z",
+      "current_round": 0,
+      "event_id": "synthetic-phishing",
+      "event_name": "Synthetic Fixture: phishing",
+      "event_status": "new",
+      "id": 0,
+      "last_seen_at": "2026-10-15T01:00:21Z",
+      "message": "员工浏览器访问仿冒Contoso测试登录页，经历两次有明确事务边的跳转，页面表单向另一测试域提交合成用户名及占位密码。另有真实授权测试域的正常登录作对照；不使用真实凭据或外部站点。",
+      "review_status": "pending",
+      "severity": "unknown",
+      "source": "synthetic-fixture-offline",
+      "title": "Phishing钓鱼与凭据提交",
+      "updated_at": "2026-10-15T01:00:21Z",
+      "context": "{\"device_id\": \"sensor-employee-phish\", \"src_ip\": \"192.0.2.40\", \"dst_ip\": \"203.0.113.40\", \"src_port\": \"49152\", \"dst_port\": \"80\", \"protocol\": \"tcp\", \"app\": {\"app_protocol\": \"http\"}, \"synthetic_fixture\": true, \"ioc\": {\"ioc_type\": \"ip\", \"ioc_value\": \"203.0.113.40\"}, \"first_time\": \"2026-10-15T00:59:50Z\", \"last_time\": \"2026-10-15T01:00:21Z\"}"
+    }
+  ],
+  "assets": [
+    {
+      "address": "192.0.2.40",
+      "asset_type": "workstation",
+      "created_at": "2026-09-01T00:00:00Z",
+      "id": "employee-phish",
+      "name": "Synthetic employee-phish",
+      "status": 1,
+      "updated_at": "2026-10-15T01:00:00Z"
+    }
+  ],
+  "hits": [
+    {
+      "hit_id": "synthetic-phishing-0001-tcp",
+      "dedup_key": "aa549bd71ca268ac00c1ef95ffadf4ebdf4aa57fb05d3e157e755c1ec4d85a6a",
+      "origin_event_id": "synthetic-phishing",
+      "occurred_at": "2026-10-15T01:00:00Z",
+      "received_at": "2026-10-15T01:00:00Z",
+      "raw": {
+        "device_id": "sensor-employee-phish",
+        "src_ip": "192.0.2.40",
+        "dst_ip": "203.0.113.40",
+        "src_port": "49152",
+        "dst_port": "80",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "203.0.113.40"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-phishing-0002-http",
+      "dedup_key": "480a09ce1eb151583cecd4e7bf82961b5829560f663f1ee125d898984b9a4260",
+      "origin_event_id": "synthetic-phishing",
+      "occurred_at": "2026-10-15T01:00:01Z",
+      "received_at": "2026-10-15T01:00:01Z",
+      "raw": {
+        "device_id": "sensor-employee-phish",
+        "src_ip": "192.0.2.40",
+        "dst_ip": "203.0.113.40",
+        "src_port": "49152",
+        "dst_port": "80",
+        "protocol": "tcp",
+        "app": {
+          "http_url": "http://cont0so.test/start",
+          "http_method": "GET",
+          "user_agent": "FixtureAgent/1.0"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "domain",
+          "ioc_value": "cont0so.test"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-phishing-0003-http",
+      "dedup_key": "dad4fa3102c38cfe0d2bbd652afe6ef5a42c0931b77fc2a65251e5e3a4d12dc4",
+      "origin_event_id": "synthetic-phishing",
+      "occurred_at": "2026-10-15T01:00:06Z",
+      "received_at": "2026-10-15T01:00:06Z",
+      "raw": {
+        "device_id": "sensor-employee-phish",
+        "src_ip": "192.0.2.40",
+        "dst_ip": "203.0.113.40",
+        "src_port": "49152",
+        "dst_port": "80",
+        "protocol": "tcp",
+        "app": {
+          "http_url": "http://cont0so.test/continue",
+          "http_method": "GET",
+          "user_agent": "FixtureAgent/1.0"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "domain",
+          "ioc_value": "cont0so.test"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-phishing-0004-http",
+      "dedup_key": "da608e2660bb1632c7e7360978e2f08e8bc157b8e18bed4dfea401c0de951ccc",
+      "origin_event_id": "synthetic-phishing",
+      "occurred_at": "2026-10-15T01:00:11Z",
+      "received_at": "2026-10-15T01:00:11Z",
+      "raw": {
+        "device_id": "sensor-employee-phish",
+        "src_ip": "192.0.2.40",
+        "dst_ip": "203.0.113.40",
+        "src_port": "49152",
+        "dst_port": "80",
+        "protocol": "tcp",
+        "app": {
+          "http_url": "http://cont0so.test/login",
+          "http_method": "GET",
+          "user_agent": "FixtureAgent/1.0"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "domain",
+          "ioc_value": "cont0so.test"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-phishing-0005-http",
+      "dedup_key": "375b34b37a5e5b52ba9ae9fc222a16fddc7687e12847545196d3cc576d67796f",
+      "origin_event_id": "synthetic-phishing",
+      "occurred_at": "2026-10-15T01:00:16Z",
+      "received_at": "2026-10-15T01:00:16Z",
+      "raw": {
+        "device_id": "sensor-employee-phish",
+        "src_ip": "192.0.2.40",
+        "dst_ip": "203.0.113.40",
+        "src_port": "49152",
+        "dst_port": "80",
+        "protocol": "tcp",
+        "app": {
+          "http_url": "http://collector-fixture.test/submit",
+          "http_method": "POST",
+          "user_agent": "FixtureAgent/1.0"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "domain",
+          "ioc_value": "collector-fixture.test"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-phishing-0006-http",
+      "dedup_key": "32105002c657cf2a34580a44663e07cd41a378259883444fdcca1eefe92f1505",
+      "origin_event_id": "synthetic-phishing",
+      "occurred_at": "2026-10-15T01:00:21Z",
+      "received_at": "2026-10-15T01:00:21Z",
+      "raw": {
+        "device_id": "sensor-employee-phish",
+        "src_ip": "192.0.2.40",
+        "dst_ip": "203.0.113.40",
+        "src_port": "49152",
+        "dst_port": "80",
+        "protocol": "tcp",
+        "app": {
+          "http_url": "http://accounts.contoso.test/login",
+          "http_method": "POST",
+          "user_agent": "FixtureAgent/1.0"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "domain",
+          "ioc_value": "accounts.contoso.test"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-phishing-0007-dns",
+      "dedup_key": "5373e7a03dd891cfb45fe459db059584fed224b22f403f999c162b89ad156391",
+      "origin_event_id": "synthetic-phishing",
+      "occurred_at": "2026-10-15T00:59:50Z",
+      "received_at": "2026-10-15T00:59:50Z",
+      "raw": {
+        "device_id": "sensor-employee-phish",
+        "src_ip": "192.0.2.40",
+        "dst_ip": "192.0.2.53",
+        "src_port": "49152",
+        "dst_port": "53",
+        "protocol": "udp",
+        "app": {
+          "dns_query": "cont0so.test",
+          "dns_answers": [
+            "203.0.113.40"
+          ],
+          "dns_rcode": "0"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "domain",
+          "ioc_value": "cont0so.test"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-phishing-0008-dns",
+      "dedup_key": "549cbf71012c5c4910a4c812933a2fc4fec7fa1a80fd08dba1d99be087e59bd0",
+      "origin_event_id": "synthetic-phishing",
+      "occurred_at": "2026-10-15T00:59:51Z",
+      "received_at": "2026-10-15T00:59:51Z",
+      "raw": {
+        "device_id": "sensor-employee-phish",
+        "src_ip": "192.0.2.40",
+        "dst_ip": "192.0.2.53",
+        "src_port": "49152",
+        "dst_port": "53",
+        "protocol": "udp",
+        "app": {
+          "dns_query": "collector-fixture.test",
+          "dns_answers": [
+            "203.0.113.40"
+          ],
+          "dns_rcode": "0"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "domain",
+          "ioc_value": "collector-fixture.test"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-phishing-0009-dns",
+      "dedup_key": "c961ed50803e7d8db3b18b16ad542fb6807f24703c6758dcdd48556fc71855aa",
+      "origin_event_id": "synthetic-phishing",
+      "occurred_at": "2026-10-15T00:59:52Z",
+      "received_at": "2026-10-15T00:59:52Z",
+      "raw": {
+        "device_id": "sensor-employee-phish",
+        "src_ip": "192.0.2.40",
+        "dst_ip": "192.0.2.53",
+        "src_port": "49152",
+        "dst_port": "53",
+        "protocol": "udp",
+        "app": {
+          "dns_query": "accounts.contoso.test",
+          "dns_answers": [
+            "203.0.113.40"
+          ],
+          "dns_rcode": "0"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "domain",
+          "ioc_value": "accounts.contoso.test"
+        }
+      }
+    }
+  ],
+  "records": [
+    {
+      "kind": "segment",
+      "key": "synthetic-phishing",
+      "value": {
+        "event_id": "synthetic-phishing",
+        "source_events": [
+          "synthetic-phishing"
+        ],
+        "stats_version": 1,
+        "data_version": 1,
+        "watermark": 9,
+        "revision_watermark": 0,
+        "hit_count": 9
+      }
+    },
+    {
+      "kind": "snapshot",
+      "key": "synthetic-phishing:1",
+      "value": {
+        "context": {
+          "event_background": "员工浏览器访问仿冒Contoso测试登录页，经历两次有明确事务边的跳转，页面表单向另一测试域提交合成用户名及占位密码。另有真实授权测试域的正常登录作对照；不使用真实凭据或外部站点。",
+          "first_time": "2026-10-15T00:59:50Z",
+          "last_time": "2026-10-15T01:00:21Z",
+          "occurrence_count": 9,
+          "scenario_id": "phishing",
+          "synthetic_fixture": true
+        },
+        "count": 9,
+        "event_id": "synthetic-phishing",
+        "evidence": [],
+        "input_manifest": {},
+        "revision_watermark": 0,
+        "snapshot_version": 1,
+        "source_events": [
+          "synthetic-phishing"
+        ],
+        "watermark": 9
+      }
+    }
+  ]
+}

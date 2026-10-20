@@ -21,7 +21,15 @@ func normalizedExecutionContract(snap EvidenceSnapshot, input SnapshotEvidenceIn
 		SnapshotIdentity: phaseOneSnapshotSource(snap), InputDigest: out.Evaluation.InputDigest,
 		RuleVersions:          map[string]string{"F": evidence.RuleVersion, "S": evidence.SemanticVersion, "C": evidence.PhaseOneVersion, "normalization": evidence.NormalizationVersion},
 		SemanticModelVersions: []string{}, SourceIndex: map[string]string{}, SourceSets: map[string][]string{}, Coverage: preparedFamilyCoverage(capturePreparedInputs(input)), Diagnostics: input.Manifest.Issues,
-		LedgerPath: "Evidence.normalized"}
+		LedgerPath: "Evidence.normalized_evidence"}
+	if input.Manifest.PhaseOne != nil {
+		for _, source := range input.Manifest.PhaseOne.Sources {
+			if source.EventID == snap.EventID && source.Version == snap.Version && source.Watermark == snap.Watermark && source.RevisionWatermark == snap.RevisionWatermark {
+				c.SnapshotIdentity = source
+				break
+			}
+		}
+	}
 	if len(c.Coverage) == 0 {
 		c.Coverage = out.Evaluation.InputCoverage
 	}

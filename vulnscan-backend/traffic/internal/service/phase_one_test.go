@@ -269,6 +269,9 @@ func TestPhaseOneHTTPQueryAndContactBasis(t *testing.T) {
 	at := time.Date(2026, 10, 12, 4, 0, 0, 0, time.UTC)
 	request := []byte("GET /run?cmd=cat%20/etc/passwd HTTP/1.1\r\nHost: agent.test\r\n\r\n")
 	messages := []map[string]any{phaseOneWire(t, at, 10, nil, false, true), phaseOneWire(t, at.Add(time.Second), 11, request, false, false)}
+	for _, message := range messages {
+		nestedMap(message, "raw_packet")["session_start_time"] = at.Format(time.RFC3339Nano)
+	}
 	snap := phaseOneInstallSnapshot(t, s, "query-command", 1, messages)
 	s.SemanticModel = reportSemanticModelFunc(func(_ context.Context, c evidence.SemanticCall) (string, error) {
 		return acceptedSemanticResponse(t, c), nil
@@ -277,7 +280,7 @@ func TestPhaseOneHTTPQueryAndContactBasis(t *testing.T) {
 	if phaseOneUnit(t, p, "C06").Status != "observed" {
 		t.Fatal("query payload did not reach S09", p.Semantics)
 	}
-	if len(p.Evidence.PhaseOne.Materials.Contacts) != 1 || p.Evidence.PhaseOne.Materials.Contacts[0].Kind != "complete_http_request" || len(p.Evidence.PhaseOne.Materials.ScopeIncomplete) == 0 {
+	if len(p.Evidence.PhaseOne.Materials.Contacts) != 1 || p.Evidence.PhaseOne.Materials.Contacts[0].Kind != "complete_http_request" || len(p.Evidence.PhaseOne.Materials.ScopeIncomplete) != 0 {
 		t.Fatal("SYN/request inflated contacts or coverage")
 	}
 }

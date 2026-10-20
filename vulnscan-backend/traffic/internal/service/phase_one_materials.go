@@ -38,22 +38,43 @@ type PhaseOneContact struct {
 	IOCType  string                 `json:"ioc_type"`
 	IOCValue string                 `json:"ioc_value"`
 	Snapshot PhaseOneSnapshotSource `json:"snapshot"`
+	TCP      *PhaseOneTCPContact    `json:"tcp,omitempty"`
+}
+
+// Flow identity and sequence come from a validated frame. SessionStart is
+// retained only when the collector's flow timestamp is valid for that frame.
+type PhaseOneTCPContact struct {
+	FlowID       string     `json:"flow_id"`
+	Sequence     uint32     `json:"sequence"`
+	SessionStart *time.Time `json:"session_start,omitempty"`
 }
 type PhaseOneMaterials struct {
-	CurrentContacts   []PhaseOneContact          `json:"current_contacts,omitempty"`
-	CurrentComplete   bool                       `json:"current_complete"`
-	CurrentIncomplete map[string][]string        `json:"current_scope_incomplete,omitempty"`
-	Expanded          bool                       `json:"expanded"`
-	Records           []PhaseOneRecord           `json:"records"`
-	Bindings          []evidence.PhaseOneBinding `json:"bindings"`
-	Contacts          []PhaseOneContact          `json:"contacts"`
-	Sources           []PhaseOneSnapshotSource   `json:"sources"`
-	Diagnostics       []string                   `json:"diagnostics"`
-	Complete          bool                       `json:"complete"`
-	ScopeIncomplete   map[string][]string        `json:"scope_incomplete,omitempty"`
-	RawHits           int64                      `json:"raw_hits"`
-	DuplicateContacts int                        `json:"duplicate_contacts"`
+	TemporalWindowCoverage *PhaseOneTemporalWindowCoverage `json:"temporal_window_coverage,omitempty"`
+	CurrentContacts        []PhaseOneContact               `json:"current_contacts,omitempty"`
+	CurrentComplete        bool                            `json:"current_complete"`
+	CurrentIncomplete      map[string][]string             `json:"current_scope_incomplete,omitempty"`
+	Expanded               bool                            `json:"expanded"`
+	Records                []PhaseOneRecord                `json:"records"`
+	Bindings               []evidence.PhaseOneBinding      `json:"bindings"`
+	Contacts               []PhaseOneContact               `json:"contacts"`
+	Sources                []PhaseOneSnapshotSource        `json:"sources"`
+	Diagnostics            []string                        `json:"diagnostics"`
+	Complete               bool                            `json:"complete"`
+	ScopeIncomplete        map[string][]string             `json:"scope_incomplete,omitempty"`
+	RawHits                int64                           `json:"raw_hits"`
+	DuplicateContacts      int                             `json:"duplicate_contacts"`
 }
+
+// This policy applies only to jitter and fixed-daily contact timelines. It is
+// separate from verified capture, transaction and protocol-family completeness.
+type PhaseOneTemporalWindowCoverage struct {
+	Basis           string `json:"basis"`
+	CurrentComplete bool   `json:"current_complete"`
+	Complete        bool   `json:"complete"`
+}
+
+const assumedTemporalWindowCoverage = "default_assumption"
+
 type PhaseOneRecord struct {
 	RawRequest    string               `json:"raw_request,omitempty"`
 	ParsedBody    string               `json:"parsed_body,omitempty"`
@@ -97,9 +118,13 @@ func collectPhaseOneMaterials(manifest *SnapshotEvidenceManifest, h store.Hit, m
 		reject(problem)
 		return
 	}
-	payload, _, why := snapshotPayload(checked)
+	payload, full, why := snapshotPayload(checked)
 	if why != "" {
 		reject(why)
+		return
+	}
+	if !full {
+		reject("capture_completeness_unverified")
 		return
 	}
 	t, err := time.Parse(time.RFC3339Nano, asString(packet["capture_time"]))
@@ -224,7 +249,18 @@ func collectPhaseOneMaterials(manifest *SnapshotEvidenceManifest, h store.Hit, m
 		kind = "dns_question"
 	}
 	if key != "" {
-		out.Contacts = append(out.Contacts, PhaseOneContact{ID: key, Kind: kind, HitID: h.ID, Time: t, Scope: input.Scope, IOCType: b.IOCType, IOCValue: b.IOCValue, Snapshot: phaseOneSnapshotSource(snap)})
+		contact := PhaseOneContact{ID: key, Kind: kind, HitID: h.ID, Time: t, Scope: input.Scope, IOCType: b.IOCType, IOCValue: b.IOCValue, Snapshot: phaseOneSnapshotSource(snap)}
+		if tcp != nil {
+			contact.TCP = &PhaseOneTCPContact{FlowID: digest([]any{input.Scope.DeviceID, src, dst, uint16(tcp.SrcPort), uint16(tcp.DstPort)}), Sequence: tcp.Seq}
+			if start, err := time.Parse(time.RFC3339Nano, asString(packet["session_start_time"])); err == nil && !start.IsZero() && !start.After(t) {
+				start = start.UTC()
+				contact.TCP.SessionStart = &start
+				// A reused wire tuple/sequence in a later collector session is
+				// a distinct contact; retransmissions within a session are not.
+				contact.ID = digest([]any{contact.ID, start})
+			}
+		}
+		out.Contacts = append(out.Contacts, contact)
 	}
 }
 
@@ -473,16 +509,10 @@ func (s Services) phaseOneTimeline(ctx context.Context, snap EvidenceSnapshot, c
 	return dedupPhaseOneContacts(out), nil
 }
 func dedupPhaseOneContacts(m PhaseOneMaterials) PhaseOneMaterials {
-	m.ScopeIncomplete = clonePhaseOneIncomplete(m.ScopeIncomplete)
-	// One observation basis per asset/endpoint/IOC: a complete application
-	// request supersedes SYN observations, which may describe that same contact.
-	// Missing requests can reduce coverage; they must never inflate frequency.
-	requests := map[string]bool{}
-	for _, c := range m.Contacts {
-		if c.Kind == "complete_http_request" {
-			requests[scopeKey(c.Scope)+":"+c.IOCType+":"+c.IOCValue] = true
-		}
-	}
+	// Superseding a SYN is deduplication, not evidence of missing capture. Clear
+	// only that obsolete reason; retain truncation, parsing and binding failures.
+	m.ScopeIncomplete = phaseOneContactIncomplete(m.ScopeIncomplete)
+	m.CurrentIncomplete = phaseOneContactIncomplete(m.CurrentIncomplete)
 	sort.Slice(m.Contacts, func(i, j int) bool {
 		a, b := m.Contacts[i], m.Contacts[j]
 		if a.Time.Equal(b.Time) {
@@ -490,24 +520,62 @@ func dedupPhaseOneContacts(m PhaseOneMaterials) PhaseOneMaterials {
 		}
 		return a.Time.Before(b.Time)
 	})
+	requests := map[string][]PhaseOneContact{}
+	for _, c := range m.Contacts {
+		if c.Kind == "complete_http_request" && c.TCP != nil {
+			if key := phaseOneTCPContactKey(c, c.TCP.Sequence-1); key != "" {
+				requests[key] = append(requests[key], c)
+			}
+		}
+	}
 	seen := map[string]bool{}
 	kept := []PhaseOneContact{}
 	for _, c := range m.Contacts {
-		if c.Kind == "tcp_initiation" && requests[scopeKey(c.Scope)+":"+c.IOCType+":"+c.IOCValue] {
-			markPhaseOneScopeIncomplete(&m, c.Scope, c.IOCType, c.IOCValue, "syn_excluded_from_http_request_timeline")
-			m.Diagnostics = append(m.Diagnostics, c.HitID+":syn_excluded_from_http_request_timeline")
-			continue
-		}
 		k := scopeKey(c.Scope) + ":" + c.IOCType + ":" + c.IOCValue + ":" + c.ID
 		if seen[k] {
 			m.DuplicateContacts++
 			continue
 		}
 		seen[k] = true
+		// A first HTTP request consumes the sequence immediately after its SYN.
+		// Require the same wire flow, collector session start, scope and IOC.
+		// Unpaired SYNs remain a separate population and never count as HTTP.
+		if c.Kind == "tcp_initiation" && c.TCP != nil {
+			superseded := false
+			for _, request := range requests[phaseOneTCPContactKey(c, c.TCP.Sequence)] {
+				if !request.Time.Before(c.Time) {
+					m.Diagnostics = append(m.Diagnostics, c.HitID+":tcp_syn_superseded_by_http_request:"+request.HitID)
+					superseded = true
+					break
+				}
+			}
+			if superseded {
+				continue
+			}
+		}
 		kept = append(kept, c)
 	}
 	m.Contacts = kept
 	return m
+}
+
+func phaseOneTCPContactKey(c PhaseOneContact, synSequence uint32) string {
+	if c.TCP == nil || c.TCP.FlowID == "" || c.TCP.SessionStart == nil || c.TCP.SessionStart.IsZero() || c.TCP.SessionStart.After(c.Time) {
+		return ""
+	}
+	return digest([]any{c.Scope, c.IOCType, c.IOCValue, c.TCP.FlowID, c.TCP.SessionStart.UTC(), synSequence})
+}
+
+func phaseOneContactIncomplete(in map[string][]string) map[string][]string {
+	out := map[string][]string{}
+	for key, reasons := range in {
+		for _, reason := range reasons {
+			if reason != "syn_excluded_from_http_request_timeline" {
+				out[key] = append(out[key], reason)
+			}
+		}
+	}
+	return out
 }
 
 func markPhaseOneScopeIncomplete(m *PhaseOneMaterials, s evidence.Scope, typ, value, reason string) {

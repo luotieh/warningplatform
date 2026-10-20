@@ -1,0 +1,518 @@
+{
+  "synthetic_fixture": true,
+  "events": [
+    {
+      "aggregation_closed": false,
+      "analysis_version": 0,
+      "created_at": "2026-10-15T01:00:00Z",
+      "current_round": 0,
+      "event_id": "synthetic-network-activity",
+      "event_name": "Synthetic Fixture: network-activity",
+      "event_status": "new",
+      "id": 0,
+      "last_seen_at": "2026-10-15T01:13:00Z",
+      "message": "内网测试探测器对12个目的端口发起短时探测，合成生命周期记录区分终结失败、建立成功和SYN_SENT；一条HTTP请求含无害MOCK_EXPLOIT_TEST标记，另有授权健康检查反例。不存在可执行利用代码或成功执行证据。",
+      "review_status": "pending",
+      "severity": "unknown",
+      "source": "synthetic-fixture-offline",
+      "title": "Network Activity扫描与利用尝试",
+      "updated_at": "2026-10-15T01:13:00Z",
+      "context": "{\"device_id\": \"sensor-scanner-net\", \"src_ip\": \"192.0.2.60\", \"dst_ip\": \"203.0.113.60\", \"src_port\": \"49152\", \"dst_port\": \"8000\", \"protocol\": \"tcp\", \"app\": {\"app_protocol\": \"http\"}, \"synthetic_fixture\": true, \"ioc\": {\"ioc_type\": \"ip\", \"ioc_value\": \"203.0.113.60\"}, \"first_time\": \"2026-10-15T01:00:00Z\", \"last_time\": \"2026-10-15T01:13:00Z\"}"
+    }
+  ],
+  "assets": [
+    {
+      "address": "192.0.2.60",
+      "asset_type": "scanner",
+      "created_at": "2026-09-01T00:00:00Z",
+      "id": "scanner-net",
+      "name": "Synthetic scanner-net",
+      "status": 1,
+      "updated_at": "2026-10-15T01:00:00Z"
+    }
+  ],
+  "hits": [
+    {
+      "hit_id": "synthetic-network-activity-0001-tcp",
+      "dedup_key": "c301f9c1fca82bef24189757616018bc900f091631ccb0248a04c9abe81c35d6",
+      "origin_event_id": "synthetic-network-activity",
+      "occurred_at": "2026-10-15T01:00:00Z",
+      "received_at": "2026-10-15T01:00:00Z",
+      "raw": {
+        "device_id": "sensor-scanner-net",
+        "src_ip": "192.0.2.60",
+        "dst_ip": "203.0.113.60",
+        "src_port": "49152",
+        "dst_port": "8000",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "203.0.113.60"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-network-activity-0002-tcp",
+      "dedup_key": "96ac8eaecf220864a1b3f1b73fe6246339d013bfbd00776e349b92b601843fb2",
+      "origin_event_id": "synthetic-network-activity",
+      "occurred_at": "2026-10-15T01:00:03Z",
+      "received_at": "2026-10-15T01:00:03Z",
+      "raw": {
+        "device_id": "sensor-scanner-net",
+        "src_ip": "192.0.2.60",
+        "dst_ip": "203.0.113.60",
+        "src_port": "49152",
+        "dst_port": "8001",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "203.0.113.60"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-network-activity-0003-tcp",
+      "dedup_key": "8e9aa18d175799843559a8e09e1a6229c2662e4b3b0fc963dda7f14d01fcf00a",
+      "origin_event_id": "synthetic-network-activity",
+      "occurred_at": "2026-10-15T01:00:06Z",
+      "received_at": "2026-10-15T01:00:06Z",
+      "raw": {
+        "device_id": "sensor-scanner-net",
+        "src_ip": "192.0.2.60",
+        "dst_ip": "203.0.113.60",
+        "src_port": "49152",
+        "dst_port": "8002",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "203.0.113.60"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-network-activity-0004-tcp",
+      "dedup_key": "67ed8a1735933415560fba24076b14ba15412644a4d2e4517c70dbdad0ef5a5e",
+      "origin_event_id": "synthetic-network-activity",
+      "occurred_at": "2026-10-15T01:00:09Z",
+      "received_at": "2026-10-15T01:00:09Z",
+      "raw": {
+        "device_id": "sensor-scanner-net",
+        "src_ip": "192.0.2.60",
+        "dst_ip": "203.0.113.60",
+        "src_port": "49152",
+        "dst_port": "8003",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "203.0.113.60"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-network-activity-0005-tcp",
+      "dedup_key": "d37809f88b4b526bc578d0b74785e7a6ab9b413792368cd4ffb2291544156f95",
+      "origin_event_id": "synthetic-network-activity",
+      "occurred_at": "2026-10-15T01:00:12Z",
+      "received_at": "2026-10-15T01:00:12Z",
+      "raw": {
+        "device_id": "sensor-scanner-net",
+        "src_ip": "192.0.2.60",
+        "dst_ip": "203.0.113.60",
+        "src_port": "49152",
+        "dst_port": "8004",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "203.0.113.60"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-network-activity-0006-tcp",
+      "dedup_key": "2b534ff97dc3e91c6dc47096af8f562399261003874ae0e7899ff4b5e526c779",
+      "origin_event_id": "synthetic-network-activity",
+      "occurred_at": "2026-10-15T01:00:15Z",
+      "received_at": "2026-10-15T01:00:15Z",
+      "raw": {
+        "device_id": "sensor-scanner-net",
+        "src_ip": "192.0.2.60",
+        "dst_ip": "203.0.113.60",
+        "src_port": "49152",
+        "dst_port": "8005",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "203.0.113.60"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-network-activity-0007-tcp",
+      "dedup_key": "b9af4112b6d293d9386666c92474e5051886cffb6714ad4080797b7a8c472a03",
+      "origin_event_id": "synthetic-network-activity",
+      "occurred_at": "2026-10-15T01:00:18Z",
+      "received_at": "2026-10-15T01:00:18Z",
+      "raw": {
+        "device_id": "sensor-scanner-net",
+        "src_ip": "192.0.2.60",
+        "dst_ip": "203.0.113.60",
+        "src_port": "49152",
+        "dst_port": "8006",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "203.0.113.60"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-network-activity-0008-tcp",
+      "dedup_key": "e84a8fce0fb8245ab7120e8ce76169f327777836525387cf3262fc322c74a1c0",
+      "origin_event_id": "synthetic-network-activity",
+      "occurred_at": "2026-10-15T01:00:21Z",
+      "received_at": "2026-10-15T01:00:21Z",
+      "raw": {
+        "device_id": "sensor-scanner-net",
+        "src_ip": "192.0.2.60",
+        "dst_ip": "203.0.113.60",
+        "src_port": "49152",
+        "dst_port": "8007",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "203.0.113.60"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-network-activity-0009-tcp",
+      "dedup_key": "724b598ecf95c8c078d162b248513a9f02cb98bfe81f79c1ae3ffbb249ce608e",
+      "origin_event_id": "synthetic-network-activity",
+      "occurred_at": "2026-10-15T01:00:24Z",
+      "received_at": "2026-10-15T01:00:24Z",
+      "raw": {
+        "device_id": "sensor-scanner-net",
+        "src_ip": "192.0.2.60",
+        "dst_ip": "203.0.113.60",
+        "src_port": "49152",
+        "dst_port": "8008",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "203.0.113.60"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-network-activity-0010-tcp",
+      "dedup_key": "e08382e5be655722942bfc22978a5420c7f3c8503d743c03eaf88997e31bddde",
+      "origin_event_id": "synthetic-network-activity",
+      "occurred_at": "2026-10-15T01:00:27Z",
+      "received_at": "2026-10-15T01:00:27Z",
+      "raw": {
+        "device_id": "sensor-scanner-net",
+        "src_ip": "192.0.2.60",
+        "dst_ip": "203.0.113.60",
+        "src_port": "49152",
+        "dst_port": "8009",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "203.0.113.60"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-network-activity-0011-tcp",
+      "dedup_key": "056db68494ba72d2683beca8ea0c49320b9432aa4a98390c474239eea05c3ae4",
+      "origin_event_id": "synthetic-network-activity",
+      "occurred_at": "2026-10-15T01:00:30Z",
+      "received_at": "2026-10-15T01:00:30Z",
+      "raw": {
+        "device_id": "sensor-scanner-net",
+        "src_ip": "192.0.2.60",
+        "dst_ip": "203.0.113.60",
+        "src_port": "49152",
+        "dst_port": "8010",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "203.0.113.60"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-network-activity-0012-tcp",
+      "dedup_key": "008b02f9e53f59f40d1654c5588aa13b90a81922b33e0508ff9e10790eb307ba",
+      "origin_event_id": "synthetic-network-activity",
+      "occurred_at": "2026-10-15T01:00:33Z",
+      "received_at": "2026-10-15T01:00:33Z",
+      "raw": {
+        "device_id": "sensor-scanner-net",
+        "src_ip": "192.0.2.60",
+        "dst_ip": "203.0.113.60",
+        "src_port": "49152",
+        "dst_port": "8011",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "203.0.113.60"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-network-activity-0013-tcp",
+      "dedup_key": "68475962117810cb7b0c7a2bce0d42980e0607f3a0af178aac710c863d097b7a",
+      "origin_event_id": "synthetic-network-activity",
+      "occurred_at": "2026-10-15T01:10:00Z",
+      "received_at": "2026-10-15T01:10:00Z",
+      "raw": {
+        "device_id": "sensor-scanner-net",
+        "src_ip": "192.0.2.60",
+        "dst_ip": "198.51.100.70",
+        "src_port": "49152",
+        "dst_port": "443",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "tls"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.70"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-network-activity-0014-tcp",
+      "dedup_key": "9e21e9bb9c5f82da597c228c7501be67881a60e70df4b5c2c91313423f1d5425",
+      "origin_event_id": "synthetic-network-activity",
+      "occurred_at": "2026-10-15T01:11:00Z",
+      "received_at": "2026-10-15T01:11:00Z",
+      "raw": {
+        "device_id": "sensor-scanner-net",
+        "src_ip": "192.0.2.60",
+        "dst_ip": "198.51.100.71",
+        "src_port": "49152",
+        "dst_port": "443",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "tls"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.71"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-network-activity-0015-tcp",
+      "dedup_key": "dc6bfb786913665949999df2645f528413e271b015d1ef7e547f2cd2ced3f30d",
+      "origin_event_id": "synthetic-network-activity",
+      "occurred_at": "2026-10-15T01:12:00Z",
+      "received_at": "2026-10-15T01:12:00Z",
+      "raw": {
+        "device_id": "sensor-scanner-net",
+        "src_ip": "192.0.2.60",
+        "dst_ip": "198.51.100.72",
+        "src_port": "49152",
+        "dst_port": "443",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "tls"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.72"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-network-activity-0016-tcp",
+      "dedup_key": "b695857d9f904d2a5aa1e2c8c5064871f7e90afba4f5a1396c4b44e25aa9ee4a",
+      "origin_event_id": "synthetic-network-activity",
+      "occurred_at": "2026-10-15T01:13:00Z",
+      "received_at": "2026-10-15T01:13:00Z",
+      "raw": {
+        "device_id": "sensor-scanner-net",
+        "src_ip": "192.0.2.60",
+        "dst_ip": "198.51.100.73",
+        "src_port": "49152",
+        "dst_port": "443",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "tls"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.73"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-network-activity-0017-tcp",
+      "dedup_key": "a69941599392515ae4d97d1e11f87a4991e6f9f3a80a249c9e4102cce6e19a5b",
+      "origin_event_id": "synthetic-network-activity",
+      "occurred_at": "2026-10-15T01:00:44Z",
+      "received_at": "2026-10-15T01:00:44Z",
+      "raw": {
+        "device_id": "sensor-scanner-net",
+        "src_ip": "192.0.2.60",
+        "dst_ip": "203.0.113.60",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "203.0.113.60"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-network-activity-0018-http",
+      "dedup_key": "8e2fbd845ebe84c74e405031c375ca3665dd41045fd9dd63e01927a4c089c8ee",
+      "origin_event_id": "synthetic-network-activity",
+      "occurred_at": "2026-10-15T01:00:45Z",
+      "received_at": "2026-10-15T01:00:45Z",
+      "raw": {
+        "device_id": "sensor-scanner-net",
+        "src_ip": "192.0.2.60",
+        "dst_ip": "203.0.113.60",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "http_url": "http://target-fixture.test:8080/test-endpoint",
+          "http_method": "POST",
+          "user_agent": "FixtureAgent/1.0"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "domain",
+          "ioc_value": "target-fixture.test"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-network-activity-0019-http",
+      "dedup_key": "5e6009966a5e955be0f2ba424e02d954d70508ddc7f6aeadf009987eaf417469",
+      "origin_event_id": "synthetic-network-activity",
+      "occurred_at": "2026-10-15T01:00:50Z",
+      "received_at": "2026-10-15T01:00:50Z",
+      "raw": {
+        "device_id": "sensor-scanner-net",
+        "src_ip": "192.0.2.60",
+        "dst_ip": "203.0.113.60",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "http_url": "http://target-fixture.test:8080/health",
+          "http_method": "GET",
+          "user_agent": "FixtureAgent/1.0"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "domain",
+          "ioc_value": "target-fixture.test"
+        }
+      }
+    }
+  ],
+  "records": [
+    {
+      "kind": "segment",
+      "key": "synthetic-network-activity",
+      "value": {
+        "event_id": "synthetic-network-activity",
+        "source_events": [
+          "synthetic-network-activity"
+        ],
+        "stats_version": 1,
+        "data_version": 1,
+        "watermark": 19,
+        "revision_watermark": 0,
+        "hit_count": 19
+      }
+    },
+    {
+      "kind": "snapshot",
+      "key": "synthetic-network-activity:1",
+      "value": {
+        "context": {
+          "event_background": "内网测试探测器对12个目的端口发起短时探测，合成生命周期记录区分终结失败、建立成功和SYN_SENT；一条HTTP请求含无害MOCK_EXPLOIT_TEST标记，另有授权健康检查反例。不存在可执行利用代码或成功执行证据。",
+          "first_time": "2026-10-15T01:00:00Z",
+          "last_time": "2026-10-15T01:13:00Z",
+          "occurrence_count": 19,
+          "scenario_id": "network-activity",
+          "synthetic_fixture": true
+        },
+        "count": 19,
+        "event_id": "synthetic-network-activity",
+        "evidence": [],
+        "input_manifest": {},
+        "revision_watermark": 0,
+        "snapshot_version": 1,
+        "source_events": [
+          "synthetic-network-activity"
+        ],
+        "watermark": 19
+      }
+    }
+  ]
+}

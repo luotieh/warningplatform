@@ -1,0 +1,1988 @@
+{
+  "synthetic_fixture": true,
+  "events": [
+    {
+      "aggregation_closed": false,
+      "analysis_version": 0,
+      "created_at": "2026-10-15T01:00:00Z",
+      "current_round": 0,
+      "event_id": "synthetic-botnet",
+      "event_name": "Synthetic Fixture: botnet",
+      "event_status": "new",
+      "id": 0,
+      "last_seen_at": "2026-10-15T01:19:01Z",
+      "message": "三个不同员工终端在一小时观测窗内同步访问同一合成更新服务，每分钟一次、相差1至2秒；各自DNS成功和NXDOMAIN独立保存。公共端点和同步不证明感染；没有传播路径或已定谳战役历史。",
+      "review_status": "pending",
+      "severity": "unknown",
+      "source": "synthetic-fixture-offline",
+      "title": "Botnet多资产协同",
+      "updated_at": "2026-10-15T01:19:03Z",
+      "context": "{\"device_id\": \"sensor-bot-1\", \"src_ip\": \"192.0.2.11\", \"dst_ip\": \"198.51.100.30\", \"src_port\": \"49152\", \"dst_port\": \"8080\", \"protocol\": \"tcp\", \"app\": {\"app_protocol\": \"http\"}, \"synthetic_fixture\": true, \"ioc\": {\"ioc_type\": \"ip\", \"ioc_value\": \"198.51.100.30\"}, \"first_time\": \"2026-10-15T01:00:00Z\", \"last_time\": \"2026-10-15T01:19:01Z\"}",
+      "observables": [
+        {
+          "type": "ip",
+          "value": "198.51.100.30"
+        }
+      ]
+    },
+    {
+      "aggregation_closed": false,
+      "analysis_version": 0,
+      "created_at": "2026-10-15T01:00:00Z",
+      "current_round": 0,
+      "event_id": "synthetic-botnet-peer-bot-2",
+      "event_name": "Synthetic Fixture: botnet",
+      "event_status": "new",
+      "id": 0,
+      "last_seen_at": "2026-10-15T01:19:02Z",
+      "message": "三个不同员工终端在一小时观测窗内同步访问同一合成更新服务，每分钟一次、相差1至2秒；各自DNS成功和NXDOMAIN独立保存。公共端点和同步不证明感染；没有传播路径或已定谳战役历史。",
+      "review_status": "pending",
+      "severity": "unknown",
+      "source": "synthetic-fixture-offline",
+      "title": "Botnet多资产协同",
+      "updated_at": "2026-10-15T01:19:03Z",
+      "context": "{\"device_id\": \"sensor-bot-2\", \"src_ip\": \"192.0.2.12\", \"dst_ip\": \"198.51.100.30\", \"src_port\": \"49152\", \"dst_port\": \"8080\", \"protocol\": \"tcp\", \"app\": {\"app_protocol\": \"http\"}, \"synthetic_fixture\": true, \"ioc\": {\"ioc_type\": \"ip\", \"ioc_value\": \"198.51.100.30\"}, \"first_time\": \"2026-10-15T01:00:00Z\", \"last_time\": \"2026-10-15T01:19:02Z\"}",
+      "observables": [
+        {
+          "type": "ip",
+          "value": "198.51.100.30"
+        }
+      ]
+    },
+    {
+      "aggregation_closed": false,
+      "analysis_version": 0,
+      "created_at": "2026-10-15T01:00:00Z",
+      "current_round": 0,
+      "event_id": "synthetic-botnet-peer-bot-3",
+      "event_name": "Synthetic Fixture: botnet",
+      "event_status": "new",
+      "id": 0,
+      "last_seen_at": "2026-10-15T01:19:03Z",
+      "message": "三个不同员工终端在一小时观测窗内同步访问同一合成更新服务，每分钟一次、相差1至2秒；各自DNS成功和NXDOMAIN独立保存。公共端点和同步不证明感染；没有传播路径或已定谳战役历史。",
+      "review_status": "pending",
+      "severity": "unknown",
+      "source": "synthetic-fixture-offline",
+      "title": "Botnet多资产协同",
+      "updated_at": "2026-10-15T01:19:03Z",
+      "context": "{\"device_id\": \"sensor-bot-3\", \"src_ip\": \"192.0.2.13\", \"dst_ip\": \"198.51.100.30\", \"src_port\": \"49152\", \"dst_port\": \"8080\", \"protocol\": \"tcp\", \"app\": {\"app_protocol\": \"http\"}, \"synthetic_fixture\": true, \"ioc\": {\"ioc_type\": \"ip\", \"ioc_value\": \"198.51.100.30\"}, \"first_time\": \"2026-10-15T01:00:00Z\", \"last_time\": \"2026-10-15T01:19:03Z\"}",
+      "observables": [
+        {
+          "type": "ip",
+          "value": "198.51.100.30"
+        }
+      ]
+    }
+  ],
+  "assets": [
+    {
+      "address": "192.0.2.11",
+      "asset_type": "workstation",
+      "created_at": "2026-09-01T00:00:00Z",
+      "id": "bot-1",
+      "name": "Synthetic bot-1",
+      "status": 1,
+      "updated_at": "2026-10-15T01:00:00Z"
+    },
+    {
+      "address": "192.0.2.12",
+      "asset_type": "workstation",
+      "created_at": "2026-09-01T00:00:00Z",
+      "id": "bot-2",
+      "name": "Synthetic bot-2",
+      "status": 1,
+      "updated_at": "2026-10-15T01:00:00Z"
+    },
+    {
+      "address": "192.0.2.13",
+      "asset_type": "workstation",
+      "created_at": "2026-09-01T00:00:00Z",
+      "id": "bot-3",
+      "name": "Synthetic bot-3",
+      "status": 1,
+      "updated_at": "2026-10-15T01:00:00Z"
+    }
+  ],
+  "hits": [
+    {
+      "hit_id": "synthetic-botnet-0001-tcp",
+      "dedup_key": "66d5cc3dc1483e8d0783ee6b48903d673b4e498c4f2d0e13b4554520781dec48",
+      "origin_event_id": "synthetic-botnet",
+      "occurred_at": "2026-10-15T01:00:01Z",
+      "received_at": "2026-10-15T01:00:01Z",
+      "raw": {
+        "device_id": "sensor-bot-1",
+        "src_ip": "192.0.2.11",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0002-tcp",
+      "dedup_key": "0db4120ef1555ac8fa1ce06ab210ec345b8fd332c79a5971e09501b48c40dd12",
+      "origin_event_id": "synthetic-botnet",
+      "occurred_at": "2026-10-15T01:01:01Z",
+      "received_at": "2026-10-15T01:01:01Z",
+      "raw": {
+        "device_id": "sensor-bot-1",
+        "src_ip": "192.0.2.11",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0003-tcp",
+      "dedup_key": "b4aa3897fdd7d16519e69f06afeee983f8b826757baf3edc0cd89a8011151eaa",
+      "origin_event_id": "synthetic-botnet",
+      "occurred_at": "2026-10-15T01:02:01Z",
+      "received_at": "2026-10-15T01:02:01Z",
+      "raw": {
+        "device_id": "sensor-bot-1",
+        "src_ip": "192.0.2.11",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0004-tcp",
+      "dedup_key": "284576a66f43280553d81aeb919c9a4383421b2e0ab42ae8b8a4ccf2bdffd701",
+      "origin_event_id": "synthetic-botnet",
+      "occurred_at": "2026-10-15T01:03:01Z",
+      "received_at": "2026-10-15T01:03:01Z",
+      "raw": {
+        "device_id": "sensor-bot-1",
+        "src_ip": "192.0.2.11",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0005-tcp",
+      "dedup_key": "bd2d4cb48e344a5d45b7ebb72870ad8aca8c2a3a0b0b4cc1033daa4bbebef934",
+      "origin_event_id": "synthetic-botnet",
+      "occurred_at": "2026-10-15T01:04:01Z",
+      "received_at": "2026-10-15T01:04:01Z",
+      "raw": {
+        "device_id": "sensor-bot-1",
+        "src_ip": "192.0.2.11",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0006-tcp",
+      "dedup_key": "bc2925a31a6083cf11f1ed308fcff84e5b97ba73ad16fb5ab17468e74ce38fd0",
+      "origin_event_id": "synthetic-botnet",
+      "occurred_at": "2026-10-15T01:05:01Z",
+      "received_at": "2026-10-15T01:05:01Z",
+      "raw": {
+        "device_id": "sensor-bot-1",
+        "src_ip": "192.0.2.11",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0007-tcp",
+      "dedup_key": "fe9eda86d254e43dacc2c0ad5753feb00046d22f4709f4ca5c594c004d6b7585",
+      "origin_event_id": "synthetic-botnet",
+      "occurred_at": "2026-10-15T01:06:01Z",
+      "received_at": "2026-10-15T01:06:01Z",
+      "raw": {
+        "device_id": "sensor-bot-1",
+        "src_ip": "192.0.2.11",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0008-tcp",
+      "dedup_key": "9d0942d9dba4909fa6eec5ca1ea8c9be3fec4ecec603702752348d7ebcb5ae2e",
+      "origin_event_id": "synthetic-botnet",
+      "occurred_at": "2026-10-15T01:07:01Z",
+      "received_at": "2026-10-15T01:07:01Z",
+      "raw": {
+        "device_id": "sensor-bot-1",
+        "src_ip": "192.0.2.11",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0009-tcp",
+      "dedup_key": "3c6bfb946b957b02e837030148627d6b25656255d253a8e7c9863b8a7331490a",
+      "origin_event_id": "synthetic-botnet",
+      "occurred_at": "2026-10-15T01:08:01Z",
+      "received_at": "2026-10-15T01:08:01Z",
+      "raw": {
+        "device_id": "sensor-bot-1",
+        "src_ip": "192.0.2.11",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0010-tcp",
+      "dedup_key": "5e699888535ca963a52923cbc41d85e00690d884c2db2c334d16fe73c8d0f3d9",
+      "origin_event_id": "synthetic-botnet",
+      "occurred_at": "2026-10-15T01:09:01Z",
+      "received_at": "2026-10-15T01:09:01Z",
+      "raw": {
+        "device_id": "sensor-bot-1",
+        "src_ip": "192.0.2.11",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0011-tcp",
+      "dedup_key": "1cb959a558940ed518de0ed76758bae8e117f21af65cf5e532f1ccb8e77ed306",
+      "origin_event_id": "synthetic-botnet",
+      "occurred_at": "2026-10-15T01:10:01Z",
+      "received_at": "2026-10-15T01:10:01Z",
+      "raw": {
+        "device_id": "sensor-bot-1",
+        "src_ip": "192.0.2.11",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0012-tcp",
+      "dedup_key": "f1cb65fe6f07b4ecd2fb38a8c905c3c37ae1f28560228b9520cc5312f686370a",
+      "origin_event_id": "synthetic-botnet",
+      "occurred_at": "2026-10-15T01:11:01Z",
+      "received_at": "2026-10-15T01:11:01Z",
+      "raw": {
+        "device_id": "sensor-bot-1",
+        "src_ip": "192.0.2.11",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0013-tcp",
+      "dedup_key": "bb7a9381512f8cf079eeb4f78abe9f4736c1de98f5bb5322a21409357443649c",
+      "origin_event_id": "synthetic-botnet",
+      "occurred_at": "2026-10-15T01:12:01Z",
+      "received_at": "2026-10-15T01:12:01Z",
+      "raw": {
+        "device_id": "sensor-bot-1",
+        "src_ip": "192.0.2.11",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0014-tcp",
+      "dedup_key": "6c37674fb89f551d66f045ba38e2c7aa35f2eda709cb0555d46d87c042c0e669",
+      "origin_event_id": "synthetic-botnet",
+      "occurred_at": "2026-10-15T01:13:01Z",
+      "received_at": "2026-10-15T01:13:01Z",
+      "raw": {
+        "device_id": "sensor-bot-1",
+        "src_ip": "192.0.2.11",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0015-tcp",
+      "dedup_key": "eeda0bc0f569bb71231266df79171fa02da6a4381dde7776c71f1d886c07fd09",
+      "origin_event_id": "synthetic-botnet",
+      "occurred_at": "2026-10-15T01:14:01Z",
+      "received_at": "2026-10-15T01:14:01Z",
+      "raw": {
+        "device_id": "sensor-bot-1",
+        "src_ip": "192.0.2.11",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0016-tcp",
+      "dedup_key": "066a6afd6a637de48bad7e930bc4a7af50a8283efee590a68c4ddca03ed8148a",
+      "origin_event_id": "synthetic-botnet",
+      "occurred_at": "2026-10-15T01:15:01Z",
+      "received_at": "2026-10-15T01:15:01Z",
+      "raw": {
+        "device_id": "sensor-bot-1",
+        "src_ip": "192.0.2.11",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0017-tcp",
+      "dedup_key": "f55a41546c333f593166eba2e16f0b23e09f447f00d47ea425678e3a77e1c61a",
+      "origin_event_id": "synthetic-botnet",
+      "occurred_at": "2026-10-15T01:16:01Z",
+      "received_at": "2026-10-15T01:16:01Z",
+      "raw": {
+        "device_id": "sensor-bot-1",
+        "src_ip": "192.0.2.11",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0018-tcp",
+      "dedup_key": "2a4923dba9eac3a086c79cb313fda199746626daf6ef49a1999ac666c6590a47",
+      "origin_event_id": "synthetic-botnet",
+      "occurred_at": "2026-10-15T01:17:01Z",
+      "received_at": "2026-10-15T01:17:01Z",
+      "raw": {
+        "device_id": "sensor-bot-1",
+        "src_ip": "192.0.2.11",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0019-tcp",
+      "dedup_key": "f2763620ad9bc919ee665c288e8d648b3cd20e24bf5cf0314109fae8977158ae",
+      "origin_event_id": "synthetic-botnet",
+      "occurred_at": "2026-10-15T01:18:01Z",
+      "received_at": "2026-10-15T01:18:01Z",
+      "raw": {
+        "device_id": "sensor-bot-1",
+        "src_ip": "192.0.2.11",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0020-tcp",
+      "dedup_key": "a4bbef00a1eecdd07cb828a5f31e259e9024dd598933e34cd4152adf56934151",
+      "origin_event_id": "synthetic-botnet",
+      "occurred_at": "2026-10-15T01:19:01Z",
+      "received_at": "2026-10-15T01:19:01Z",
+      "raw": {
+        "device_id": "sensor-bot-1",
+        "src_ip": "192.0.2.11",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0021-dns",
+      "dedup_key": "5cc49b2276bed131716d6f3df5398073ac43ea9df836f8aa161a7d3108697173",
+      "origin_event_id": "synthetic-botnet",
+      "occurred_at": "2026-10-15T01:00:00Z",
+      "received_at": "2026-10-15T01:00:00Z",
+      "raw": {
+        "device_id": "sensor-bot-1",
+        "src_ip": "192.0.2.11",
+        "dst_ip": "192.0.2.53",
+        "src_port": "49152",
+        "dst_port": "53",
+        "protocol": "udp",
+        "app": {
+          "dns_query": "pool-fixture.test",
+          "dns_answers": [
+            "198.51.100.30"
+          ],
+          "dns_rcode": "0"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "domain",
+          "ioc_value": "pool-fixture.test"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0022-dns",
+      "dedup_key": "61eb0d188b1e3c09ab46d8237f764af1119dc8b8348a792e4f715f9f5133a274",
+      "origin_event_id": "synthetic-botnet",
+      "occurred_at": "2026-10-15T01:00:01Z",
+      "received_at": "2026-10-15T01:00:01Z",
+      "raw": {
+        "device_id": "sensor-bot-1",
+        "src_ip": "192.0.2.11",
+        "dst_ip": "192.0.2.53",
+        "src_port": "49152",
+        "dst_port": "53",
+        "protocol": "udp",
+        "app": {
+          "dns_query": "update-1.unavailable-fixture.test",
+          "dns_answers": null,
+          "dns_rcode": "3"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "domain",
+          "ioc_value": "update-1.unavailable-fixture.test"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0023-dns",
+      "dedup_key": "dc7bd0418557fd30fe34338979787d2934068500eefa6cd07d15fbc4f719b241",
+      "origin_event_id": "synthetic-botnet",
+      "occurred_at": "2026-10-15T01:00:02Z",
+      "received_at": "2026-10-15T01:00:02Z",
+      "raw": {
+        "device_id": "sensor-bot-1",
+        "src_ip": "192.0.2.11",
+        "dst_ip": "192.0.2.53",
+        "src_port": "49152",
+        "dst_port": "53",
+        "protocol": "udp",
+        "app": {
+          "dns_query": "update-2.unavailable-fixture.test",
+          "dns_answers": null,
+          "dns_rcode": "3"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "domain",
+          "ioc_value": "update-2.unavailable-fixture.test"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0024-dns",
+      "dedup_key": "ea5e902b9d40812c24a7322102c0a0fd137ea2e84917999e2825fef92a5aa7f3",
+      "origin_event_id": "synthetic-botnet",
+      "occurred_at": "2026-10-15T01:00:03Z",
+      "received_at": "2026-10-15T01:00:03Z",
+      "raw": {
+        "device_id": "sensor-bot-1",
+        "src_ip": "192.0.2.11",
+        "dst_ip": "192.0.2.53",
+        "src_port": "49152",
+        "dst_port": "53",
+        "protocol": "udp",
+        "app": {
+          "dns_query": "update-3.unavailable-fixture.test",
+          "dns_answers": null,
+          "dns_rcode": "3"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "domain",
+          "ioc_value": "update-3.unavailable-fixture.test"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0025-dns",
+      "dedup_key": "3a83697d952e123645719a8982ed8d529416d5fdfcb9023672b068cfcec1e338",
+      "origin_event_id": "synthetic-botnet",
+      "occurred_at": "2026-10-15T01:00:04Z",
+      "received_at": "2026-10-15T01:00:04Z",
+      "raw": {
+        "device_id": "sensor-bot-1",
+        "src_ip": "192.0.2.11",
+        "dst_ip": "192.0.2.53",
+        "src_port": "49152",
+        "dst_port": "53",
+        "protocol": "udp",
+        "app": {
+          "dns_query": "update-4.unavailable-fixture.test",
+          "dns_answers": null,
+          "dns_rcode": "3"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "domain",
+          "ioc_value": "update-4.unavailable-fixture.test"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0026-tcp",
+      "dedup_key": "dcd903cde0bc61774eb65df96129213a31be08f00894bb957f12943763acc2e0",
+      "origin_event_id": "synthetic-botnet-peer-bot-2",
+      "occurred_at": "2026-10-15T01:00:02Z",
+      "received_at": "2026-10-15T01:00:02Z",
+      "raw": {
+        "device_id": "sensor-bot-2",
+        "src_ip": "192.0.2.12",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0027-tcp",
+      "dedup_key": "a7ec70b0cb4c21f622f1fd6f66b71e8ec12b223bbd7da5414f85edb34b4f90fc",
+      "origin_event_id": "synthetic-botnet-peer-bot-2",
+      "occurred_at": "2026-10-15T01:01:02Z",
+      "received_at": "2026-10-15T01:01:02Z",
+      "raw": {
+        "device_id": "sensor-bot-2",
+        "src_ip": "192.0.2.12",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0028-tcp",
+      "dedup_key": "56d10dba6eb8ac2bf88feae1360ec4d30ae104b875d1249964be5794e045e8e5",
+      "origin_event_id": "synthetic-botnet-peer-bot-2",
+      "occurred_at": "2026-10-15T01:02:02Z",
+      "received_at": "2026-10-15T01:02:02Z",
+      "raw": {
+        "device_id": "sensor-bot-2",
+        "src_ip": "192.0.2.12",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0029-tcp",
+      "dedup_key": "4f45a9cbde425ad4951fe679f65c7d74f7086abfd0375fbdeb8b3bb64329486a",
+      "origin_event_id": "synthetic-botnet-peer-bot-2",
+      "occurred_at": "2026-10-15T01:03:02Z",
+      "received_at": "2026-10-15T01:03:02Z",
+      "raw": {
+        "device_id": "sensor-bot-2",
+        "src_ip": "192.0.2.12",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0030-tcp",
+      "dedup_key": "7b9a83b01eda1f1d1e6c19109fd2ebbcffc2026b78bdddf624ce2cd44b5bccda",
+      "origin_event_id": "synthetic-botnet-peer-bot-2",
+      "occurred_at": "2026-10-15T01:04:02Z",
+      "received_at": "2026-10-15T01:04:02Z",
+      "raw": {
+        "device_id": "sensor-bot-2",
+        "src_ip": "192.0.2.12",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0031-tcp",
+      "dedup_key": "ff6ce493edbb1c3a2da5ca4fd9984acce9c22f7b31ed3c7f91736be77f5f7fbd",
+      "origin_event_id": "synthetic-botnet-peer-bot-2",
+      "occurred_at": "2026-10-15T01:05:02Z",
+      "received_at": "2026-10-15T01:05:02Z",
+      "raw": {
+        "device_id": "sensor-bot-2",
+        "src_ip": "192.0.2.12",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0032-tcp",
+      "dedup_key": "2e0c6b84a21621ed741c0d616a04f2aa48fcd08932b328306a1a5320e221419c",
+      "origin_event_id": "synthetic-botnet-peer-bot-2",
+      "occurred_at": "2026-10-15T01:06:02Z",
+      "received_at": "2026-10-15T01:06:02Z",
+      "raw": {
+        "device_id": "sensor-bot-2",
+        "src_ip": "192.0.2.12",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0033-tcp",
+      "dedup_key": "79a90914b67a0691efacb668614c534470b572a48d31c3140c31467d77e801cb",
+      "origin_event_id": "synthetic-botnet-peer-bot-2",
+      "occurred_at": "2026-10-15T01:07:02Z",
+      "received_at": "2026-10-15T01:07:02Z",
+      "raw": {
+        "device_id": "sensor-bot-2",
+        "src_ip": "192.0.2.12",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0034-tcp",
+      "dedup_key": "d25aba54ab76511c00129ea2b760f1c9e7811acaed05d895405fb361163a352a",
+      "origin_event_id": "synthetic-botnet-peer-bot-2",
+      "occurred_at": "2026-10-15T01:08:02Z",
+      "received_at": "2026-10-15T01:08:02Z",
+      "raw": {
+        "device_id": "sensor-bot-2",
+        "src_ip": "192.0.2.12",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0035-tcp",
+      "dedup_key": "407434c5e636ca869220ef7bc9efee65ae3bf0bb4463e82556e4bf73330503b5",
+      "origin_event_id": "synthetic-botnet-peer-bot-2",
+      "occurred_at": "2026-10-15T01:09:02Z",
+      "received_at": "2026-10-15T01:09:02Z",
+      "raw": {
+        "device_id": "sensor-bot-2",
+        "src_ip": "192.0.2.12",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0036-tcp",
+      "dedup_key": "45ee604d7d220ccfcb2fc172534eea4ba5e3c09d72ec6d54578ea1307429d313",
+      "origin_event_id": "synthetic-botnet-peer-bot-2",
+      "occurred_at": "2026-10-15T01:10:02Z",
+      "received_at": "2026-10-15T01:10:02Z",
+      "raw": {
+        "device_id": "sensor-bot-2",
+        "src_ip": "192.0.2.12",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0037-tcp",
+      "dedup_key": "95243ae1dd6badcccf9a16bdfdd3019a3aae2a39b95912dd5bbf0e9395544c8c",
+      "origin_event_id": "synthetic-botnet-peer-bot-2",
+      "occurred_at": "2026-10-15T01:11:02Z",
+      "received_at": "2026-10-15T01:11:02Z",
+      "raw": {
+        "device_id": "sensor-bot-2",
+        "src_ip": "192.0.2.12",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0038-tcp",
+      "dedup_key": "d9baa34861921071a4e455905ca55ccc40b69d1128c702e39d597395ae3e2a05",
+      "origin_event_id": "synthetic-botnet-peer-bot-2",
+      "occurred_at": "2026-10-15T01:12:02Z",
+      "received_at": "2026-10-15T01:12:02Z",
+      "raw": {
+        "device_id": "sensor-bot-2",
+        "src_ip": "192.0.2.12",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0039-tcp",
+      "dedup_key": "4e82442989350dc611aa1226852c25fef4e82e10f91edc4a6bda3c85469c67f0",
+      "origin_event_id": "synthetic-botnet-peer-bot-2",
+      "occurred_at": "2026-10-15T01:13:02Z",
+      "received_at": "2026-10-15T01:13:02Z",
+      "raw": {
+        "device_id": "sensor-bot-2",
+        "src_ip": "192.0.2.12",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0040-tcp",
+      "dedup_key": "daf6901d7db631e2a56315559f21f0b7920323c28ba287661f88bbfddc72cb7d",
+      "origin_event_id": "synthetic-botnet-peer-bot-2",
+      "occurred_at": "2026-10-15T01:14:02Z",
+      "received_at": "2026-10-15T01:14:02Z",
+      "raw": {
+        "device_id": "sensor-bot-2",
+        "src_ip": "192.0.2.12",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0041-tcp",
+      "dedup_key": "d6db22ca5b44e07d19132d66be24bf8fd17a1d077b339a6a88a1bd70294e1e9f",
+      "origin_event_id": "synthetic-botnet-peer-bot-2",
+      "occurred_at": "2026-10-15T01:15:02Z",
+      "received_at": "2026-10-15T01:15:02Z",
+      "raw": {
+        "device_id": "sensor-bot-2",
+        "src_ip": "192.0.2.12",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0042-tcp",
+      "dedup_key": "d98948ae3053c21d58390d7c39f02621a50399aecc0a809cd1a9d37c2f370212",
+      "origin_event_id": "synthetic-botnet-peer-bot-2",
+      "occurred_at": "2026-10-15T01:16:02Z",
+      "received_at": "2026-10-15T01:16:02Z",
+      "raw": {
+        "device_id": "sensor-bot-2",
+        "src_ip": "192.0.2.12",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0043-tcp",
+      "dedup_key": "522f5959b36d5a221297e300b1618d4a101695f0777446c6325ed3b86e173d57",
+      "origin_event_id": "synthetic-botnet-peer-bot-2",
+      "occurred_at": "2026-10-15T01:17:02Z",
+      "received_at": "2026-10-15T01:17:02Z",
+      "raw": {
+        "device_id": "sensor-bot-2",
+        "src_ip": "192.0.2.12",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0044-tcp",
+      "dedup_key": "ebae9c35b974021855498b9f90b63a2bd41c069f489f32652137195509381ef1",
+      "origin_event_id": "synthetic-botnet-peer-bot-2",
+      "occurred_at": "2026-10-15T01:18:02Z",
+      "received_at": "2026-10-15T01:18:02Z",
+      "raw": {
+        "device_id": "sensor-bot-2",
+        "src_ip": "192.0.2.12",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0045-tcp",
+      "dedup_key": "915c0bb715445101a617bb31bd8683234d044119d63bd27bd5d07a87fec0ce43",
+      "origin_event_id": "synthetic-botnet-peer-bot-2",
+      "occurred_at": "2026-10-15T01:19:02Z",
+      "received_at": "2026-10-15T01:19:02Z",
+      "raw": {
+        "device_id": "sensor-bot-2",
+        "src_ip": "192.0.2.12",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0046-dns",
+      "dedup_key": "c670bfaa87f861331b0cc3c337d8fd8dd118a889e658bfe5129d780a3f1998a6",
+      "origin_event_id": "synthetic-botnet-peer-bot-2",
+      "occurred_at": "2026-10-15T01:00:00Z",
+      "received_at": "2026-10-15T01:00:00Z",
+      "raw": {
+        "device_id": "sensor-bot-2",
+        "src_ip": "192.0.2.12",
+        "dst_ip": "192.0.2.53",
+        "src_port": "49152",
+        "dst_port": "53",
+        "protocol": "udp",
+        "app": {
+          "dns_query": "pool-fixture.test",
+          "dns_answers": [
+            "198.51.100.30"
+          ],
+          "dns_rcode": "0"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "domain",
+          "ioc_value": "pool-fixture.test"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0047-dns",
+      "dedup_key": "d3d172bd7b1f7989cb48f0331e68dca28268bb3f19082bb53ea5d64dbede54fd",
+      "origin_event_id": "synthetic-botnet-peer-bot-2",
+      "occurred_at": "2026-10-15T01:00:01Z",
+      "received_at": "2026-10-15T01:00:01Z",
+      "raw": {
+        "device_id": "sensor-bot-2",
+        "src_ip": "192.0.2.12",
+        "dst_ip": "192.0.2.53",
+        "src_port": "49152",
+        "dst_port": "53",
+        "protocol": "udp",
+        "app": {
+          "dns_query": "update-1.unavailable-fixture.test",
+          "dns_answers": null,
+          "dns_rcode": "3"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "domain",
+          "ioc_value": "update-1.unavailable-fixture.test"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0048-dns",
+      "dedup_key": "07015606ff13a254d093f0506352ff39febac6a537bd92253c05d3488e124dea",
+      "origin_event_id": "synthetic-botnet-peer-bot-2",
+      "occurred_at": "2026-10-15T01:00:02Z",
+      "received_at": "2026-10-15T01:00:02Z",
+      "raw": {
+        "device_id": "sensor-bot-2",
+        "src_ip": "192.0.2.12",
+        "dst_ip": "192.0.2.53",
+        "src_port": "49152",
+        "dst_port": "53",
+        "protocol": "udp",
+        "app": {
+          "dns_query": "update-2.unavailable-fixture.test",
+          "dns_answers": null,
+          "dns_rcode": "3"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "domain",
+          "ioc_value": "update-2.unavailable-fixture.test"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0049-dns",
+      "dedup_key": "e25d041c12e9e88448626a99fad5d6bc600c37024d28762735d60df12ef847b3",
+      "origin_event_id": "synthetic-botnet-peer-bot-2",
+      "occurred_at": "2026-10-15T01:00:03Z",
+      "received_at": "2026-10-15T01:00:03Z",
+      "raw": {
+        "device_id": "sensor-bot-2",
+        "src_ip": "192.0.2.12",
+        "dst_ip": "192.0.2.53",
+        "src_port": "49152",
+        "dst_port": "53",
+        "protocol": "udp",
+        "app": {
+          "dns_query": "update-3.unavailable-fixture.test",
+          "dns_answers": null,
+          "dns_rcode": "3"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "domain",
+          "ioc_value": "update-3.unavailable-fixture.test"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0050-dns",
+      "dedup_key": "93a47420ce407702135ab6e1cead7f5eb3c62266aa069416459a468c5d11266b",
+      "origin_event_id": "synthetic-botnet-peer-bot-2",
+      "occurred_at": "2026-10-15T01:00:04Z",
+      "received_at": "2026-10-15T01:00:04Z",
+      "raw": {
+        "device_id": "sensor-bot-2",
+        "src_ip": "192.0.2.12",
+        "dst_ip": "192.0.2.53",
+        "src_port": "49152",
+        "dst_port": "53",
+        "protocol": "udp",
+        "app": {
+          "dns_query": "update-4.unavailable-fixture.test",
+          "dns_answers": null,
+          "dns_rcode": "3"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "domain",
+          "ioc_value": "update-4.unavailable-fixture.test"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0051-tcp",
+      "dedup_key": "ce50c882121d1cfe7785881225ab30ae4b8f5ec6559279e43b282fcbd0794e14",
+      "origin_event_id": "synthetic-botnet-peer-bot-3",
+      "occurred_at": "2026-10-15T01:00:03Z",
+      "received_at": "2026-10-15T01:00:03Z",
+      "raw": {
+        "device_id": "sensor-bot-3",
+        "src_ip": "192.0.2.13",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0052-tcp",
+      "dedup_key": "7acc539f56e6558c33ee4cbec1a2ba37a55c97ff762dfd8afa9ebd3edd92e659",
+      "origin_event_id": "synthetic-botnet-peer-bot-3",
+      "occurred_at": "2026-10-15T01:01:03Z",
+      "received_at": "2026-10-15T01:01:03Z",
+      "raw": {
+        "device_id": "sensor-bot-3",
+        "src_ip": "192.0.2.13",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0053-tcp",
+      "dedup_key": "3b3a2da480d2b18ced8cae1d81939e63391e3506c6dca68b44cc990ed58f5e33",
+      "origin_event_id": "synthetic-botnet-peer-bot-3",
+      "occurred_at": "2026-10-15T01:02:03Z",
+      "received_at": "2026-10-15T01:02:03Z",
+      "raw": {
+        "device_id": "sensor-bot-3",
+        "src_ip": "192.0.2.13",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0054-tcp",
+      "dedup_key": "d89dd3eef5301a2233fcd3c080e5fdd92c22bc0205c82d929976d216eb2ae31b",
+      "origin_event_id": "synthetic-botnet-peer-bot-3",
+      "occurred_at": "2026-10-15T01:03:03Z",
+      "received_at": "2026-10-15T01:03:03Z",
+      "raw": {
+        "device_id": "sensor-bot-3",
+        "src_ip": "192.0.2.13",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0055-tcp",
+      "dedup_key": "e937b93464763282378e98f80e78bedb259a8373513a32c721dfc9c7ba45b1ec",
+      "origin_event_id": "synthetic-botnet-peer-bot-3",
+      "occurred_at": "2026-10-15T01:04:03Z",
+      "received_at": "2026-10-15T01:04:03Z",
+      "raw": {
+        "device_id": "sensor-bot-3",
+        "src_ip": "192.0.2.13",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0056-tcp",
+      "dedup_key": "016e7198f9d2eb2b2b2672123b26927563b70bd805e49a8f63a610ef66ab2507",
+      "origin_event_id": "synthetic-botnet-peer-bot-3",
+      "occurred_at": "2026-10-15T01:05:03Z",
+      "received_at": "2026-10-15T01:05:03Z",
+      "raw": {
+        "device_id": "sensor-bot-3",
+        "src_ip": "192.0.2.13",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0057-tcp",
+      "dedup_key": "cf42d1be0f853a11a9164abbf31ac95bee28bbfe8f1485fba03b9677f354d43d",
+      "origin_event_id": "synthetic-botnet-peer-bot-3",
+      "occurred_at": "2026-10-15T01:06:03Z",
+      "received_at": "2026-10-15T01:06:03Z",
+      "raw": {
+        "device_id": "sensor-bot-3",
+        "src_ip": "192.0.2.13",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0058-tcp",
+      "dedup_key": "8b88a30a9e391e876c7a65b69fe900b7bb74abe458bea8bb743ab6b8a17a60d0",
+      "origin_event_id": "synthetic-botnet-peer-bot-3",
+      "occurred_at": "2026-10-15T01:07:03Z",
+      "received_at": "2026-10-15T01:07:03Z",
+      "raw": {
+        "device_id": "sensor-bot-3",
+        "src_ip": "192.0.2.13",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0059-tcp",
+      "dedup_key": "fa4f3d76105dfff28a8d0c1a1c266fd18eefea82c33f4c9b3eb8b9f5dc8cd821",
+      "origin_event_id": "synthetic-botnet-peer-bot-3",
+      "occurred_at": "2026-10-15T01:08:03Z",
+      "received_at": "2026-10-15T01:08:03Z",
+      "raw": {
+        "device_id": "sensor-bot-3",
+        "src_ip": "192.0.2.13",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0060-tcp",
+      "dedup_key": "0440f91fbee07acc9e1b1f3d813cf073367f02bd080915d72a43a5c6037bbc06",
+      "origin_event_id": "synthetic-botnet-peer-bot-3",
+      "occurred_at": "2026-10-15T01:09:03Z",
+      "received_at": "2026-10-15T01:09:03Z",
+      "raw": {
+        "device_id": "sensor-bot-3",
+        "src_ip": "192.0.2.13",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0061-tcp",
+      "dedup_key": "e250173b2d163fe160067ed0dad849a1362e0e8020332a3aeb65ed1bdedf535d",
+      "origin_event_id": "synthetic-botnet-peer-bot-3",
+      "occurred_at": "2026-10-15T01:10:03Z",
+      "received_at": "2026-10-15T01:10:03Z",
+      "raw": {
+        "device_id": "sensor-bot-3",
+        "src_ip": "192.0.2.13",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0062-tcp",
+      "dedup_key": "7f0223148029b978bc4166213b7395a6bd9e5cf763c79fc012ef87a61f196bb5",
+      "origin_event_id": "synthetic-botnet-peer-bot-3",
+      "occurred_at": "2026-10-15T01:11:03Z",
+      "received_at": "2026-10-15T01:11:03Z",
+      "raw": {
+        "device_id": "sensor-bot-3",
+        "src_ip": "192.0.2.13",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0063-tcp",
+      "dedup_key": "afe06f7485a240876534a576fb777c7ad7c5956fba300b06ba8f4e73d2c9a546",
+      "origin_event_id": "synthetic-botnet-peer-bot-3",
+      "occurred_at": "2026-10-15T01:12:03Z",
+      "received_at": "2026-10-15T01:12:03Z",
+      "raw": {
+        "device_id": "sensor-bot-3",
+        "src_ip": "192.0.2.13",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0064-tcp",
+      "dedup_key": "1e7aa44d522fa342d187493d609dff4e5ca2711d4656ea48225088c1cf784451",
+      "origin_event_id": "synthetic-botnet-peer-bot-3",
+      "occurred_at": "2026-10-15T01:13:03Z",
+      "received_at": "2026-10-15T01:13:03Z",
+      "raw": {
+        "device_id": "sensor-bot-3",
+        "src_ip": "192.0.2.13",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0065-tcp",
+      "dedup_key": "c00d6e97c5e50398f319b3ead7fed4f0552174949facc1ee353e21f87d5dc911",
+      "origin_event_id": "synthetic-botnet-peer-bot-3",
+      "occurred_at": "2026-10-15T01:14:03Z",
+      "received_at": "2026-10-15T01:14:03Z",
+      "raw": {
+        "device_id": "sensor-bot-3",
+        "src_ip": "192.0.2.13",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0066-tcp",
+      "dedup_key": "7024d2fc9ef28b9f77bf2bcbd2d45d6fdd8da1b8c930e9d27d64208b67b834d0",
+      "origin_event_id": "synthetic-botnet-peer-bot-3",
+      "occurred_at": "2026-10-15T01:15:03Z",
+      "received_at": "2026-10-15T01:15:03Z",
+      "raw": {
+        "device_id": "sensor-bot-3",
+        "src_ip": "192.0.2.13",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0067-tcp",
+      "dedup_key": "3911487a8f264dd38602a507e70a350212f74a90975ce5e838e437a4d31cbc4b",
+      "origin_event_id": "synthetic-botnet-peer-bot-3",
+      "occurred_at": "2026-10-15T01:16:03Z",
+      "received_at": "2026-10-15T01:16:03Z",
+      "raw": {
+        "device_id": "sensor-bot-3",
+        "src_ip": "192.0.2.13",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0068-tcp",
+      "dedup_key": "520b97313d6c74a4990978b222ec9d7a06c110a1b99a2c0011795e2260d27136",
+      "origin_event_id": "synthetic-botnet-peer-bot-3",
+      "occurred_at": "2026-10-15T01:17:03Z",
+      "received_at": "2026-10-15T01:17:03Z",
+      "raw": {
+        "device_id": "sensor-bot-3",
+        "src_ip": "192.0.2.13",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0069-tcp",
+      "dedup_key": "2cf29394de6e789982c04c8cccd082c991c50dc0977715e842affc1f57c8b897",
+      "origin_event_id": "synthetic-botnet-peer-bot-3",
+      "occurred_at": "2026-10-15T01:18:03Z",
+      "received_at": "2026-10-15T01:18:03Z",
+      "raw": {
+        "device_id": "sensor-bot-3",
+        "src_ip": "192.0.2.13",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0070-tcp",
+      "dedup_key": "518915525685a8047f735596677e765a6365d358ebc22ce6c94720815e1b0c55",
+      "origin_event_id": "synthetic-botnet-peer-bot-3",
+      "occurred_at": "2026-10-15T01:19:03Z",
+      "received_at": "2026-10-15T01:19:03Z",
+      "raw": {
+        "device_id": "sensor-bot-3",
+        "src_ip": "192.0.2.13",
+        "dst_ip": "198.51.100.30",
+        "src_port": "49152",
+        "dst_port": "8080",
+        "protocol": "tcp",
+        "app": {
+          "app_protocol": "http"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "ip",
+          "ioc_value": "198.51.100.30"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0071-dns",
+      "dedup_key": "9e7b99f63634e1169c08796503d5f4ea7b14b93ff7a80ce6c50b53873c274f88",
+      "origin_event_id": "synthetic-botnet-peer-bot-3",
+      "occurred_at": "2026-10-15T01:00:00Z",
+      "received_at": "2026-10-15T01:00:00Z",
+      "raw": {
+        "device_id": "sensor-bot-3",
+        "src_ip": "192.0.2.13",
+        "dst_ip": "192.0.2.53",
+        "src_port": "49152",
+        "dst_port": "53",
+        "protocol": "udp",
+        "app": {
+          "dns_query": "pool-fixture.test",
+          "dns_answers": [
+            "198.51.100.30"
+          ],
+          "dns_rcode": "0"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "domain",
+          "ioc_value": "pool-fixture.test"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0072-dns",
+      "dedup_key": "3eb62efe0dc1dc0db5cfbd4cffe6fa7df87783a8866f4ff90664fe6903072262",
+      "origin_event_id": "synthetic-botnet-peer-bot-3",
+      "occurred_at": "2026-10-15T01:00:01Z",
+      "received_at": "2026-10-15T01:00:01Z",
+      "raw": {
+        "device_id": "sensor-bot-3",
+        "src_ip": "192.0.2.13",
+        "dst_ip": "192.0.2.53",
+        "src_port": "49152",
+        "dst_port": "53",
+        "protocol": "udp",
+        "app": {
+          "dns_query": "update-1.unavailable-fixture.test",
+          "dns_answers": null,
+          "dns_rcode": "3"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "domain",
+          "ioc_value": "update-1.unavailable-fixture.test"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0073-dns",
+      "dedup_key": "d7900c28aa0c1e4191331a6268f185483103a823ea460d110f2cb69fc0817ba5",
+      "origin_event_id": "synthetic-botnet-peer-bot-3",
+      "occurred_at": "2026-10-15T01:00:02Z",
+      "received_at": "2026-10-15T01:00:02Z",
+      "raw": {
+        "device_id": "sensor-bot-3",
+        "src_ip": "192.0.2.13",
+        "dst_ip": "192.0.2.53",
+        "src_port": "49152",
+        "dst_port": "53",
+        "protocol": "udp",
+        "app": {
+          "dns_query": "update-2.unavailable-fixture.test",
+          "dns_answers": null,
+          "dns_rcode": "3"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "domain",
+          "ioc_value": "update-2.unavailable-fixture.test"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0074-dns",
+      "dedup_key": "61431204b7997dd5310dcf4edbb31697f702379c86b81b7dc2bffefe30379e22",
+      "origin_event_id": "synthetic-botnet-peer-bot-3",
+      "occurred_at": "2026-10-15T01:00:03Z",
+      "received_at": "2026-10-15T01:00:03Z",
+      "raw": {
+        "device_id": "sensor-bot-3",
+        "src_ip": "192.0.2.13",
+        "dst_ip": "192.0.2.53",
+        "src_port": "49152",
+        "dst_port": "53",
+        "protocol": "udp",
+        "app": {
+          "dns_query": "update-3.unavailable-fixture.test",
+          "dns_answers": null,
+          "dns_rcode": "3"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "domain",
+          "ioc_value": "update-3.unavailable-fixture.test"
+        }
+      }
+    },
+    {
+      "hit_id": "synthetic-botnet-0075-dns",
+      "dedup_key": "382a4f1a7f89e7323a14e8997d687ff745202874cb26b17fbe3543cf48f66f3d",
+      "origin_event_id": "synthetic-botnet-peer-bot-3",
+      "occurred_at": "2026-10-15T01:00:04Z",
+      "received_at": "2026-10-15T01:00:04Z",
+      "raw": {
+        "device_id": "sensor-bot-3",
+        "src_ip": "192.0.2.13",
+        "dst_ip": "192.0.2.53",
+        "src_port": "49152",
+        "dst_port": "53",
+        "protocol": "udp",
+        "app": {
+          "dns_query": "update-4.unavailable-fixture.test",
+          "dns_answers": null,
+          "dns_rcode": "3"
+        },
+        "synthetic_fixture": true,
+        "ioc": {
+          "ioc_type": "domain",
+          "ioc_value": "update-4.unavailable-fixture.test"
+        }
+      }
+    }
+  ],
+  "records": [
+    {
+      "kind": "segment",
+      "key": "synthetic-botnet",
+      "value": {
+        "event_id": "synthetic-botnet",
+        "source_events": [
+          "synthetic-botnet"
+        ],
+        "stats_version": 1,
+        "data_version": 1,
+        "watermark": 75,
+        "revision_watermark": 0,
+        "hit_count": 25
+      }
+    },
+    {
+      "kind": "snapshot",
+      "key": "synthetic-botnet:1",
+      "value": {
+        "context": {
+          "event_background": "三个不同员工终端在一小时观测窗内同步访问同一合成更新服务，每分钟一次、相差1至2秒；各自DNS成功和NXDOMAIN独立保存。公共端点和同步不证明感染；没有传播路径或已定谳战役历史。",
+          "first_time": "2026-10-15T01:00:00Z",
+          "last_time": "2026-10-15T01:19:03Z",
+          "occurrence_count": 75,
+          "scenario_id": "botnet",
+          "synthetic_fixture": true
+        },
+        "count": 25,
+        "event_id": "synthetic-botnet",
+        "evidence": [],
+        "input_manifest": {},
+        "revision_watermark": 0,
+        "snapshot_version": 1,
+        "source_events": [
+          "synthetic-botnet"
+        ],
+        "watermark": 75
+      }
+    },
+    {
+      "kind": "segment",
+      "key": "synthetic-botnet-peer-bot-2",
+      "value": {
+        "event_id": "synthetic-botnet-peer-bot-2",
+        "source_events": [
+          "synthetic-botnet-peer-bot-2"
+        ],
+        "stats_version": 1,
+        "data_version": 1,
+        "watermark": 75,
+        "revision_watermark": 0,
+        "hit_count": 25
+      }
+    },
+    {
+      "kind": "snapshot",
+      "key": "synthetic-botnet-peer-bot-2:1",
+      "value": {
+        "context": {
+          "event_background": "三个不同员工终端在一小时观测窗内同步访问同一合成更新服务，每分钟一次、相差1至2秒；各自DNS成功和NXDOMAIN独立保存。公共端点和同步不证明感染；没有传播路径或已定谳战役历史。",
+          "first_time": "2026-10-15T01:00:00Z",
+          "last_time": "2026-10-15T01:19:03Z",
+          "occurrence_count": 75,
+          "scenario_id": "botnet",
+          "synthetic_fixture": true
+        },
+        "count": 25,
+        "event_id": "synthetic-botnet-peer-bot-2",
+        "evidence": [],
+        "input_manifest": {},
+        "revision_watermark": 0,
+        "snapshot_version": 1,
+        "source_events": [
+          "synthetic-botnet-peer-bot-2"
+        ],
+        "watermark": 75
+      }
+    },
+    {
+      "kind": "segment",
+      "key": "synthetic-botnet-peer-bot-3",
+      "value": {
+        "event_id": "synthetic-botnet-peer-bot-3",
+        "source_events": [
+          "synthetic-botnet-peer-bot-3"
+        ],
+        "stats_version": 1,
+        "data_version": 1,
+        "watermark": 75,
+        "revision_watermark": 0,
+        "hit_count": 25
+      }
+    },
+    {
+      "kind": "snapshot",
+      "key": "synthetic-botnet-peer-bot-3:1",
+      "value": {
+        "context": {
+          "event_background": "三个不同员工终端在一小时观测窗内同步访问同一合成更新服务，每分钟一次、相差1至2秒；各自DNS成功和NXDOMAIN独立保存。公共端点和同步不证明感染；没有传播路径或已定谳战役历史。",
+          "first_time": "2026-10-15T01:00:00Z",
+          "last_time": "2026-10-15T01:19:03Z",
+          "occurrence_count": 75,
+          "scenario_id": "botnet",
+          "synthetic_fixture": true
+        },
+        "count": 25,
+        "event_id": "synthetic-botnet-peer-bot-3",
+        "evidence": [],
+        "input_manifest": {},
+        "revision_watermark": 0,
+        "snapshot_version": 1,
+        "source_events": [
+          "synthetic-botnet-peer-bot-3"
+        ],
+        "watermark": 75
+      }
+    }
+  ]
+}

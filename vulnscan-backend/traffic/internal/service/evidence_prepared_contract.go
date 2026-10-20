@@ -67,6 +67,13 @@ func preparedFamilyCoverage(v EvidencePreparedInputs) []PreparedFamilyCoverage {
 	return out
 }
 
+// PreparedInputCoverage derives the wire coverage ledger for independent input
+// producers using the same implementation as the formal snapshot collector.
+// It does not authenticate a producer or upgrade its provenance flags.
+func PreparedInputCoverage(v EvidencePreparedInputs) []PreparedFamilyCoverage {
+	return preparedFamilyCoverage(v)
+}
+
 func uniqueSortedStrings(in []string) []string {
 	seen := map[string]bool{}
 	out := []string{}
@@ -141,6 +148,31 @@ func (b PreparedEvidenceBundle) validateContractRelations() error {
 					}
 				}
 			}
+		}
+	}
+	// Group semantic subjects use the same group-only scope as the F engine.
+	// Admit only declared groups with traceable, distinct asset membership.
+	groupIDs := map[string]bool{}
+	for _, g := range b.Inputs.Request.Groups {
+		if g.ID == "" || groupIDs[g.ID] || !g.Window.Start.Before(g.Window.End) {
+			return fmt.Errorf("prepared_invalid_group_identity_or_window")
+		}
+		groupIDs[g.ID] = true
+		members := map[string]bool{}
+		for _, m := range g.Members {
+			if m.AssetID == "" || members[m.AssetID] || m.Scope.AssetID != m.AssetID || !scopes[m.Scope] || len(m.HitIDs) == 0 {
+				return fmt.Errorf("prepared_invalid_group_member")
+			}
+			members[m.AssetID] = true
+			for _, id := range m.HitIDs {
+				h, ok := sources[id]
+				if !ok || h.Scope != m.Scope || h.OccurredAt.Before(g.Window.Start) || !h.OccurredAt.Before(g.Window.End) {
+					return fmt.Errorf("prepared_group_member_source_mismatch")
+				}
+			}
+		}
+		if len(members) > 0 {
+			scopes[evidence.Scope{GroupID: g.ID}] = true
 		}
 	}
 	p := b.Inputs.Manifest.PhaseOne
