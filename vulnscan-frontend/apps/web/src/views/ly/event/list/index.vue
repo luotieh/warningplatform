@@ -263,25 +263,50 @@ function onRankTagClose() {
 // 研判概率、分析状态等列无需手动刷新即可看到最新值。
 let listUpdateTimer: ReturnType<typeof setTimeout> | undefined;
 let listPollTimer: ReturnType<typeof setInterval> | undefined;
+const disconnectedPollInterval = 60_000;
 const handleEventListUpdate = () => {
   clearTimeout(listUpdateTimer);
   listUpdateTimer = setTimeout(() => void loadEvents(), 800);
 };
 
-onMounted(async () => {
+function stopListPolling() {
+  clearInterval(listPollTimer);
+  listPollTimer = undefined;
+}
+
+function startDisconnectedPolling() {
+  if (deepflowSocket.connected || listPollTimer !== undefined) return;
+  // 实时通道不可用时低频兜底；隐藏页面或已有查询时不重复请求。
+  listPollTimer = setInterval(() => {
+    if (!deepflowSocket.connected && !document.hidden && !lyStore.loading) void loadEvents();
+  }, disconnectedPollInterval);
+}
+
+function handleSocketConnected() {
+  stopListPolling();
+  // 补齐断线期间漏掉的更新，与紧随其后的广播合并刷新。
+  handleEventListUpdate();
+}
+
+onMounted(() => {
+  deepflowSocket.on('event_list_update', handleEventListUpdate);
+  deepflowSocket.on('connected', handleSocketConnected);
+  deepflowSocket.on('disconnected', startDisconnectedPolling);
+  deepflowSocket.on('error', startDisconnectedPolling);
   deepflowSocket.connect();
   deepflowSocket.join('events');
-  deepflowSocket.on('event_list_update', handleEventListUpdate);
-  await loadEvents();
-  // Also refresh statistics/task state when websocket notifications are unavailable.
-  listPollTimer = setInterval(() => { if (!document.hidden && !lyStore.loading) void loadEvents(); }, 15000);
+  startDisconnectedPolling();
+  void loadEvents();
   void loadAssets();
 });
 
 onUnmounted(() => {
   clearTimeout(listUpdateTimer);
-  clearInterval(listPollTimer);
+  stopListPolling();
   deepflowSocket.off('event_list_update', handleEventListUpdate);
+  deepflowSocket.off('connected', handleSocketConnected);
+  deepflowSocket.off('disconnected', startDisconnectedPolling);
+  deepflowSocket.off('error', startDisconnectedPolling);
   deepflowSocket.leave('events');
 });
 </script>
