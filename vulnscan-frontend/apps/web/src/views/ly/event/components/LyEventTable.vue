@@ -15,6 +15,7 @@ import { eventVictimAssets } from '#/utils/ly-asset';
 
 import ReportModal from '../detail/components/ReportModal.vue';
 import EvidenceDialog from '../detail/components/EvidenceDialog.vue';
+import EventAddressSummary from './EventAddressSummary.vue';
 
 defineOptions({ name: 'LyEventTable' });
 
@@ -393,9 +394,13 @@ const columns = computed(() => [
     minWidth: 260,
     render: (row: Record<string, any>) =>
       h('div', { style: 'display:flex;align-items:center;gap:8px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;flex-wrap:wrap' }, [
-        h('span', { style: 'color:#d03050' }, row.attackDevice || '-'),
+        h(EventAddressSummary, { address: String(row.attackDevice || '-'), row, assets: props.assets }, {
+          default: () => h('span', { style: 'color:#d03050' }, row.attackDevice || '-'),
+        }),
         h(IconifyIcon, { icon: 'lucide:move-right', style: 'font-size:15px;color:#909399;flex:none' }),
-        h('span', { style: 'color:#2080f0' }, row.victimDevice || '-'),
+        h(EventAddressSummary, { address: String(row.victimDevice || '-'), row, assets: props.assets }, {
+          default: () => h('span', { style: 'color:#2080f0' }, row.victimDevice || '-'),
+        }),
         row.heartbeat_detected
           ? h(NTag, { type: 'error', size: 'small', round: true, bordered: false, title: `检测到 C2 信标心跳：约 ${row.heartbeat_period_sec || '?'}s 周期的固定小包通信` }, { default: () => 'C2心跳' })
           : null,
@@ -405,7 +410,9 @@ const columns = computed(() => [
           : null,
         // 列表直接展示命中的 IOC（如 DNS 应答中的 127.0.0.1），此前只在详情弹窗可见。
         row.ioc?.ioc_value
-          ? h(NTag, { size: 'small', round: true, type: 'error', bordered: false, title: `${row.ioc.ioc_type || 'IOC'} 命中，右键查看历史事件`, onContextmenu: (event: MouseEvent) => openIOCMenu(event, row) }, { default: () => `IOC ${row.ioc.ioc_value}` })
+          ? h(EventAddressSummary, { address: String(row.ioc.ioc_value), row, assets: props.assets }, {
+              default: () => h(NTag, { size: 'small', round: true, type: 'error', bordered: false, onContextmenu: (event: MouseEvent) => openIOCMenu(event, row) }, { default: () => `IOC ${row.ioc.ioc_value}` }),
+            })
           : null,
       ]),
   },
