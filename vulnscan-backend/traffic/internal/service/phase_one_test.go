@@ -167,7 +167,9 @@ func phaseOneInstallSnapshot(t *testing.T, s Services, id string, version int64,
 		snap.Context[k] = v
 	}
 	snap.Context["first_time"], snap.Context["last_time"] = first.Format(time.RFC3339Nano), last.Format(time.RFC3339Nano)
-	snap.Context["ioc"] = map[string]any{"ioc_type": messages[0]["ioc_type"], "ioc_value": messages[0]["ioc_value"]}
+	if _, ok := snap.Context["ioc"]; !ok {
+		snap.Context["ioc"] = map[string]any{"ioc_type": messages[0]["ioc_type"], "ioc_value": messages[0]["ioc_value"]}
+	}
 	raw, _ := json.Marshal(snap.Context)
 	_, err := s.Store.CreateEvent(domain.Event{EventID: id, Context: string(raw), CreatedAt: first, LastSeenAt: &last})
 	if err != nil {
@@ -427,8 +429,12 @@ func TestPhaseOneArchivedSnapshot34C01(t *testing.T) {
 	if len(p.Evidence.PhaseOne.Materials.Bindings) != 14 || len(p.Evidence.PhaseOne.Materials.Contacts) != 0 {
 		t.Fatal("TLS packet burst became communication counts", p.Evidence.PhaseOne.Materials)
 	}
-	if phaseOneUnit(t, p, "C02").Status != "missing" || phaseOneUnit(t, p, "C03").Status != "missing" {
-		t.Fatal("raw14 inflated temporal facts")
+	if phaseOneUnit(t, p, "C02").Status != "missing" {
+		t.Fatal("raw14 inflated jitter samples")
+	}
+	daily := phaseOneUnit(t, p, "C03")
+	if daily.Fact.ObservationKind != "event_occurrence" || daily.Fact.Measurements.SampleCount != 86 || daily.Status == "missing" {
+		t.Fatal("event starts must drive daily timing without historical packets", daily)
 	}
 	export := os.Getenv("PHASE_ONE_ACCEPTANCE_OUTPUT")
 	if export != "" {

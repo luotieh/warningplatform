@@ -22,17 +22,18 @@ type Baseline struct {
 	Frequencies map[string]float64 `json:"frequencies"`
 }
 type Input struct {
-	Scope           Scope              `json:"scope"`
-	Window          *AnalysisWindow    `json:"window"`
-	Baselines       []Baseline         `json:"baselines"`
-	DNS             *DNSData           `json:"dns"`
-	HTTP            *HTTPData          `json:"http"`
-	Network         *NetworkData       `json:"network"`
-	TLS             *TLSData           `json:"tls"`
-	History         *HistoryData       `json:"history"`
-	PlatformHistory *HistoryData       `json:"-"`
-	Corroboration   *CorroborationData `json:"corroboration"`
-	Authorizations  *AuthorizationData `json:"authorizations"`
+	Scope                   Scope              `json:"scope"`
+	Window                  *AnalysisWindow    `json:"window"`
+	Baselines               []Baseline         `json:"baselines"`
+	DNS                     *DNSData           `json:"dns"`
+	HTTP                    *HTTPData          `json:"http"`
+	Network                 *NetworkData       `json:"network"`
+	TLS                     *TLSData           `json:"tls"`
+	History                 *HistoryData       `json:"history"`
+	PlatformHistory         *HistoryData       `json:"-"`
+	PlatformHistorySubjects []HistorySubject   `json:"-"`
+	Corroboration           *CorroborationData `json:"corroboration"`
+	Authorizations          *AuthorizationData `json:"authorizations"`
 }
 type DNSRecord struct {
 	SourceID   string    `json:"source_id"`
@@ -48,6 +49,9 @@ type DNSData struct {
 	BigramLogProbabilities map[string]float64 `json:"bigram_log_probabilities"`
 }
 type HTTPRecord struct {
+	// Set only after a complete request has been parsed from verified saved bytes.
+	// This binds a single observed request; it never proves a complete HTTP window.
+	RequestVerification     *HTTPRequestVerification  `json:"request_verification,omitempty"`
 	RequestID               string                    `json:"request_id,omitempty"`
 	RawRequest              string                    `json:"-"`
 	ParsedBody              string                    `json:"-"`
@@ -72,6 +76,24 @@ type HTTPRecord struct {
 	RedirectVerified        bool                      `json:"redirect_verified"`
 	DeclaredBrand           string                    `json:"declared_brand"`
 	BrandClaimVerified      bool                      `json:"brand_claim_verified"`
+}
+
+const HTTPRequestVerificationVersion = "saved-full-http-request-1"
+
+type HTTPRequestVerification struct {
+	Version          string    `json:"version"`
+	Scope            Scope     `json:"scope"`
+	SourceID         string    `json:"source_id"`
+	SourceOccurredAt time.Time `json:"source_occurred_at"`
+	RequestID        string    `json:"request_id"`
+	RequestTime      time.Time `json:"request_time"`
+	URL              string    `json:"url"`
+	Method           string    `json:"method"`
+	SessionID        string    `json:"session_id"`
+	// FieldNames binds the complete parsed query/form/JSON top-level key set;
+	// values remain redacted and are irrelevant to credential structure.
+	FieldsVerified bool     `json:"fields_verified,omitempty"`
+	FieldNames     []string `json:"field_names,omitempty"`
 }
 type Brand struct {
 	Name              string   `json:"name"`
@@ -115,6 +137,11 @@ type Session struct {
 	DownBytes      uint64    `json:"down_bytes"`
 	VolumeVerified bool      `json:"volume_verified"`
 	HitIDs         []string  `json:"hit_ids"`
+	// Observed packet counters do not establish a complete session volume.
+	ByteUnit string `json:"byte_unit,omitempty"`
+	// Its reported observation span can outlive the event occurrence window;
+	// it is excluded from complete-session algorithms even if flags conflict.
+	ObservationOnly bool `json:"observation_only,omitempty"`
 }
 type Service struct {
 	Port     uint16 `json:"port"`
@@ -156,6 +183,8 @@ type TLSData struct {
 	TrustRootsDER        [][]byte          `json:"trust_roots_der"`
 }
 type HistoryEvent struct {
+	IOCType            string             `json:"ioc_type,omitempty"`
+	DeviceID           string             `json:"device_id,omitempty"`
 	ObservationKind    string             `json:"observation_kind,omitempty"`
 	AssetIDs           []string           `json:"asset_ids,omitempty"`
 	ActivityType       string             `json:"activity_type,omitempty"`

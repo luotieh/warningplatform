@@ -51,14 +51,19 @@ func PreprocessCollectedEvidence(ctx context.Context, collected EvidenceCollecti
 	if err = preprocessProviderTimeline(ctx, c, &input, &history, &a); err != nil {
 		return b, a, err
 	}
+	history.RelatedRows = assembleProviderRelatedHistory(c, history)
+	input.Manifest.PhaseOne.CurrentBindings = append([]evidence.PhaseOneBinding{}, input.Manifest.PhaseOne.Bindings...)
 	applyProviderHistory(&input, snap, history)
+	populateProviderHistorySubjects(&input, snap, history)
+	applyProviderTemporalWindowDefault(c, &input)
 	if len(c.MatchIOCs) > 0 {
 		if err = appendCollectedProviderPeers(ctx, &input, assets, c.Peers, w, &a); err != nil {
 			return b, a, err
 		}
 	}
+	populateProviderMemberAddresses(&input.Request, assets)
+	resolveProviderSessionIdentities(&input)
 	dedupProviderContactSets(&input)
-	applyProviderTemporalWindowDefault(c, &input)
 	buildProviderAssetInputs(&input.Request)
 	qi := -1
 	for i := range a.Queries {

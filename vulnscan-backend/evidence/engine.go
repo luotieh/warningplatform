@@ -124,6 +124,9 @@ func (e *Engine) Evaluate(ctx context.Context, request Request) (Result, error) 
 			return Result{}, fmt.Errorf("input scope is unknown or repeated: %+v", input.Scope)
 		}
 		g.input = input
+		if err := ValidateHistorySubjects(input, hitIndex); err != nil {
+			return Result{}, err
+		}
 	}
 	assetScopes := map[Scope]bool{}
 	assetBindings := map[string]bool{}
@@ -180,6 +183,12 @@ func (e *Engine) Evaluate(ctx context.Context, request Request) (Result, error) 
 			}
 			execution := Execution{FactID: id, Scope: scope, Status: "skipped", ReasonCode: NotRequested}
 			if selected[id] {
+				if id == "F_HIST_INFRA_PERSISTENCE" && g.input != nil && len(g.input.PlatformHistorySubjects) > 0 {
+					findings, executions := e.historySubjectFindings(g)
+					result.Findings = append(result.Findings, findings...)
+					result.Executions = append(result.Executions, executions...)
+					continue
+				}
 				var finding Finding
 				packetComplete := g.complete
 				if (id == BeaconPeriodic || id == MultiDayPersist || id == "F_FIXED_DAILY_WINDOW" || id == "F_BEACON_JITTER" || id == "F_RATE_BURST" || id == "F_RATE_RAMP") && request.Quality.SavedTimelineComplete != nil {
@@ -188,6 +197,9 @@ func (e *Engine) Evaluate(ctx context.Context, request Request) (Result, error) 
 				finding = e.evaluateFactSafely(id, g)
 				g.complete = packetComplete
 				finding.SnapshotVersion = request.SnapshotVersion
+				execution.IOCType = finding.IOCType
+				execution.IOCValue = finding.IOCValue
+				execution.ObservationKind = finding.ObservationKind
 				execution.ReasonCode = finding.ReasonCode
 				if finding.Eligibility == "eligible" || finding.ReasonCode == IncompleteNegative {
 					execution.Status = "executed"

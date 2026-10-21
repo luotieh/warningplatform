@@ -32,10 +32,17 @@ func buildSnapshotAssetInputs(req *evidence.Request) {
 		}
 		if source.Network != nil {
 			if target.Network == nil {
-				target.Network = &evidence.NetworkData{Provenance: evidence.Provenance{Verified: true, Complete: req.Quality.Coverage == evidence.CoverageComplete, Version: source.Network.Version}}
+				target.Network = &evidence.NetworkData{Provenance: evidence.Provenance{Verified: source.Network.Verified, Complete: req.Quality.Coverage == evidence.CoverageComplete, Version: source.Network.Version}}
 			}
+			target.Network.Verified = target.Network.Verified && source.Network.Verified
+			target.Network.Complete = target.Network.Complete && source.Network.Complete
 			target.Network.Connections = append(target.Network.Connections, source.Network.Connections...)
 			target.Network.SourceIDs = append(target.Network.SourceIDs, source.Network.SourceIDs...)
+			for _, session := range source.Network.Sessions {
+				copy := session
+				copy.HitIDs = append([]string(nil), session.HitIDs...)
+				target.Network.Sessions = append(target.Network.Sessions, copy)
+			}
 		}
 		if source.DNS != nil {
 			if target.DNS == nil {

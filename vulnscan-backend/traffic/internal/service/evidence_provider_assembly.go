@@ -18,6 +18,7 @@ func assembleProviderTraffic(snap EvidenceSnapshot, assets []domain.Asset, hits 
 	bound := map[evidence.Scope]*evidence.Input{}
 	addresses := []string{}
 	devices := map[string]bool{}
+	sessions := newProviderSessionAccumulator(assets)
 	source := phaseOneSnapshotSource(snap)
 	source.LoadedHits = int64(len(hits))
 	source.Complete = int64(len(hits)) == snap.Count
@@ -63,28 +64,38 @@ func assembleProviderTraffic(snap EvidenceSnapshot, assets []domain.Asset, hits 
 		adaptSnapshotProtocols(in, h, appView, remote, port, false)
 		wire := asString(nestedMap(m, "raw_packet")["packet_hex"]) != ""
 		wireVerified, wireRecord := false, false
-		if wire {
+		if wire || len(nestedMap(m, "exchange")) > 0 {
 			normalizeProviderIOC(m)
 			parsed := &snapshotParseContext{}
 			m[snapshotParseContextKey] = parsed
+			exchange := providerVerifiedHTTP(m)
+			exchangeVerified := exchange != nil && exchange.Request != nil && providerExchangeInWindow(exchange, in)
+			if exchange != nil {
+				out.Manifest.WireFrameDecodeCount += int64(exchange.FrameDecodes)
+				out.Manifest.HTTPRequestParseCount += int64(exchange.FramingParses)
+			}
 			reportVerifyDatagram(m)
 			_, why := snapshotFramePayload(nestedMap(m, "raw_packet"), m, in)
 			wireVerified = why == ""
-			if wireVerified {
+			if wireVerified || exchangeVerified {
 				enrichSnapshotProtocols(in, h, m, &out.Manifest)
 			} else {
 				out.Manifest.addIssue(SnapshotInputIssue{Code: why, Stage: "parse_protocol", HitID: h.ID, Scope: scope})
 			}
 			before := len(out.Manifest.PhaseOne.Records)
 			collectPhaseOneMaterials(&out.Manifest, h, m, *in, assets, snap)
+			appendProviderExchangeContact(&out.Manifest, h, m, *in, assets, snap)
 			wireRecord = len(out.Manifest.PhaseOne.Records) > before
-			if wireVerified {
+			if wireVerified || exchangeVerified {
 				collectSnapshotSemanticObservation(&out, in, h, m, assets)
 			}
 			out.Manifest.ReportObservations = append(out.Manifest.ReportObservations, reportMaterialObservation(h, m, scope))
+			sessions.observe(h, m, *in)
 			out.Manifest.WireFrameDecodeCount += parsed.frameDecodes
 			out.Manifest.HTTPRequestParseCount += parsed.httpParses
 			out.Manifest.DNSMessageParseCount += parsed.dnsParses
+		} else {
+			sessions.observe(h, m, *in)
 		}
 		last := &in.Network.Connections[len(in.Network.Connections)-1]
 		last.Transport = strings.ToLower(firstNonEmpty(asString(m["protocol"]), asString(m["proto"])))
@@ -147,6 +158,7 @@ func assembleProviderTraffic(snap EvidenceSnapshot, assets []domain.Asset, hits 
 	sort.Slice(out.Request.Inputs, func(i, j int) bool {
 		return scopeKey(out.Request.Inputs[i].Scope) < scopeKey(out.Request.Inputs[j].Scope)
 	})
+	sessions.apply(&out)
 	materials := dedupPhaseOneContacts(*out.Manifest.PhaseOne)
 	materials.CurrentContacts = append([]PhaseOneContact(nil), materials.Contacts...)
 	materials.CurrentIncomplete = clonePhaseOneIncomplete(materials.ScopeIncomplete)
@@ -169,6 +181,7 @@ func normalizeProviderIOC(m map[string]any) {
 func assembleProviderHistory(h ReportHistory, rows []domain.Event, assets []domain.Asset, devices map[string]bool, truncated bool) ReportHistory {
 	h.Status = "available"
 	h.CandidateCount = len(rows)
+	h.EventSummaryOnly, h.EventSummaryComplete = true, !truncated
 	h.Truncated = true // alert history never proves full communication coverage
 	if truncated {
 		h.Reason = "candidate_budget_exceeded"
@@ -185,6 +198,7 @@ func assembleProviderHistory(h ReportHistory, rows []domain.Event, assets []doma
 		first, e1 := time.Parse(time.RFC3339Nano, asString(c["first_time"]))
 		last, e2 := time.Parse(time.RFC3339Nano, asString(c["last_time"]))
 		if e1 != nil || e2 != nil || last.Before(first) || first.Before(h.Start) || !last.Before(h.End) {
+			h.EventSummaryComplete = false
 			h.ExcludedCount++
 			continue
 		}
@@ -243,22 +257,19 @@ func appendCollectedProviderPeers(ctx context.Context, out *SnapshotEvidenceInpu
 		out.Manifest.DeclaredHits += input.Manifest.DeclaredHits
 		out.Manifest.RawBytes += input.Manifest.RawBytes
 		out.Manifest.JSONDecodeCount += input.Manifest.JSONDecodeCount
+		out.Manifest.WireFrameDecodeCount += input.Manifest.WireFrameDecodeCount
+		out.Manifest.HTTPRequestParseCount += input.Manifest.HTTPRequestParseCount
+		out.Manifest.DNSMessageParseCount += input.Manifest.DNSMessageParseCount
 		out.Manifest.PhaseOne.Records = append(out.Manifest.PhaseOne.Records, input.Manifest.PhaseOne.Records...)
 		out.Manifest.PhaseOne.Bindings = append(out.Manifest.PhaseOne.Bindings, input.Manifest.PhaseOne.Bindings...)
 		out.Manifest.PhaseOne.Contacts = append(out.Manifest.PhaseOne.Contacts, input.Manifest.PhaseOne.Contacts...)
-		out.Manifest.PhaseOne.CurrentContacts = append(out.Manifest.PhaseOne.CurrentContacts, input.Manifest.PhaseOne.CurrentContacts...)
 		for key, reasons := range input.Manifest.PhaseOne.ScopeIncomplete {
 			if out.Manifest.PhaseOne.ScopeIncomplete == nil {
 				out.Manifest.PhaseOne.ScopeIncomplete = map[string][]string{}
 			}
 			out.Manifest.PhaseOne.ScopeIncomplete[key] = append(out.Manifest.PhaseOne.ScopeIncomplete[key], reasons...)
 		}
-		for key, reasons := range input.Manifest.PhaseOne.CurrentIncomplete {
-			if out.Manifest.PhaseOne.CurrentIncomplete == nil {
-				out.Manifest.PhaseOne.CurrentIncomplete = map[string][]string{}
-			}
-			out.Manifest.PhaseOne.CurrentIncomplete[key] = append(out.Manifest.PhaseOne.CurrentIncomplete[key], reasons...)
-		}
+
 		out.SemanticObservations = append(out.SemanticObservations, input.SemanticObservations...)
 		out.Manifest.ReportObservations = append(out.Manifest.ReportObservations, input.Manifest.ReportObservations...)
 		out.Manifest.Issues = append(out.Manifest.Issues, input.Manifest.Issues...)
@@ -281,6 +292,11 @@ func appendCollectedProviderPeers(ctx context.Context, out *SnapshotEvidenceInpu
 				if old.Network != nil && in.Network != nil {
 					old.Network.Connections = append(old.Network.Connections, in.Network.Connections...)
 					old.Network.SourceIDs = uniqueSortedStrings(append(old.Network.SourceIDs, in.Network.SourceIDs...))
+					for _, session := range in.Network.Sessions {
+						copy := session
+						copy.HitIDs = append([]string(nil), session.HitIDs...)
+						old.Network.Sessions = append(old.Network.Sessions, copy)
+					}
 				} else if in.Network != nil {
 					old.Network = in.Network
 				}
@@ -395,8 +411,21 @@ func applyProviderHistory(out *SnapshotEvidenceInput, snap EvidenceSnapshot, h R
 		in := out.Request.Inputs[i]
 		local := h
 		local.Rows = nil
+		boundIOCs := []domain.IOC{}
+		if out.Manifest.PhaseOne != nil {
+			for _, binding := range out.Manifest.PhaseOne.CurrentBindings {
+				if binding.Verified && binding.Scope == in.Scope {
+					boundIOCs = append(boundIOCs, domain.IOC{Type: binding.IOCType, Value: binding.IOCValue})
+				}
+			}
+		}
 		for _, row := range h.Rows {
 			if row.DeviceID == in.Scope.DeviceID && len(row.AllAssetIDs) == 1 && row.AllAssetIDs[0] == in.Scope.AssetID {
+				local.Rows = append(local.Rows, row)
+			}
+		}
+		for _, row := range h.RelatedRows {
+			if providerRelatedHistoryForScope(row, in.Scope, boundIOCs) {
 				local.Rows = append(local.Rows, row)
 			}
 		}

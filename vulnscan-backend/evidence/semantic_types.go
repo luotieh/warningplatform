@@ -73,7 +73,7 @@ type SemanticMaterial struct {
 }
 
 type SemanticDecodeStep struct {
-	Encoding string `json:"encoding"` // base64, base64url, hex
+	Encoding string `json:"encoding"` // base64, base64url, hex, canonical unpadded base32
 	InputID  string `json:"input_id"`
 	OutputID string `json:"output_id"`
 }

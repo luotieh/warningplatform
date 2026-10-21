@@ -87,8 +87,11 @@ func (p TrafficDataProvider) Load(ctx context.Context, s EvidenceSnapshot, w evi
 				return nil, err
 			}
 			bytes += int64(len(h.Raw))
-			if len(rows) >= o.MaxHits || bytes > o.MaxBytes {
-				return nil, fmt.Errorf("hit_or_byte_budget_exceeded")
+			if len(rows) >= o.MaxHits {
+				return nil, fmt.Errorf("hit_budget_exceeded")
+			}
+			if bytes > o.MaxBytes {
+				return nil, fmt.Errorf("byte_budget_exceeded")
 			}
 			if seen[h.ID] || h.ID == "" || h.OccurredAt.Before(w.Start) || !h.OccurredAt.Before(w.End) || h.Sequence > s.Watermark {
 				return nil, fmt.Errorf("hit_source_or_window_mismatch")
@@ -112,7 +115,16 @@ func (p TrafficDataProvider) Load(ctx context.Context, s EvidenceSnapshot, w evi
 	return rows, nil
 }
 func providerCandidates(ctx context.Context, r store.EvidenceReader, q store.HistoryQuery, limit int) ([]domain.Event, bool, error) {
-	rows := []domain.Event{}
+	return providerCandidatesWithinBytes(ctx, r, q, limit, 4<<20)
+}
+
+func providerCandidatesWithinBytes(ctx context.Context, r store.EvidenceReader, q store.HistoryQuery, limit, maxBytes int, costs ...*providerSummaryCost) (rows []domain.Event, truncated bool, resultErr error) {
+	rows = []domain.Event{}
+	cost := &providerSummaryCost{}
+	if len(costs) > 0 && costs[0] != nil {
+		cost = costs[0]
+	}
+	defer func() { cost.finish(rows) }()
 	seen := map[string]bool{}
 	var bytes int
 	for len(rows) <= limit {
@@ -120,7 +132,10 @@ func providerCandidates(ctx context.Context, r store.EvidenceReader, q store.His
 		if remaining := limit + 1 - len(rows); remaining < q.Limit {
 			q.Limit = remaining
 		}
+		cost.ReadCalls++
 		page, err := r.HistoryCandidates(ctx, q)
+		cost.ReturnedRows += len(page)
+		cost.ReturnedBytes += providerHistoryBytes(page)
 		if err != nil {
 			return nil, false, err
 		}
@@ -128,8 +143,8 @@ func providerCandidates(ctx context.Context, r store.EvidenceReader, q store.His
 			break
 		}
 		for _, e := range page {
-			bytes += len(e.Context)
-			if bytes > 4<<20 {
+			bytes += store.HistorySummaryBytes(e)
+			if bytes > maxBytes {
 				return rows, true, nil
 			}
 			if seen[e.EventID] {
@@ -148,7 +163,7 @@ func providerCandidates(ctx context.Context, r store.EvidenceReader, q store.His
 			break
 		}
 	}
-	truncated := len(rows) > limit
+	truncated = len(rows) > limit
 	if truncated {
 		rows = rows[:limit]
 	}
@@ -262,56 +277,21 @@ func CollectEvidenceFromPlatform(ctx context.Context, r store.EvidenceReader, id
 		HistorySnapshots: map[string]CollectedSnapshotReference{}, Peers: []CollectedTrafficSnapshot{}}
 	hw := evidence.AnalysisWindow{Start: w.Start.Add(-o.Lookback), End: w.Start}
 	t = time.Now()
-	qi = query("history", "HistoryDataProvider", "HistoryCandidates", map[string]any{"addresses": addresses, "iocs": iocs, "exclude": snap.Sources}, hw, o.MaxEvents)
-	if len(addresses)+len(iocs) > 0 {
-		c.HistoryCandidates, c.HistoryTruncated, err = (HistoryDataProvider{r}).Load(ctx, store.HistoryQuery{Start: hw.Start, End: hw.End, Addresses: addresses, IOCs: iocs, ExcludeIDs: snap.Sources}, o.MaxEvents)
+	qi = query("history", "HistoryDataProvider", "HistoryCandidates", map[string]any{"addresses": addresses, "iocs": iocs, "exclude": snap.Sources, "require_asset_ioc": true}, hw, o.MaxEvents)
+	if len(addresses) > 0 && len(iocs) > 0 {
+		cost := &providerSummaryCost{}
+		c.HistoryCandidates, c.HistoryTruncated, err = providerCandidatesWithinBytes(ctx, r, store.HistoryQuery{Start: hw.Start, End: hw.End, Addresses: addresses, IOCs: iocs, ExcludeIDs: snap.Sources, RequireAssetIOC: true, SummaryOnly: true}, o.MaxEvents, 4<<20, cost)
+		a.Queries[qi].Keys.(map[string]any)["summary_cost"] = cost
 		finish(qi, len(c.HistoryCandidates), "event_history_only_not_contacts", err, t)
 		if err != nil {
 			return c, err
 		}
-		historyHits, historyBytes := 0, int64(0)
-		for _, row := range c.HistoryCandidates {
-			_, snapshot, readErr := (EventDataProvider{r}).Load(ctx, row.EventID)
-			ref := CollectedSnapshotReference{EventID: row.EventID, Snapshot: snapshot}
-			if readErr != nil {
-				if readErr.Error() != "published_segment_missing" && readErr.Error() != "published_snapshot_missing" {
-					return c, readErr
-				}
-				ref.Reason = readErr.Error()
-			}
-			if ref.Reason == "" {
-				start, e1 := time.Parse(time.RFC3339Nano, asString(snapshot.Context["first_time"]))
-				end, e2 := time.Parse(time.RFC3339Nano, asString(snapshot.Context["last_time"]))
-				if e1 != nil || e2 != nil || end.Before(start) || start.Before(hw.Start) || !end.Before(hw.End) {
-					ref.Reason = "historical_snapshot_outside_lookback_or_invalid"
-				} else if snapshot.Count > int64(o.MaxHits-historyHits) || historyBytes >= o.MaxBytes {
-					ref.Reason = "historical_traffic_budget_exceeded"
-				} else {
-					po := o
-					po.MaxHits, po.MaxBytes = o.MaxHits-historyHits, o.MaxBytes-historyBytes
-					started := time.Now()
-					window := evidence.AnalysisWindow{Start: start, End: end.Add(time.Nanosecond)}
-					index := query("history:"+row.EventID, "TrafficDataProvider", "SnapshotPage", map[string]any{"event_id": snapshot.EventID, "source_events": snapshot.Sources, "watermark": snapshot.Watermark, "revision_watermark": snapshot.RevisionWatermark}, window, po.MaxHits)
-					rows, loadErr := (TrafficDataProvider{r}).Load(ctx, snapshot, window, po)
-					finish(index, len(rows), "saved_historical_hits_not_full_network", loadErr, started)
-					if loadErr != nil {
-						return c, loadErr
-					}
-					if int64(len(rows)) != snapshot.Count {
-						return c, fmt.Errorf("historical_snapshot_membership_count_mismatch:%s", row.EventID)
-					}
-					ref.Hits, ref.Loaded = collectEvidenceHits(rows), true
-					historyHits += len(rows)
-					for _, hit := range rows {
-						historyBytes += int64(len(hit.Raw))
-					}
-				}
-			}
-			c.HistorySnapshots[row.EventID] = ref
-		}
 	} else {
 		finish(qi, 0, "unavailable", nil, t)
 		a.Queries[qi].Reason = "asset_or_ioc_identity_unresolved"
+	}
+	if err = collectProviderRelatedHistory(ctx, r, &c, &a); err != nil {
+		return c, err
 	}
 	t = time.Now()
 	qi = query("group", "GroupDataProvider", "HistoryCandidates + SnapshotPage", map[string]any{"iocs": iocs, "exclude": snap.Sources}, w, o.MaxEvents)

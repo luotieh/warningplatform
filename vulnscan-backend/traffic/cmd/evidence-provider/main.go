@@ -178,7 +178,11 @@ func run() error {
 	if e = write(*out, "query-trace.json", append(a.Trace, service.ProviderExecutionTrace(b, result)...)); e != nil {
 		return e
 	}
-	outputs := map[string]any{"f-results.json": result.Evaluation, "semantic-plan.json": result.Semantics.Result.Plan, "semantic-results.json": result.Semantics, "joint-evidence.json": result.Evidence.PhaseOne, "normalized-result.json": result, "rule-readiness.json": result.Evidence.Pipeline.Checks, "execution-mode.json": map[string]any{"semantic_mode": *semantic, "real_model_calls": 0, "business_database_writes": 0, "fixture": *fixture != ""}}
+	var semanticPlan any
+	if result.Semantics.Result != nil {
+		semanticPlan = result.Semantics.Result.Plan
+	}
+	outputs := map[string]any{"f-results.json": result.Evaluation, "semantic-plan.json": semanticPlan, "semantic-results.json": result.Semantics, "joint-evidence.json": result.Evidence.PhaseOne, "normalized-result.json": result, "rule-readiness.json": result.Evidence.Pipeline.Checks, "execution-mode.json": map[string]any{"semantic_mode": *semantic, "real_model_calls": 0, "business_database_writes": 0, "fixture": *fixture != ""}}
 	for name, value := range outputs {
 		if e = write(*out, name, value); e != nil {
 			return e

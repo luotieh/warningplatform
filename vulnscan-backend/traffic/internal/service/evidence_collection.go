@@ -16,37 +16,41 @@ import (
 const EvidenceCollectionSchemaVersion = "evidence-platform-collection-1"
 
 // EvidenceCollection is the serializable collection/preprocessing boundary.
-// Hits retain their original Raw bytes, including raw_packet and exchange.
+// Current Hits retain their original Raw bytes. Historical Hits carry only
+// contact wire fields when TemporalOnly is true; they are not full raw exports.
 // The digest detects accidental changes; it does not authenticate imported data.
 // Query matches and snapshot membership are not claims of complete capture.
 type EvidenceCollection struct {
-	SchemaVersion     string                                `json:"schema_version"`
-	CollectionDigest  string                                `json:"collection_digest"`
-	Event             domain.Event                          `json:"event"`
-	Snapshot          EvidenceSnapshot                      `json:"snapshot"`
-	Assets            []domain.Asset                        `json:"assets"`
-	Hits              []CollectedHit                        `json:"hits"`
-	Window            evidence.AnalysisWindow               `json:"window"`
-	Options           EvidenceQueryOptions                  `json:"options"`
-	MatchAddresses    []string                              `json:"match_addresses"`
-	MatchIOCs         []domain.IOC                          `json:"match_iocs"`
-	HistoryCandidates []domain.Event                        `json:"history_candidates"`
-	HistoryTruncated  bool                                  `json:"history_truncated"`
-	HistorySnapshots  map[string]CollectedSnapshotReference `json:"history_snapshots"`
-	GroupCandidates   []domain.Event                        `json:"group_candidates"`
-	GroupTruncated    bool                                  `json:"group_truncated"`
-	Peers             []CollectedTrafficSnapshot            `json:"peers"`
-	SourceRegistry    *store.AggregateRecord                `json:"source_registry,omitempty"`
-	Supplemental      *store.AggregateRecord                `json:"supplemental,omitempty"`
-	Audit             EvidenceSupplyAudit                   `json:"audit"`
+	SchemaVersion            string                                `json:"schema_version"`
+	CollectionDigest         string                                `json:"collection_digest"`
+	Event                    domain.Event                          `json:"event"`
+	Snapshot                 EvidenceSnapshot                      `json:"snapshot"`
+	Assets                   []domain.Asset                        `json:"assets"`
+	Hits                     []CollectedHit                        `json:"hits"`
+	Window                   evidence.AnalysisWindow               `json:"window"`
+	Options                  EvidenceQueryOptions                  `json:"options"`
+	MatchAddresses           []string                              `json:"match_addresses"`
+	MatchIOCs                []domain.IOC                          `json:"match_iocs"`
+	HistoryCandidates        []domain.Event                        `json:"history_candidates"`
+	HistoryTruncated         bool                                  `json:"history_truncated"`
+	RelatedHistoryCandidates []domain.Event                        `json:"related_history_candidates,omitempty"`
+	RelatedHistoryTruncated  bool                                  `json:"related_history_truncated,omitempty"`
+	HistorySnapshots         map[string]CollectedSnapshotReference `json:"history_snapshots"`
+	GroupCandidates          []domain.Event                        `json:"group_candidates"`
+	GroupTruncated           bool                                  `json:"group_truncated"`
+	Peers                    []CollectedTrafficSnapshot            `json:"peers"`
+	SourceRegistry           *store.AggregateRecord                `json:"source_registry,omitempty"`
+	Supplemental             *store.AggregateRecord                `json:"supplemental,omitempty"`
+	Audit                    EvidenceSupplyAudit                   `json:"audit"`
 }
 
 type CollectedSnapshotReference struct {
-	EventID  string           `json:"event_id"`
-	Snapshot EvidenceSnapshot `json:"snapshot"`
-	Reason   string           `json:"unavailable_reason,omitempty"`
-	Hits     []CollectedHit   `json:"hits,omitempty"`
-	Loaded   bool             `json:"loaded"`
+	TemporalOnly bool             `json:"temporal_only,omitempty"`
+	EventID      string           `json:"event_id"`
+	Snapshot     EvidenceSnapshot `json:"snapshot"`
+	Reason       string           `json:"unavailable_reason,omitempty"`
+	Hits         []CollectedHit   `json:"hits,omitempty"`
+	Loaded       bool             `json:"loaded"`
 }
 
 type CollectedTrafficSnapshot struct {

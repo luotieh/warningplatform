@@ -102,7 +102,7 @@ func Normalize(facts []Finding, sem *SemanticResult, executions ...[]Execution) 
 		execution := ""
 		if len(executions) > 0 {
 			for _, x := range executions[0] {
-				if x.FactID == f.FactID && x.Scope == f.Scope {
+				if x.FactID == f.FactID && x.Scope == f.Scope && x.IOCType == f.IOCType && x.IOCValue == f.IOCValue && x.ObservationKind == f.ObservationKind {
 					execution = x.Status
 					break
 				}

@@ -94,7 +94,7 @@ func TestEvidenceCollectionOfflineReplayAndRawPreservation(t *testing.T) {
 	if err = collection.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	if len(collection.Peers) != 1 || len(collection.HistoryCandidates) != 1 || collection.HistorySnapshots["history"].Reason != "published_segment_missing" {
+	if len(collection.Peers) != 1 || len(collection.HistoryCandidates) != 1 || len(collection.HistorySnapshots) != 0 {
 		t.Fatal("cross-event collection missing")
 	}
 	for _, hit := range append(append([]CollectedHit(nil), collection.Hits...), collection.Peers[0].Hits...) {

@@ -42,6 +42,12 @@ func factContract(d Definition) EvidenceContract {
 		c.CannotProve = "同问题名失败后解析并连接不证明域名激活原因、C2或感染"
 	case "F_HTTP_SIZE_STABILITY":
 		c.CannotProve = "只计算请求体大小；未证明响应大小稳定、回连目的或传输内容"
+	case "F_URL_ODD_AUTHORITY":
+		c.CannotProve = "只判断所列已核验请求的URL结构；请求集合内阴性不证明完整事件或未采集请求没有异常，也不证明钓鱼"
+		c.RequiredCorrelations = []string{"实际请求URL与同资产、端点、时间及来源绑定", "partial输入须有完整请求逐条核验与身份去重；不提升事件窗口完整性"}
+	case "F_CRED_POST_STRUCTURE":
+		c.CannotProve = "只判断所列完整请求的POST与凭据字段名结构；不证明凭据已送达、钓鱼成立或未采集请求不存在凭据提交"
+		c.RequiredCorrelations = []string{"实际请求方法、完整字段名集合与同资产、端点、时间及来源绑定", "partial输入须逐条核验完整请求和字段名、去重；不提升事件窗口完整性"}
 	case "F_MULTI_REDIRECT_CHAIN", "F_REDIRECT_CHAIN":
 		c.CannotProve = "不识别短链服务，不证明钓鱼；SessionID只用于限制现有已核验链，不能猜测浏览器跨连接身份"
 	case "F_SMALL_PACKET":

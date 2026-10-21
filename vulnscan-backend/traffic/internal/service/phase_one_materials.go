@@ -49,6 +49,7 @@ type PhaseOneTCPContact struct {
 	SessionStart *time.Time `json:"session_start,omitempty"`
 }
 type PhaseOneMaterials struct {
+	CurrentBindings        []evidence.PhaseOneBinding      `json:"current_bindings,omitempty"`
 	TemporalWindowCoverage *PhaseOneTemporalWindowCoverage `json:"temporal_window_coverage,omitempty"`
 	CurrentContacts        []PhaseOneContact               `json:"current_contacts,omitempty"`
 	CurrentComplete        bool                            `json:"current_complete"`
@@ -65,7 +66,7 @@ type PhaseOneMaterials struct {
 	DuplicateContacts      int                             `json:"duplicate_contacts"`
 }
 
-// This policy applies only to jitter and fixed-daily contact timelines. It is
+// This policy applies only to the current-event jitter contact timeline. It is
 // separate from verified capture, transaction and protocol-family completeness.
 type PhaseOneTemporalWindowCoverage struct {
 	Basis           string `json:"basis"`
@@ -214,7 +215,7 @@ func collectPhaseOneMaterials(manifest *SnapshotEvidenceManifest, h store.Hit, m
 				b.Field = "http.request.host"
 			}
 		}
-		if dnsOK && equal(dns.Questions[0].Name.String()) {
+		if dnsOK && providerObservedDomainMatchesIOC(dns.Questions[0].Name.String(), b.IOCValue) {
 			b.Field = "dns.question.name"
 		}
 		if sni := phaseOneSNI(payload); sni != "" && equal(sni) {

@@ -69,7 +69,8 @@ func pipelinePendingFacts(result *evidence.Result, original evidence.Request) {
 
 // General temporal facts share phase-one's independently deduplicated contact
 // supply. Byte/packet counts remain unknown unless measured per communication.
-func pipelineIndependentTemporalFacts(ctx context.Context, snap EvidenceSnapshot, m PhaseOneMaterials) ([]evidence.Finding, error) {
+func pipelineIndependentTemporalFacts(ctx context.Context, snap EvidenceSnapshot, m PhaseOneMaterials, histories ...ReportHistory) ([]evidence.Finding, error) {
+	summaryOnly := len(histories) > 0 && histories[0].EventSummaryOnly
 	groups := map[string][]PhaseOneContact{}
 	for _, c := range m.Contacts {
 		k := scopeKey(c.Scope) + c.IOCType + ":" + c.IOCValue + "|" + c.Kind
@@ -90,6 +91,9 @@ func pipelineIndependentTemporalFacts(ctx context.Context, snap EvidenceSnapshot
 		coverageKey := scopeKey(contacts[0].Scope) + contacts[0].IOCType + ":" + contacts[0].IOCValue
 		complete, truncated := m.Complete && len(m.ScopeIncomplete[coverageKey]) == 0, false
 		r := evidence.Request{EventID: snap.EventID, SnapshotVersion: snap.Version, Facts: []evidence.FactID{evidence.BeaconPeriodic, evidence.MultiDayPersist}, Quality: evidence.Quality{Coverage: evidence.CoveragePartial, SavedTimelineComplete: &complete, CaptureTruncated: &truncated}}
+		if summaryOnly {
+			r.Facts = []evidence.FactID{evidence.BeaconPeriodic}
+		}
 		if complete {
 			r.Quality.Coverage = evidence.CoverageComplete
 		}
@@ -109,6 +113,13 @@ func pipelineIndependentTemporalFacts(ctx context.Context, snap EvidenceSnapshot
 			f.ObservationKind = contacts[0].Kind
 			findings = append(findings, f)
 		}
+	}
+	if summaryOnly {
+		eventFacts, e := phaseOneEventTimeFacts(ctx, snap, m, histories[0], []evidence.FactID{evidence.MultiDayPersist})
+		if e != nil {
+			return nil, e
+		}
+		findings = append(findings, eventFacts...)
 	}
 	return findings, nil
 }

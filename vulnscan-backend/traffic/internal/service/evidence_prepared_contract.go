@@ -64,6 +64,22 @@ func preparedFamilyCoverage(v EvidencePreparedInputs) []PreparedFamilyCoverage {
 			}
 		}
 	}
+	for _, in := range v.Request.Inputs {
+		for _, s := range v.PlatformHistorySubjects[scopeKey(in.Scope)] {
+			if s.History == nil {
+				continue
+			}
+			h := s.History
+			reasons := []string{}
+			if !h.Verified {
+				reasons = append(reasons, "unverified_family")
+			}
+			if !h.Complete {
+				reasons = append(reasons, "partial_family")
+			}
+			out = append(out, PreparedFamilyCoverage{Family: "PlatformHistorySubject", Scope: in.Scope, Window: &evidence.AnalysisWindow{Start: h.LookbackStart, End: h.AsOf}, IOCValues: []string{s.IOCType + ":" + s.IOCValue}, SourceIdentity: h.Version, SourceIDs: h.SourceIDs, Available: true, Verified: h.Verified, Complete: h.Complete, Reasons: reasons})
+		}
+	}
 	return out
 }
 
@@ -88,6 +104,9 @@ func uniqueSortedStrings(in []string) []string {
 }
 
 func (b PreparedEvidenceBundle) validateContractRelations() error {
+	if err := validatePreparedHistorySubjects(b.Inputs); err != nil {
+		return err
+	}
 	raw, err := json.Marshal(b)
 	if err != nil {
 		return err

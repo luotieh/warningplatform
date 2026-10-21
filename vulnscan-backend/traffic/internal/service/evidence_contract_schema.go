@@ -285,9 +285,15 @@ func PreparedInputFieldMap() []PreparedFieldMapping {
 		if id == "F_HIST_ASSET_IOC_RECURRENCE" || id == "F_HIST_INFRA_PERSISTENCE" {
 			paths = append(paths, jsonLeafPaths(reflect.TypeOf(map[string]*evidence.HistoryData{}), "inputs.platform_history")...)
 		}
+		if id == "F_HIST_INFRA_PERSISTENCE" {
+			paths = append(paths, jsonLeafPaths(reflect.TypeOf(map[string][]evidence.HistorySubject{}), "inputs.platform_history_subjects")...)
+		}
 		switch id {
 		case evidence.BeaconPeriodic, evidence.MultiDayPersist, "F_BEACON_JITTER", "F_FIXED_DAILY_WINDOW":
 			paths = append(paths, jsonLeafPaths(reflect.TypeOf(PhaseOneMaterials{}), "inputs.manifest.phase_one_materials")...)
+		}
+		if id == "F_FIXED_DAILY_WINDOW" || id == evidence.MultiDayPersist {
+			paths = append(paths, "snapshot.context.first_time", "history.event_summary_only", "history.event_summary_complete", "history.lookback_start", "history.as_of", "history.rows[].event_id", "history.rows[].first_time", "history.rows[].last_time", "history.rows[].device_id", "history.rows[].all_asset_ids[]", "history.rows[].iocs[].type", "history.rows[].iocs[].value")
 		}
 		paths = uniqueSortedStrings(paths)
 		out = append(out, PreparedFieldMapping{string(id), "F", families, paths, scope, "evidence.FactInputs + existing per-rule evaluator; paths list available fields, not unconditional AND prerequisites"})

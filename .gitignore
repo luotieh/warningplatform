@@ -30,3 +30,17 @@ vulnscan-backend/server-arm64
 /server-arm64-*
 /*-arm64
 vulnscan-frontend/apps/web/mock/
+
+# Local documentation, taskbooks and acceptance artifacts
+/docs/
+*.md
+*.doc
+*.docx
+*.pdf
+*.ppt
+*.pptx
+*.xls
+*.xlsx
+*.csv
+*.log
+.local/

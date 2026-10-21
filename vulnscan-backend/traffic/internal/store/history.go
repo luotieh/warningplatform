@@ -18,6 +18,11 @@ type HistoryQuery struct {
 	Addresses  []string
 	IOCs       []domain.IOC
 	Limit      int
+	// RequireAssetIOC requires both identities; candidate events are still
+	// checked against their saved contact records during preprocessing.
+	RequireAssetIOC bool
+	// SummaryOnly omits messages, review prose and unrelated application data.
+	SummaryOnly bool
 	// ExactRelations opt in to AND-bound transport/application history. Legacy
 	// callers retain the broad context search; phase-one never uses that OR path.
 	ExactRelations []HistoryRelation
@@ -31,6 +36,9 @@ type HistoryRelation struct {
 }
 
 func historyQueryValid(q HistoryQuery) error {
+	if q.RequireAssetIOC && (len(q.Addresses) == 0 || len(q.IOCs) == 0 || len(q.ExactRelations) != 0) {
+		return fmt.Errorf("history_query_invalid")
+	}
 	if len(q.ExactRelations) > 32 || len(q.ExactRelations) > 0 && q.DeviceID == "" {
 		return fmt.Errorf("history_query_invalid")
 	}
@@ -84,24 +92,29 @@ func historyCandidateMatches(e domain.Event, q HistoryQuery) bool {
 		}
 		return false
 	}
+	assetMatch := false
 	for _, address := range q.Addresses {
 		if c["src_ip"] == address || c["dst_ip"] == address {
-			return true
+			assetMatch = true
 		}
 	}
+	iocMatch := false
 	for _, ioc := range q.IOCs {
 		for _, o := range e.Observables {
 			if o.Value == ioc.Value && o.Type == ioc.Type {
-				return true
+				iocMatch = true
 			}
 		}
 		for _, key := range []string{"ioc", "ioc_evidence"} {
 			if m, ok := c[key].(map[string]any); ok && m["ioc_value"] == ioc.Value && m["ioc_type"] == ioc.Type {
-				return true
+				iocMatch = true
 			}
 		}
 	}
-	return false
+	if q.RequireAssetIOC {
+		return assetMatch && iocMatch
+	}
+	return assetMatch || iocMatch
 }
 
 // Requires both the declared IOC identity and the actual relevant field. DNS
@@ -162,6 +175,14 @@ func (s *MemoryStore) HistoryCandidates(ctx context.Context, q HistoryQuery) ([]
 		for _, key := range []string{"src_ip", "dst_ip", "src_port", "dst_port", "device_id", "app", "detection_method", "first_time", "last_time", "occurrence_time", "canonical_event_id"} {
 			minimal[key] = c[key]
 		}
+		if q.SummaryOnly {
+			app, _ := c["app"].(map[string]any)
+			minimal["app"] = map[string]any{}
+			for _, key := range []string{"http_url", "http_host", "tls_sni", "dns_query"} {
+				minimal["app"].(map[string]any)[key] = app[key]
+			}
+			rows[index].Message, rows[index].ReviewComment = "", ""
+		}
 		for _, key := range []string{"ioc", "ioc_evidence"} {
 			if ioc, ok := c[key].(map[string]any); ok {
 				minimal[key] = map[string]any{"ioc_type": ioc["ioc_type"], "ioc_value": ioc["ioc_value"]}
@@ -169,6 +190,9 @@ func (s *MemoryStore) HistoryCandidates(ctx context.Context, q HistoryQuery) ([]
 		}
 		b, _ := json.Marshal(minimal)
 		rows[index].Context = string(b)
+		if q.SummaryOnly {
+			rows[index] = minimalHistoryEvent(rows[index])
+		}
 	}
 	return rows, ctx.Err()
 }
@@ -232,12 +256,24 @@ func historySQL(q HistoryQuery) (string, []any, error) {
 			args = append(args, string(raw), ioc.Value, ioc.Type, ioc.Value, ioc.Type)
 		}
 	}
-	where = append(where, "("+strings.Join(match, " OR ")+")")
+	if q.RequireAssetIOC {
+		where = append(where, "("+strings.Join(match[:len(q.Addresses)], " OR ")+")", "("+strings.Join(match[len(q.Addresses):], " OR ")+")")
+	} else {
+		where = append(where, "("+strings.Join(match, " OR ")+")")
+	}
 	args = append(args, q.Limit)
 	projected := []string{}
 	for _, key := range []string{"src_ip", "dst_ip", "src_port", "dst_port", "device_id", "app", "detection_method", "first_time", "last_time", "occurrence_time", "canonical_event_id"} {
 		if key == "app" {
-			projected = append(projected, "'app',CASE WHEN JSON_VALID(context) THEN JSON_EXTRACT(context,'$.app') ELSE NULL END")
+			if q.SummaryOnly {
+				parts := []string{}
+				for _, k := range []string{"http_url", "http_host", "tls_sni", "dns_query"} {
+					parts = append(parts, "'"+k+"',"+field("$.app."+k))
+				}
+				projected = append(projected, "'app',JSON_OBJECT("+strings.Join(parts, ",")+")")
+			} else {
+				projected = append(projected, "'app',CASE WHEN JSON_VALID(context) THEN JSON_EXTRACT(context,'$.app') ELSE NULL END")
+			}
 			continue
 		}
 		projected = append(projected, "'"+key+"',"+field("$."+key))
@@ -246,6 +282,23 @@ func historySQL(q HistoryQuery) (string, []any, error) {
 		projected = append(projected, "'"+key+"',JSON_OBJECT('ioc_type',"+field("$."+key+".ioc_type")+",'ioc_value',"+field("$."+key+".ioc_value")+")")
 	}
 	cols := strings.Replace(eventSelectCols, ", context,", ", JSON_OBJECT("+strings.Join(projected, ",")+") AS context,", 1)
+	if q.SummaryOnly {
+		// Predicates may inspect the full observables column, but consumers only
+		// need explicit IOC/application relations in context. Do not return the
+		// entire unbounded column or report/review prose merely to filter rows.
+		for _, name := range []string{"event_name", "title", "message", "source", "severity", "event_status", "review_status", "review_comment", "reviewed_by", "circular_code"} {
+			cols = strings.Replace(cols, ", "+name+",", ", '' AS "+name+",", 1)
+		}
+		for _, name := range []string{"current_round", "analysis_version", "aggregation_closed"} {
+			cols = strings.Replace(cols, ", "+name+",", ", 0 AS "+name+",", 1)
+		}
+		for _, name := range []string{"reviewed_at", "last_analysis_at"} {
+			cols = strings.Replace(cols, ", "+name+",", ", NULL AS "+name+",", 1)
+		}
+		cols = strings.Replace(cols, "id, event_id", "0 AS id, event_id", 1)
+		cols = strings.Replace(cols, ", observables,", ", '[]' AS observables,", 1)
+		cols = strings.Replace(cols, ", archive_date", ", NULL AS archive_date", 1)
+	}
 	return "SELECT " + cols + " FROM events WHERE " + strings.Join(where, " AND ") + " ORDER BY COALESCE(last_seen_at,created_at) DESC,event_id ASC LIMIT ?", args, nil
 }
 func (s *MySQLStore) HistoryCandidates(ctx context.Context, q HistoryQuery) ([]domain.Event, error) {
@@ -267,4 +320,18 @@ func (s *MySQLStore) HistoryCandidates(ctx context.Context, q HistoryQuery) ([]d
 		result = append(result, e)
 	}
 	return result, rows.Err()
+}
+
+// The same retained fields are used by MemoryStore and MySQL summary reads.
+// Legacy full history callers keep their existing projection. UpdatedAt is
+// retained as source metadata; CreatedAt/LastSeenAt are the paging identity.
+func minimalHistoryEvent(e domain.Event) domain.Event {
+	return domain.Event{EventID: e.EventID, Category: e.Category, Context: e.Context, CreatedAt: e.CreatedAt, UpdatedAt: e.UpdatedAt, LastSeenAt: e.LastSeenAt}
+}
+
+// HistorySummaryBytes counts the entire retained record, not just Context.
+// This is canonical application JSON size, not database protocol wire bytes.
+func HistorySummaryBytes(e domain.Event) int {
+	b, _ := json.Marshal(e)
+	return len(b)
 }

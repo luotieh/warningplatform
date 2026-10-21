@@ -9,7 +9,7 @@ type FactID string
 const (
 	BeaconPeriodic  FactID = "F_BEACON_PERIODIC"
 	MultiDayPersist FactID = "F_MULTI_DAY_PERSIST"
-	RuleVersion            = "evidence-algorithms-0.7"
+	RuleVersion            = "evidence-algorithms-0.12"
 )
 
 type Scope struct {
@@ -147,10 +147,13 @@ const (
 )
 
 type Execution struct {
-	FactID     FactID     `json:"fact_id"`
-	Scope      Scope      `json:"scope"`
-	Status     string     `json:"execution_status"`
-	ReasonCode ReasonCode `json:"reason_code"`
+	IOCType         string     `json:"ioc_type,omitempty"`
+	IOCValue        string     `json:"ioc_value,omitempty"`
+	ObservationKind string     `json:"observation_kind,omitempty"`
+	FactID          FactID     `json:"fact_id"`
+	Scope           Scope      `json:"scope"`
+	Status          string     `json:"execution_status"`
+	ReasonCode      ReasonCode `json:"reason_code"`
 }
 
 type Result struct {

@@ -248,6 +248,15 @@ func verifySources(dir string, b service.PreparedEvidenceBundle, o service.Prepa
 	if e = json.Unmarshal(raw, &sources); e != nil {
 		return e
 	}
+	// Event occurrence evidence is sourced from the frozen event identity in
+	// the bundle, separately from the external packet/HTTP source ledger.
+	if b.Snapshot.EventID != "" && b.Snapshot.EventID == b.Inputs.Request.EventID {
+		frozen, err := json.Marshal(b.Snapshot)
+		if err != nil {
+			return err
+		}
+		sources[b.Snapshot.EventID] = frozen
+	}
 	for _, h := range b.Inputs.Request.Hits {
 		if _, ok := sources[h.ID]; !ok {
 			return fmt.Errorf("unregistered hit: %s", h.ID)

@@ -117,6 +117,36 @@ func TestProviderTemporalFrozenArchive(t *testing.T) {
 	reader := temporalArchiveReader{EvidenceReader: memory, archive: archive}
 	rows := []map[string]any{}
 	for _, id := range ids {
+		// Export the existing saved Store sources through the collection boundary
+		// without inventing missing history or changing any archived Raw bytes.
+		if export := os.Getenv("PROVIDER_TEMPORAL_COLLECTION_EXPORT"); export != "" {
+			collection, err := CollectEvidenceFromPlatform(ctx, reader, id, providerTestOptions(t))
+			if err != nil {
+				t.Fatal(id, err)
+			}
+			if err = collection.Validate(); err != nil {
+				t.Fatal(err)
+			}
+			dir := filepath.Join(export, id)
+			if err = os.MkdirAll(dir, 0700); err != nil {
+				t.Fatal(err)
+			}
+			raw, err := json.MarshalIndent(collection, "", "  ")
+			if err != nil {
+				t.Fatal(err)
+			}
+			file, err := os.OpenFile(filepath.Join(dir, "platform-collection.json"), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, writeErr := file.Write(append(raw, '\n'))
+			closeErr := file.Close()
+			if writeErr != nil || closeErr != nil {
+				t.Fatalf("collection export: write=%v close=%v", writeErr, closeErr)
+			}
+			t.Logf("exported unchanged stored source collection %s: hits=%d", id, len(collection.Hits))
+			continue
+		}
 		bundle, audit, err := PrepareEvidenceFromPlatform(ctx, reader, id, providerTestOptions(t))
 		if err != nil {
 			t.Fatal(id, err)

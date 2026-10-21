@@ -152,7 +152,7 @@ func TestProviderTemporalSYNHTTPIndependentPopulations(t *testing.T) {
 			t.Fatal("HTTP timeline did not execute", finding)
 		}
 	}
-	if len(seen) != 4 {
+	if len(seen) != 3 || !seen["F_FIXED_DAILY_WINDOW:event_occurrence"] {
 		t.Fatal("independent population lost", seen)
 	}
 }

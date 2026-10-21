@@ -45,7 +45,7 @@ func TestProviderLossGroupObservationsAndAssetInputs(t *testing.T) {
 		t.Fatal("trace stages missing")
 	}
 	for _, p := range a.CoverageProofs {
-		if p.CollectionCoverage || p.TransactionCoverage || p.Complete {
+		if p.CollectionCoverage || p.TransactionCoverage || (p.Complete && p.Family != "event_occurrence") {
 			t.Fatal("proof upgraded")
 		}
 	}

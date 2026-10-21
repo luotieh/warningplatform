@@ -12,6 +12,10 @@ import (
 )
 
 const evidencePreprocessVersion = "evidence-preprocess-2.1"
+
+// Invalidate computed features without rejecting previously sealed 2.1 input
+// archives. Archives retain their supplied inputs until explicitly reprocessed.
+const preprocessImplementationVersion = "real-chain-parity-5"
 const preprocessCacheBytes = 8 << 20
 const preprocessDecodedBytes = 64 << 20
 
@@ -26,13 +30,14 @@ type PreparedHTTPPayload struct {
 // Request holds the existing DNS/HTTP/TLS/network/history/group input families;
 // HTTP and PlatformHistory preserve fields excluded from public report JSON.
 type EvidencePreparedInputs struct {
-	SemanticMaterials *evidence.SemanticRequest        `json:"semantic_materials"`
-	Request           evidence.Request                 `json:"request"`
-	Manifest          SnapshotEvidenceManifest         `json:"manifest"`
-	Observations      []SnapshotSemanticObservation    `json:"observations"`
-	HTTP              map[string]PreparedHTTPPayload   `json:"http"`
-	PlatformHistory   map[string]*evidence.HistoryData `json:"platform_history"`
-	Reason            string                           `json:"reason,omitempty"`
+	SemanticMaterials       *evidence.SemanticRequest            `json:"semantic_materials"`
+	Request                 evidence.Request                     `json:"request"`
+	Manifest                SnapshotEvidenceManifest             `json:"manifest"`
+	Observations            []SnapshotSemanticObservation        `json:"observations"`
+	HTTP                    map[string]PreparedHTTPPayload       `json:"http"`
+	PlatformHistory         map[string]*evidence.HistoryData     `json:"platform_history"`
+	PlatformHistorySubjects map[string][]evidence.HistorySubject `json:"platform_history_subjects,omitempty"`
+	Reason                  string                               `json:"reason,omitempty"`
 }
 type preprocessedEnvelope struct {
 	Version string `json:"version"`
@@ -66,9 +71,13 @@ func encodePreprocessed(input SnapshotEvidenceInput, key string) (preprocessedEn
 
 func capturePreparedInputs(input SnapshotEvidenceInput) EvidencePreparedInputs {
 	value := EvidencePreparedInputs{SemanticMaterials: input.PreparedSemantics, Request: input.Request, Manifest: input.Manifest, Observations: input.SemanticObservations, HTTP: map[string]PreparedHTTPPayload{}, PlatformHistory: map[string]*evidence.HistoryData{}, Reason: input.Reason}
+	value.PlatformHistorySubjects = map[string][]evidence.HistorySubject{}
 	for _, inputs := range [][]evidence.Input{input.Request.Inputs, input.Request.AssetInputs} {
 		for _, in := range inputs {
 			value.PlatformHistory[scopeKey(in.Scope)] = in.PlatformHistory
+			if len(in.PlatformHistorySubjects) > 0 {
+				value.PlatformHistorySubjects[scopeKey(in.Scope)] = in.PlatformHistorySubjects
+			}
 			if in.HTTP != nil {
 				for _, r := range in.HTTP.Records {
 					value.HTTP[r.SourceID] = PreparedHTTPPayload{r.RawRequest, r.ParsedBody}
@@ -109,6 +118,7 @@ func restorePreparedInputs(value EvidencePreparedInputs) SnapshotEvidenceInput {
 		for n := range inputs {
 			in := &inputs[n]
 			in.PlatformHistory = value.PlatformHistory[scopeKey(in.Scope)]
+			in.PlatformHistorySubjects = value.PlatformHistorySubjects[scopeKey(in.Scope)]
 			if in.HTTP != nil {
 				for i := range in.HTTP.Records {
 					r := &in.HTTP.Records[i]
@@ -141,7 +151,7 @@ func (s Services) pipelinePreprocessed(ctx context.Context, snap EvidenceSnapsho
 	identity := opts
 	identity.Facts = nil
 	identity.DeferIndependentFacts = false
-	key := digest([]any{evidencePreprocessVersion, reportSnapshotAdapterVersion, snap.EventID, snap.Version, snap.Watermark, snap.RevisionWatermark, identity, assets, opts.Supplemental, opts.Sources, opts.RegistryIssue, opts.SourceIssue, opts.SupplementalIssue})
+	key := digest([]any{preprocessImplementationVersion, evidencePreprocessVersion, reportSnapshotAdapterVersion, snap.EventID, snap.Version, snap.Watermark, snap.RevisionWatermark, identity, assets, opts.Supplemental, opts.Sources, opts.RegistryIssue, opts.SourceIssue, opts.SupplementalIssue})
 	cacheable := opts.RegistryIssue == nil && opts.SourceIssue == nil && opts.SupplementalIssue == nil
 	if cacheable {
 		if record, ok, err := s.Store.AggregateRecord(ctx, "evidence_preprocess", key); err == nil && ok && len(record.Value) <= 12<<20 {

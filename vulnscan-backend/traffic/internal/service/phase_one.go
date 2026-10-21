@@ -60,7 +60,7 @@ func (s Services) ExecutePhaseOne(ctx context.Context, snap EvidenceSnapshot, fa
 		merged.Diagnostics = append(merged.Diagnostics, "timeline_read_failed:"+err.Error())
 	}
 	out.Materials = merged
-	key := digest([]any{evidence.PhaseOneVersion, evidence.RuleVersion, semanticAdapterVersion, cfg, snap.EventID, snap.Version, snap.Watermark, snap.RevisionWatermark, materials, merged, history, sem.ResultKey, sem.Result, facts.Result})
+	key := digest([]any{temporalInputScopeVersion, evidence.PhaseOneVersion, evidence.RuleVersion, semanticAdapterVersion, cfg, snap.EventID, snap.Version, snap.Watermark, snap.RevisionWatermark, materials, merged, history, sem.ResultKey, sem.Result, facts.Result})
 	out.CacheKey = key
 	if persist {
 		if record, ok, readErr := s.Store.AggregateRecord(ctx, "phase_one_result", key); readErr == nil && ok {
@@ -123,33 +123,23 @@ func computePhaseOneFacts(ctx context.Context, snap EvidenceSnapshot, materials,
 	// Only independent contacts enter the existing temporal algorithms. Evaluate
 	// each IOC separately even when it shares an endpoint with another indicator.
 	groups := map[string][]PhaseOneContact{}
-	for _, c := range merged.Contacts {
+	for _, c := range phaseOneCurrentContacts(snap, materials) {
 		k := scopeKey(c.Scope) + c.IOCType + ":" + c.IOCValue + "|" + c.Kind
 		groups[k] = append(groups[k], c)
 	}
 	for _, contacts := range groups {
 		groupKey := scopeKey(contacts[0].Scope) + contacts[0].IOCType + ":" + contacts[0].IOCValue
-		// C02 needs a complete current observation set, not C03's three-day
-		// extension. Failure of that optional extension cannot erase this set.
-		currentContacts := []PhaseOneContact{}
-		for _, c := range merged.CurrentContacts {
-			if scopeKey(c.Scope)+c.IOCType+":"+c.IOCValue == groupKey && c.Kind == contacts[0].Kind {
-				currentContacts = append(currentContacts, c)
-			}
-		}
-		for _, factID := range []evidence.FactID{"F_BEACON_JITTER", "F_FIXED_DAILY_WINDOW"} {
+		for _, factID := range []evidence.FactID{"F_BEACON_JITTER"} {
 			selected := contacts
-			windowComplete, currentWindowComplete := merged.Complete, merged.CurrentComplete
-			assumed := merged.TemporalWindowCoverage != nil && merged.TemporalWindowCoverage.Basis == assumedTemporalWindowCoverage
+			complete := materials.Complete && len(materials.ScopeIncomplete[groupKey]) == 0
+			if materials.Expanded {
+				complete = materials.CurrentComplete && len(materials.CurrentIncomplete[groupKey]) == 0
+			}
+			assumed := materials.TemporalWindowCoverage != nil && materials.TemporalWindowCoverage.Basis == assumedTemporalWindowCoverage
 			if assumed {
-				windowComplete = merged.TemporalWindowCoverage.Complete
-				currentWindowComplete = merged.TemporalWindowCoverage.CurrentComplete
+				complete = materials.TemporalWindowCoverage.CurrentComplete && len(materials.CurrentIncomplete[groupKey]) == 0
 			}
-			complete := windowComplete && len(merged.ScopeIncomplete[groupKey]) == 0
-			if factID == "F_BEACON_JITTER" && len(currentContacts) >= 16 {
-				selected = currentContacts
-				complete = currentWindowComplete && len(merged.CurrentIncomplete[groupKey]) == 0
-			}
+
 			req := evidence.Request{EventID: snap.EventID, SnapshotVersion: snap.Version, Facts: []evidence.FactID{"F_BEACON_JITTER", "F_FIXED_DAILY_WINDOW"}, Quality: evidence.Quality{Coverage: evidence.CoverageComplete}}
 			req.Facts = []evidence.FactID{factID}
 			req.Quality.SavedTimelineComplete = &complete
@@ -178,6 +168,12 @@ func computePhaseOneFacts(ctx context.Context, snap EvidenceSnapshot, materials,
 			}
 		}
 	}
+	eventFacts, err := phaseOneEventTimeFacts(ctx, snap, materials, history, []evidence.FactID{"F_FIXED_DAILY_WINDOW"})
+	if err != nil {
+		return nil, err
+	}
+	findings = append(findings, eventFacts...)
+
 	// Missing contacts need explicit F outcomes, never inherited packet-count F.
 	for _, b := range materials.Bindings {
 		if !b.Verified {

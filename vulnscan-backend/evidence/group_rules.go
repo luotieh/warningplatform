@@ -67,10 +67,14 @@ func verifiedGroup(g *observations) bool {
 		}
 		connections[r.SourceID] = true
 	}
+	dnsSources := map[string]bool{}
 	for _, r := range x.DNS {
-		if !seen[x.DNSOwnership[r.SourceID]] || r.Time.Before(x.Window.Start) || !r.Time.Before(x.Window.End) || r.SourceID == "" {
+		// Independent DNS logs need not be connection hits, but each source
+		// identifies one observation. Repeating it cannot change a denominator.
+		if !seen[x.DNSOwnership[r.SourceID]] || r.Time.Before(x.Window.Start) || !r.Time.Before(x.Window.End) || r.SourceID == "" || dnsSources[r.SourceID] {
 			return false
 		}
+		dnsSources[r.SourceID] = true
 	}
 	return len(seen) > 0
 }
@@ -316,6 +320,9 @@ func (e *Engine) groupFact(f Finding, g *observations) Finding {
 		h := x.History
 		if !validHistory(h, g.request.EventID) || !h.AsOf.Equal(x.Window.Start) || canonicalEndpoint(x.Endpoint) == "" {
 			return absent(f, MissingInput)
+		}
+		if !h.Complete {
+			return absent(f, UnverifiedCoverage)
 		}
 		first := map[string]time.Time{}
 		prior := map[string]bool{}

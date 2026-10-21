@@ -61,6 +61,12 @@ func (e *Engine) historyFact(f Finding, g *observations) Finding {
 	refs := append([]string(nil), h.SourceIDs...)
 	rows := []HistoryEvent{}
 	for _, r := range h.Events {
+		// Saved cross-sensor associations can support infrastructure history.
+		// Asset-local rules retain their device binding. Older archives without
+		// the optional device field keep their existing behavior.
+		if r.DeviceID != "" && r.DeviceID != g.scope.DeviceID && f.FactID != "F_HIST_INFRA_PERSISTENCE" {
+			continue
+		}
 		refs = append(refs, r.ID)
 		if r.AdjudicationID != "" {
 			refs = append(refs, r.AdjudicationID)

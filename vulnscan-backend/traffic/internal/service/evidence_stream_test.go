@@ -195,11 +195,13 @@ func TestPhaseOneCompleteTemporalAndHTTPNegatives(t *testing.T) {
 		snap := phaseOneInstallSnapshot(t, s, fmt.Sprintf("negative-day-%d", day), int64(day+1), messages)
 		if day == 2 {
 			p := phaseOneRun(t, s, snap, false)
-			for _, id := range []string{"C02", "C03"} {
-				u := phaseOneUnit(t, p, id)
-				if u.Status != "not_observed" || u.Score != 0 {
-					t.Fatal(id, u)
-				}
+			jitter := phaseOneUnit(t, p, "C02")
+			if jitter.Status != "missing" || jitter.Fact.ReasonCode != evidence.InsufficientSamples || jitter.Fact.Measurements.SampleCount != 8 {
+				t.Fatal("history must not fill current jitter samples", jitter)
+			}
+			daily := phaseOneUnit(t, p, "C03")
+			if daily.Status != "observed" || daily.Fact.ObservationKind != "event_occurrence" || daily.Fact.Measurements.SampleCount != 3 {
+				t.Fatal("one event start per natural day", daily)
 			}
 		}
 	}

@@ -201,11 +201,11 @@ func (s *MySQLStore) HitPage(ctx context.Context, q HitQuery) ([]Hit, error) {
 	args = append(args, q.Watermark)
 	if !q.From.IsZero() {
 		query += " AND occurred_at>=?"
-		args = append(args, q.From)
+		args = append(args, mysqlHitWindowBound(q.From))
 	}
 	if !q.To.IsZero() {
 		query += " AND occurred_at<?"
-		args = append(args, q.To)
+		args = append(args, mysqlHitWindowBound(q.To))
 	}
 	if !q.AfterTime.IsZero() {
 		query += " AND (occurred_at>? OR (occurred_at=? AND hit_id>?))"

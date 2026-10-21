@@ -189,7 +189,7 @@ func (s Services) executePreparedPipeline(ctx context.Context, source pipelinePr
 	event, snap, assets, options, history, config := source.Event, source.Snapshot, source.Assets, source.Options, source.History, source.Config
 	assetVersions := append([]domain.Asset(nil), assets...)
 	sort.Slice(assetVersions, func(i, j int) bool { return assetVersions[i].ID < assetVersions[j].ID })
-	key := digest([]any{PreparedEvidenceSchemaVersion, snap.EventID, snap.Version, snap.Watermark, snap.RevisionWatermark, evidence.RuleVersion, reportSnapshotAdapterVersion, config, options, assetVersions, options.Supplemental, options.SupplementalIssue, options.Sources, options.SourceIssue, options.RegistryIssue})
+	key := digest([]any{preprocessImplementationVersion, temporalInputScopeVersion, PreparedEvidenceSchemaVersion, snap.EventID, snap.Version, snap.Watermark, snap.RevisionWatermark, evidence.RuleVersion, reportSnapshotAdapterVersion, config, options, assetVersions, options.Supplemental, options.SupplementalIssue, options.Sources, options.SourceIssue, options.RegistryIssue})
 	var record store.AggregateRecord
 	var exists bool
 	var err error
@@ -242,7 +242,7 @@ func (s Services) executePreparedPipeline(ctx context.Context, source pipelinePr
 		evaluation, err = evaluateSnapshotFactInput(ctx, snap, loaded, loadErr, options, config)
 		wire := capturePreparedInputs(loaded)
 		evaluation.InputCoverage = preparedFamilyCoverage(wire)
-		evaluation.InputDigest = digest([]any{wire.Request, wire.HTTP, wire.PlatformHistory, config})
+		evaluation.InputDigest = digest([]any{wire.Request, wire.HTTP, wire.PlatformHistory, wire.PlatformHistorySubjects, config})
 		factTiming()
 		if err != nil {
 			if ctx.Err() != nil {
@@ -297,7 +297,7 @@ func (s Services) executePreparedPipeline(ctx context.Context, source pipelinePr
 		evaluation.Manifest.PhaseOne = &preparedPhase.Materials
 		evaluation.Manifest.PhaseOneFactsPrepared = true
 		if evaluation.Result != nil {
-			additional, timeErr := pipelineIndependentTemporalFacts(ctx, snap, preparedPhase.Materials)
+			additional, timeErr := pipelineIndependentTemporalFacts(ctx, snap, preparedPhase.Materials, history)
 			if timeErr != nil {
 				return preparedReportInput{}, timeErr
 			}
@@ -306,10 +306,13 @@ func (s Services) executePreparedPipeline(ctx context.Context, source pipelinePr
 			evaluation.Result.Executions = nil
 			for _, f := range evaluation.Result.Findings {
 				status := "executed"
-				if f.Status == evidence.Missing {
+				if f.Status == evidence.Missing && f.ReasonCode != evidence.IncompleteNegative {
 					status = "skipped"
 				}
-				evaluation.Result.Executions = append(evaluation.Result.Executions, evidence.Execution{FactID: f.FactID, Scope: f.Scope, Status: status, ReasonCode: f.ReasonCode})
+				if f.ReasonCode == "rule_execution_error" {
+					status = "execution_error"
+				}
+				evaluation.Result.Executions = append(evaluation.Result.Executions, evidence.Execution{FactID: f.FactID, Scope: f.Scope, IOCType: f.IOCType, IOCValue: f.IOCValue, ObservationKind: f.ObservationKind, Status: status, ReasonCode: f.ReasonCode})
 			}
 			evaluation.Manifest.FactCoverage = snapshotFactCoverage(evidence.Request{Facts: options.Facts}, *evaluation.Result)
 		}
@@ -379,7 +382,7 @@ func (s Services) executePreparedPipeline(ctx context.Context, source pipelinePr
 		// Storage lookup keys include collector options. The public algorithm
 		// digest binds actual typed inputs and parameters, independent of how
 		// they were fetched and whether a cache was used.
-		evaluation.InputDigest = digest([]any{wire.Request, wire.HTTP, wire.PlatformHistory, config})
+		evaluation.InputDigest = digest([]any{wire.Request, wire.HTTP, wire.PlatformHistory, wire.PlatformHistorySubjects, config})
 	}
 	normalizeTiming := pipelineMeasure(ctx, "normalize_project")
 	bundle := buildReportEvidence(event, snap, evaluation, semantics, history)
@@ -502,7 +505,7 @@ func snapshotFactSummary(evaluation SnapshotFactEvaluation) map[string]any {
 		if i == maxFindings {
 			break
 		}
-		entries = append(entries, map[string]any{"fact_id": f.FactID, "scope": f.Scope, "window": f.Window, "status": f.Status, "eligibility": f.Eligibility, "quality": f.Quality, "measurements": f.Measurements, "parameters": f.Parameters, "reason_code": f.ReasonCode, "limitations": f.Limitations})
+		entries = append(entries, map[string]any{"fact_id": f.FactID, "scope": f.Scope, "ioc_type": f.IOCType, "ioc_value": f.IOCValue, "observation_kind": f.ObservationKind, "window": f.Window, "status": f.Status, "eligibility": f.Eligibility, "quality": f.Quality, "measurements": f.Measurements, "parameters": f.Parameters, "reason_code": f.ReasonCode, "limitations": f.Limitations})
 	}
 	summary["findings"] = entries
 	summary["total_findings"] = len(findings)

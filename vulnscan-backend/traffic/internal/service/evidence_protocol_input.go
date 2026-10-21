@@ -79,7 +79,23 @@ func enrichSnapshotProtocols(input *evidence.Input, hit store.Hit, m map[string]
 		packet = child
 	}
 	packet, frameProblem := snapshotFramePayload(packet, m, input)
+	// Payload projections with a self-reported capture flag are not wire proof.
+	// packet is the actual request child selected above when that format is used.
+	requestWireVerified := frameProblem == "" && asString(packet["packet_hex"]) != ""
 	payload, full, problem := snapshotPayload(packet)
+	parseMap, parseHit := m, hit
+	exchange := providerVerifiedHTTP(m)
+	if exchange != nil && exchange.Request != nil && providerExchangeInWindow(exchange, input) {
+		packet = exchange.Request
+		payload, full, problem = snapshotPayload(packet)
+		frameProblem = ""
+		parseMap, parseHit.OccurredAt = exchange.RequestMap, exchange.RequestTime
+		requestWireVerified = true // verified frames + reconstruction + HTTP framing
+		// Keep the actual request parse accounted in the existing per-hit ledger.
+		parseMap[snapshotParseContextKey] = m[snapshotParseContextKey]
+	} else {
+		exchange = nil
+	}
 	issue := func(code, field string) {
 		manifest.addIssue(SnapshotInputIssue{Code: code, Stage: "parse_protocol", Field: field, HitID: hit.ID, Scope: input.Scope})
 	}
@@ -139,7 +155,8 @@ func enrichSnapshotProtocols(input *evidence.Input, hit store.Hit, m map[string]
 			input.HTTP = &evidence.HTTPData{}
 		}
 		input.HTTP.RequestCandidates++
-		record, protocolParsed, parseProblem := snapshotHTTPRequest(payload, full, hit, m, app)
+		fieldsVerified := false
+		record, protocolParsed, parseProblem := snapshotHTTPRequest(payload, full, parseHit, parseMap, app, &fieldsVerified)
 		if parseProblem != "" {
 			issue(parseProblem, "raw_packet.request")
 		}
@@ -157,7 +174,21 @@ func enrichSnapshotProtocols(input *evidence.Input, hit store.Hit, m map[string]
 			last.AppProtocol, last.ProtocolParsed = "http", true
 		}
 		if record.URL != "" {
-			if responseProblem := snapshotHTTPResponse(&record, packet, nestedMap(nestedMap(m, "raw_packet"), "response"), payload); responseProblem != "" {
+			if requestWireVerified && parseProblem == "" && protocolParsed && full && !record.Truncated && record.RequestID != "" && record.SessionID != "" {
+				record.RequestVerification = &evidence.HTTPRequestVerification{Version: evidence.HTTPRequestVerificationVersion, Scope: input.Scope, SourceID: hit.ID, SourceOccurredAt: hit.OccurredAt, RequestID: record.RequestID, RequestTime: record.Time, URL: record.URL, Method: record.Method, SessionID: record.SessionID}
+				if fieldsVerified {
+					record.RequestVerification.FieldsVerified = true
+					record.RequestVerification.FieldNames = evidence.HTTPRequestFieldNames(record.Fields)
+				}
+			}
+			response := nestedMap(nestedMap(m, "raw_packet"), "response")
+			if exchange != nil {
+				response = exchange.Response
+				if why := providerExchangeProblem(exchange); why != "" {
+					issue(why, "exchange.response")
+				}
+			}
+			if responseProblem := snapshotHTTPResponse(&record, packet, response, payload); responseProblem != "" {
 				issue(responseProblem, "raw_packet.response")
 			}
 			if input.HTTP == nil {
@@ -405,7 +436,8 @@ func snapshotHTTPResponse(record *evidence.HTTPRecord, request, response map[str
 	return ""
 }
 
-func snapshotHTTPRequest(payload []byte, full bool, hit store.Hit, m, app map[string]any) (evidence.HTTPRecord, bool, string) {
+func snapshotHTTPRequest(payload []byte, full bool, hit store.Hit, m, app map[string]any, fieldsVerified *bool) (evidence.HTTPRecord, bool, string) {
+	*fieldsVerified = false
 	if c := snapshotParsing(m); c != nil {
 		c.httpParses++
 	}
@@ -549,6 +581,8 @@ func snapshotHTTPRequest(payload []byte, full bool, hit store.Hit, m, app map[st
 	}
 	summary := evidence.SummarizeHTTPFieldEncoding(fieldValues)
 	r.EncodingSummary = &summary
+	// Opaque text is a valid request body, but not a verified field inventory.
+	*fieldsVerified = len(body) == 0 || media == "application/x-www-form-urlencoded" || media == "application/json"
 	return r, true, ""
 }
 

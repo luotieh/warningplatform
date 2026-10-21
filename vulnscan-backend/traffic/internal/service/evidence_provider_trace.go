@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
 	"time"
 
@@ -121,13 +120,14 @@ func (r *providerTraceReader) HistoryCandidates(ctx context.Context, q store.His
 }
 func (r *providerTraceReader) SnapshotPage(ctx context.Context, q store.HitQuery, rw, pb, rb int64) ([]store.Hit, error) {
 	rows, err := r.EvidenceReader.SnapshotPage(ctx, q, rw, pb, rb)
-	r.audit.trace("S1", "traffic", "SnapshotPage.page", "traffic_event_hits", nil, evidence.Scope{}, &evidence.AnalysisWindow{Start: q.From, End: q.To}, struct {
+	method := "SnapshotPage"
+	r.audit.trace("S1", "traffic", method+".page", "traffic_event_hits", nil, evidence.Scope{}, &evidence.AnalysisWindow{Start: q.From, End: q.To}, struct {
 		Query    store.HitQuery
 		Revision int64
 		Count    int
 	}{q, rw, len(rows)}, readTraceReason(true, err))
 	for _, h := range rows {
-		r.audit.trace("S1", "traffic", "SnapshotPage", "traffic_event_hits", []string{h.ID}, evidence.Scope{}, &evidence.AnalysisWindow{Start: q.From, End: q.To}, h, readTraceReason(true, err))
+		r.audit.trace("S1", "traffic", method, "traffic_event_hits", []string{h.ID}, evidence.Scope{}, &evidence.AnalysisWindow{Start: q.From, End: q.To}, h, readTraceReason(true, err))
 		providerTraceSavedFields(r.audit, h, evidence.AnalysisWindow{Start: q.From, End: q.To})
 	}
 	return rows, err
@@ -217,7 +217,14 @@ func providerHistoryChecks(history ReportHistory, rows []domain.Event, assets []
 		}
 		source, ok := sources[e.EventID]
 		if !ok {
-			return checks, fmt.Errorf("collected_history_source_missing:%s", e.EventID)
+			x.SourceSnapshot = "event:" + e.EventID
+			x.SourceQuality = "saved event summary; no historical packet read or communication coverage claim"
+			x.QueryMatch = "same asset AND IOC candidate; event identity and time checked separately"
+			checks = append(checks, x)
+			continue
+		}
+		if source.TemporalOnly {
+			x.QueryMatch = "same asset AND IOC candidate; saved contact binding checked separately"
 		}
 		if source.Reason != "" {
 			x.SourceSnapshot = "unavailable:" + source.Reason
@@ -242,12 +249,25 @@ func providerAssemblyAudit(b PreparedEvidenceBundle, a *EvidenceSupplyAudit) {
 			refs = append(refs, contact.HitID)
 			a.trace("S2", "contacts", "inputs.manifest.phase_one_materials.contacts", "traffic_event_hits", []string{contact.HitID}, contact.Scope, nil, contact, "")
 		}
-		a.CoverageProofs = append(a.CoverageProofs, ProviderCoverageProof{AffectedRules: []string{"F_BEACON_JITTER", "F_FIXED_DAILY_WINDOW", "F_MULTI_DAY_PERSIST"}, Family: "contacts", Loaded: len(m.Contacts), Declared: -1, Verified: len(m.Contacts) > 0, Complete: false, Provenance: evidence.Provenance{Verified: len(m.Contacts) > 0, Complete: false, SourceIDs: uniqueSortedStrings(refs), Version: "provider-wire-contacts-1"}, Basis: []string{"validated frame tuple, capture time and actual IOC field; independently deduplicated requests/SYN/DNS questions; frozen per-event watermarks"}, Missing: []string{"COVERAGE_UNPROVEN:independent communication-window coverage; saved row counts are not a network denominator"}})
+		a.CoverageProofs = append(a.CoverageProofs, ProviderCoverageProof{AffectedRules: []string{"F_BEACON_JITTER"}, Family: "contacts", Loaded: len(m.Contacts), Declared: -1, Verified: len(m.Contacts) > 0, Complete: false, Provenance: evidence.Provenance{Verified: len(m.Contacts) > 0, Complete: false, SourceIDs: uniqueSortedStrings(refs), Version: "provider-wire-contacts-1"}, Basis: []string{"validated frame tuple, capture time and actual IOC field; independently deduplicated requests/SYN/DNS questions; frozen per-event watermarks"}, Missing: []string{"COVERAGE_UNPROVEN:independent communication-window coverage; saved row counts are not a network denominator"}})
 		proof := &a.CoverageProofs[len(a.CoverageProofs)-1]
 		proof.WindowCoverageAssumption = m.TemporalWindowCoverage
 		if m.TemporalWindowCoverage != nil {
-			proof.Basis = append(proof.Basis, "F_BEACON_JITTER and F_FIXED_DAILY_WINDOW use default_assumption for window coverage; this is not verified capture coverage")
+			proof.Basis = append(proof.Basis, "F_BEACON_JITTER uses default_assumption for window coverage; this is not verified capture coverage")
 		}
+	}
+	if b.History.EventSummaryOnly {
+		ids := []string{b.Snapshot.EventID}
+		for _, row := range b.History.Rows {
+			ids = append(ids, row.EventID)
+		}
+		a.CoverageProofs = append(a.CoverageProofs, ProviderCoverageProof{
+			AffectedRules: []string{"F_FIXED_DAILY_WINDOW", "F_MULTI_DAY_PERSIST"}, Family: "event_occurrence",
+			Loaded: len(ids), Declared: -1, Verified: true, Complete: b.History.EventSummaryComplete,
+			Provenance: evidence.Provenance{Verified: true, Complete: b.History.EventSummaryComplete, SourceIDs: ids, Version: temporalInputScopeVersion},
+			Basis:      []string{"one first_time per EventID; same registered asset, device and actual IOC relation; no historical packet expansion or network coverage claim"},
+		})
+		a.trace("S2", "event_occurrence", "snapshot.context.first_time", "events", []string{b.Snapshot.EventID}, evidence.Scope{}, nil, b.Snapshot.Context["first_time"], "")
 	}
 	for _, h := range a.StoredHits {
 		found := false

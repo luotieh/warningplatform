@@ -74,7 +74,7 @@ func TestEvidenceProviderReadOnlyRepeatAndExecution(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !a.Valid || len(a.Queries) != 6 || len(a.Fields) == 0 {
+	if !a.Valid || len(a.Queries) != 7 || len(a.Fields) == 0 {
 		t.Fatal("missing audit", a.Valid, len(a.Queries))
 	}
 	repeat, _, err := PrepareEvidenceFromPlatform(context.Background(), s, "current", o)

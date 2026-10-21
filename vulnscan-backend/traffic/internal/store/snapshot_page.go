@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// SnapshotPageReader bounds base+effective revision bytes BEFORE reading JSON.
+// SnapshotPageReader bounds base+effective revision bytes BEFORE reading JSON;
 // Implementations preserve immutable membership and never skip an oversized row.
 type SnapshotPageReader interface {
 	SnapshotPage(context.Context, HitQuery, int64, int64, int64) ([]Hit, error)
@@ -31,11 +31,11 @@ func (s *MySQLStore) SnapshotPage(ctx context.Context, q HitQuery, rw, pageBytes
 	args = append(args, q.Watermark)
 	if !q.From.IsZero() {
 		where += " AND h.occurred_at>=?"
-		args = append(args, q.From)
+		args = append(args, mysqlHitWindowBound(q.From))
 	}
 	if !q.To.IsZero() {
 		where += " AND h.occurred_at<?"
-		args = append(args, q.To)
+		args = append(args, mysqlHitWindowBound(q.To))
 	}
 	if !q.AfterTime.IsZero() {
 		where += " AND (h.occurred_at>? OR (h.occurred_at=? AND h.hit_id>?))"

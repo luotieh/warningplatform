@@ -1,6 +1,7 @@
 package evidence
 
 import (
+	"encoding/base32"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -488,6 +489,12 @@ func semanticDecode(d SemanticMaterial, ids map[string]SemanticMaterial) ([]Sema
 			decoded, err = base64.RawURLEncoding.Strict().DecodeString(a.Text)
 		case "hex":
 			decoded, err = hex.DecodeString(a.Text)
+		case "base32":
+			encoding := base32.StdEncoding.WithPadding(base32.NoPadding)
+			decoded, err = encoding.DecodeString(strings.ToUpper(a.Text))
+			if err == nil && (len(decoded) < 4 || !strings.EqualFold(encoding.EncodeToString(decoded), a.Text)) {
+				return nil, false
+			}
 		default:
 			return nil, false
 		}

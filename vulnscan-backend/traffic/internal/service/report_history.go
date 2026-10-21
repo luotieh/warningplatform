@@ -44,6 +44,9 @@ type ReportHistoryRow struct {
 	AdjudicationSource string         `json:"adjudication_source,omitempty"`
 }
 type ReportHistory struct {
+	RelatedRows                []ReportHistoryRow          `json:"related_rows,omitempty"`
+	EventSummaryOnly           bool                        `json:"event_summary_only,omitempty"`
+	EventSummaryComplete       bool                        `json:"event_summary_complete,omitempty"`
 	FrozenSnapshots            map[string]EvidenceSnapshot `json:"frozen_snapshots,omitempty"`
 	SnapshotIssues             map[string]string           `json:"snapshot_issues,omitempty"`
 	ExactRelations             bool                        `json:"exact_relations,omitempty"`
@@ -398,7 +401,7 @@ func applyPlatformHistory(out *SnapshotEvidenceInput, snap EvidenceSnapshot, his
 			} else if row.SourceAddress == ioc || row.DestinationAddress == ioc {
 				kind = "transport_contact"
 			}
-			h.Events = append(h.Events, evidence.HistoryEvent{ID: row.EventID, AssetID: asset, AssetIDs: row.AllAssetIDs, IOC: ioc, Time: row.First, Relation: row.Relation, ActivityType: row.ActivityType, ObservationKind: kind})
+			h.Events = append(h.Events, evidence.HistoryEvent{ID: row.EventID, DeviceID: row.DeviceID, AssetID: asset, AssetIDs: row.AllAssetIDs, IOC: ioc, Time: row.First, Relation: row.Relation, ActivityType: row.ActivityType, ObservationKind: kind})
 			h.SourceIDs = append(h.SourceIDs, row.EventID)
 		}
 		i.PlatformHistory = h

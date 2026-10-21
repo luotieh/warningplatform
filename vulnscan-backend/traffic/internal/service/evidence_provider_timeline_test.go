@@ -38,7 +38,13 @@ func TestProviderTemporalHistoryBudgetAndScopeFilter(t *testing.T) {
 			if kind == "foreign-ioc" {
 				nestedMap(historical, "ioc")["ioc_value"] = "198.51.100.99"
 			}
-			phaseOneInstallSnapshot(t, s, "historical", 1, []map[string]any{historical, providerTemporalMessage(t, prior.Add(time.Minute), 300)})
+			historicalMessages := []map[string]any{historical, providerTemporalMessage(t, prior.Add(time.Minute), 300)}
+			if kind == "foreign-ioc" {
+				// Event metadata matches the requested IOC. Historical hit contents
+				// are deliberately irrelevant to event-summary collection.
+				historicalMessages[0], historicalMessages[1] = historicalMessages[1], historicalMessages[0]
+			}
+			phaseOneInstallSnapshot(t, s, "historical", 1, historicalMessages)
 			options := providerTestOptions(t)
 			if kind == "budget" {
 				options.MaxHits = 1
@@ -51,14 +57,17 @@ func TestProviderTemporalHistoryBudgetAndScopeFilter(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if kind == "budget" {
-				ref := collection.HistorySnapshots["historical"]
-				if ref.Loaded || ref.Reason != "historical_traffic_budget_exceeded" || len(bundle.Inputs.Manifest.PhaseOne.Contacts) != 1 {
-					t.Fatal("history budget ignored", ref.Reason)
-				}
-			} else if len(bundle.Inputs.Manifest.PhaseOne.Contacts) != 2 {
-				t.Fatal("foreign contact accepted or valid history discarded", kind, len(bundle.Inputs.Manifest.PhaseOne.Contacts))
+			if len(collection.HistorySnapshots) != 0 || len(bundle.Inputs.Manifest.PhaseOne.Contacts) != 1 {
+				t.Fatal("history packet collection or contact mixing returned")
 			}
+			want := 1
+			if kind == "foreign-device" {
+				want = 0
+			}
+			if len(bundle.History.Rows) != want {
+				t.Fatal("event summary binding failed", kind, len(bundle.History.Rows))
+			}
+
 		})
 	}
 }
@@ -77,16 +86,6 @@ func TestProviderTemporalWireContactsAndCrossDayReplay(t *testing.T) {
 		id := fmt.Sprintf("prior-%d", day)
 		prior := at.AddDate(0, 0, -day)
 		phaseOneInstallSnapshot(t, s, id, 1, []map[string]any{providerTemporalMessage(t, prior, uint32(20000+day))})
-		// The event projection lacks a usable device join, while its frozen
-		// snapshot and actual packet independently retain the binding.
-		event, _ := s.Store.GetEvent(id)
-		fields := decodeEventContext(event.Context)
-		delete(fields, "device_id")
-		raw, _ := json.Marshal(fields)
-		event.Context = string(raw)
-		if _, ok := s.Store.UpdateEvent(id, map[string]any{"context": event.Context}); !ok {
-			t.Fatal("event context update failed")
-		}
 	}
 	collection, err := CollectEvidenceFromPlatform(ctx, s.Store.(store.EvidenceReader), "current", providerTestOptions(t))
 	if err != nil {
@@ -95,18 +94,17 @@ func TestProviderTemporalWireContactsAndCrossDayReplay(t *testing.T) {
 	if len(collection.HistoryCandidates) != 3 {
 		t.Fatal("history candidates missing", len(collection.HistoryCandidates))
 	}
-	for _, ref := range collection.HistorySnapshots {
-		if !ref.Loaded || len(ref.Hits) != 1 {
-			t.Fatal("historical wire not collected", ref.Reason)
-		}
+	if len(collection.HistorySnapshots) != 0 {
+		t.Fatal("historical packets must not be collected")
 	}
+
 	before := digest(collection)
 	bundle, audit, err := PreprocessCollectedEvidence(ctx, collection)
 	if err != nil {
 		t.Fatal(err)
 	}
 	m := bundle.Inputs.Manifest.PhaseOne
-	if len(m.CurrentContacts) != 20 || len(m.Contacts) != 23 || m.DuplicateContacts != 1 {
+	if len(m.CurrentContacts) != 20 || len(m.Contacts) != 20 || m.DuplicateContacts != 1 {
 		t.Fatalf("contacts: current=%d expanded=%d duplicates=%d diagnostics=%v", len(m.CurrentContacts), len(m.Contacts), m.DuplicateContacts, m.Diagnostics)
 	}
 	for _, contact := range m.Contacts {
@@ -115,7 +113,7 @@ func TestProviderTemporalWireContactsAndCrossDayReplay(t *testing.T) {
 		}
 	}
 	if len(bundle.History.Rows) != 3 || bundle.History.ExcludedCount != 0 {
-		t.Fatal("wire-proven history join not recovered", bundle.History)
+		t.Fatal("event-summary history binding failed", bundle.History)
 	}
 	for _, check := range audit.HistoryChecks {
 		if !check.Accepted || len(check.Reasons) != 0 {
@@ -176,12 +174,13 @@ func TestProviderTemporalWireContactsAndCrossDayReplay(t *testing.T) {
 	if found[evidence.MultiDayPersist].Status != evidence.Observed {
 		t.Fatal("cross-day positive lost under partial visibility", found)
 	}
-	for _, id := range []evidence.FactID{"F_FIXED_DAILY_WINDOW", "F_BEACON_JITTER"} {
-		if found[id].Eligibility != "eligible" || !strings.Contains(strings.Join(found[id].Limitations, ";"), "observation_window_assumed_complete") {
-			t.Fatal("default window did not reach temporal calculation or lost assumption", id, found[id])
-		}
+	if found["F_BEACON_JITTER"].Eligibility != "eligible" || !strings.Contains(strings.Join(found["F_BEACON_JITTER"].Limitations, ";"), "observation_window_assumed_complete") {
+		t.Fatal("current jitter did not execute")
 	}
-	t.Logf("20 current contacts / 4 days: jitter and fixed-daily execute with an explicit window assumption; verified capture and HTTP coverage remain partial")
+	if f := found["F_FIXED_DAILY_WINDOW"]; f.Eligibility != "eligible" || f.ObservationKind != "event_occurrence" || f.Measurements.SampleCount != 4 {
+		t.Fatal("fixed-daily did not use four event starts", f)
+	}
+
 }
 
 func TestProviderTemporalWindowDefaultKeepsKnownGaps(t *testing.T) {
@@ -243,9 +242,14 @@ func TestProviderTemporalWindowDefaultKeepsKnownGaps(t *testing.T) {
 				}
 				return
 			}
-			if found["F_FIXED_DAILY_WINDOW"].ReasonCode != evidence.UnverifiedCoverage {
-				t.Fatal("known gap was ignored", kind, found)
+			if kind == "history-query-truncated" {
+				if found["F_FIXED_DAILY_WINDOW"].ReasonCode != evidence.UnverifiedCoverage {
+					t.Fatal("incomplete event query accepted")
+				}
+			} else if found["F_FIXED_DAILY_WINDOW"].Eligibility != "eligible" {
+				t.Fatal("packet coverage blocked event-level timing", kind, found["F_FIXED_DAILY_WINDOW"])
 			}
+
 			if kind == "truncated-current" {
 				if found["F_BEACON_JITTER"].ReasonCode != evidence.UnverifiedCoverage {
 					t.Fatal("truncated current window was promoted", found)

@@ -23,24 +23,27 @@ import (
 	"vulnscan-backend/traffic/internal/store"
 )
 
-const semanticAdapterVersion = "snapshot-semantic-adapter-1.6-phase1"
+const semanticAdapterVersion = "snapshot-semantic-adapter-1.10-verified-clienthello-sni"
 const maxSemanticObservations = 128
 const maxSemanticObservationBytes = 2 << 20
 const maxSemanticMessageBytes = 32 << 10
 
 // Captured during the single snapshot scan; never included in fact caches.
 type SnapshotSemanticObservation struct {
-	HitID         string
-	Scope         evidence.Scope
-	Direction     string
-	Payload       string
-	Response      string
-	Body          string
-	HTTP          *evidence.HTTPRecord
-	DNS           *evidence.DNSRecord
-	Complete      bool
-	StratumMethod string
-	TransactionID string
+	HitID             string
+	Scope             evidence.Scope
+	Direction         string
+	Payload           string
+	Response          string
+	Body              string
+	HTTP              *evidence.HTTPRecord
+	DNS               *evidence.DNSRecord
+	TLSSNI            string `json:",omitempty"`
+	Complete          bool
+	StratumMethod     string
+	TransactionID     string
+	RequestFieldPath  string `json:",omitempty"`
+	ResponseFieldPath string `json:",omitempty"`
 }
 
 func collectSnapshotSemanticObservation(out *SnapshotEvidenceInput, input *evidence.Input, h store.Hit, m map[string]any, assets []domain.Asset) {
@@ -77,6 +80,23 @@ func collectSnapshotSemanticObservation(out *SnapshotEvidenceInput, input *evide
 	}
 	packet, frameProblem := snapshotFramePayload(packet, m, input)
 	payload, full, problem := snapshotPayload(packet)
+	exchange := providerVerifiedHTTP(m)
+	if exchange != nil && exchange.Request != nil && providerExchangeInWindow(exchange, input) {
+		if !providerExchangeRequestOccurrence(m, exchange) {
+			return
+		}
+		packet = exchange.Request
+		payload, full, problem = snapshotPayload(packet)
+		frameProblem = ""
+		o.RequestFieldPath, o.ResponseFieldPath = "exchange.request.reassembled_hex", "exchange.response.reassembled_hex"
+		if id, ok := registeredSnapshotAsset(assets, exchange.requestSide.src); ok && id == input.Scope.AssetID {
+			o.Direction = "outbound"
+		} else if id, ok := registeredSnapshotAsset(assets, exchange.requestSide.dst); ok && id == input.Scope.AssetID {
+			o.Direction = "inbound"
+		}
+	} else {
+		exchange = nil
+	}
 	if frameProblem != "" || (problem != "" && problem != "payload_bytes_unavailable") {
 		out.Manifest.SemanticCoverageIncomplete = true
 		return
@@ -110,7 +130,11 @@ func collectSnapshotSemanticObservation(out *SnapshotEvidenceInput, input *evide
 		}
 
 		if o.HTTP != nil && o.HTTP.ResponseVerified {
-			raw, complete, why := snapshotPayload(nestedMap(nestedMap(m, "raw_packet"), "response"))
+			response := nestedMap(nestedMap(m, "raw_packet"), "response")
+			if exchange != nil {
+				response = exchange.Response
+			}
+			raw, complete, why := snapshotPayload(response)
 			if complete && why == "" && utf8.Valid(raw) {
 				o.Response = string(raw)
 			}
@@ -134,7 +158,13 @@ func collectSnapshotSemanticObservation(out *SnapshotEvidenceInput, input *evide
 		out.Manifest.addIssue(SnapshotInputIssue{Code: "semantic_message_budget_exceeded", Stage: "prepare_semantics", HitID: h.ID, Scope: o.Scope})
 		return
 	}
-	if o.Payload == "" && o.DNS == nil {
+	if o.HTTP == nil && o.DNS == nil && full && len(payload) >= 9 && payload[0] == 22 && payload[5] == 1 {
+		o.TLSSNI = providerVerifiedClientHelloSNI(h, m, input, assets)
+		if o.TLSSNI != "" {
+			o.Complete = true // this field/message only, never the TLS window
+		}
+	}
+	if o.Payload == "" && o.DNS == nil && o.TLSSNI == "" {
 		return
 	}
 	if out.Manifest.StreamVersion != "" && !o.Complete {
@@ -142,9 +172,19 @@ func collectSnapshotSemanticObservation(out *SnapshotEvidenceInput, input *evide
 		out.Manifest.addIssue(SnapshotInputIssue{Code: "phase_one_semantic_operation_incomplete", Stage: "prepare_semantics", HitID: h.ID, Scope: o.Scope})
 		return
 	}
-	used := len(o.Payload) + len(o.Response) + len(o.Body)
+	used := len(o.Payload) + len(o.Response) + len(o.Body) + len(o.TLSSNI)
 	for _, old := range out.SemanticObservations {
-		used += len(old.Payload) + len(old.Response) + len(old.Body)
+		used += len(old.Payload) + len(old.Response) + len(old.Body) + len(old.TLSSNI)
+	}
+	// Preserve the established HTTP/DNS/Stratum selection. New lexical-only
+	// TLS observations use remaining capacity and cannot evict those materials.
+	if o.TLSSNI == "" {
+		for i := len(out.SemanticObservations) - 1; i >= 0 && (len(out.SemanticObservations) >= maxSemanticObservations || used > maxSemanticObservationBytes); i-- {
+			if old := out.SemanticObservations[i]; old.TLSSNI != "" {
+				used -= len(old.Payload) + len(old.Response) + len(old.Body) + len(old.TLSSNI)
+				out.SemanticObservations = append(out.SemanticObservations[:i], out.SemanticObservations[i+1:]...)
+			}
+		}
 	}
 	if len(out.SemanticObservations) >= maxSemanticObservations || used > maxSemanticObservationBytes {
 		out.Manifest.SemanticCoverageIncomplete = true
@@ -169,7 +209,7 @@ func buildSnapshotSemanticRequest(snap EvidenceSnapshot, input SnapshotEvidenceI
 	factsFor := func(scope evidence.Scope, w evidence.AnalysisWindow) []evidence.Finding {
 		fs := []evidence.Finding{}
 		for _, f := range result.Findings {
-			if f.Scope == scope && f.Window != nil && f.Window.Start.Equal(w.Start) && f.Window.End.Equal(w.End) {
+			if semanticFactReferenceSupported(f) && f.Scope == scope && f.Window != nil && f.Window.Start.Equal(w.Start) && f.Window.End.Equal(w.End) {
 				fs = append(fs, f)
 			}
 		}
@@ -218,6 +258,15 @@ func buildSnapshotSemanticRequest(snap EvidenceSnapshot, input SnapshotEvidenceI
 		}
 		s := newSubject("operation:"+o.HitID, i)
 		p := evidence.Provenance{Verified: true, Complete: o.Complete, Version: fmt.Sprintf("%s:%d", snap.EventID, snap.Version), SourceIDs: []string{o.HitID}}
+		if o.TLSSNI != "" {
+			// A complete ClientHello proves this name, not certificate identity,
+			// DGA generation, a new contact or complete TLS-session visibility.
+			s.Facts = nil
+			d := material(&s, "domain", o.TLSSNI, "raw_packet.packet_hex/tls.client_hello.server_name", p, o.Complete)
+			lex := material(&s, "lexical_context", "实际完整ClientHello中的SNI；词形仅供解释，不证明DGA、恶意归属或TLS会话完整", "raw_packet.packet_hex/tls.client_hello", p, o.Complete)
+			lex.RelatedIDs = []string{d.ID}
+			s.Materials = append(s.Materials, d, lex)
+		}
 		if o.DNS != nil {
 			// Bind the encoded-label fact to this exact question, not a positive
 			// aggregate from another domain at the same recursive resolver.
@@ -246,10 +295,7 @@ func buildSnapshotSemanticRequest(snap EvidenceSnapshot, input SnapshotEvidenceI
 			}
 			lex := material(&s, "lexical_context", lexText, "dns.question", p, o.Complete)
 			s.Materials = append(s.Materials, d, lex)
-			label := strings.Split(o.DNS.Domain, ".")[0]
-			if _, err := hex.DecodeString(label); err == nil {
-				addSemanticDecodeMaterials(&s, label, []string{d.ID}, material, p)
-			}
+			addProviderDNSHexMaterials(&s, d, material, p)
 		}
 		if o.HTTP != nil && o.Payload != "" {
 			h := o.HTTP
@@ -259,7 +305,7 @@ func buildSnapshotSemanticRequest(snap EvidenceSnapshot, input SnapshotEvidenceI
 			if tx == "" {
 				tx = "hit:" + o.HitID
 			}
-			request := material(&s, "protocol_request", o.Payload, "raw_packet.request.payload", p, o.Complete)
+			request := material(&s, "protocol_request", o.Payload, firstNonEmpty(o.RequestFieldPath, "raw_packet.request.payload"), p, o.Complete)
 			request.TransactionID, request.Direction, request.Method, request.Protocol, request.Destination = tx, o.Direction, h.Method, "http", h.URL
 			for field := range h.Fields {
 				request.FieldNames = append(request.FieldNames, field)
@@ -344,7 +390,7 @@ func buildSnapshotSemanticRequest(snap EvidenceSnapshot, input SnapshotEvidenceI
 				addSemanticDecodeMaterials(&s, value, []string{request.ID}, material, p)
 			}
 			if h.ResponseVerified && o.Response != "" && o.Direction != "" && h.TransactionID != "" {
-				response := material(&s, "protocol_response", o.Response, "raw_packet.response.payload", p, true)
+				response := material(&s, "protocol_response", o.Response, firstNonEmpty(o.ResponseFieldPath, "raw_packet.response.payload"), p, true)
 				response.TransactionID = tx
 				response.Direction = "inbound"
 				if o.Direction == "inbound" {
@@ -403,6 +449,10 @@ func buildSnapshotSemanticRequest(snap EvidenceSnapshot, input SnapshotEvidenceI
 		}
 		r.Subjects = append(r.Subjects, s)
 	}
+	groupSummaryHits := map[string]evidence.Hit{}
+	for _, hit := range input.Request.Hits {
+		groupSummaryHits[hit.ID] = hit
+	}
 	for _, g := range input.Request.Groups {
 		if !trustedInputProvenance(g.Provenance) {
 			continue
@@ -413,7 +463,7 @@ func buildSnapshotSemanticRequest(snap EvidenceSnapshot, input SnapshotEvidenceI
 			if !member.MembershipVerified {
 				continue
 			}
-			text := fmt.Sprintf("资产=%s；核验角色=%s；保存关联命中%d条", member.AssetID, member.Role, len(member.HitIDs))
+			text := providerGroupMemberSummary(g, member, groupSummaryHits)
 			m := material(&s, "group_member", text, "group.members", g.Provenance, true)
 			m.ID += ":" + member.AssetID
 			m.AssetID, m.Role = member.AssetID, member.Role
@@ -429,6 +479,17 @@ func buildSnapshotSemanticRequest(snap EvidenceSnapshot, input SnapshotEvidenceI
 
 // Binding after F is deterministic; no packet parsing, payload decoding or
 // source retrieval is performed by this part of L3.
+// SemanticFactRef identifies a fact only by FactID and subject scope/window.
+// Typed infrastructure history is instead keyed by IOC type/value as well;
+// projecting it here would erase that identity (even for a single candidate),
+// and multiple candidates would create duplicate FactIDs. No semantic slot
+// depends on this fact. Keep it exclusively in the typed F/normalized output
+// until semantic references can represent its full identity. Legacy untyped
+// findings retain their existing projection.
+func semanticFactReferenceSupported(f evidence.Finding) bool {
+	return f.FactID != "F_HIST_INFRA_PERSISTENCE" || f.IOCType == "" && f.IOCValue == "" && f.ObservationKind == ""
+}
+
 func bindPreparedSemanticFacts(input SnapshotEvidenceInput, result *evidence.Result, mode evidence.SemanticInputMode) evidence.SemanticRequest {
 	r := *input.PreparedSemantics
 	r.InputMode = mode
@@ -445,7 +506,7 @@ func bindPreparedSemanticFacts(input SnapshotEvidenceInput, result *evidence.Res
 		s.Facts = nil
 		if result != nil {
 			for _, f := range result.Findings {
-				if f.Scope != s.Scope {
+				if !semanticFactReferenceSupported(f) || f.Scope != s.Scope {
 					continue
 				}
 				if o, ok := dns[s.ID]; ok {
