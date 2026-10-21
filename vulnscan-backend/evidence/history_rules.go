@@ -35,6 +35,9 @@ func (e *Engine) historyFact(f Finding, g *observations) Finding {
 	if g.input == nil {
 		return absent(f, MissingInput)
 	}
+	if f.FactID == "F_DST_NOVELTY" && len(g.input.PlatformHistorySubjects) > 0 {
+		return verifiedPriorEndpointOccurrence(f, g)
+	}
 	h := g.input.History
 	if g.input.PlatformHistory != nil && f.FactID != "F_DST_NOVELTY" && f.FactID != "F_HIST_STAGE_PROGRESSION" && f.FactID != "F_HIST_COORD_PARAM_MATCH" && f.FactID != "F_HIST_GROUP_RECURRENCE" {
 		h = g.input.PlatformHistory

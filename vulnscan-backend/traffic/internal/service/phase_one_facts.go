@@ -63,7 +63,11 @@ func phaseOneCurrentFacts(ctx context.Context, snap EvidenceSnapshot, m PhaseOne
 				if r.HTTP == nil || r.HTTP.Truncated || r.RawRequest == "" {
 					http.Complete = false
 				}
-				if r.HTTP != nil && !seen[r.HTTP.RequestID] {
+				// Verified-request consumers must see every saved projection so
+				// they can reject conflicting time/identity groups themselves.
+				// First-wins would silently hide those conflicts. Legacy records
+				// without a marker retain their existing RequestID deduplication.
+				if r.HTTP != nil && (r.HTTP.RequestVerification != nil || !seen[r.HTTP.RequestID]) {
 					seen[r.HTTP.RequestID] = true
 					http.Records = append(http.Records, *r.HTTP)
 					http.SourceIDs = append(http.SourceIDs, r.Hit.ID)

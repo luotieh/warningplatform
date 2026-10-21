@@ -15,7 +15,7 @@ const evidencePreprocessVersion = "evidence-preprocess-2.1"
 
 // Invalidate computed features without rejecting previously sealed 2.1 input
 // archives. Archives retain their supplied inputs until explicitly reprocessed.
-const preprocessImplementationVersion = "real-chain-parity-5"
+const preprocessImplementationVersion = "real-chain-parity-12"
 const preprocessCacheBytes = 8 << 20
 const preprocessDecodedBytes = 64 << 20
 

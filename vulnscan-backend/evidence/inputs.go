@@ -72,28 +72,55 @@ type HTTPRecord struct {
 	ResponseLocation        string                    `json:"response_location"`
 	ResponseVerified        bool                      `json:"response_verified"`
 	FormAction              string                    `json:"form_action"`
+	FormVerification        *HTTPFormVerification     `json:"form_verification,omitempty"`
 	RedirectToTransactionID string                    `json:"redirect_to_transaction_id"`
 	RedirectVerified        bool                      `json:"redirect_verified"`
 	DeclaredBrand           string                    `json:"declared_brand"`
 	BrandClaimVerified      bool                      `json:"brand_claim_verified"`
 }
 
-const HTTPRequestVerificationVersion = "saved-full-http-request-1"
-
-type HTTPRequestVerification struct {
+// A complete, paired response supplies static HTML form destinations. This
+// authority is separate from request completeness and proves no submission.
+type HTTPFormVerification struct {
 	Version          string    `json:"version"`
 	Scope            Scope     `json:"scope"`
 	SourceID         string    `json:"source_id"`
 	SourceOccurredAt time.Time `json:"source_occurred_at"`
 	RequestID        string    `json:"request_id"`
-	RequestTime      time.Time `json:"request_time"`
-	URL              string    `json:"url"`
-	Method           string    `json:"method"`
 	SessionID        string    `json:"session_id"`
+	TransactionID    string    `json:"transaction_id"`
+	PageURL          string    `json:"page_url"`
+	ResponseStatus   int       `json:"response_status"`
+	ResponseSHA256   string    `json:"response_sha256"`
+	Actions          []string  `json:"actions"`
+}
+
+const HTTPFormVerificationVersion = "saved-paired-html-forms-1"
+
+const HTTPRequestVerificationVersion = "saved-full-http-request-1"
+
+type HTTPRequestVerification struct {
+	UserAgentVerified  bool      `json:"user_agent_verified,omitempty"`
+	UserAgent          string    `json:"user_agent,omitempty"`
+	BodyLengthVerified bool      `json:"body_length_verified,omitempty"`
+	BodyLength         uint64    `json:"body_length,omitempty"`
+	Version            string    `json:"version"`
+	Scope              Scope     `json:"scope"`
+	SourceID           string    `json:"source_id"`
+	SourceOccurredAt   time.Time `json:"source_occurred_at"`
+	RequestID          string    `json:"request_id"`
+	RequestTime        time.Time `json:"request_time"`
+	URL                string    `json:"url"`
+	Method             string    `json:"method"`
+	SessionID          string    `json:"session_id"`
 	// FieldNames binds the complete parsed query/form/JSON top-level key set;
 	// values remain redacted and are irrelevant to credential structure.
 	FieldsVerified bool     `json:"fields_verified,omitempty"`
 	FieldNames     []string `json:"field_names,omitempty"`
+	// Summary authority is separate from request/field-name completeness and
+	// binds the pre-redaction encoding measurements of this exact request.
+	EncodingSummaryVerified bool                      `json:"encoding_summary_verified,omitempty"`
+	EncodingSummary         *HTTPFieldEncodingSummary `json:"encoding_summary,omitempty"`
 }
 type Brand struct {
 	Name              string   `json:"name"`
@@ -115,19 +142,39 @@ type HTTPData struct {
 	BrandsVerified    bool         `json:"brands_verified"`
 }
 type Connection struct {
-	Transport       string    `json:"transport"`        // verified tcp/udp, never inferred from a port
-	OutcomeVerified bool      `json:"outcome_verified"` // terminal outcome, not a packet flag
-	SourceID        string    `json:"source_id"`
-	Time            time.Time `json:"time"`
-	AssetID         string    `json:"asset_id"`
-	Destination     string    `json:"destination"`
-	Port            uint16    `json:"port"`
-	AppProtocol     string    `json:"app_protocol"`
-	ProtocolParsed  bool      `json:"protocol_parsed"`
-	PayloadBytes    *uint64   `json:"payload_bytes"`
-	TCPState        string    `json:"tcp_state"`
-	SessionID       string    `json:"session_id"`
+	SYNAttemptVerification *TCPSYNAttemptVerification `json:"syn_attempt_verification,omitempty"`
+	Transport              string                     `json:"transport"`        // verified tcp/udp, never inferred from a port
+	OutcomeVerified        bool                       `json:"outcome_verified"` // terminal outcome, not a packet flag
+	SourceID               string                     `json:"source_id"`
+	Time                   time.Time                  `json:"time"`
+	AssetID                string                     `json:"asset_id"`
+	Destination            string                     `json:"destination"`
+	Port                   uint16                     `json:"port"`
+	AppProtocol            string                     `json:"app_protocol"`
+	ProtocolParsed         bool                       `json:"protocol_parsed"`
+	PayloadBytes           *uint64                    `json:"payload_bytes"`
+	TCPState               string                     `json:"tcp_state"`
+	SessionID              string                     `json:"session_id"`
 }
+
+// TCPSYNAttemptVerification binds a parsed initial SYN to saved source bytes.
+// It describes an observed attempt, never a successful/failed connection or
+// complete observation window. Only the F_PORT_SEQUENCE subset consumes it.
+const TCPSYNAttemptVerificationVersion = "saved-full-tcp-syn-1"
+
+type TCPSYNAttemptVerification struct {
+	Version          string    `json:"version"`
+	Scope            Scope     `json:"scope"`
+	SourceID         string    `json:"source_id"`
+	SourceOccurredAt time.Time `json:"source_occurred_at"`
+	SourceAddress    string    `json:"source_address"`
+	SourcePort       uint16    `json:"source_port"`
+	Destination      string    `json:"destination"`
+	DestinationPort  uint16    `json:"destination_port"`
+	Sequence         uint32    `json:"sequence"`
+	SessionID        string    `json:"session_id"`
+}
+
 type Session struct {
 	SourceID       string    `json:"source_id"`
 	ID             string    `json:"id"`

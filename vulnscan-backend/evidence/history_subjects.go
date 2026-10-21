@@ -41,7 +41,7 @@ func ValidateHistorySubjects(in *Input, hits map[string]Hit) error {
 	return nil
 }
 
-func (e *Engine) historySubjectFindings(g *observations) ([]Finding, []Execution) {
+func (e *Engine) historySubjectFindings(g *observations, id FactID) ([]Finding, []Execution) {
 	subjects := append([]HistorySubject(nil), g.input.PlatformHistorySubjects...)
 	sort.Slice(subjects, func(i, j int) bool {
 		return subjects[i].IOCType+"\x00"+subjects[i].IOCValue < subjects[j].IOCType+"\x00"+subjects[j].IOCValue
@@ -62,8 +62,14 @@ func (e *Engine) historySubjectFindings(g *observations) ([]Finding, []Execution
 			}
 		}
 		sort.Strings(local.sourceIDs)
-		f := e.evaluateFactSafely("F_HIST_INFRA_PERSISTENCE", &local)
-		f.IOCType, f.IOCValue, f.ObservationKind = s.IOCType, s.IOCValue, "event_occurrence"
+		var f Finding
+		if id == "F_IOC_NOVELTY" {
+			f = verifiedPriorIOCOccurrence(s, &local)
+		} else {
+			f = e.evaluateFactSafely(id, &local)
+			f.ObservationKind = "event_occurrence"
+		}
+		f.IOCType, f.IOCValue = s.IOCType, s.IOCValue
 		f.SnapshotVersion = g.request.SnapshotVersion
 		status := "skipped"
 		if f.Eligibility == "eligible" || f.ReasonCode == IncompleteNegative {

@@ -24,24 +24,25 @@ type ReportHistoryDiagnostics struct {
 	Truncated  bool   `json:"truncated"`
 }
 type ReportHistoryRow struct {
-	VerifiedDNSHitIDs  []string       `json:"verified_dns_hit_ids,omitempty"`
-	SourceAddress      string         `json:"source_address,omitempty"`
-	DestinationAddress string         `json:"destination_address,omitempty"`
-	DeviceID           string         `json:"device_id"`
-	Application        map[string]any `json:"application,omitempty"`
-	ActivityType       string         `json:"activity_type"`
-	EventID            string         `json:"event_id"`
-	AssetIDs           []string       `json:"asset_ids"`
-	AllAssetIDs        []string       `json:"all_asset_ids"`
-	ActivityIOCs       []domain.IOC   `json:"activity_iocs"`
-	IOCs               []domain.IOC   `json:"iocs"`
-	Relation           string         `json:"relation"`
-	First              time.Time      `json:"first_time"`
-	Last               time.Time      `json:"last_time"`
-	ReviewStatus       string         `json:"review_status"`
-	Adjudication       string         `json:"adjudication"`
-	AdjudicationID     string         `json:"adjudication_id,omitempty"`
-	AdjudicationSource string         `json:"adjudication_source,omitempty"`
+	DestinationEndpoint string         `json:"destination_endpoint,omitempty"`
+	VerifiedDNSHitIDs   []string       `json:"verified_dns_hit_ids,omitempty"`
+	SourceAddress       string         `json:"source_address,omitempty"`
+	DestinationAddress  string         `json:"destination_address,omitempty"`
+	DeviceID            string         `json:"device_id"`
+	Application         map[string]any `json:"application,omitempty"`
+	ActivityType        string         `json:"activity_type"`
+	EventID             string         `json:"event_id"`
+	AssetIDs            []string       `json:"asset_ids"`
+	AllAssetIDs         []string       `json:"all_asset_ids"`
+	ActivityIOCs        []domain.IOC   `json:"activity_iocs"`
+	IOCs                []domain.IOC   `json:"iocs"`
+	Relation            string         `json:"relation"`
+	First               time.Time      `json:"first_time"`
+	Last                time.Time      `json:"last_time"`
+	ReviewStatus        string         `json:"review_status"`
+	Adjudication        string         `json:"adjudication"`
+	AdjudicationID      string         `json:"adjudication_id,omitempty"`
+	AdjudicationSource  string         `json:"adjudication_source,omitempty"`
 }
 type ReportHistory struct {
 	RelatedRows                []ReportHistoryRow          `json:"related_rows,omitempty"`

@@ -17,6 +17,9 @@ func (e *Engine) networkFact(f Finding, g *observations) Finding {
 	}
 	n := g.input.Network
 	dependency(&f, "network", n.Provenance)
+	if f.FactID == "F_PORT_SEQUENCE" && !n.Complete && hasTCPSYNAttemptVerification(n) {
+		return e.verifiedTCPPortSequence(f, g)
+	}
 	if !provenance(n.Provenance) || !n.Complete || len(n.Connections) == 0 {
 		return absent(f, UnverifiedCoverage)
 	}
@@ -116,47 +119,7 @@ func (e *Engine) networkFact(f Finding, g *observations) Finding {
 		}
 		return finish(f, float64(peak) > b[0], map[string]float64{"peak_unique_targets_per_hour": float64(peak)}, refs...)
 	case "F_PORT_SEQUENCE":
-		rows := append([]Connection(nil), n.Connections...)
-		sort.Slice(rows, func(i, j int) bool {
-			if rows[i].Time.Equal(rows[j].Time) {
-				return rows[i].SourceID < rows[j].SourceID
-			}
-			return rows[i].Time.Before(rows[j].Time)
-		})
-		seen := map[uint16]bool{}
-		ports := []float64{}
-		for _, r := range rows {
-			if !seen[r.Port] {
-				seen[r.Port] = true
-				ports = append(ports, float64(r.Port))
-			}
-		}
-		if len(ports) < 8 {
-			return absent(f, InsufficientSamples)
-		}
-		ascending, descending := true, true
-		for i := 1; i < len(ports); i++ {
-			ascending = ascending && ports[i] > ports[i-1]
-			descending = descending && ports[i] < ports[i-1]
-		}
-		if ascending || descending {
-			return finish(f, true, map[string]float64{"distinct_ports": float64(len(ports)), "monotonic": 1}, refs...)
-		}
-		threshold, ok := e.policy(&f, "difference_entropy_threshold")
-		if !ok || threshold <= 0 {
-			return absent(f, MissingPolicy)
-		}
-		counts := map[float64]int{}
-		for i := 1; i < len(ports); i++ {
-			counts[ports[i]-ports[i-1]]++
-		}
-		h := 0.0
-		for _, c := range counts {
-			p := float64(c) / float64(len(ports)-1)
-			h -= p * math.Log2(p)
-		}
-		f.Limitations = append(f.Limitations, "差分熵仅为配置的伪随机序列线索，不证明随机生成机制")
-		return finish(f, h >= threshold, map[string]float64{"distinct_ports": float64(len(ports)), "difference_entropy": h}, refs...)
+		return e.portSequence(f, n.Connections, refs)
 	case "F_SMALL_PACKET":
 		limit, ok := e.policy(&f, "small_payload_bytes")
 		if !ok || limit <= 0 {
@@ -278,4 +241,49 @@ func (e *Engine) corroboration(f Finding, g *observations) Finding {
 		return finish(f, first >= 15 && share >= 0.6 && first-second >= 10 && c.IOCType == types[0], map[string]float64{"hard_type_top1": first, "top1_share": share, "margin": first - second}, refs...)
 	}
 	return absent(f, MissingInput)
+}
+
+// portSequence preserves the original complete-window calculation.
+func (e *Engine) portSequence(f Finding, connections []Connection, refs []string) Finding {
+	rows := append([]Connection(nil), connections...)
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].Time.Equal(rows[j].Time) {
+			return rows[i].SourceID < rows[j].SourceID
+		}
+		return rows[i].Time.Before(rows[j].Time)
+	})
+	seen := map[uint16]bool{}
+	ports := []float64{}
+	for _, r := range rows {
+		if !seen[r.Port] {
+			seen[r.Port] = true
+			ports = append(ports, float64(r.Port))
+		}
+	}
+	if len(ports) < 8 {
+		return absent(f, InsufficientSamples)
+	}
+	ascending, descending := true, true
+	for i := 1; i < len(ports); i++ {
+		ascending = ascending && ports[i] > ports[i-1]
+		descending = descending && ports[i] < ports[i-1]
+	}
+	if ascending || descending {
+		return finish(f, true, map[string]float64{"distinct_ports": float64(len(ports)), "monotonic": 1}, refs...)
+	}
+	threshold, ok := e.policy(&f, "difference_entropy_threshold")
+	if !ok || threshold <= 0 {
+		return absent(f, MissingPolicy)
+	}
+	counts := map[float64]int{}
+	for i := 1; i < len(ports); i++ {
+		counts[ports[i]-ports[i-1]]++
+	}
+	h := 0.0
+	for _, c := range counts {
+		p := float64(c) / float64(len(ports)-1)
+		h -= p * math.Log2(p)
+	}
+	f.Limitations = append(f.Limitations, "差分熵仅为配置的伪随机序列线索，不证明随机生成机制")
+	return finish(f, h >= threshold, map[string]float64{"distinct_ports": float64(len(ports)), "difference_entropy": h}, refs...)
 }

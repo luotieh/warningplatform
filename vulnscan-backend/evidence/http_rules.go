@@ -72,12 +72,24 @@ func (e *Engine) httpFact(f Finding, g *observations) Finding {
 		return absent(f, MissingInput)
 	}
 	h := g.input.HTTP
+	if (f.FactID == "F_HTTP_UA_RARITY" || f.FactID == "F_HTTP_SIZE_STABILITY") && !h.Complete && hasHTTPRequestVerification(h) {
+		return verifiedHTTPRequestObservation(f, g)
+	}
+	if f.FactID == "F_FORM_CROSSSITE" && !h.Complete && hasHTTPRequestVerification(h) {
+		return verifiedHTTPRequestObservation(f, g)
+	}
 	// A URL structure check can describe a verified request subset without
 	// asserting that every request in the event/window was captured.
 	if f.FactID == "F_URL_ODD_AUTHORITY" && !h.Complete && hasHTTPRequestVerification(h) {
 		return verifiedHTTPRequestObservation(f, g)
 	}
 	if f.FactID == "F_CRED_POST_STRUCTURE" && !h.Complete && hasHTTPRequestVerification(h) {
+		return verifiedHTTPRequestObservation(f, g)
+	}
+	if f.FactID == "F_HTTP_ENDPOINT_REPEAT" && !h.Complete && hasHTTPRequestVerification(h) {
+		return verifiedHTTPRequestObservation(f, g)
+	}
+	if f.FactID == "F_HTTP_FIELD_ENCODING" && !h.Complete && hasHTTPRequestVerification(h) {
 		return verifiedHTTPRequestObservation(f, g)
 	}
 	if f.FactID == "F_HTTP_ENDPOINT_REPEAT" {

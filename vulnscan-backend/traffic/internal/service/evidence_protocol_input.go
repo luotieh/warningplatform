@@ -3,6 +3,7 @@ package service
 import (
 	"bufio"
 	"bytes"
+	"crypto/sha256"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -53,6 +54,7 @@ func snapshotPayload(packet map[string]any) ([]byte, bool, string) {
 }
 
 func enrichSnapshotProtocols(input *evidence.Input, hit store.Hit, m map[string]any, manifest *SnapshotEvidenceManifest) {
+	enrichProviderSYNAttempt(input, hit, m, manifest)
 	// Session-level app.http_url is a hint, never a captured request. Remove
 	// this hit's projection before classifying its actual wire bytes.
 	httpHint := false
@@ -176,9 +178,20 @@ func enrichSnapshotProtocols(input *evidence.Input, hit store.Hit, m map[string]
 		if record.URL != "" {
 			if requestWireVerified && parseProblem == "" && protocolParsed && full && !record.Truncated && record.RequestID != "" && record.SessionID != "" {
 				record.RequestVerification = &evidence.HTTPRequestVerification{Version: evidence.HTTPRequestVerificationVersion, Scope: input.Scope, SourceID: hit.ID, SourceOccurredAt: hit.OccurredAt, RequestID: record.RequestID, RequestTime: record.Time, URL: record.URL, Method: record.Method, SessionID: record.SessionID}
+				record.RequestVerification.UserAgentVerified = true
+				record.RequestVerification.UserAgent = record.UserAgent
+				if record.BodyLength != nil {
+					record.RequestVerification.BodyLengthVerified = true
+					record.RequestVerification.BodyLength = *record.BodyLength
+				}
 				if fieldsVerified {
 					record.RequestVerification.FieldsVerified = true
 					record.RequestVerification.FieldNames = evidence.HTTPRequestFieldNames(record.Fields)
+					if record.EncodingSummary != nil {
+						summary := *record.EncodingSummary
+						record.RequestVerification.EncodingSummaryVerified = true
+						record.RequestVerification.EncodingSummary = &summary
+					}
 				}
 			}
 			response := nestedMap(nestedMap(m, "raw_packet"), "response")
@@ -190,6 +203,12 @@ func enrichSnapshotProtocols(input *evidence.Input, hit store.Hit, m map[string]
 			}
 			if responseProblem := snapshotHTTPResponse(&record, packet, response, payload); responseProblem != "" {
 				issue(responseProblem, "raw_packet.response")
+			} else if exchange != nil && exchange.Response != nil && record.ResponseVerified && record.FormVerification != nil && record.RequestVerification != nil {
+				v := record.FormVerification
+				v.Scope, v.SourceID, v.SourceOccurredAt = input.Scope, hit.ID, hit.OccurredAt
+				v.RequestID, v.SessionID, v.TransactionID = record.RequestID, record.SessionID, record.TransactionID
+			} else {
+				record.FormVerification = nil
 			}
 			if input.HTTP == nil {
 				input.HTTP = &evidence.HTTPData{}
@@ -404,6 +423,11 @@ func snapshotHTTPResponse(record *evidence.HTTPRecord, request, response map[str
 	if media == "text/html" {
 		tokenizer := html.NewTokenizer(bytes.NewReader(content))
 		actions := []string{}
+		base, err := url.Parse(record.URL)
+		if err != nil {
+			return "http_page_url_invalid"
+		}
+		baseSeen := false
 		for {
 			tt := tokenizer.Next()
 			if tt == html.ErrorToken {
@@ -414,8 +438,20 @@ func snapshotHTTPResponse(record *evidence.HTTPRecord, request, response map[str
 			}
 			if tt == html.StartTagToken || tt == html.SelfClosingTagToken {
 				t := tokenizer.Token()
+				if t.Data == "base" && !baseSeen {
+					for _, a := range t.Attr {
+						if a.Key == "href" {
+							baseSeen = true
+							base, err = base.Parse(a.Val)
+							if err != nil || (base.Scheme != "http" && base.Scheme != "https") || base.Hostname() == "" {
+								return "http_html_base_invalid"
+							}
+							break
+						}
+					}
+				}
 				if t.Data == "form" {
-					action := record.URL
+					action := ""
 					for _, a := range t.Attr {
 						if a.Key == "action" && a.Val != "" {
 							action = a.Val
@@ -425,11 +461,23 @@ func snapshotHTTPResponse(record *evidence.HTTPRecord, request, response map[str
 				}
 			}
 		}
-		if len(actions) == 1 {
-			record.FormAction = actions[0]
-		} else if len(actions) > 1 {
-			return "http_multiple_forms_unsupported"
+		// HTML's first base applies to all forms, including earlier DOM nodes.
+		resolved := []string{}
+		for _, action := range actions {
+			target := record.URL // absent/empty action submits to the document URL
+			if action != "" {
+				u, err := base.Parse(action)
+				if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" {
+					return "http_form_action_invalid"
+				}
+				target = u.String()
+			}
+			resolved = append(resolved, target)
 		}
+		if len(resolved) == 1 {
+			record.FormAction = resolved[0]
+		}
+		record.FormVerification = &evidence.HTTPFormVerification{Version: evidence.HTTPFormVerificationVersion, PageURL: record.URL, ResponseStatus: resp.StatusCode, ResponseSHA256: fmt.Sprintf("%x", sha256.Sum256(body)), Actions: resolved}
 	}
 	// Location is observed, but following it is not proven; redirect chain
 	// flags stay false until a verified transaction join is available.

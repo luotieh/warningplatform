@@ -480,14 +480,17 @@ func buildSnapshotSemanticRequest(snap EvidenceSnapshot, input SnapshotEvidenceI
 // Binding after F is deterministic; no packet parsing, payload decoding or
 // source retrieval is performed by this part of L3.
 // SemanticFactRef identifies a fact only by FactID and subject scope/window.
-// Typed infrastructure history is instead keyed by IOC type/value as well;
+// Typed infrastructure history and prior-IOC occurrence are keyed by IOC type/value as well;
 // projecting it here would erase that identity (even for a single candidate),
 // and multiple candidates would create duplicate FactIDs. No semantic slot
 // depends on this fact. Keep it exclusively in the typed F/normalized output
 // until semantic references can represent its full identity. Legacy untyped
 // findings retain their existing projection.
 func semanticFactReferenceSupported(f evidence.Finding) bool {
-	return f.FactID != "F_HIST_INFRA_PERSISTENCE" || f.IOCType == "" && f.IOCValue == "" && f.ObservationKind == ""
+	if f.FactID == "F_HIST_INFRA_PERSISTENCE" || f.FactID == "F_IOC_NOVELTY" {
+		return f.IOCType == "" && f.IOCValue == "" && f.ObservationKind == ""
+	}
+	return true
 }
 
 func bindPreparedSemanticFacts(input SnapshotEvidenceInput, result *evidence.Result, mode evidence.SemanticInputMode) evidence.SemanticRequest {

@@ -58,7 +58,7 @@ func populateProviderHistorySubjects(out *SnapshotEvidenceInput, snap EvidenceSn
 						continue
 					}
 					seen[row.EventID] = true
-					s.History.Events = append(s.History.Events, evidence.HistoryEvent{ID: row.EventID, DeviceID: row.DeviceID, AssetID: row.AllAssetIDs[0], AssetIDs: row.AllAssetIDs, IOCType: s.IOCType, IOC: s.IOCValue, Time: row.First, Relation: row.Relation, ActivityType: row.ActivityType, ObservationKind: "event_occurrence"})
+					s.History.Events = append(s.History.Events, evidence.HistoryEvent{Endpoint: row.DestinationEndpoint, ID: row.EventID, DeviceID: row.DeviceID, AssetID: row.AllAssetIDs[0], AssetIDs: row.AllAssetIDs, IOCType: s.IOCType, IOC: s.IOCValue, Time: row.First, Relation: row.Relation, ActivityType: row.ActivityType, ObservationKind: "event_occurrence"})
 					s.History.SourceIDs = append(s.History.SourceIDs, row.EventID)
 				}
 			}

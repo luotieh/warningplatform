@@ -26,9 +26,12 @@ func factContract(d Definition) EvidenceContract {
 		CannotProve:            "不能单独证明恶意意图、攻击归属、主机感染或攻击成功",
 		RequiredCorrelations:   []string{"同资产及真实通信来源绑定", "独立行为或内容证据及授权背景；仅适用的C联合规则决定风险贡献"}}
 	switch d.ID {
-	case BeaconPeriodic, "F_BEACON_JITTER", "F_HTTP_ENDPOINT_REPEAT":
+	case BeaconPeriodic, "F_BEACON_JITTER":
 		c.CannotProve = "周期或重复请求不证明C2；累计FLOW包数不能替代逐次独立联系"
 		c.RequiredCorrelations = []string{"同资产、端点与IOC的原始字段绑定", "完整独立联系或HTTP事务观测", "适用的C02/C04前提；F_BEACON_PERIODIC不属于一期C"}
+	case "F_HTTP_ENDPOINT_REPEAT":
+		c.CannotProve = "只描述所列已核验请求的同端点重复与间隔；不证明C2、持续回连或完整事件中不存在其他请求"
+		c.RequiredCorrelations = []string{"同资产、端点、来源与请求身份绑定；冲突请求不得参与", "partial输入仅计算逐条完整核验且去重的请求子集；同Host/Path独立分组，不提升窗口完整性"}
 	case "F_FIXED_DAILY_WINDOW", MultiDayPersist:
 		c.CannotProve = "活跃日期或日内集中不证明持续在线、持久化或恶意作息"
 	case "F_DNS_HIGH_ENTROPY":
@@ -45,11 +48,26 @@ func factContract(d Definition) EvidenceContract {
 	case "F_URL_ODD_AUTHORITY":
 		c.CannotProve = "只判断所列已核验请求的URL结构；请求集合内阴性不证明完整事件或未采集请求没有异常，也不证明钓鱼"
 		c.RequiredCorrelations = []string{"实际请求URL与同资产、端点、时间及来源绑定", "partial输入须有完整请求逐条核验与身份去重；不提升事件窗口完整性"}
+	case "F_IOC_NOVELTY":
+		c.CannotProve = "可信历史命中可以证明该IOC并非平台首次已保存出现；历史检索不完整时零命中不能证明首次出现，更不能证明首次真实通信"
+		c.RequiredCorrelations = []string{"当前IOC类型和值、独立来源及历史事件精确绑定", "先前事件时间严格早于当前事件；历史数量是已检索记录下界；首次出现阳性仍须完整覆盖证明"}
+	case "F_DST_NOVELTY":
+		c.CannotProve = "同资产同设备的可信历史端点命中仅反证首次已保存告警；不证明连接成功、恶意或完整历史；部分历史零匹配不能证明新颖"
+		c.RequiredCorrelations = []string{"历史原始摘要中的协议、目的IP、目的端口与源资产归属；不得用IOC或端口猜测协议", "当前scope与历史资产、设备及规范端点完全一致；历史时间早于当前窗口"}
+	case "F_FORM_CROSSSITE":
+		c.CannotProve = "完整HTML响应中的静态表单action不证明实际提交、凭据送达、脚本行为或恶意；子集阴性不代表完整事件阴性"
+		c.RequiredCorrelations = []string{"完整响应与核验请求事务、TCP方向、序列、时间及来源绑定", "按文档URL及首个HTML base解析全部静态表单action，并比较可注册域；缺少表单仍为missing"}
+	case "F_HTTP_FIELD_ENCODING":
+		c.CannotProve = "编码字段比例与长度仅描述已核验请求子集；编码不证明恶意、外传或完整事件异常，缺少可信正常基线时不得判定异常"
+		c.RequiredCorrelations = []string{"完整请求、字段名及脱敏前编码统计逐条与来源绑定；冲突请求排除", "可信正常业务基线encoded_field_ratio_p95与encoded_field_length_p95；不得从当前告警自身构造正常基线"}
 	case "F_CRED_POST_STRUCTURE":
 		c.CannotProve = "只判断所列完整请求的POST与凭据字段名结构；不证明凭据已送达、钓鱼成立或未采集请求不存在凭据提交"
 		c.RequiredCorrelations = []string{"实际请求方法、完整字段名集合与同资产、端点、时间及来源绑定", "partial输入须逐条核验完整请求和字段名、去重；不提升事件窗口完整性"}
 	case "F_MULTI_REDIRECT_CHAIN", "F_REDIRECT_CHAIN":
 		c.CannotProve = "不识别短链服务，不证明钓鱼；SessionID只用于限制现有已核验链，不能猜测浏览器跨连接身份"
+	case "F_PORT_SEQUENCE":
+		c.CannotProve = "端口顺序只描述同源同目标的已核验连接尝试；不证明握手成功、扫描意图或完整事件窗口内不存在其他行为"
+		c.RequiredCorrelations = []string{"原始完整TCP初始SYN与同资产、设备、端点、时间及来源绑定", "按源地址和目标地址分组，按五元组及初始序号去重；partial子集不提升事件窗口完整性"}
 	case "F_SMALL_PACKET":
 		c.CannotProve = "低应用载荷不等于零载荷，也不证明扫描或探测意图"
 	case "F_CONN_FAIL_RATE":

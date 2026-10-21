@@ -183,8 +183,8 @@ func (e *Engine) Evaluate(ctx context.Context, request Request) (Result, error) 
 			}
 			execution := Execution{FactID: id, Scope: scope, Status: "skipped", ReasonCode: NotRequested}
 			if selected[id] {
-				if id == "F_HIST_INFRA_PERSISTENCE" && g.input != nil && len(g.input.PlatformHistorySubjects) > 0 {
-					findings, executions := e.historySubjectFindings(g)
+				if (id == "F_HIST_INFRA_PERSISTENCE" || id == "F_IOC_NOVELTY") && g.input != nil && len(g.input.PlatformHistorySubjects) > 0 {
+					findings, executions := e.historySubjectFindings(g, id)
 					result.Findings = append(result.Findings, findings...)
 					result.Executions = append(result.Executions, executions...)
 					continue

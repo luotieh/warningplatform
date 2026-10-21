@@ -225,7 +225,7 @@ func assembleProviderHistory(h ReportHistory, rows []domain.Event, assets []doma
 			h.ExcludedCount++
 			continue
 		}
-		h.Rows = append(h.Rows, ReportHistoryRow{EventID: e.EventID, DeviceID: device, First: first, Last: last, AssetIDs: ids, AllAssetIDs: ids, IOCs: matched, ActivityIOCs: matched, Application: nestedMap(c, "app"), SourceAddress: asString(c["src_ip"]), DestinationAddress: asString(c["dst_ip"]), Relation: "same_asset_ioc", ActivityType: e.Category, Adjudication: "unreviewed"})
+		h.Rows = append(h.Rows, ReportHistoryRow{DestinationEndpoint: providerSavedHistoryEndpoint(c, assets, ids), EventID: e.EventID, DeviceID: device, First: first, Last: last, AssetIDs: ids, AllAssetIDs: ids, IOCs: matched, ActivityIOCs: matched, Application: nestedMap(c, "app"), SourceAddress: asString(c["src_ip"]), DestinationAddress: asString(c["dst_ip"]), Relation: "same_asset_ioc", ActivityType: e.Category, Adjudication: "unreviewed"})
 	}
 	return h
 }

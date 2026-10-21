@@ -130,7 +130,7 @@ func assembleProviderRelatedHistory(c EvidenceCollection, primary ReportHistory)
 			continue
 		}
 		seen[e.EventID] = true
-		out = append(out, ReportHistoryRow{EventID: e.EventID, DeviceID: device, First: first, Last: last, AssetIDs: ids, AllAssetIDs: ids,
+		out = append(out, ReportHistoryRow{DestinationEndpoint: providerSavedHistoryEndpoint(m, c.Assets, ids), EventID: e.EventID, DeviceID: device, First: first, Last: last, AssetIDs: ids, AllAssetIDs: ids,
 			IOCs: matched, ActivityIOCs: matched, Application: nestedMap(m, "app"), SourceAddress: asString(m["src_ip"]), DestinationAddress: asString(m["dst_ip"]),
 			Relation: "related_asset_or_ioc", ActivityType: e.Category, Adjudication: "unreviewed"})
 	}
