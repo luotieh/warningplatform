@@ -58,6 +58,7 @@ func validatePipelineAssessment(a ReportAssessment, b ReportEvidenceBundle) erro
 		return validateReportNumbers(text, refs, entries)
 	}
 	allRefs := []string{}
+	hasDecisionEvidence := false
 	for group, reasons := range [][]ReportReason{a.Supporting, a.Opposing, a.Alternatives} {
 		if len(reasons) > 16 {
 			return fmt.Errorf("report_response_bounds")
@@ -78,12 +79,13 @@ func validatePipelineAssessment(a ReportAssessment, b ReportEvidenceBundle) erro
 					return fmt.Errorf("report_invalid_counterevidence")
 				}
 			}
+			allRefs = append(allRefs, reason.EvidenceIDs...)
 			if group < 2 {
-				allRefs = append(allRefs, reason.EvidenceIDs...)
+				hasDecisionEvidence = true
 			}
 		}
 	}
-	if len(allRefs) == 0 {
+	if !hasDecisionEvidence {
 		return fmt.Errorf("report_probability_without_evidence")
 	}
 	if err := checkText(a.ProbabilityReason, allRefs, false); err != nil {

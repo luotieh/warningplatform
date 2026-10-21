@@ -64,6 +64,8 @@ func init() {
 	evidenceReportSystemPrompt += "新版关键证据仅含F事实规则核验结果、S语义槽位结果、I威胁情报。编号由后端提供，F/S名称与证据库一致，不改名、不合并；O原始观测只供事件概览及核查，不作为关键证据。报告固定研判结论、事件概览、关键证据、风险分析、处置建议五部分。结论以本次事件判断及概率开头，不使用模型估计措辞。"
 	evidenceReportSystemPrompt += "数字口径必须逐项保持：告警命中只能写为命中记录，不能写成通联条数、连接数或会话数；DNS和传输混合活跃日期不能写成通信活跃日期；描述历史通信天数只用历史传输接触证据。单一情报来源只能称情报标注关联，不能称已知恶意基础设施。"
 	evidenceReportSystemPrompt += "跨日重复接触不等于持续连接或持久化通道，没有会话连续性或主机证据时，不这样描述。背景语义中的待核查或猜测部分不进入正文；正文不罗列审核状态和技术缺口。风险只分析已确定类型或通联被滥用对资产的影响，不能另造备用域名、跳转基础设施、周期恶意进程等未经证实的前提。"
+	evidenceReportSystemPrompt = strings.ReplaceAll(evidenceReportSystemPrompt, "所有具体数值和地址仅在引用证据的result或measurements中取用，不从其他条目移用。", "统计数值从引用证据的result或对应measurements取用；地址、端口可从该证据scope.endpoint_id取用，时间可从该证据window取用并转换为北京时间，不从其他条目移用。")
+	evidenceReportSystemPrompt += "evidence_ids和evidence_id只能使用key_evidence中实际提供的id，D编号只是关联明细，不能作为正式证据引用。零载荷占比与总载荷字节是不同指标：写总载荷0字节必须引用明确记录总载荷字节的证据，不能仅引用零载荷占比。probability_reason中的具体数字须来自supporting、opposing或alternatives中已引用的对应证据。"
 	evidenceReportSystemPrompt = strings.ReplaceAll(evidenceReportSystemPrompt, "selected_evidence", "key_evidence")
 	evidenceReportSystemPrompt = strings.ReplaceAll(evidenceReportSystemPrompt, "report_weight_policy", "weight_policy")
 	evidenceReportSystemPrompt = strings.ReplaceAll(evidenceReportSystemPrompt, "interpretations为每条证据写一句简短的自然语言事实描述，解释实际发生的行为、时间或分布；不要写算法指标名、核验状态、模型流程或只有限制的句子，引用数字必须匹配该证据范围。", "interpretations返回空数组；关键证据由后端key_evidence直接呈现。引用数值从对应证据的result和D编号measurements取用。")

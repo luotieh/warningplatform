@@ -2,8 +2,41 @@ package service
 
 import (
 	"testing"
+	"time"
 	"vulnscan-backend/evidence"
 )
+
+func TestReportNumbersStructuredSources(t *testing.T) {
+	at := time.Date(2026, 10, 21, 8, 44, 2, 631528000, time.UTC)
+	entries := map[string]ReportEvidence{"O003": {
+		Scope:        evidence.Scope{EndpointID: "tcp://104.21.57.117:443", AssetID: "asset-987654321"},
+		Window:       &evidence.Window{Start: at, End: at.Add(time.Second)},
+		Measurements: map[string]any{"payload_total_bytes": 132},
+	}}
+	for _, text := range []string{"104.21.57.117:443", "2026-10-21 16:44:02", "2026-10-21 08:44:02", "132字节"} {
+		if err := validateReportNumbers(text, []string{"O003"}, entries); err != nil {
+			t.Errorf("%s: %v", text, err)
+		}
+	}
+	for _, text := range []string{"987654321字节", "16:59:59", "8443端口", "133字节"} {
+		if err := validateReportNumbers(text, []string{"O003"}, entries); err == nil {
+			t.Errorf("unsupported: %s", text)
+		}
+	}
+}
+
+func TestReportNumbersDoesNotBorrowZeroBytesFromRatio(t *testing.T) {
+	entries := map[string]ReportEvidence{
+		"F007": {Finding: &evidence.Finding{Measurements: evidence.Measurements{SampleCount: 2, Values: map[string]float64{"zero_payload_fraction": 1}}}},
+		"O001": {Measurements: map[string]any{"payload_total_bytes": 0}},
+	}
+	if err := validateReportNumbers("总载荷0字节", []string{"F007"}, entries); err == nil {
+		t.Fatal("ratio authorized total bytes")
+	}
+	if err := validateReportNumbers("总载荷0字节", []string{"O001"}, entries); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestReportNumbersAcceptsActualTimestampWithoutFractionalSeconds(t *testing.T) {
 	entries := map[string]ReportEvidence{"E001": {Result: "北京时间=2026-10-11T20:03:53.6712+08:00"}}

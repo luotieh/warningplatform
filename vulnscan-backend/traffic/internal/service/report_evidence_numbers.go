@@ -3,6 +3,7 @@ package service
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -20,6 +21,21 @@ func validateReportNumbers(text string, refs []string, entries map[string]Report
 	for _, id := range refs {
 		e := entries[id]
 		source := e.Result
+		if len(e.Measurements) > 0 {
+			raw, _ := json.Marshal(e.Measurements)
+			source += " " + string(raw)
+		}
+		// Only endpoint addresses/ports are facts; opaque asset/device IDs are not.
+		if endpoint, err := url.Parse(e.Scope.EndpointID); err == nil && endpoint.Host != "" {
+			source += " " + endpoint.Hostname() + " " + endpoint.Port()
+		}
+		if e.Window != nil {
+			for _, at := range []time.Time{e.Window.Start, e.Window.End} {
+				if !at.IsZero() {
+					source += " " + at.Format(time.RFC3339Nano)
+				}
+			}
+		}
 		if e.Finding != nil {
 			raw, _ := json.Marshal(e.Finding.Measurements)
 			source += " " + string(raw)
@@ -29,6 +45,7 @@ func validateReportNumbers(text string, refs []string, entries map[string]Report
 		for _, stamp := range reportSourceTimestamps.FindAllString(source, -1) {
 			if at, err := time.Parse(time.RFC3339Nano, stamp); err == nil {
 				source += " " + at.Truncate(time.Second).Format(time.RFC3339)
+				source += " " + at.In(time.FixedZone("Asia/Shanghai", 8*60*60)).Truncate(time.Second).Format(time.RFC3339)
 			}
 		}
 		source = normalizeReportChineseCounts(source)
