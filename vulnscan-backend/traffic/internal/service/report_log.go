@@ -199,6 +199,11 @@ func (r *reportLog) prepared(p preparedReportInput) {
 		rows = append(rows, map[string]any{"entry": e, "selected": selected[e.ID], "selection_reason": reason})
 	}
 	r.write("evidence-selection.json", map[string]any{"entries": rows, "selected_ids": p.Evidence.SelectedIDs, "digest": p.Evidence.Digest, "selection_omitted": p.Evidence.SelectionOmitted})
+	if p.Evidence.Scoring != nil {
+		r.write("evidence-weights.json", p.Evidence.Scoring)
+		r.write("material-coverage.json", reportAvailability(p))
+		return
+	}
 	policy := reportWeightPolicy(p.Evidence)
 	weights := []map[string]any{}
 	for _, e := range p.Evidence.Entries {

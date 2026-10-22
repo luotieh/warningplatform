@@ -46,6 +46,7 @@ type ReportEvidence struct {
 }
 
 type ReportEvidenceBundle struct {
+	Scoring           *ReportScoring               `json:"judgement_v02,omitempty"`
 	Pipeline          *EvidencePipelineAudit       `json:"pipeline,omitempty"`
 	PhaseOne          *PhaseOneEvaluation          `json:"phase_one,omitempty"`
 	CurrentSourceIDs  []string                     `json:"current_source_ids,omitempty"`

@@ -226,6 +226,17 @@ func (s Services) runAnalysis(ctx context.Context, eventID string, kind string, 
 	if err != nil {
 		return s.failAgentWorkflow(eventID, err)
 	}
+	if prepared.Evidence.Pipeline != nil {
+		prepared.Evidence = prepareReportV02Evidence(prepared.Evidence)
+		prepared.Evidence.Scoring = scoreReportThreats(prepared.Evidence)
+		audit.prepared(prepared)
+		audit.write("threat-scoring.json", prepared.Evidence.Scoring)
+		audit.write("knowledge-selection.json", selectReportKnowledge(prepared.Evidence))
+		audit.write("evidence-v02-catalog.json", reportV02CatalogAudit(prepared.Evidence))
+		if !prepared.Evidence.Scoring.HasEvidence {
+			return s.failAgentWorkflow(eventID, fmtReportScoreInsufficient())
+		}
+	}
 	event.Context = prepared.Context
 	userLimit, maxBytes := reportInputEstimateBudget, 100000
 	if inputExplicit {
@@ -294,6 +305,11 @@ func (s Services) runAnalysis(ctx context.Context, eventID string, kind string, 
 		audit.write("probability-publication.json", map[string]any{"published": false, "assessment": assessment, "validation_error": reportErrorText(err), "old_report_and_probability_preserved": true})
 		return s.failAgentWorkflow(eventID, fmt.Errorf("报告JSON或概率字段无法读取：%w", err))
 	}
+	if assessment.Scoring != nil {
+		prepared.Evidence.Scoring = assessment.Scoring
+		audit.write("model-adjustment.json", assessment.Scoring.Adjustment)
+		audit.write("threat-scoring.json", assessment.Scoring)
+	}
 	audit.meta["probability"] = assessment.Probability
 	if assessment.Probability != nil {
 		audit.meta["probability"] = *assessment.Probability
@@ -314,7 +330,7 @@ func (s Services) runAnalysis(ctx context.Context, eventID string, kind string, 
 	if err == nil {
 		audit.meta["summary_id"] = sm.ID
 	}
-	audit.write("probability-publication.json", map[string]any{"assessment": assessment, "summary_id": sm.ID, "analysis_version": version, "snapshot_version": prepared.Evidence.SnapshotVersion, "published": err == nil, "error": reportErrorText(err), "source": "uncalibrated model estimate; evidence references, boundaries and numeric tokens checked", "probability": assessment.Probability, "model_process": "pipeline -> model assessment -> reference/boundary checks -> atomic publication"})
+	audit.write("probability-publication.json", map[string]any{"assessment": assessment, "summary_id": sm.ID, "analysis_version": version, "snapshot_version": prepared.Evidence.SnapshotVersion, "published": err == nil, "error": reportErrorText(err), "source": "versioned evidence baseline plus bounded model adjustment; not calibrated probability", "probability": assessment.Probability, "model_process": "pipeline -> model assessment -> reference/boundary checks -> atomic publication"})
 	if err != nil {
 		return s.failAgentWorkflow(eventID, fmt.Errorf("保存分析总结失败: %w", err))
 	}

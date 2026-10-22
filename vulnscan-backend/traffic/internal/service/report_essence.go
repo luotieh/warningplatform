@@ -529,6 +529,9 @@ func reportEssenceAdapters(b ReportEvidenceBundle) []map[string]any {
 }
 
 func essenceWeightPolicy(b ReportEvidenceBundle) map[string]any {
+	if b.Scoring != nil {
+		return reportScoreModelProjection(b.Scoring)
+	}
 	// Reuse the existing coefficients, remap their references and take only the
 	// strongest instruction per resulting evidence and dependency group.
 	original := b

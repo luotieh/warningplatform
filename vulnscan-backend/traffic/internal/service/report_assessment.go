@@ -30,6 +30,8 @@ type ReportRisk struct {
 	Impact      string   `json:"impact"`
 }
 type ReportAssessment struct {
+	Scoring           *ReportScoring           `json:"judgement_v02,omitempty"`
+	ModelAdjustment   *ReportModelAdjustment   `json:"model_adjustment,omitempty"`
 	EvidenceRisk      *evidence.PhaseOneResult `json:"evidence_risk,omitempty"`
 	Target            string                   `json:"target"`
 	ThreatType        string                   `json:"threat_type"`
@@ -71,6 +73,10 @@ func init() {
 	evidenceReportSystemPrompt = strings.ReplaceAll(evidenceReportSystemPrompt, "interpretations为每条证据写一句简短的自然语言事实描述，解释实际发生的行为、时间或分布；不要写算法指标名、核验状态、模型流程或只有限制的句子，引用数字必须匹配该证据范围。", "interpretations返回空数组；关键证据由后端key_evidence直接呈现。引用数值从对应证据的result和D编号measurements取用。")
 }
 
+func init() {
+	evidenceReportSystemPrompt += "当输入包含judgement_v02时，另允许threat_type=exploit_related。v0.2使用输入的确定性公式，取代旧相对权重和禁止公式的旧约定；允许按同一主张合并展示多个引用。基准及最终数值由后端负责，不自行自由估分；probability可填基准整数供兼容，后端会以计算结果覆盖。额外允许model_adjustment={delta,reason,evidence_ids,uncovered_context_key}，无符合条件的上下文返回null。只有未计分的实际application_fields(application_identity)或dns_connection(dns_connection_relation)观测可建议±5调整；已计分事实不得重复调分。不得在正文、理由和建议另写百分比数字。interpretations为有实际意义的证据提供一句事实和意义，不写猜测或算法变量；普通O概览无需逐条复述。最终报告由后端组织，技术状态不进入正文。"
+}
+
 func evidenceReportPrompt(event domain.Event, p preparedReportInput, b ReportEvidenceBundle, dialogue string) (string, error) {
 	return evidenceReportPromptBudget(event, p, b, dialogue, reportInputEstimateBudget, reportPromptEstimateBudget, 100000)
 }
@@ -78,10 +84,16 @@ func evidenceReportPrompt(event domain.Event, p preparedReportInput, b ReportEvi
 func evidenceReportPromptBudget(event domain.Event, p preparedReportInput, b ReportEvidenceBundle, dialogue string, userLimit, fullLimit, maxBytes int) (string, error) {
 	essence := reportEssenceFor(b)
 	input := map[string]any{"schema_version": reportEvidenceVersion, "event": map[string]any{"title": truncateRunes(event.EventName, 300)}, "event_overview": pipelineOverviewProjection(b.Overview), "asset_context": p.AssetSection, "key_evidence": essence.Items, "evidence_details": essence.Details, "evidence_projection_omitted": essence.ProjectionOmitted, "weight_policy": essenceWeightPolicy(b), "report_requirements": "依据key_evidence的F/S/I编号形成结论、概率、风险和处置。D编号只是数据依据，不独立计证。正文关键证据由后端提供，不改写测量值。"}
-	if b.Pipeline != nil {
+	if b.Scoring != nil {
+		delete(input, "weight_policy") // same calculation is supplied once, below
+		input["judgement_v02"] = reportScoreModelProjection(b.Scoring)
+		input["knowledge"] = selectReportKnowledge(b)
+		input["score_interpretation"] = "使用v0.2计算基准与有限调分；不是C01-C07换算；不输出另一个自由估计概率。"
+	}
+	if b.Pipeline != nil && b.Scoring == nil {
 		input["pipeline_audit"] = map[string]any{"version": b.Pipeline.Version, "key": b.Pipeline.Key, "catalog_size": len(b.Pipeline.Checks), "states": b.Pipeline.Counts}
 	}
-	if b.PhaseOne != nil {
+	if b.PhaseOne != nil && b.Scoring == nil {
 		input["phase_one_evaluation"] = pipelineJointModelProjection(b.PhaseOne.Result)
 		input["score_interpretation"] = "C01-C07分数由后端策略确定，不是已校准概率；不得将分数转换为恶意概率，模型判断亦未经概率校准。"
 	}
@@ -114,6 +126,15 @@ func decodeReportAssessment(raw string, b ReportEvidenceBundle) (ReportAssessmen
 	decoder := json.NewDecoder(strings.NewReader(raw))
 	if err := decoder.Decode(&a); err != nil {
 		return a, fmt.Errorf("report_schema_invalid")
+	}
+	if a.Probability != nil && (*a.Probability < 0 || *a.Probability > 100) {
+		return a, fmt.Errorf("report_probability_out_of_range")
+	}
+	a.Scoring = nil // backend-owned; model may not supply a scoring record
+	if b.Scoring != nil {
+		if err := applyReportScoring(&a, b); err != nil {
+			return a, err
+		}
 	}
 	if a.Probability == nil {
 		return a, fmt.Errorf("report_probability_required")
@@ -182,9 +203,12 @@ func reportCell(s string) string {
 	return s
 }
 
-var reportThreatTypeNames = map[string]string{"phishing_related": "钓鱼相关线索", "c2_related": "指令控制相关线索", "botnet_related": "群体协同相关线索", "mining_related": "挖矿通信相关线索", "dns_related": "DNS异常相关线索", "exfiltration_related": "数据传输异常相关线索", "scanning_related": "扫描行为相关线索", "suspicious_contact": "可疑目标通联", "normal_business": "正常业务倾向", "undetermined": "威胁类型待核查"}
+var reportThreatTypeNames = map[string]string{"exploit_related": "漏洞利用相关线索", "phishing_related": "钓鱼相关线索", "c2_related": "指令控制相关线索", "botnet_related": "群体协同相关线索", "mining_related": "挖矿通信相关线索", "dns_related": "DNS异常相关线索", "exfiltration_related": "数据传输异常相关线索", "scanning_related": "扫描行为相关线索", "suspicious_contact": "可疑目标通联", "normal_business": "正常业务倾向", "undetermined": "威胁类型待核查"}
 
 func renderReportMarkdown(doc ReportDocument) string {
+	if doc.Assessment.Scoring != nil && doc.Assessment.Scoring.Version == reportScoringVersion {
+		return renderReportV02(doc)
+	}
 	if doc.LayoutVersion == reportFivePartLayout || doc.LayoutVersion == reportFivePartLegacyLayout {
 		return renderFivePartReport(doc)
 	}
