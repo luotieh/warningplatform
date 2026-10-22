@@ -17,12 +17,14 @@ function evaluate(source, bindings, result) {
 }
 const route = vue.reactive({ query: { ioc_value: 'example.com', ioc_type: 'domain', victim: '10.0.0.1' } });
 const pending = [];
+const reportStarts = [];
 const file = fs.readFileSync(path.join(root, 'apps/web/src/views/ly/event/history/index.vue'), 'utf8');
 const page = evaluate(file.match(/<script[^>]*>([\s\S]*?)<\/script>/)[1], {
   ...vue, defineOptions: () => {}, onUnmounted: () => {}, useRoute: () => route,
   lyAssetList: async () => [], eventAssetNames: () => [], normalizeLyEvents: (rows) => rows,
   deepflowGetEventsPage: (params) => new Promise((resolve, reject) => pending.push({ params, resolve, reject })),
-}, '({ form, query, rows, total, page, search, changeMode, changePage, error, loading })');
+  deepflowGenerateHistoryReport: (params) => new Promise((resolve, reject) => reportStarts.push({ params, resolve, reject })),
+}, '({ form, query, rows, total, page, search, changeMode, changePage, error, loading, generateReport, report, reportLoading, reportError })');
 const settle = async () => { await vue.nextTick(); await new Promise((resolve) => setImmediate(resolve)); };
 
 (async () => {
@@ -45,8 +47,26 @@ const settle = async () => { await vue.nextTick(); await new Promise((resolve) =
   all.resolve({ items: [{ event_id: 'all' }], total: 100 });
   await settle();
   assert.equal(page.total.value, 100);
+  const generation = page.generateReport();
+  assert.deepEqual(reportStarts[0].params, { ioc_value: 'example.com', ioc_type: 'domain' }, 'report scope must omit page and include all targets');
+  reportStarts.shift().resolve({ markdown: 'comprehensive' });
+  await generation;
+  assert.equal(page.report.value.markdown, 'comprehensive');
+  assert.equal(page.reportLoading.value, false);
+
+  const failedGeneration = page.generateReport();
+  reportStarts.shift().reject(new Error('model unavailable'));
+  await failedGeneration;
+  assert.equal(page.reportError.value, 'model unavailable');
+  assert.equal(page.report.value, null);
+
+  const staleGeneration = page.generateReport();
+  const oldStart = reportStarts.shift();
   page.form.mode = 'same';
   page.changeMode();
+  oldStart.resolve({ markdown: 'stale' });
+  await staleGeneration;
+  assert.equal(page.report.value, null, 'report for old scope must never appear in new query');
   const same = pending.shift();
   assert.equal(same.params.victim, '10.0.0.1');
   same.resolve({ items: [], total: 40 });
@@ -85,5 +105,5 @@ const settle = async () => { await vue.nextTick(); await new Promise((resolve) =
   assert.equal(menu.iocMenu.show, true);
   menu.viewIOCHistory();
   assert.deepEqual(destination, { path: '/ly/event/history', query: { ioc_value: 'example.com', ioc_type: 'domain', victim: '10.0.0.1' } });
-  console.log('PASS: IOC context menu, default target, all targets, paging, route changes, stale responses, errors');
+  console.log('PASS: IOC history, manual report generation, report scope, direct failure handling, stale report protection');
 })().catch((error) => { console.error(error); process.exitCode = 1; });

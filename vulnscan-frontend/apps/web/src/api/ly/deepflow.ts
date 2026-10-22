@@ -121,6 +121,27 @@ export function deepflowPost<T = any>(url: string, data?: Record<string, any>) {
   });
 }
 
+export interface HistoryComprehensiveReport {
+  report_id: string;
+  kind: 'history_comprehensive';
+  markdown: string;
+  snapshot: {
+    scope: { ioc_value: string; ioc_type: string; victim: string };
+    generated_at: string;
+    event_count: number;
+    known_hits: number;
+    missing_hit_counts: number;
+    first_seen: string;
+    last_seen: string;
+    source_event_ids: string[];
+    daily_event_starts: { date: string; event_starts: number }[];
+  };
+}
+
+export function deepflowGenerateHistoryReport(scope: Record<string, any>) {
+  return deepflowPost<HistoryComprehensiveReport>('/events/history/report', scope);
+}
+
 export function deepflowPut<T = any>(url: string, data?: Record<string, any>) {
   return request<T>(url, {
     body: JSON.stringify(data ?? {}),

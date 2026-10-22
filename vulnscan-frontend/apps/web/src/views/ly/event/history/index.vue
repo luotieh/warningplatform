@@ -1,9 +1,10 @@
 <script lang="ts" setup>
 import { computed, onUnmounted, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { NAlert, NButton, NCard, NInput, NPagination, NSelect, NSpace, NTag } from 'naive-ui';
+import { NAlert, NButton, NCard, NInput, NModal, NPagination, NSelect, NSpace, NTag } from 'naive-ui';
 import { lyAssetList, type LyAsset } from '#/api/ly/assets';
-import { deepflowGetEventsPage } from '#/api/ly/deepflow';
+import { deepflowGetEventsPage, deepflowGenerateHistoryReport, type HistoryComprehensiveReport } from '#/api/ly/deepflow';
+import { markdownToHtml } from '#/utils/markdown';
 import { normalizeLyEvents } from '#/utils/ly';
 import { eventAssetNames } from '#/utils/ly-asset';
 import LyEventTable from '../components/LyEventTable.vue';
@@ -19,6 +20,42 @@ const pageSize = ref(20);
 const total = ref(0);
 const loading = ref(false);
 const error = ref('');
+const report = ref<HistoryComprehensiveReport | null>(null);
+const reportVisible = ref(false);
+const reportLoading = ref(false);
+const reportError = ref('');
+let reportRequestId = 0;
+
+async function generateReport() {
+  if (!query.value || reportLoading.value) return;
+  const id = ++reportRequestId;
+  const scope = { ...query.value };
+  reportVisible.value = true;
+  reportLoading.value = true;
+  reportError.value = '';
+  report.value = null;
+  try {
+    const result = await deepflowGenerateHistoryReport(scope);
+    if (id !== reportRequestId) return;
+    report.value = result;
+  } catch (cause) {
+    if (id === reportRequestId) reportError.value = cause instanceof Error ? cause.message : '综合报告生成失败';
+  } finally {
+    if (id === reportRequestId) reportLoading.value = false;
+  }
+}
+
+function downloadReport() {
+  if (!report.value) return;
+  const s = report.value.snapshot;
+  const text = `# 历史事件综合报告\n\nIOC：${s.scope.ioc_value}\n被攻击方：${s.scope.victim || '全部'}\n生成时间：${s.generated_at}\n事件数：${s.event_count}\n\n${report.value.markdown}\n\n## 统计快照与来源索引\n\n\`\`\`json\n${JSON.stringify(s, null, 2)}\n\`\`\`\n`;
+  const url = URL.createObjectURL(new Blob([text], { type: 'text/markdown;charset=utf-8' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = '历史事件综合报告.md';
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 let requestId = 0;
 const displayRows = computed(() => rows.value.map((row) => ({
   ...row, assetText: eventAssetNames(row, assets.value).join('、') || '未登记',
@@ -54,6 +91,10 @@ async function loadHistory() {
 function search() {
   // 默认范围必须同时指定 IOC 和被攻击方，缺少目标时不静默放宽范围。
   if (!form.ioc.trim() || (form.mode === 'same' && !form.victim.trim())) return;
+  ++reportRequestId;
+  reportLoading.value = false;
+  reportVisible.value = false;
+  report.value = null;
   query.value = {
     ioc_value: form.ioc.trim(),
     ioc_type: form.type.trim(),
@@ -64,6 +105,10 @@ function search() {
 }
 
 watch(() => [route.query.ioc_value, route.query.ioc_type, route.query.victim], () => {
+  ++reportRequestId;
+  reportLoading.value = false;
+  reportVisible.value = false;
+  report.value = null;
   ++requestId;
   loading.value = false;
   query.value = null;
@@ -82,7 +127,7 @@ function changePage(value: number) { page.value = value; void loadHistory(); }
 function changePageSize(value: number) { pageSize.value = value; page.value = 1; void loadHistory(); }
 
 void lyAssetList().then((result) => { assets.value = result || []; }).catch(() => {});
-onUnmounted(() => { ++requestId; });
+onUnmounted(() => { ++requestId; ++reportRequestId; });
 </script>
 
 <template>
@@ -111,12 +156,36 @@ onUnmounted(() => { ++requestId; });
       <NAlert v-if="error" type="error">{{ error }}</NAlert>
       <NAlert v-else-if="!query" type="info">请输入 IOC 和被攻击方，或选择“该 IOC 所有事件”后查询。</NAlert>
       <NCard v-if="query" :title="`历史事件（${total}）`" size="small">
+        <template #header-extra>
+          <NSpace>
+            <NButton v-if="report" @click="reportVisible = true">查看综合报告</NButton>
+            <NButton type="primary" :loading="reportLoading" :disabled="loading || !total || !!error" @click="generateReport">生成综合报告</NButton>
+          </NSpace>
+        </template>
+        <p class="history-hint">基于当前查询范围的全部历史事件生成，覆盖所有分页；重点分析整体活动特征、趋势与风险走向。</p>
         <LyEventTable :rows="displayRows" :loading="loading" :show-asset="true" :assets="assets" />
         <div class="history-pager">
           <NPagination :page="page" :page-size="pageSize" :item-count="total" show-size-picker :page-sizes="[20, 50, 100]" @update:page="changePage" @update:page-size="changePageSize" />
         </div>
       </NCard>
     </NSpace>
+    <NModal v-model:show="reportVisible" preset="card" title="历史事件综合报告" style="width: min(1000px, 94vw)">
+      <NAlert v-if="reportLoading" type="info">正在汇总全部匹配事件并生成综合报告，请稍候……</NAlert>
+      <NAlert v-else-if="reportError" type="error">{{ reportError }}</NAlert>
+      <template v-if="report">
+        <NSpace align="center">
+          <NTag type="info">IOC：{{ report.snapshot.scope.ioc_value }}</NTag>
+          <NTag>{{ report.snapshot.scope.victim || '全部被攻击方' }}</NTag>
+          <NTag>{{ report.snapshot.event_count }} 个事件</NTag>
+          <NButton @click="downloadReport">下载报告及统计快照</NButton>
+        </NSpace>
+        <p class="history-hint">生成时间：{{ report.snapshot.generated_at }}。统计基于已保存的事件记录，IOC 命中不等于成功连接；报告可下载保存。</p>
+        <div class="history-report-body" v-html="markdownToHtml(report.markdown)"></div>
+        <details><summary>查看趋势统计（每日新聚合事件数）</summary>
+          <div v-for="day in report.snapshot.daily_event_starts" :key="day.date">{{ day.date }}：{{ day.event_starts }}</div>
+        </details>
+      </template>
+    </NModal>
   </div>
 </template>
 
@@ -124,4 +193,8 @@ onUnmounted(() => { ++requestId; });
 .history-page { padding: 12px; }
 .history-hint { color: #808080; font-size: 13px; margin: 12px 0; }
 .history-pager { display: flex; justify-content: flex-end; padding-top: 12px; }
+.history-report-body { overflow-wrap: anywhere; line-height: 1.8; max-height: 65vh; overflow-y: auto; padding: 16px 0; }
+.history-report-body :deep(h2) { font-size: 18px; font-weight: 600; margin: 18px 0 10px; }
+.history-report-body :deep(p), .history-report-body :deep(ul), .history-report-body :deep(ol) { margin: 10px 0; }
+.history-report-body :deep(ul), .history-report-body :deep(ol) { padding-left: 24px; list-style: revert; }
 </style>
