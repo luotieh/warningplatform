@@ -165,6 +165,10 @@ func renderFivePartReport(doc ReportDocument) string {
 
 // Keep the old layout immutable so saved report versions remain readable.
 func renderCompactEventOverview(doc ReportDocument) string {
+	return renderEventOverview(doc, false)
+}
+
+func renderEventOverview(doc ReportDocument, complete bool) string {
 	var w strings.Builder
 	o := doc.Evidence.Overview
 	value := func(key string) string { return firstNonEmpty(doc.EventOverview[key], "未提供") }
@@ -183,11 +187,15 @@ func renderCompactEventOverview(doc ReportDocument) string {
 	}
 	tuples := []string{}
 	for n, t := range o.Tuples {
-		if n == 3 {
+		if !complete && n == 3 {
 			tuples = append(tuples, fmt.Sprintf("另有%d组五元组", len(o.Tuples)-n))
 			break
 		}
-		tuples = append(tuples, fmt.Sprintf("%s → %s（%s）", t.Source, t.Destination, t.Protocol))
+		row := fmt.Sprintf("%s → %s（%s）", t.Source, t.Destination, t.Protocol)
+		if complete {
+			row += fmt.Sprintf("：%d条命中", t.Hits)
+		}
+		tuples = append(tuples, row)
 	}
 	if len(tuples) == 0 {
 		source := value("通信源")
@@ -209,11 +217,17 @@ func renderCompactEventOverview(doc ReportDocument) string {
 	}
 	intel := []string{}
 	for n, i := range o.IOCs {
-		if n == 2 {
+		if !complete && n == 2 {
 			intel = append(intel, fmt.Sprintf("另有%d项IOC", len(o.IOCs)-n))
 			break
 		}
 		fields := []string{i.Value}
+		if complete && i.Type != "" {
+			fields = append(fields, "类型："+i.Type)
+		}
+		if complete && i.Activity != "" {
+			fields = append(fields, "情报描述："+i.Activity)
+		}
 		if i.Category != "" {
 			fields = append(fields, i.Category)
 		}

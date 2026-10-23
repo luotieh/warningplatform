@@ -2,6 +2,7 @@ package service
 
 import (
 	"encoding/json"
+	"fmt"
 	"math"
 	"os"
 	"path/filepath"
@@ -317,5 +318,91 @@ func TestReportV02ScopeAndUnprovenTransaction(t *testing.T) {
 	}
 	if c := v02Candidate(t, v02Bundle(v02Semantic("S1", "S07/exfil.sensitive_upload/", "upload"), v02Semantic("S2", "S08/exfil.chunk_sequence/", "chunks")), "exfiltration_related"); len(c.Combinations) > 0 || c.Cap != 79 {
 		t.Fatalf("unverified transfer chain: %+v", c)
+	}
+}
+
+func TestReportV02PromptIncludesCalculationRulesWithoutAudit(t *testing.T) {
+	b := v02Bundle(v02Semantic("S1", "S01/c2.command_intent/", "command"), v02Fact("F1", "F_BEACON_PERIODIC", "timeline"))
+	b.Scoring = scoreReportThreats(b)
+	b.Pipeline = &EvidencePipelineAudit{Key: "audit-only-secret"}
+	before, _ := json.Marshal(b.Scoring)
+	prompt, err := evidenceReportPrompt(domain.Event{}, preparedReportInput{}, b, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var input map[string]json.RawMessage
+	if err = json.Unmarshal([]byte(prompt), &input); err != nil {
+		t.Fatal(err)
+	}
+	var score struct {
+		Rules map[string]string `json:"calculation_rules"`
+	}
+	if err = json.Unmarshal(input["judgement_v02"], &score); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"effective_strength", "single_and_row", "deduplication", "combination", "counter", "baseline", "caps", "type_selection", "final_adjustment"} {
+		if score.Rules[key] == "" {
+			t.Errorf("missing rule %s", key)
+		}
+	}
+	if !strings.Contains(score.Rules["single_and_row"], "35%") || !strings.Contains(score.Rules["combination"], "1.5") {
+		t.Fatal("missing arithmetic explanation")
+	}
+	if _, ok := input["pipeline_audit"]; ok {
+		t.Fatal("audit sent to model")
+	}
+	if strings.Contains(prompt, "audit-only-secret") || strings.Contains(prompt, "source_refs") {
+		t.Fatal("audit source trace leaked")
+	}
+	after, _ := json.Marshal(b.Scoring)
+	if string(before) != string(after) {
+		t.Fatal("projection changed score")
+	}
+}
+
+func TestReportV02CompleteOverviewAndReadableEvidence(t *testing.T) {
+	b := v02Bundle(v02Semantic("S1", "S01/c2.command_intent/", "command"), v02Fact("F1", "F_BEACON_PERIODIC", "timeline"))
+	b.Scoring = scoreReportThreats(b)
+	for n := 0; n < 7; n++ {
+		b.Overview.Tuples = append(b.Overview.Tuples, ReportOverviewTuple{Source: fmt.Sprintf("192.0.2.1:%d", 40000+n), Destination: "203.0.113.1:443", Protocol: "tcp", Hits: n + 1})
+		b.Overview.IOCs = append(b.Overview.IOCs, ReportOverviewIOC{Value: fmt.Sprintf("ioc%d.example", n), Activity: strings.Repeat("完整情报", 80)})
+	}
+	prompt, err := evidenceReportPrompt(domain.Event{}, preparedReportInput{}, b, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var input struct {
+		Overview struct {
+			Tuples  []ReportOverviewTuple `json:"five_tuples"`
+			IOCs    []ReportOverviewIOC   `json:"iocs"`
+			Omitted int                   `json:"omitted_five_tuples"`
+		} `json:"event_overview"`
+	}
+	if err = json.Unmarshal([]byte(prompt), &input); err != nil {
+		t.Fatal(err)
+	}
+	if len(input.Overview.Tuples) != 7 || len(input.Overview.IOCs) != 7 || input.Overview.Omitted != 0 || input.Overview.IOCs[6].Activity != b.Overview.IOCs[6].Activity {
+		t.Fatal("overview truncated")
+	}
+	a := ReportAssessment{ThreatType: "c2_related", Interpretations: []ReportInterpretation{{EvidenceID: "F1", Meaning: "核验样本呈周期通信。"}}}
+	if err = applyReportScoring(&a, b); err != nil {
+		t.Fatal(err)
+	}
+	doc := ReportDocument{Evidence: b, Assessment: a}
+	body := renderReportV02(doc)
+	key := strings.Split(strings.Split(body, "## 三、关键证据")[1], "## 四、风险分析")[0]
+	if !strings.Contains(key, "**周期通信**：") || strings.Contains(key, "F1 ") || strings.Contains(key, "S1 ") {
+		t.Fatal(key)
+	}
+	if !strings.Contains(body, "192.0.2.1:40006") || !strings.Contains(body, "ioc6.example") || strings.Contains(body, "另有") {
+		t.Fatal("render truncated overview")
+	}
+	legacy := renderCompactEventOverview(doc)
+	if !strings.Contains(legacy, "另有4组五元组") {
+		t.Fatal("legacy changed")
+	}
+	_, err = evidenceReportPromptBudget(domain.Event{}, preparedReportInput{}, b, "", 10, 20, 100)
+	if err == nil {
+		t.Fatal("oversized full context must fail explicitly")
 	}
 }

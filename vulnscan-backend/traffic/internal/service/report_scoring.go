@@ -615,7 +615,7 @@ func reportScoreModelProjection(s *ReportScoring) map[string]any {
 	}
 	weights := []map[string]any{}
 	for _, p := range reportScoreProfiles() {
-		for _, r := range p.rows {
+		for rowIndex, r := range p.rows {
 			present := []string{}
 			for _, i := range s.Items {
 				if reportScoreMatch(i.Key, r.keys) {
@@ -623,11 +623,11 @@ func reportScoreModelProjection(s *ReportScoring) map[string]any {
 				}
 			}
 			if len(present) > 0 {
-				weights = append(weights, map[string]any{"type": p.kind, "keys": reportSortedUnique(present), "weight": r.weight, "cap": r.cap})
+				weights = append(weights, map[string]any{"type": p.kind, "row": rowIndex + 1, "keys": reportSortedUnique(present), "weight": r.weight, "cap": r.cap, "shared_cap_group": r.limit})
 			}
 		}
 	}
-	return map[string]any{"version": s.Version, "knowledge_version": s.KnowledgeVersion, "formula": s.Formula, "factors": factors, "weights": weights, "candidates": s.Candidates, "selected_type": s.SelectedType, "baseline_integer": s.Final, "max_adjustment": 5, "nature": "heuristic_evidence_estimate_not_calibrated_probability"}
+	return map[string]any{"version": s.Version, "knowledge_version": s.KnowledgeVersion, "formula": s.Formula, "calculation_rules": reportScoreCalculationRules(), "factors": factors, "weights": weights, "candidates": s.Candidates, "selected_type": s.SelectedType, "baseline_integer": s.Final, "max_adjustment": 5, "nature": "heuristic_evidence_estimate_not_calibrated_probability"}
 }
 
 func reportScoreTypeBehavior(kind string, i ReportScoreItem) bool {
@@ -828,4 +828,20 @@ func reportV02CatalogAudit(b ReportEvidenceBundle) []map[string]any {
 		out = append(out, map[string]any{"implementation_key": key, "name": names[key], "role": role, "weights": weights, "actual_instances": instances})
 	}
 	return out
+}
+
+// Explanation only: the backend remains the sole owner of arithmetic and limits.
+func reportScoreCalculationRules() map[string]string {
+	return map[string]string{
+		"effective_strength": "x=strength×reliability×binding，范围0至1；使用后端给出的因子，不自行重判算法门槛。材料缺失不加分，也不是反证。",
+		"single_and_row":     "单项=weight×x。先去重，再在同一评分行内将最强项全额计入，其他保留的独立项按35%计入；合计不超过该行cap。共享上限的行共同受限，不再次折减35%。",
+		"deduplication":      "同一对象范围内，同源且同义的跨行主张只取最强项；同行来源重叠不重复计入。事实及其同义语义解释不作为两份独立证据。重复条目不等于证据增强。",
+		"combination":        "组合=组合权重×min(成员x)×关联核验值；关联核验值为0或1，由后端核验主体、对象、时间及所需事务或群体关系。来源不重叠才可称独立，共享内容只能证明内容关联。按贡献降序保留组合，共享成员或同源成员的组合不叠加，组合合计最高1.5。实际触发值以candidates.combinations为准。",
+		"counter":            "仅已核验且覆盖本次对象、时间与来源的任务授权反证可抵扣其覆盖的事实贡献；单项最多1.2×x，合计最多2，且不超过尚未抵扣的覆盖贡献。不直接抵扣语义内容、情报或组合贡献；缺材料不能扣分。",
+		"baseline":           "z=-2.2+sum(contributions.value)+sum(combinations.value)-sum(counters.value)；raw=100/(1+exp(-z))；base=min(raw,cap)。贡献作用于z，不是直接增加同等百分点；-2.2是启发式初值，不是统计先验。",
+		"caps":               "一般接触或情报背景上限59；有本类型行为特征上限79；核验的强直接证据与独立行为关联成立时最高94，钓鱼及外传还要求事务关联。扫描、挖矿当前最高79。上限不是保底分，低分不证明正常。",
+		"type_selection":     "分别计算各威胁类型及NetworkActivity子类型，不相加或平均；默认从有类型行为的候选中选择最高基准，没有类型行为则为一般接触。模型改选须引用相应候选实际支持证据，使用该候选后端基准。",
+		"final_adjustment":   "模型仅可依据未计分的application_identity或dns_connection_relation实际观测建议±5个百分点，提供delta、reason、evidence_ids及uncovered_context_key。重复计分、无效引用或越界调整采用0。final=round(clamp(base+accepted_delta,0,cap))，最终值由后端写入；这是启发式恶意倾向，未经概率校准。",
+		"writing":            "用实际事实与关联解释结论，不在报告正文复述评分行、算法变量、上限或审计过程，也不另写一个自由估计概率。",
+	}
 }

@@ -85,6 +85,7 @@ func evidenceReportPromptBudget(event domain.Event, p preparedReportInput, b Rep
 	essence := reportEssenceFor(b)
 	input := map[string]any{"schema_version": reportEvidenceVersion, "event": map[string]any{"title": truncateRunes(event.EventName, 300)}, "event_overview": pipelineOverviewProjection(b.Overview), "asset_context": p.AssetSection, "key_evidence": essence.Items, "evidence_details": essence.Details, "evidence_projection_omitted": essence.ProjectionOmitted, "weight_policy": essenceWeightPolicy(b), "report_requirements": "依据key_evidence的F/S/I编号形成结论、概率、风险和处置。D编号只是数据依据，不独立计证。正文关键证据由后端提供，不改写测量值。"}
 	if b.Scoring != nil {
+		input["event_overview"] = reportV02OverviewProjection(b.Overview)
 		delete(input, "weight_policy") // same calculation is supplied once, below
 		input["judgement_v02"] = reportScoreModelProjection(b.Scoring)
 		input["knowledge"] = selectReportKnowledge(b)
