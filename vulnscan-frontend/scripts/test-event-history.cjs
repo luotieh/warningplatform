@@ -18,13 +18,16 @@ function evaluate(source, bindings, result) {
 const route = vue.reactive({ query: { ioc_value: 'example.com', ioc_type: 'domain', victim: '10.0.0.1' } });
 const pending = [];
 const reportStarts = [];
+const archiveReads = [];
 const file = fs.readFileSync(path.join(root, 'apps/web/src/views/ly/event/history/index.vue'), 'utf8');
 const page = evaluate(file.match(/<script[^>]*>([\s\S]*?)<\/script>/)[1], {
   ...vue, defineOptions: () => {}, onUnmounted: () => {}, useRoute: () => route,
   lyAssetList: async () => [], eventAssetNames: () => [], normalizeLyEvents: (rows) => rows,
   deepflowGetEventsPage: (params) => new Promise((resolve, reject) => pending.push({ params, resolve, reject })),
+  deepflowListHistoryReports: async () => [{ report_id: 'saved', generated_at: '2026-10-23', event_count: 25 }],
+  deepflowGetHistoryReport: async (id) => { archiveReads.push(id); return { report_id: id, markdown: 'saved report' }; },
   deepflowGenerateHistoryReport: (params) => new Promise((resolve, reject) => reportStarts.push({ params, resolve, reject })),
-}, '({ form, query, rows, total, page, search, changeMode, changePage, error, loading, generateReport, report, reportLoading, reportError })');
+}, '({ form, query, rows, total, page, search, changeMode, changePage, error, loading, generateReport, report, reportLoading, reportError, savedReports, savedReportId, openSavedReport })');
 const settle = async () => { await vue.nextTick(); await new Promise((resolve) => setImmediate(resolve)); };
 
 (async () => {
@@ -58,7 +61,14 @@ const settle = async () => { await vue.nextTick(); await new Promise((resolve) =
   reportStarts.shift().reject(new Error('model unavailable'));
   await failedGeneration;
   assert.equal(page.reportError.value, 'model unavailable');
-  assert.equal(page.report.value, null);
+  assert.equal(page.report.value.markdown, 'comprehensive', 'failed generation must preserve the last completed report');
+  await settle();
+  assert.equal(page.savedReports.value[0].report_id, 'saved');
+  page.savedReportId.value = 'saved';
+  await page.openSavedReport();
+  assert.equal(page.report.value.markdown, 'saved report');
+  assert.deepEqual(archiveReads, ['saved']);
+  assert.equal(reportStarts.length, 0, 'reading saved reports must not invoke generation');
 
   const staleGeneration = page.generateReport();
   const oldStart = reportStarts.shift();

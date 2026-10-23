@@ -34,6 +34,7 @@ type HistoryDay struct {
 }
 
 type HistoryReportSnapshot struct {
+	Features         *HistoryFeatures   `json:"connection_features,omitempty"`
 	Scope            HistoryReportScope `json:"scope"`
 	GeneratedAt      string             `json:"generated_at"`
 	EventCount       int                `json:"event_count"`
@@ -130,6 +131,11 @@ func (s *EventService) GenerateHistoryReport(ctx context.Context, scope HistoryR
 		return nil, errors.New("当前范围没有历史事件")
 	}
 	snapshot := buildHistoryReportSnapshot(scope, events)
+	features, err := s.historyFeatures(ctx, events)
+	if err != nil {
+		return nil, err
+	}
+	snapshot.Features = &features
 	// Keep IDs for audit/download, but do not spend model context on event details.
 	material := snapshot
 	material.EventIDs = nil
@@ -146,7 +152,7 @@ func (s *EventService) GenerateHistoryReport(ctx context.Context, scope HistoryR
 	model := *s.core.LLM
 	model.DisableThinking = true
 	model.ReportThinkingDisabled = true
-	completion, err := model.CompleteReport(ctx, historyReportSystem, string(raw))
+	completion, err := model.CompleteReport(ctx, historyReportSystem+historyActivityInstructions, string(raw))
 	if err != nil {
 		return nil, fmt.Errorf("综合报告生成失败: %w", err)
 	}

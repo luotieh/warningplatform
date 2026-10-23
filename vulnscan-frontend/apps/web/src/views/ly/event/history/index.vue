@@ -3,7 +3,7 @@ import { computed, onUnmounted, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { NAlert, NButton, NCard, NInput, NModal, NPagination, NSelect, NSpace, NTag } from 'naive-ui';
 import { lyAssetList, type LyAsset } from '#/api/ly/assets';
-import { deepflowGetEventsPage, deepflowGenerateHistoryReport, type HistoryComprehensiveReport } from '#/api/ly/deepflow';
+import { deepflowGetEventsPage, deepflowGenerateHistoryReport, deepflowListHistoryReports, deepflowGetHistoryReport, type HistoryReportListItem, type HistoryComprehensiveReport } from '#/api/ly/deepflow';
 import { markdownToHtml } from '#/utils/markdown';
 import { normalizeLyEvents } from '#/utils/ly';
 import { eventAssetNames } from '#/utils/ly-asset';
@@ -25,6 +25,45 @@ const reportVisible = ref(false);
 const reportLoading = ref(false);
 const reportError = ref('');
 let reportRequestId = 0;
+const savedReports = ref<HistoryReportListItem[]>([]);
+const savedReportId = ref<string | null>(null);
+const archiveError = ref('');
+const archiveLoading = ref(false);
+let archiveRequestId = 0;
+const savedReportOptions = computed(() => savedReports.value.map((item) => ({
+  value: item.report_id, label: `${item.generated_at} · ${item.event_count} 个事件`,
+})));
+
+async function loadSavedReports() {
+  const id = ++archiveRequestId;
+  if (!query.value) return;
+  archiveLoading.value = true;
+  archiveError.value = '';
+  try {
+    const result = await deepflowListHistoryReports({ ...query.value });
+    if (id === archiveRequestId) savedReports.value = result;
+  } catch (cause) {
+    if (id === archiveRequestId) archiveError.value = cause instanceof Error ? cause.message : '已保存报告查询失败';
+  } finally {
+    if (id === archiveRequestId) archiveLoading.value = false;
+  }
+}
+
+async function openSavedReport() {
+  if (!savedReportId.value || reportLoading.value) return;
+  const id = ++reportRequestId;
+  reportVisible.value = true;
+  reportLoading.value = true;
+  reportError.value = '';
+  try {
+    const result = await deepflowGetHistoryReport(savedReportId.value);
+    if (id === reportRequestId) report.value = result;
+  } catch (cause) {
+    if (id === reportRequestId) reportError.value = cause instanceof Error ? cause.message : '读取报告失败';
+  } finally {
+    if (id === reportRequestId) reportLoading.value = false;
+  }
+}
 
 async function generateReport() {
   if (!query.value || reportLoading.value) return;
@@ -33,11 +72,12 @@ async function generateReport() {
   reportVisible.value = true;
   reportLoading.value = true;
   reportError.value = '';
-  report.value = null;
   try {
     const result = await deepflowGenerateHistoryReport(scope);
     if (id !== reportRequestId) return;
     report.value = result;
+    savedReportId.value = result.report_id;
+    void loadSavedReports();
   } catch (cause) {
     if (id === reportRequestId) reportError.value = cause instanceof Error ? cause.message : '综合报告生成失败';
   } finally {
@@ -100,11 +140,19 @@ function search() {
     ioc_type: form.type.trim(),
     ...(form.mode === 'same' ? { victim: form.victim.trim() } : {}),
   };
+  savedReports.value = [];
+  savedReportId.value = null;
+  void loadSavedReports();
   page.value = 1;
   void loadHistory();
 }
 
 watch(() => [route.query.ioc_value, route.query.ioc_type, route.query.victim], () => {
+  ++archiveRequestId;
+  archiveLoading.value = false;
+  savedReports.value = [];
+  savedReportId.value = null;
+  archiveError.value = '';
   ++reportRequestId;
   reportLoading.value = false;
   reportVisible.value = false;
@@ -127,7 +175,7 @@ function changePage(value: number) { page.value = value; void loadHistory(); }
 function changePageSize(value: number) { pageSize.value = value; page.value = 1; void loadHistory(); }
 
 void lyAssetList().then((result) => { assets.value = result || []; }).catch(() => {});
-onUnmounted(() => { ++requestId; ++reportRequestId; });
+onUnmounted(() => { ++requestId; ++reportRequestId; ++archiveRequestId; });
 </script>
 
 <template>
@@ -163,6 +211,12 @@ onUnmounted(() => { ++requestId; ++reportRequestId; });
           </NSpace>
         </template>
         <p class="history-hint">基于当前查询范围的全部历史事件生成，覆盖所有分页；重点分析整体活动特征、趋势与风险走向。</p>
+        <NSpace align="center" style="margin-bottom: 12px">
+          <NSelect v-model:value="savedReportId" :options="savedReportOptions" :loading="archiveLoading" clearable placeholder="选择已保存的综合报告" style="width: 360px; max-width: 80vw" />
+          <NButton :disabled="!savedReportId || reportLoading" @click="openSavedReport">打开已保存报告</NButton>
+          <NButton :loading="archiveLoading" @click="loadSavedReports">刷新报告列表</NButton>
+        </NSpace>
+        <NAlert v-if="archiveError" type="warning" style="margin-bottom: 12px">{{ archiveError }}</NAlert>
         <LyEventTable :rows="displayRows" :loading="loading" :show-asset="true" :assets="assets" />
         <div class="history-pager">
           <NPagination :page="page" :page-size="pageSize" :item-count="total" show-size-picker :page-sizes="[20, 50, 100]" @update:page="changePage" @update:page-size="changePageSize" />
@@ -170,9 +224,9 @@ onUnmounted(() => { ++requestId; ++reportRequestId; });
       </NCard>
     </NSpace>
     <NModal v-model:show="reportVisible" preset="card" title="历史事件综合报告" style="width: min(1000px, 94vw)">
-      <NAlert v-if="reportLoading" type="info">正在汇总全部匹配事件并生成综合报告，请稍候……</NAlert>
+      <NAlert v-if="reportLoading" type="info">正在加载综合报告；新报告生成可能需要较长时间，请稍候……</NAlert>
       <NAlert v-else-if="reportError" type="error">{{ reportError }}</NAlert>
-      <template v-if="report">
+      <template v-if="report && !reportLoading && !reportError">
         <NSpace align="center">
           <NTag type="info">IOC：{{ report.snapshot.scope.ioc_value }}</NTag>
           <NTag>{{ report.snapshot.scope.victim || '全部被攻击方' }}</NTag>
@@ -181,7 +235,12 @@ onUnmounted(() => { ++requestId; ++reportRequestId; });
         </NSpace>
         <p class="history-hint">生成时间：{{ report.snapshot.generated_at }}。统计基于已保存的事件记录，IOC 命中不等于成功连接；报告可下载保存。</p>
         <div class="history-report-body" v-html="markdownToHtml(report.markdown)"></div>
-        <details><summary>查看趋势统计（每日新聚合事件数）</summary>
+        <details v-if="report.snapshot.connection_features"><summary>查看按日实际保存的活动明细统计</summary>
+          <p>以下为保存的命中数，不是成功连接数。部分或不可用明细不会补零。</p>
+          <div v-for="day in report.snapshot.connection_features.daily_observed_activity" :key="day.date">{{ day.date }}：{{ day.observed_hits }} 次保存命中，{{ day.active_events }} 个活跃事件</div>
+          <p v-for="boundary in report.snapshot.connection_features.boundaries" :key="boundary">{{ boundary }}</p>
+        </details>
+        <details><summary>查看每日新聚合事件数（辅助统计）</summary>
           <div v-for="day in report.snapshot.daily_event_starts" :key="day.date">{{ day.date }}：{{ day.event_starts }}</div>
         </details>
       </template>

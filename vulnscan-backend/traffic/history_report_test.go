@@ -124,7 +124,21 @@ func TestHistoryReportManualRequestPersistsCompletedResult(t *testing.T) {
 	if err != nil || !found || !strings.Contains(string(record.Value), "综合报告") {
 		t.Fatal("completed result not persisted")
 	}
+	router.GET("/reports", h.ListHistoryReports)
+	router.GET("/reports/:reportID", h.GetHistoryReport)
 	svc.core.LLM = nil
+	for _, path := range []string{"/reports?ioc_value=1.2.3.4", "/reports/" + id} {
+		read := httptest.NewRecorder()
+		router.ServeHTTP(read, httptest.NewRequest("GET", path, nil))
+		if read.Code != 200 || !strings.Contains(read.Body.String(), id) || calls != 1 {
+			t.Fatalf("saved report unavailable without model: %s", read.Body.String())
+		}
+	}
+	filtered := httptest.NewRecorder()
+	router.ServeHTTP(filtered, httptest.NewRequest("GET", "/reports?ioc_value=1.2.3.4&victim=other", nil))
+	if filtered.Code != 200 || strings.Contains(filtered.Body.String(), id) {
+		t.Fatalf("archive leaked a different scope: %s", filtered.Body.String())
+	}
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, httptest.NewRequest("POST", "/history", strings.NewReader(`{"ioc_value":"1.2.3.4"}`)))
 	if w.Code != 422 || !strings.Contains(w.Body.String(), "模型") {

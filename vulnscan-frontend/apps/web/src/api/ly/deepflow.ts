@@ -135,11 +135,31 @@ export interface HistoryComprehensiveReport {
     last_seen: string;
     source_event_ids: string[];
     daily_event_starts: { date: string; event_starts: number }[];
+    connection_features?: {
+      daily_observed_activity: { date: string; observed_hits: number; active_events: number }[];
+      coverage_event_counts: Record<string, number>;
+      boundaries: string[];
+    };
   };
 }
 
 export function deepflowGenerateHistoryReport(scope: Record<string, any>) {
   return deepflowPost<HistoryComprehensiveReport>('/events/history/report', scope);
+}
+
+export interface HistoryReportListItem {
+  report_id: string;
+  generated_at: string;
+  event_count: number;
+  scope: { ioc_value: string; ioc_type: string; victim: string };
+}
+
+export function deepflowListHistoryReports(scope: Record<string, any>) {
+  return deepflowGet<HistoryReportListItem[]>('/events/history/reports', scope);
+}
+
+export function deepflowGetHistoryReport(id: string) {
+  return deepflowGet<HistoryComprehensiveReport>(`/events/history/reports/${encodeURIComponent(id)}`);
 }
 
 export function deepflowPut<T = any>(url: string, data?: Record<string, any>) {
