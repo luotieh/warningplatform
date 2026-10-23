@@ -49,15 +49,15 @@ const state = reactive({
   total: 0,
   rankKey: '' as '' | 'attackDevice' | 'victimDevice' | 'typeText',
   rankValue: '',
-  // 排序：time=时间倒序（默认）/ payload=总载荷大小 / frequency=命中频次
-  // 排序：time=时间倒序（默认）/ payload=总载荷大小 / frequency=命中频次 / probability=研判概率
+  // 排序：time=时间倒序（默认）/ payload=命中报文载荷大小 / frequency=命中频次
+  // 排序：time=时间倒序（默认）/ payload=命中报文载荷大小 / frequency=命中频次 / probability=研判概率
   sort: 'time' as 'time' | 'payload' | 'frequency' | 'probability',
   order: 'desc' as 'desc' | 'asc',
 });
 
 const sortOptions = [
   { label: '创建时间', value: 'time' },
-  { label: '总载荷大小', value: 'payload' },
+  { label: '命中报文载荷大小', value: 'payload' },
   { label: '命中频次', value: 'frequency' },
   { label: '研判概率', value: 'probability' },
 ];
@@ -428,7 +428,6 @@ onUnmounted(() => {
           :rows="filteredRows"
           :auto-analyze="true"
           :loading="lyStore.loading"
-          :show-asset="true"
           :assets="assets"
         />
         <div class="pager-wrap">

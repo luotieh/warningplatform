@@ -217,7 +217,7 @@ onUnmounted(() => { ++requestId; ++reportRequestId; ++archiveRequestId; });
           <NButton :loading="archiveLoading" @click="loadSavedReports">刷新报告列表</NButton>
         </NSpace>
         <NAlert v-if="archiveError" type="warning" style="margin-bottom: 12px">{{ archiveError }}</NAlert>
-        <LyEventTable :rows="displayRows" :loading="loading" :show-asset="true" :assets="assets" />
+        <LyEventTable :rows="displayRows" :loading="loading" :assets="assets" />
         <div class="history-pager">
           <NPagination :page="page" :page-size="pageSize" :item-count="total" show-size-picker :page-sizes="[20, 50, 100]" @update:page="changePage" @update:page-size="changePageSize" />
         </div>

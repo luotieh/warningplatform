@@ -62,7 +62,9 @@ func (s *EventService) LyCompatibleList(ctx context.Context) []map[string]any {
 	events := s.core.Store.ListEvents()
 	rows := make([]map[string]any, 0, len(events))
 	for _, event := range events {
-		rows = append(rows, lyCompatibleEvent(event))
+		row := lyCompatibleEvent(event)
+		s.attachHitPacketPayload(ctx, row)
+		rows = append(rows, row)
 	}
 	return rows
 }
@@ -71,7 +73,7 @@ func (s *EventService) LyCompatibleList(ctx context.Context) []map[string]any {
 func (s *EventService) ListPage(ctx context.Context, q store.EventQuery) ([]map[string]any, int, error) {
 	// 排行、关键字和资产筛选共用展示口径，先匹配全量结果再分页。
 	// 未使用展示字段筛选时保留数据库直接分页路径。
-	if (strings.TrimSpace(q.RankKey) != "" && strings.TrimSpace(q.RankValue) != "") || strings.TrimSpace(q.Keyword) != "" || strings.TrimSpace(q.Asset) != "" || q.OnlyAssetRelated || q.IOCValue != "" || q.IOCType != "" || q.Victim != "" {
+	if strings.EqualFold(strings.TrimSpace(q.Sort), "payload") || (strings.TrimSpace(q.RankKey) != "" && strings.TrimSpace(q.RankValue) != "") || strings.TrimSpace(q.Keyword) != "" || strings.TrimSpace(q.Asset) != "" || q.OnlyAssetRelated || q.IOCValue != "" || q.IOCType != "" || q.Victim != "" {
 		return s.listPageDisplayFiltered(ctx, q)
 	}
 	page, err := s.core.Store.ListEventsPage(q)
@@ -80,7 +82,9 @@ func (s *EventService) ListPage(ctx context.Context, q store.EventQuery) ([]map[
 	}
 	rows := make([]map[string]any, 0, len(page.Items))
 	for _, event := range page.Items {
-		rows = append(rows, lyCompatibleEvent(event))
+		row := lyCompatibleEvent(event)
+		s.attachHitPacketPayload(ctx, row)
+		rows = append(rows, row)
 	}
 	return rows, page.Total, nil
 }
@@ -104,6 +108,27 @@ func (s *EventService) listPageDisplayFiltered(ctx context.Context, q store.Even
 		}
 		rows = append(rows, row)
 	}
+	if strings.EqualFold(strings.TrimSpace(q.Sort), "payload") {
+		for _, row := range rows {
+			s.attachHitPacketPayload(ctx, row)
+		}
+		sort.SliceStable(rows, func(i, j int) bool {
+			a, aok := rows[i]["hit_packet_payload"].(trafficservice.HitPacketPayload)
+			b, bok := rows[j]["hit_packet_payload"].(trafficservice.HitPacketPayload)
+			ak := aok && a.Quality != "unavailable"
+			bk := bok && b.Quality != "unavailable"
+			if ak != bk {
+				return ak
+			}
+			if a.PayloadBytes == b.PayloadBytes {
+				return false
+			}
+			if strings.EqualFold(q.Order, "asc") {
+				return a.PayloadBytes < b.PayloadBytes
+			}
+			return a.PayloadBytes > b.PayloadBytes
+		})
+	}
 	total := len(rows)
 	page, pageSize := q.Page, q.PageSize
 	if page < 1 {
@@ -123,7 +148,13 @@ func (s *EventService) listPageDisplayFiltered(ctx context.Context, q store.Even
 	if end > total {
 		end = total
 	}
-	return rows[start:end], total, nil
+	selected := rows[start:end]
+	if !strings.EqualFold(strings.TrimSpace(q.Sort), "payload") {
+		for _, row := range selected {
+			s.attachHitPacketPayload(ctx, row)
+		}
+	}
+	return selected, total, nil
 }
 
 // RankItem 单个排行值及命中数。
@@ -766,4 +797,13 @@ func (s *EventService) Review(ctx context.Context, eventID, action, comment, rev
 	default:
 		return nil, errors.New("无效的审核动作")
 	}
+}
+
+func (s *EventService) attachHitPacketPayload(ctx context.Context, row map[string]any) {
+	value, err := s.core.HitPacketPayload(ctx, stringValue(row["id"]))
+	if err != nil {
+		row["hit_packet_payload"] = trafficservice.HitPacketPayload{Quality: "unavailable", Reasons: map[string]int64{"snapshot_unavailable": 1}}
+		return
+	}
+	row["hit_packet_payload"] = value
 }

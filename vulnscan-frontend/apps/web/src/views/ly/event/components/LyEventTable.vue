@@ -25,12 +25,10 @@ const props = withDefaults(
     showDesc?: boolean;
     autoAnalyze?: boolean;
     loading?: boolean;
-    /** 是否展示「资产」列（行内 assetText：资产名或「未登记」）。 */
-    showAsset?: boolean;
     /** 资产清单：明细弹窗的「被攻击资产」按目标侧匹配展示。 */
     assets?: Record<string, any>[];
   }>(),
-  { showDesc: false, autoAnalyze: false, loading: false, showAsset: false, assets: () => [] },
+  { showDesc: false, autoAnalyze: false, loading: false, assets: () => [] },
 );
 
 const userStore = useUserStore();
@@ -416,24 +414,6 @@ const columns = computed(() => [
           : null,
       ]),
   },
-  ...(props.showAsset
-    ? [
-        {
-          title: '资产',
-          key: 'assetText',
-          minWidth: 150,
-          render: (row: Record<string, any>) => {
-            const text = String(row.assetText || '');
-            const unregistered = !text || text === '未登记';
-            return h(
-              NTag,
-              { size: 'small', round: true, type: unregistered ? 'default' : 'info' },
-              { default: () => text || '未登记' },
-            );
-          },
-        },
-      ]
-    : []),
   {
     title: '严重程度',
     key: 'levelText',
@@ -488,16 +468,19 @@ const columns = computed(() => [
   },
   {
     title: '总载荷',
-    key: 'totalPayloadText',
-    width: 110,
+    key: 'hitPacketPayload',
+    width: 135,
     render: (row: Record<string, any>) => {
-      if (row.volume_quality === 'unverified') return h('span', { title: '流累计观测值不能直接相加；实际载荷总量未核验' }, '未核验');
-      const bytes = Number(row.total_payload_bytes ?? 0);
-      return h(
-        'span',
-        { style: bytes > 0 ? 'font-family:ui-monospace,SFMono-Regular,Menlo,monospace' : '' },
-        bytes > 0 ? formatBytes(bytes) : '-',
-      );
+      const value = row.hit_packet_payload;
+      if (!value || value.quality === 'unavailable') return h('span', { title: '缺少可解析且身份可核验的命中报文；不使用上游累计值替代' }, '不可用');
+      const partial = value.quality === 'partial';
+      const bytes = Number(value.payload_bytes);
+      const text = `${partial ? '≥ ' : ''}${bytes === 0 ? '0 B' : formatBytes(bytes)}${partial ? '（部分）' : ''}`;
+      const reasons = Object.entries(value.reasons || {}).map(([reason, count]) => `${reason}: ${count}`).join('；');
+      return h('span', {
+        style: 'font-family:ui-monospace,SFMono-Regular,Menlo,monospace',
+        title: `已发布快照 ${value.snapshot_version} 中的命中报文按身份去重后的传输层载荷，含重传，不代表完整会话或外传量。已读取 ${value.read_records} 条，预期 ${value.expected_records} 条；有效报文 ${value.unique_packets} 个，重复 ${value.duplicate_records} 条，无法计量 ${value.rejected_records} 条。${reasons}`,
+      }, text);
     },
   },
   {

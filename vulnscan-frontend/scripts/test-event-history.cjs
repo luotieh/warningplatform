@@ -115,5 +115,16 @@ const settle = async () => { await vue.nextTick(); await new Promise((resolve) =
   assert.equal(menu.iocMenu.show, true);
   menu.viewIOCHistory();
   assert.deepEqual(destination, { path: '/ly/event/history', query: { ioc_value: 'example.com', ioc_type: 'domain', victim: '10.0.0.1' } });
+  const volumeTable = table.replace(/\r\n/g, '\n');
+  const volumeStart = volumeTable.indexOf("    title: '总载荷',");
+  const volumeEnd = volumeTable.indexOf("  {\n    title: '分析状态'", volumeStart);
+  const columnText = volumeTable.slice(volumeStart, volumeEnd).replace(/},\s*$/, '');
+  const utils = fs.readFileSync(path.join(root, 'apps/web/src/utils/ly.ts'), 'utf8');
+  const actualFormatBytes = evaluate(utils, { exports: {} }, 'formatBytes');
+  const volumeColumn = evaluate(`const column = ({${columnText}});`, { h: vue.h, formatBytes: actualFormatBytes }, 'column');
+  assert.equal(volumeColumn.render({ total_payload_bytes: 999 }).children, '不可用', 'never substitute cumulative totals');
+  const measured = { quality: 'verified', payload_bytes: 0, read_records: 1, expected_records: 1, unique_packets: 1, duplicate_records: 0, rejected_records: 0 };
+  assert.equal(volumeColumn.render({ hit_packet_payload: measured }).children, '0 B', 'known zero must be visible');
+  assert.match(volumeColumn.render({ hit_packet_payload: { ...measured, quality: 'partial', payload_bytes: 12 } }).children, /≥ 12 B.*部分/);
   console.log('PASS: IOC history, manual report generation, report scope, direct failure handling, stale report protection');
 })().catch((error) => { console.error(error); process.exitCode = 1; });
